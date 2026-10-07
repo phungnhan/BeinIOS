@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <title>BeinGroup</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <header>
+    <img src="icons/icon48.png" alt="" width="22" height="22" />
+    <h1>BeinGroup</h1>
+    <a href="#" id="open-dashboard" class="dash" title="Mở Dashboard">📊 Dashboard</a>
+  </header>
+
+  <div id="dry-note" class="note" hidden>Đang <b>chạy thử</b>: duyệt/từ chối chỉ ghi nhật ký, chưa gửi lên Beincom.</div>
+
+  <section class="stats">
+    <div class="stat"><span class="num" id="requests">–</span><span class="label">yêu cầu tham gia</span></div>
+    <div class="stat"><span class="num" id="posts">–</span><span class="label">bài chờ duyệt</span></div>
+    <div class="stat"><span class="num" id="flagged">–</span><span class="label">bài mới vi phạm</span></div>
+  </section>
+
+  <section class="card">
+    <div class="status" id="status">Đang tải…</div>
+    <div class="sub" id="last-scan"></div>
+  </section>
+
+  <section>
+    <div class="label">Group có việc</div>
+    <ul id="todo"></ul>
+  </section>
+
+  <button id="scan" class="primary">↻ Quét ngay</button>
+
+  <section class="settings">
+    <label class="master" id="master"><input type="checkbox" id="active" /> <b id="master-text">Addon đang hoạt động</b></label>
+    <div class="grid">
+      <label title="Chỉ ghi nhật ký, không gửi duyệt/từ chối lên Beincom"><input type="checkbox" id="dryRun" /> Chạy thử</label>
+      <label title="Báo khi có yêu cầu tham gia hoặc bài chờ duyệt mới"><input type="checkbox" id="notify" /> Thông báo</label>
+    </div>
+  </section>
+
+  <footer>
+    <div class="ver"><span id="version"></span> · Tác giả: <b>Kai | Crypto Life</b></div>
+  </footer>
+
+  <script src="common.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>

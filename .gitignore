@@ -1,0 +1,14 @@
+# OS / editor
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+
+# Gói addon tạo ra khi đóng gói
+*.crx
+*.pem
+*.zip
+
+# Trang xem thử giao diện với dữ liệu mẫu
+test/preview/

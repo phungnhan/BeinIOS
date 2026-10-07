@@ -1,0 +1,32 @@
+{
+  "manifest_version": 3,
+  "name": "BeinGroup — Quản lý Group Beincom",
+  "version": "0.5.1",
+  "description": "Quản lý các Group Beincom bạn quản trị: duyệt thành viên và bài viết theo quy tắc, ẩn bài vi phạm, quản lý thành viên, soạn và hẹn giờ đăng bài, thống kê thành viên và bài viết. Tác giả: Kai | Crypto Life.",
+  "permissions": ["alarms", "storage", "notifications", "scripting"],
+  "host_permissions": [
+    "https://api.beincom.com/*",
+    "https://group.beincom.com/*"
+  ],
+  "options_ui": {
+    "page": "dashboard.html",
+    "open_in_tab": true
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "BeinGroup",
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}

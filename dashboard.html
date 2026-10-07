@@ -1,0 +1,561 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>BeinGroup · Dashboard</title>
+  <link rel="icon" href="icons/icon48.png" />
+  <link rel="stylesheet" href="dashboard.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <img src="icons/icon48.png" alt="" width="32" height="32" />
+      <div>
+        <h1>BeinGroup</h1>
+        <div class="muted small">Quản lý Group Beincom</div>
+      </div>
+    </div>
+    <div class="actions">
+      <span class="pill" id="scan-pill">–</span>
+      <span class="pill warn" id="dry-pill" hidden>Chạy thử</span>
+      <button id="btn-scan" class="primary" title="Quét toàn bộ: group, yêu cầu tham gia, bài chờ duyệt, bài mới đăng. Chỉ cần tải lại tab đang xem thì dùng nút Tải lại trên thanh tab.">↻ Quét ngay</button>
+    </div>
+  </header>
+
+  <nav class="tabs" id="tabs" role="tablist" aria-label="Các mục">
+    <button role="tab" data-tab="overview">Tổng quan</button>
+    <button role="tab" data-tab="members">Thành viên <span class="badge" id="badge-members"></span></button>
+    <button role="tab" data-tab="content">Bài viết <span class="badge" id="badge-content"></span></button>
+    <button role="tab" data-tab="compose">Đăng bài <span class="badge info" id="badge-compose"></span></button>
+    <button role="tab" data-tab="stats">Thống kê</button>
+    <button role="tab" data-tab="settings">Quy tắc &amp; cài đặt</button>
+    <button role="tab" data-tab="log">Nhật ký</button>
+    <span class="tabs-spacer"></span>
+    <span class="muted small tab-refresh-at" id="tab-refresh-at"></span>
+    <button id="btn-tab-refresh" class="ghost sm tab-refresh" hidden>↻ Tải lại</button>
+  </nav>
+
+  <div id="banner" class="banner" hidden></div>
+
+  <main>
+    <section class="kpis" data-tab="overview">
+      <div class="kpi">
+        <div class="kpi-label">Group đang quản trị</div>
+        <div class="kpi-value" id="kpi-groups">–</div>
+        <div class="kpi-sub" id="kpi-groups-sub"></div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">Yêu cầu tham gia đang chờ</div>
+        <div class="kpi-value" id="kpi-requests">–</div>
+        <div class="kpi-sub" id="kpi-requests-sub"></div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">Bài chờ duyệt</div>
+        <div class="kpi-value" id="kpi-posts">–</div>
+        <div class="kpi-sub" id="kpi-posts-sub"></div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">Bài mới vi phạm</div>
+        <div class="kpi-value" id="kpi-flagged">–</div>
+        <div class="kpi-sub" id="kpi-flagged-sub"></div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">Lần quét gần nhất</div>
+        <div class="kpi-value small-value" id="kpi-scan">–</div>
+        <div class="kpi-sub" id="kpi-scan-sub"></div>
+      </div>
+    </section>
+
+    <section class="card span-3" id="groups" data-tab="overview">
+      <div class="card-head">
+        <h2>Group bạn quản trị</h2>
+        <span class="muted small">Bấm một dòng để xem yêu cầu tham gia của group đó</span>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Group</th><th>Vai trò</th><th class="num">Thành viên</th><th>Duyệt thành viên</th><th>Duyệt bài</th><th class="num">Yêu cầu chờ</th><th class="num">Bài chờ</th><th>Mở trên Beincom</th></tr>
+          </thead>
+          <tbody id="groups-body"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="card span-3" id="review" data-tab="members">
+      <div class="card-head">
+        <h2>Duyệt thành viên</h2>
+        <div class="review-tools">
+          <select id="group-select" aria-label="Chọn group"></select>
+          <div class="seg" id="verdict-filter">
+            <button data-f="all" class="active">Tất cả <span id="cnt-all"></span></button>
+            <button data-f="approve">Gợi ý duyệt <span id="cnt-approve"></span></button>
+            <button data-f="review">Cần xem <span id="cnt-review"></span></button>
+            <button data-f="decline">Gợi ý từ chối <span id="cnt-decline"></span></button>
+          </div>
+        </div>
+      </div>
+      <div id="review-note" class="muted small review-note"></div>
+      <div class="bulk-bar">
+        <label class="check"><input type="checkbox" id="check-all" /> Chọn tất cả đang hiện</label>
+        <span class="muted small" id="selected-count">Đã chọn 0</span>
+        <span class="spacer"></span>
+        <button id="btn-approve-selected" class="ok-btn" disabled>✓ Duyệt đã chọn</button>
+        <button id="btn-decline-selected" class="danger" disabled>✕ Từ chối đã chọn</button>
+      </div>
+      <div class="table-wrap">
+        <table class="requests">
+          <thead>
+            <tr><th class="cb"></th><th>Người xin vào</th><th>Câu trả lời</th><th>Gửi lúc</th><th>Đánh giá theo quy tắc</th><th class="act">Thao tác</th></tr>
+          </thead>
+          <tbody id="requests-body"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="card span-3" id="members" data-tab="members">
+      <div class="card-head">
+        <h2>Thành viên</h2>
+        <div class="review-tools">
+          <select id="members-group" aria-label="Chọn group"></select>
+          <div class="seg" id="members-tab">
+            <button data-f="list" class="active">Danh sách</button>
+            <button data-f="activity">Vào / rời gần đây</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="members-list-pane">
+        <div class="bulk-bar">
+          <form id="members-search" class="search">
+            <input type="search" id="members-key" placeholder="Tìm theo tên hoặc username" aria-label="Tìm thành viên" />
+            <button class="ghost sm">Tìm</button>
+          </form>
+          <select id="members-sort" aria-label="Sắp xếp">
+            <option value="joined_at:desc">Mới vào trước</option>
+            <option value="is_community_admin:desc">Admin trước</option>
+          </select>
+          <span class="muted small" id="members-count"></span>
+          <span class="spacer"></span>
+          <button id="btn-members-export" class="ghost sm">Xuất CSV</button>
+        </div>
+        <div class="bulk-bar">
+          <label class="check"><input type="checkbox" id="members-check-all" /> Chọn tất cả đang hiện</label>
+          <span class="muted small" id="members-selected">Đã chọn 0</span>
+          <span class="spacer"></span>
+          <button id="btn-members-remove" class="danger" disabled>Xoá đã chọn</button>
+        </div>
+        <div id="members-note" class="muted small review-note"></div>
+        <div class="table-wrap">
+          <table class="requests">
+            <thead>
+              <tr><th class="cb"></th><th>Thành viên</th><th>Vào lúc</th><th class="num">Số group đã vào</th><th class="act">Thao tác</th></tr>
+            </thead>
+            <tbody id="members-body"></tbody>
+          </table>
+        </div>
+        <button id="btn-members-more" class="ghost more" hidden>Tải thêm</button>
+      </div>
+
+      <div id="members-activity-pane" hidden>
+        <div class="bulk-bar">
+          <div class="seg" id="activity-filter">
+            <button data-f="all" class="active">Tất cả</button>
+            <button data-f="in">Vào</button>
+            <button data-f="out">Rời / bị xoá</button>
+            <button data-f="role">Vai trò</button>
+          </div>
+          <span class="muted small" id="activity-summary"></span>
+        </div>
+        <div id="activity-note" class="muted small review-note"></div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Thời gian</th><th>Sự kiện</th><th>Thành viên</th><th>Người thực hiện</th><th>Ghi chú</th></tr>
+            </thead>
+            <tbody id="activity-body"></tbody>
+          </table>
+        </div>
+        <button id="btn-activity-more" class="ghost more" hidden>Tải thêm</button>
+      </div>
+    </section>
+
+    <section class="card span-3" id="approval" data-tab="content">
+      <div class="card-head">
+        <h2>Duyệt bài</h2>
+        <div class="review-tools">
+          <select id="community-select" aria-label="Chọn community"></select>
+          <div class="seg" id="approval-filter">
+            <button data-f="all" class="active">Tất cả <span id="acnt-all"></span></button>
+            <button data-f="ok">Gợi ý duyệt <span id="acnt-ok"></span></button>
+            <button data-f="review">Cần xem <span id="acnt-review"></span></button>
+            <button data-f="bad">Gợi ý từ chối <span id="acnt-bad"></span></button>
+          </div>
+          <a id="approval-open" class="small" target="_blank" hidden>Mở trang duyệt bài ↗</a>
+        </div>
+      </div>
+      <div id="approval-note" class="muted small review-note"></div>
+      <div class="bulk-bar">
+        <label class="check"><input type="checkbox" id="approval-check-all" /> Chọn tất cả đang hiện</label>
+        <span class="muted small" id="approval-selected">Đã chọn 0</span>
+        <span class="spacer"></span>
+        <button id="btn-approve-posts" class="ok-btn" disabled>✓ Duyệt đã chọn</button>
+        <button id="btn-reject-posts" class="danger" disabled>✕ Từ chối đã chọn</button>
+      </div>
+      <div class="table-wrap">
+        <table class="requests posts">
+          <thead>
+            <tr><th class="cb"></th><th>Người đăng</th><th>Nội dung</th><th>Đăng vào</th><th>Gửi lúc</th><th>Đánh giá theo quy tắc</th><th class="act">Thao tác</th></tr>
+          </thead>
+          <tbody id="approval-body"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="card span-3" id="recent" data-tab="content">
+      <div class="card-head">
+        <h2>Bài mới đăng</h2>
+        <div class="review-tools">
+          <div class="seg" id="recent-filter">
+            <button data-f="flagged" class="active">Cần xử lý <span id="rcnt-flagged"></span></button>
+            <button data-f="all">Tất cả <span id="rcnt-all"></span></button>
+            <button data-f="dismissed">Đã bỏ qua <span id="rcnt-dismissed"></span></button>
+            <button data-f="hidden">Đã ẩn <span id="rcnt-hidden"></span></button>
+          </div>
+        </div>
+      </div>
+      <div id="recent-note" class="muted small review-note"></div>
+      <div class="bulk-bar">
+        <label class="check"><input type="checkbox" id="recent-check-all" /> Chọn tất cả đang hiện</label>
+        <span class="muted small" id="recent-selected">Đã chọn 0</span>
+        <span class="spacer"></span>
+        <button id="btn-dismiss-posts" class="ghost" disabled>Bỏ qua đã chọn</button>
+        <button id="btn-hide-posts" class="danger" disabled>Ẩn đã chọn</button>
+      </div>
+      <div class="table-wrap">
+        <table class="requests posts">
+          <thead>
+            <tr><th class="cb"></th><th>Người đăng</th><th>Nội dung</th><th>Group</th><th>Đăng lúc</th><th>Đánh giá theo quy tắc</th><th class="act">Thao tác</th></tr>
+          </thead>
+          <tbody id="recent-body"></tbody>
+        </table>
+      </div>
+      <button id="btn-recent-more" class="ghost more" hidden>Xem thêm</button>
+    </section>
+
+    <section class="card span-3" id="compose" data-tab="compose">
+      <div class="card-head">
+        <h2>Đăng bài</h2>
+        <div class="review-tools">
+          <select id="tpl-select" aria-label="Mẫu bài"></select>
+          <button id="btn-tpl-use" class="ghost sm">Dùng mẫu</button>
+          <button id="btn-tpl-save" class="ghost sm">Lưu làm mẫu</button>
+          <button id="btn-tpl-delete" class="ghost sm danger">Xoá mẫu</button>
+        </div>
+      </div>
+      <div class="compose-grid">
+        <div class="compose-groups">
+          <div class="group-title">Đăng vào</div>
+          <div id="compose-groups" class="check-list"></div>
+          <div class="muted small">Một bài hiện ở mọi group đã chọn (giống chọn nhiều nơi đăng trên Beincom).</div>
+        </div>
+        <div class="compose-main">
+          <div class="editor" id="editor">
+            <div class="editor-toolbar" role="toolbar" aria-label="Định dạng bài">
+              <button type="button" data-md="bold" title="Chữ đậm (Ctrl+B)" aria-label="Chữ đậm"><b>B</b></button>
+              <button type="button" data-md="italic" title="Chữ nghiêng (Ctrl+I)" aria-label="Chữ nghiêng"><i>I</i></button>
+              <button type="button" data-md="strike" title="Gạch ngang" aria-label="Gạch ngang"><s>S</s></button>
+              <button type="button" data-md="code" title="Code" aria-label="Code">&lt;/&gt;</button>
+              <span class="sep" aria-hidden="true"></span>
+              <button type="button" data-md="heading" title="Tiêu đề" aria-label="Tiêu đề">H</button>
+              <button type="button" data-md="ul" title="Danh sách gạch đầu dòng" aria-label="Danh sách gạch đầu dòng">• ≡</button>
+              <button type="button" data-md="ol" title="Danh sách đánh số" aria-label="Danh sách đánh số">1. ≡</button>
+              <button type="button" data-md="quote" title="Trích dẫn" aria-label="Trích dẫn">❝</button>
+              <button type="button" data-md="hr" title="Đường kẻ ngang" aria-label="Đường kẻ ngang">―</button>
+              <span class="sep" aria-hidden="true"></span>
+              <button type="button" data-md="link" title="Chèn link (Ctrl+K)" aria-label="Chèn link">🔗 Link</button>
+              <span class="spacer"></span>
+              <div class="seg" id="editor-mode" aria-label="Chế độ xem">
+                <button type="button" data-f="write" class="active">Soạn</button>
+                <button type="button" data-f="split">Soạn + xem trước</button>
+                <button type="button" data-f="preview">Xem trước</button>
+              </div>
+            </div>
+            <div class="editor-body" id="editor-body">
+              <textarea id="compose-text" rows="12" placeholder="Viết nội dung bài… Bôi đen chữ rồi bấm nút trên thanh công cụ để định dạng. Xuống dòng giữ nguyên." aria-label="Nội dung bài"></textarea>
+              <div id="compose-preview" class="md-preview" aria-label="Xem trước bài" hidden></div>
+            </div>
+          </div>
+          <div class="compose-meta">
+            <span id="compose-count" class="muted small">0/3000</span>
+            <span id="compose-check" class="small"></span>
+            <span class="spacer"></span>
+            <span id="compose-saved" class="muted small"></span>
+          </div>
+          <div class="compose-options">
+            <label class="check"><input type="checkbox" id="compose-canComment" checked /> Cho bình luận</label>
+            <label class="check"><input type="checkbox" id="compose-canReact" checked /> Cho thả cảm xúc</label>
+            <label class="check"><input type="checkbox" id="compose-important" /> Đánh dấu Quan trọng đến</label>
+            <input type="datetime-local" id="compose-important-until" disabled aria-label="Quan trọng đến lúc" />
+          </div>
+          <div class="compose-when">
+            <label class="check"><input type="radio" name="compose-when" value="now" checked /> Đăng ngay</label>
+            <label class="check"><input type="radio" name="compose-when" value="later" /> Hẹn giờ lúc</label>
+            <input type="datetime-local" id="compose-at" disabled aria-label="Giờ đăng" />
+            <span class="spacer"></span>
+            <button id="btn-compose-clear" class="ghost">Xoá nội dung</button>
+            <button id="btn-compose" class="primary">Đăng ngay</button>
+          </div>
+          <div class="muted small">Hẹn giờ dùng chức năng có sẵn của Beincom: tới giờ Beincom tự đăng, không cần mở trình duyệt. Bản này chưa đính kèm ảnh/video.</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card span-3" id="scheduled" data-tab="compose">
+      <div class="card-head">
+        <h2>Bài đã hẹn giờ</h2>
+        <div class="review-tools">
+          <span class="muted small" id="scheduled-note"></span>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table class="requests posts">
+          <thead>
+            <tr><th>Giờ đăng</th><th>Người đăng</th><th>Nội dung</th><th>Đăng vào</th><th>Trạng thái</th><th class="act">Thao tác</th></tr>
+          </thead>
+          <tbody id="scheduled-body"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="card span-3" id="stats" data-tab="stats">
+      <div class="card-head">
+        <h2>Thống kê</h2>
+        <div class="review-tools">
+          <select id="stats-group" aria-label="Chọn community hoặc group"></select>
+          <div class="seg" id="stats-range" aria-label="Khoảng thời gian">
+            <button data-f="7">7 ngày</button>
+            <button data-f="30" class="active">30 ngày</button>
+            <button data-f="90">90 ngày</button>
+          </div>
+          <button id="btn-stats-csv" class="ghost sm">Xuất CSV</button>
+        </div>
+      </div>
+      <div id="stats-note" class="muted small review-note"></div>
+      <div class="stat-tiles" id="stats-tiles"></div>
+      <div class="stats-charts">
+        <figure class="chart-card">
+          <figcaption><b>Số thành viên</b> <span class="muted small" id="chart-members-sub"></span></figcaption>
+          <div id="chart-members" class="chart"></div>
+        </figure>
+        <figure class="chart-card">
+          <figcaption>
+            <b>Vào / rời mỗi ngày</b>
+            <span class="legend small"><span><i class="sw sw-up"></i>Vào</span><span><i class="sw sw-down"></i>Rời</span></span>
+            <span class="muted small" id="chart-joinleave-sub"></span>
+          </figcaption>
+          <div id="chart-joinleave" class="chart"></div>
+        </figure>
+        <figure class="chart-card">
+          <figcaption><b>Bài mới mỗi ngày</b> <span class="muted small" id="chart-posts-sub"></span></figcaption>
+          <div id="chart-posts" class="chart"></div>
+        </figure>
+      </div>
+      <details class="stats-table">
+        <summary>Bảng số liệu theo ngày</summary>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Ngày</th><th class="num">Thành viên</th><th class="num">Vào</th><th class="num">Rời</th><th class="num">Bài mới</th></tr></thead>
+            <tbody id="stats-table-body"></tbody>
+          </table>
+        </div>
+      </details>
+    </section>
+
+    <section class="card" id="stats-top-posts" data-tab="stats">
+      <div class="card-head">
+        <h2>Bài nổi bật</h2>
+        <span class="muted small">Theo cảm xúc + bình luận</span>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Bài</th><th class="num">Cảm xúc</th><th class="num">Bình luận</th></tr></thead>
+          <tbody id="top-posts-body"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="card span-2" id="stats-top-authors" data-tab="stats">
+      <div class="card-head">
+        <h2>Người đăng tích cực</h2>
+        <span class="muted small">Theo số bài trong khoảng thời gian</span>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Thành viên</th><th class="num">Bài</th><th class="num">Cảm xúc</th><th class="num">Bình luận</th></tr></thead>
+          <tbody id="top-authors-body"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="card span-2" id="rules" data-tab="settings">
+      <div class="card-head">
+        <h2>Quy tắc lọc thành viên</h2>
+        <span class="muted small" id="rules-saved"></span>
+      </div>
+      <p class="muted small intro">Addon chấm mỗi yêu cầu: vi phạm quy tắc từ chối → <b>Gợi ý từ chối</b>; thiếu điều kiện → <b>Cần xem</b>; đạt hết → <b>Gợi ý duyệt</b>. Chỉ là gợi ý, bạn vẫn bấm duyệt — trừ khi bật tự xử lý ở Cài đặt.</p>
+      <div class="rules-grid">
+        <div class="group">
+          <div class="group-title">⚠ Cần xem khi</div>
+          <label class="switch-row"><input type="checkbox" id="requireAvatar" /><span><b>Không có ảnh đại diện</b></span></label>
+          <label class="switch-row"><input type="checkbox" id="requireAnswers" /><span><b>Chưa trả lời câu hỏi bắt buộc</b><br /><span class="muted small">Hoặc trả lời quá ngắn</span></span></label>
+          <label class="select-row" data-requires="requireAnswers">
+            <span><b>Câu trả lời tối thiểu</b></span>
+            <span class="inline"><input type="number" id="minAnswerLength" min="0" max="200" /> ký tự</span>
+          </label>
+          <label class="switch-row"><input type="checkbox" id="requireVerified" /><span><b>Tài khoản chưa xác minh</b></span></label>
+        </div>
+        <div class="group">
+          <div class="group-title">✕ Gợi ý từ chối khi</div>
+          <label class="switch-row"><input type="checkbox" id="declineDeactivated" /><span><b>Tài khoản đã bị vô hiệu hoá</b></span></label>
+          <label class="text-row">
+            <span><b>Từ khoá cấm</b><br /><span class="muted small">Trong tên, username hoặc câu trả lời. Cách nhau dấu phẩy, không phân biệt hoa thường và dấu.</span></span>
+            <textarea id="bannedKeywords" rows="3" placeholder="vd: kiếm tiền nhanh, sex, t.me/"></textarea>
+          </label>
+          <label class="text-row">
+            <span><b>Username luôn từ chối</b></span>
+            <textarea id="blockUsernames" rows="2" placeholder="@username, mỗi người cách nhau dấu phẩy"></textarea>
+          </label>
+        </div>
+        <div class="group">
+          <div class="group-title">✓ Luôn gợi ý duyệt</div>
+          <label class="text-row">
+            <span><b>Username luôn duyệt</b><br /><span class="muted small">Bỏ qua mọi quy tắc khác</span></span>
+            <textarea id="allowUsernames" rows="3" placeholder="@username, mỗi người cách nhau dấu phẩy"></textarea>
+          </label>
+        </div>
+      </div>
+    </section>
+
+    <section class="card settings-card" id="settings" data-tab="settings">
+      <div class="card-head">
+        <h2>Cài đặt</h2>
+        <span class="muted small" id="saved-hint"></span>
+      </div>
+      <label class="master-row" id="master-row">
+        <span class="toggle"><input type="checkbox" id="active" /><i></i></span>
+        <span><b id="master-title">Addon đang hoạt động</b><br /><span class="muted small">Tắt để dừng quét tự động, thông báo và tự xử lý. Nút Quét ngay và Duyệt vẫn dùng được.</span></span>
+      </label>
+      <div class="group" id="settings-group">
+        <label class="switch-row dry"><input type="checkbox" id="dryRun" /><span><b>Chạy thử</b><br /><span class="muted small">Duyệt/từ chối chỉ ghi nhật ký, chưa gửi lên Beincom. Tắt khi đã kiểm tra quy tắc ổn.</span></span></label>
+        <label class="switch-row"><input type="checkbox" id="notify" /><span><b>Thông báo</b><br /><span class="muted small">Khi có yêu cầu tham gia, bài chờ duyệt hoặc bài mới vi phạm</span></span></label>
+        <label class="switch-row"><input type="checkbox" id="scanPosts" /><span><b>Quét bài mới đăng</b><br /><span class="muted small">20 bài mới nhất của mỗi group, chấm theo quy tắc bài viết</span></span></label>
+        <label class="select-row">
+          <span><b>Chu kỳ quét</b></span>
+          <select id="intervalMin">
+            <option value="15">15 phút</option>
+            <option value="30">30 phút</option>
+            <option value="60">1 giờ</option>
+            <option value="120">2 giờ</option>
+            <option value="240">4 giờ</option>
+          </select>
+        </label>
+        <label class="select-row">
+          <span><b>Nghỉ giữa hai thao tác</b><br /><span class="muted small">Khi duyệt hàng loạt</span></span>
+          <select id="actionDelaySec">
+            <option value="1">1 giây</option>
+            <option value="2">2 giây</option>
+            <option value="3">3 giây</option>
+            <option value="5">5 giây</option>
+          </select>
+        </label>
+        <div class="group-title auto-title">🤖 Tự xử lý sau mỗi lần quét</div>
+        <label class="switch-row"><input type="checkbox" id="autoApprove" /><span><b>Tự duyệt "Gợi ý duyệt"</b></span></label>
+        <label class="switch-row"><input type="checkbox" id="autoDecline" /><span><b>Tự từ chối "Gợi ý từ chối"</b></span></label>
+        <div class="muted small">"Cần xem" không bao giờ tự xử lý.</div>
+      </div>
+    </section>
+
+    <section class="card span-2" id="post-rules" data-tab="settings">
+      <div class="card-head">
+        <h2>Quy tắc bài viết</h2>
+        <span class="muted small" id="post-rules-saved"></span>
+      </div>
+      <p class="muted small intro">Dùng cho cả <b>Duyệt bài</b> và <b>Bài mới đăng</b>: vi phạm → <b>Gợi ý từ chối</b> / <b>Vi phạm</b>; có link ngoài (nếu bật) → <b>Cần xem</b>. Không vi phạm gì → <b>Gợi ý duyệt</b>. Addon không tự duyệt hay ẩn bài.</p>
+      <div class="rules-grid">
+        <div class="group">
+          <div class="group-title">✕ Vi phạm khi có</div>
+          <label class="text-row">
+            <span><b>Từ khoá cấm</b><br /><span class="muted small">Cách nhau dấu phẩy, không phân biệt hoa thường và dấu.</span></span>
+            <textarea id="post-bannedKeywords" rows="3" placeholder="vd: lừa đảo, x100 tài khoản, cam kết lợi nhuận"></textarea>
+          </label>
+        </div>
+        <div class="group">
+          <div class="group-title">🔗 Link</div>
+          <label class="text-row">
+            <span><b>Tên miền cấm</b><br /><span class="muted small">Gồm cả tên miền con: <code>t.me</code> chặn cả <code>www.t.me</code>.</span></span>
+            <textarea id="post-blockedDomains" rows="3" placeholder="vd: t.me, bit.ly, tinyurl.com"></textarea>
+          </label>
+        </div>
+        <div class="group">
+          <div class="group-title">⚠ Cần xem khi</div>
+          <label class="switch-row"><input type="checkbox" id="post-reviewExternalLinks" /><span><b>Có link ra ngoài</b><br /><span class="muted small">Trừ các tên miền cho phép bên dưới</span></span></label>
+          <label class="text-row" data-requires="reviewExternalLinks">
+            <span><b>Tên miền cho phép</b></span>
+            <textarea id="post-allowedDomains" rows="2" placeholder="beincom.com, coingecko.com"></textarea>
+          </label>
+        </div>
+      </div>
+    </section>
+
+    <section class="card span-3" id="log-card" data-tab="log">
+      <div class="card-head">
+        <h2>Nhật ký thao tác</h2>
+        <div class="review-tools">
+          <div class="seg" id="log-filter">
+            <button data-f="all" class="active">Tất cả</button>
+            <button data-f="member">Thành viên</button>
+            <button data-f="post">Bài viết</button>
+            <button data-f="dry">Chạy thử</button>
+            <button data-f="error">Lỗi</button>
+          </div>
+          <button id="btn-export-csv" class="ghost">Xuất CSV</button>
+          <button id="btn-export-json" class="ghost">Xuất JSON</button>
+          <button id="btn-clear" class="ghost danger">Xoá nhật ký</button>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Thời gian</th><th>Nguồn</th><th>Thao tác</th><th>Kết quả</th><th>Group</th><th>Đối tượng</th><th>Ghi chú</th></tr>
+          </thead>
+          <tbody id="log-body"></tbody>
+        </table>
+      </div>
+      <button id="btn-more" class="ghost more" hidden>Xem thêm</button>
+    </section>
+  </main>
+
+  <dialog id="confirm">
+    <form method="dialog">
+      <h3 id="confirm-title">Xác nhận</h3>
+      <p id="confirm-text"></p>
+      <ul id="confirm-list"></ul>
+      <div id="confirm-extra"></div>
+      <p id="confirm-dry" class="dry-msg"></p>
+      <div class="dialog-actions">
+        <button value="cancel" class="ghost">Huỷ</button>
+        <button value="ok" id="confirm-ok" class="primary">Xác nhận</button>
+      </div>
+    </form>
+  </dialog>
+
+  <footer class="muted small">
+    Dữ liệu chỉ lưu trong trình duyệt này · <span id="version"></span> · Tác giả: <b>Kai | Crypto Life</b>
+  </footer>
+
+  <script src="common.js"></script>
+  <script src="charts.js"></script>
+  <script src="dashboard.js"></script>
+</body>
+</html>
