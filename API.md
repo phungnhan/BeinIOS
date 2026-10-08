@@ -5,6 +5,9 @@ Ghi lại ngày 2026-10-07: đọc mã JavaScript của group.beincom.com (966 f
 Ký hiệu cột **Thử**: ✅ đã gọi, trả 200 · ⏱ gọi nhưng không trả lời trong 30 giây · — chưa gọi (API ghi).
 
 ## Chung
+- **Giới hạn trang**: API nội dung `content/…` (duyệt bài, báo cáo, bài hẹn giờ, tag, series…) báo `400 limit must not be greater than 25` nếu `limit` > 25 (gặp từ 10/2026). API nhóm `group/…` (yêu cầu tham gia, thành viên, nhật ký) vẫn nhận 50–100.
+- Lỗi kiểm tra dữ liệu: `meta.message` chỉ là "Bad Request Exception", chi tiết nằm trong `meta.errors` (mảng chuỗi hoặc `{ message: [...] }`).
+- Thao tác trên bài đã bị xoá trên web: `code: "content.not_found"`, `message: "Content not found"`.
 - Gốc API:
   - `https://api.beincom.com/v1/group/…` — community, group, thành viên, quyền
   - `https://api.beincom.com/v1/content/…` — bài viết, duyệt bài, báo cáo
@@ -111,15 +114,19 @@ API nhóm `content/` nhận tên trường **camelCase** (client của web khôn
 - Bình luận: base `content/comments` (thêm, sửa, xoá, trả lời). Chưa tìm ra API đọc danh sách bình luận của một bài.
 
 ## 6. Báo cáo vi phạm
+Báo cáo của người dùng (bài viết, article, bình luận). `{groupId}` là **ID group gốc** của community.
+
 | Method | Đường dẫn | Body / tham số | Thử |
 |---|---|---|---|
-| GET | `content/manage/communities/{groupId}/content-reports` | `limit`, `after` | ⏱ / 400 |
-| GET | `content/manage/communities/{groupId}/content-reports/{id}` | Chi tiết, số lượng theo lý do | — |
-| PUT | `content/manage/communities/{groupId}/content-reports/{targetId}/status` | `{ status: "IGNORED" \| "HID" }` | — |
+| GET | `content/manage/communities/{groupId}/content-reports` | `limit`, `after`; mỗi dòng: `id`, `targetId`, `targetType`, `content`, `targetActor`, `reasonsCount [{ reasonType, total, description }]`, `status`, `commentPostId` (bình luận) | ⏱ / 400 |
+| GET | `content/manage/communities/{groupId}/content-reports/{id}` | Chi tiết: mỗi lý do có `reporters [...]`, `reasonType`, `total`, `description` (theo schema trong mã web) | ✅ (nhanh) |
+| PUT | `content/manage/communities/{groupId}/content-reports/{targetId}/status` | `{ status: "IGNORED" \| "HID" }`. Dùng **`targetId`** (ID nội dung), không phải ID báo cáo | — |
 
-- Trạng thái: `CREATED`, `IGNORED`, `HID`. Loại nội dung: `POST`, `ARTICLE`, `COMMENT`.
+- Trạng thái: `CREATED` (chờ xử lý), `IGNORED`, `HID`. Loại nội dung: `POST`, `ARTICLE`, `COMMENT`. `reasonType` giống API Ẩn bài.
 - Cần quyền admin community: admin group nhận lỗi `400 community.not_admin`.
-- Gọi bằng tài khoản chủ community Food Research thì API không trả lời trong hơn 60 giây (thử 2 lần). Addon chưa dùng.
+- Gọi bằng tài khoản chủ community Food Research và The Heroic Spirit (chưa có báo cáo nào) thì API danh sách không trả lời trong hơn 40–60 giây. Addon đặt thời hạn 25 giây ở tab Báo cáo và báo cho người dùng; lần quét định kỳ chỉ đọc trang đầu, chờ 15 giây, treo thì coi như không có báo cáo.
+- Bài **gắn cờ tự động** và **đã ẩn**: `GET content/manage/groups/{groupId}/contents/flagged` · `hidden` (mục 5). Dùng được với admin group, cả group con; `type` không bắt buộc. Bài gắn cờ có `postScan.dataViolation.violatedCategories` (loại vi phạm do Beincom tự phát hiện).
+- **Báo cáo thành viên**: trang `admin-panel/{communityId}/report/reported-user` có trong bản dịch nhưng mã web chưa có bảng hay API tương ứng, nên addon không làm được.
 
 ## 7. Đăng bài và hẹn giờ
 Luồng của web: tạo bản nháp (lấy `id`), rồi đăng ngay hoặc hẹn giờ trên bản nháp đó. Body camelCase.
@@ -138,11 +145,31 @@ Luồng của web: tạo bản nháp (lấy `id`), rồi đăng ngay hoặc hẹ
 - `content` là **markdown**. Bài thật có cả `\n` lẫn `\n\n`, không dùng ký hiệu ngắt dòng đặc biệt; `**đậm**` dùng được. Web đổi `#` / `##` thành `###` khi mở lại bài.
 - Tối đa **3000 ký tự** mỗi bài.
 - `setting` mặc định: `{ canComment: true, canReact: true, isImportant: false, importantExpiredAt: null }`.
+  - `isImportant: true` với `importantExpiredAt: null` = Quan trọng không hết hạn. Web có hạn chọn sẵn: 1 ngày, 3 ngày, 1 tuần, 2 tuần, 1 tháng, 3 tháng, 6 tháng, 1 năm, tự chọn.
+  - Bản dịch có chữ "Mọi người có thể chia sẻ bài viết này" (`canShare`) nhưng giao diện bài viết không dùng, bài thật cũng không có trường này. `canShare` chỉ thấy ở series.
+- Bài (cả bài hẹn giờ) có thêm: `media.images[]` (`id`, `url`, `width`, `height`, `mimeType`, `status`), `linkPreview` (`url`, `title`, `domain`, `image`, `description`), `tags[]` (`id`, `name`, `slug`, `groupId`), `series[]`, `mentions` (theo username), `createdAt`.
 - Một bài đăng được vào nhiều group cùng lúc qua `audience.groupIds`.
 - Trạng thái bài: `DRAFT`, `PROCESSING`, `PUBLISHED`, `WAITING_SCHEDULE`, `SCHEDULE_FAILED`, `WAITING_SCAN`, `SCAN_REJECTED`.
 - Beincom giới hạn số bản nháp (lỗi `DraftLimitExceededException`).
 - Web còn có "đăng dưới danh nghĩa group": `POST …/{groupId}/posts`, sau cờ tính năng `create-content-by-group`. Addon chưa dùng.
 - Ảnh/video phải tải lên qua API upload riêng trước khi đăng. Addon chưa làm.
+
+### Khung soạn bài của web (đọc từ mã, addon đã làm theo nhưng chưa thử thật)
+Web tạo bản nháp ngay khi bấm "Next" ở bước chọn group và **tự lưu nháp** (`PUT content/posts/{id}`) trong lúc soạn.
+
+| Phần | API / giới hạn |
+|---|---|
+| Tải ảnh | 1) `POST upload/images/` `{ properties: { mime_type }, resource: "post:content" }` (không gửi `x-version-id`) → `data: { id, presigned_post: { url, fields } }`; 2) `POST` multipart lên `presigned_post.url` với các `fields` (`key`, `bucket`, `X-Amz-*`, `Policy`) rồi `file` sau cùng, không gửi cookie; 3) `GET upload/images/{id}?wait=true` → `data: { url, status, properties, error_message }` (`status: "ERROR"` = lỗi). Base `https://api.beincom.com/v1/upload/`. Đối tượng gắn vào bài: `{ url, id, ...properties }` |
+| Tải video | Như ảnh với `upload/videos/` (kèm `x-version-id: 2.0.0`, body chỉ có `properties`). Kết quả chờ có thêm `thumbnails`. Đối tượng gắn vào bài: `{ id, url, ...properties, status: "waiting_process", thumbnails }` (Beincom còn xử lý video sau khi đăng) |
+| Tải tệp | 1) `POST upload/files/` (không body) → `data.id`; 2) `POST upload/files/{id}` multipart `file` + `upload_type=post_file`, **kèm cookie** → `data: { id, origin_url, properties }`. Đối tượng gắn vào bài: `{ id, url: origin_url, ...properties }` (web đổi khoá sang camelCase) |
+| Giới hạn | Ảnh: tối đa 10, mỗi ảnh ≤ 25 MB (bmp, gif, jpg, png, svg, heic, avif, webp). Video: 1, ≤ 300 MB. Tệp: ≤ 25 tệp, mỗi tệp ≤ 5 MB (pdf, doc(x), xls(x), ppt(x), odt, ods, txt, csv, zip, html). Chữ ≤ 3000 ký tự |
+| Gắn vào bài | `media: { images: [...], videos: [...], files: [...] }`. Web chỉ cho một loại mỗi bài (có ảnh thì khoá video / tệp) |
+| Nhắc tên | `GET user/users/mentionable?group_ids=a,b&key=…` ✅ — **không gửi `x-version-id`** (có thì 400). Trả snake_case: `id`, `username`, `fullname`, `avatar`, `is_verified`, `subscriptions`; mặc định 20 người. Trong nội dung ghi `@username` (đầu dòng hoặc sau khoảng trắng; dấu câu dính sau tên bị bỏ). Body: `mentions: { [username]: { id, avatar, name: username, fullname, isVerified } }` |
+| Xem trước link | Link ngoài: `GET group/url-metadata?url=…` ✅ → `{ url, domain, title, image, description, publisher }`. Link bài / article / series Beincom: `GET content/contents/{id}/link-preview` ✅ (cùng dạng). Web xem trước **link cuối cùng** trong bài, bấm × để bỏ; chỉ hiện khi bài không có ảnh / video / tệp. Body: `linkPreview` = đối tượng đó |
+| Tag | `GET content/tags?groupIds[]=<group gốc>&name=…&offset=…` ✅ (cũng nhận `groupIds=` một giá trị) → `list` (`id`, `name`, `slug`, `groupId`, `groups`, `totalUsed`), `meta { limit: 25, offset, total }`. Web lấy theo **group gốc** của các group đã chọn. Tối đa **5 tag** mỗi bài; tên tag 3–32 ký tự (tạo tag: `POST content/tags { name, groupId }`, cần quyền `permissions/can-cud-tags/community/{id}`) |
+| Series | `GET content/series?groupIds[]=<group>&contentSearch=…&offset=…` ✅ — **bắt buộc dạng `groupIds[]=`** (gửi `groupIds=` bị 400 "groupIds must be an array") → `list` (`id`, `title`, `summary`, `coverMedia`, `audience`). Tối đa **3 series** mỗi bài |
+| Kiểm tra | `POST content/contents/validate-series-tags` `{ groups: [id], series: [id], tags: [id] }`. Không hợp lệ: code `tag_series_invalid`, `meta.errors { seriesIds, tagIds }`. Đăng / hẹn giờ cũng trả lỗi này. Body bài: `tags: [id]`, `series: [id]` |
+| Khác | Chọn emoji |
 
 ## 8. Thống kê và nhật ký
 Thống kê chính thức chỉ dành cho **chủ / admin community**. Admin group nhận `403 forbidden` hoặc `400 community.not_admin`.

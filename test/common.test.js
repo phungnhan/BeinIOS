@@ -119,14 +119,15 @@ test('answersOf: ghép câu hỏi, hiện câu chưa trả lời, chịu đượ
   );
 });
 
-test('newRequestIds và totals (bài chờ duyệt chỉ cộng một lần mỗi community)', () => {
+test('newRequestIds và totals (bài chờ duyệt chỉ cộng một lần mỗi community, bài gắn cờ ở nhiều group đếm một lần)', () => {
   const groups = [
-    { id: 'g1', communityId: 'c1', pendingTotal: 2, approvalCount: 3, requests: [{ id: 'a' }, { id: 'b' }] },
-    { id: 'g2', communityId: 'c1', pendingTotal: 1, approvalCount: null, requests: [{ id: 'c' }] },
+    { id: 'g1', communityId: 'c1', pendingTotal: 2, approvalCount: 3, requests: [{ id: 'a' }, { id: 'b' }], reportIds: ['r1', 'r2'], flaggedIds: ['f1'] },
+    { id: 'g2', communityId: 'c1', pendingTotal: 1, approvalCount: null, requests: [{ id: 'c' }], flaggedIds: ['f1', 'f2'] },
     { id: 'g3', communityId: 'c2', pendingTotal: 0, approvalCount: 4, requests: [] },
   ];
   assert.deepEqual(BG.newRequestIds(groups, ['a']), ['b', 'c']);
-  assert.deepEqual(BG.totals(groups), { requests: 3, posts: 7 });
+  assert.deepEqual(BG.totals(groups), { requests: 3, posts: 7, reports: 2, autoFlagged: 2 });
+  assert.deepEqual(BG.autoFlaggedIds(groups), ['f1', 'f2']);
 });
 
 test('đường dẫn trang Beincom cho group gốc và group con', () => {
@@ -198,6 +199,10 @@ test('validateCompose và composeBody: kiểm tra trước khi đăng, setting "
   const b = BG.composeBody({ ...base, setting: { isImportant: true, importantExpiredAt: '2026-10-09T00:00:00Z' }, scheduledAt: '2026-10-08T01:00:00Z' });
   assert.deepEqual([b.setting.isImportant, b.setting.importantExpiredAt, b.scheduledAt, b.setting.canComment], [true, '2026-10-09T00:00:00.000Z', '2026-10-08T01:00:00.000Z', true]);
   assert.equal(BG.composeBody(base).scheduledAt, undefined);
+  // Quan trọng không hết hạn: importantExpiredAt = null
+  const never = { ...base, setting: { isImportant: true, importantExpiredAt: null } };
+  assert.equal(BG.validateCompose(never, now), '');
+  assert.deepEqual(BG.composeBody(never).setting, { canComment: true, canReact: true, isImportant: true, importantExpiredAt: null });
 });
 
 // ---------- Xem trước markdown ----------
@@ -270,4 +275,152 @@ test('slimMember: thống nhất hai dạng API thành viên', () => {
 test('toCsv: có BOM, bọc ô chứa dấu phẩy/ngoặc kép/xuống dòng', () => {
   const csv = BG.toCsv([{ a: 'x,y', b: 'say "hi"' }, { a: 'dòng\n2', b: null }], [{ label: 'A', key: 'a' }, { label: 'B', get: (r) => r.b }]);
   assert.equal(csv, String.fromCharCode(0xfeff) + 'A,B\r\n"x,y","say ""hi"""\r\n"dòng\n2",');
+});
+
+test('slimReport và reportUrl: gộp lý do, link bình luận về bài chứa nó', () => {
+  const r = BG.slimReport({
+    id: 'rp1',
+    targetId: 'c1',
+    targetType: 'COMMENT',
+    content: 'spam',
+    commentPostId: 'p9',
+    targetActor: { id: 'a1', username: 'spammer', fullname: 'Spam Bot' },
+    reasonsCount: [{ reasonType: 'SPAM', total: 3 }, { reasonType: 'OTHERS', total: 1, description: 'lừa đảo' }],
+  });
+  assert.deepEqual(r.reasons.map((x) => [x.type, x.label, x.total, x.description]), [
+    ['SPAM', BG.HIDE_REASONS.SPAM, 3, ''],
+    ['OTHERS', BG.HIDE_REASONS.OTHERS, 1, 'lừa đảo'],
+  ]);
+  assert.deepEqual([r.total, r.status, r.actor.username], [4, 'CREATED', 'spammer']);
+  assert.equal(BG.reportUrl(r), 'https://group.beincom.com/posts/p9');
+  assert.equal(BG.reportUrl({ ...r, commentPostId: null }), '');
+  assert.equal(BG.reportUrl({ targetId: 'p1', targetType: 'POST' }), 'https://group.beincom.com/posts/p1');
+});
+
+test('isCommunityAdmin: chỉ đúng khi có quyền manage ở community', () => {
+  const perm = { communities: { c1: ['manage', 'edit'], c2: ['view'] } };
+  assert.equal(BG.isCommunityAdmin(perm, 'c1'), true);
+  assert.equal(BG.isCommunityAdmin(perm, 'c2'), false);
+  assert.equal(BG.isCommunityAdmin(perm, 'c3'), false);
+  assert.equal(BG.isCommunityAdmin(null, 'c1'), false);
+});
+
+test('importantUntil: hạn Quan trọng tính từ lúc đăng, cộng tháng không nhảy quá cuối tháng', () => {
+  const base = new Date(2026, 0, 31, 9, 0); // 31/01/2026 09:00 giờ máy
+  const at = (preset) => {
+    const v = BG.importantUntil(preset, base);
+    return v && new Date(v).toLocaleDateString('en-CA');
+  };
+  assert.deepEqual(['1d', '3d', '1w', '2w'].map(at), ['2026-02-01', '2026-02-03', '2026-02-07', '2026-02-14']);
+  assert.deepEqual(['1m', '3m', '6m', '1y'].map(at), ['2026-02-28', '2026-04-30', '2026-07-31', '2027-01-31']);
+  assert.equal(BG.importantUntil('never', base), null);
+  assert.equal(BG.importantUntil('custom', base), undefined);
+  assert.equal(new Date(BG.importantUntil('1d', base)).getHours(), 9); // giữ giờ đăng
+  assert.ok(Object.keys(BG.IMPORTANT_FOR).includes('never'));
+});
+
+test('slimScheduled: cài đặt, ảnh (chỉ https), link xem trước, tag, series, nhắc tên', () => {
+  const p = BG.slimScheduled({
+    id: 's1',
+    type: 'POST',
+    content: 'Nội dung **đậm**',
+    createdAt: '2026-10-08T01:00:00Z',
+    scheduledAt: '2026-10-09T02:00:00Z',
+    status: 'WAITING_SCHEDULE',
+    setting: { canComment: false, canReact: true, isImportant: true, importantExpiredAt: '2026-10-16T02:00:00Z' },
+    media: { images: [{ url: 'https://media.beincom.com/a' }, { url: 'http://x/b' }, { url: 'javascript:alert(1)' }], videos: [], files: [{}] },
+    linkPreview: { url: 'http://vd.vn/bai', title: 'Bài', domain: 'vd.vn', image: 'http://vd.vn/a.jpg' },
+    tags: [{ name: 'DEFI' }],
+    series: [{ title: 'Nhập môn' }],
+    mentions: { kai: { username: 'kai' } },
+  });
+  assert.deepEqual(p.setting, { canComment: false, canReact: true, isImportant: true, importantExpiredAt: '2026-10-16T02:00:00Z' });
+  assert.deepEqual([p.thumbs, p.media.images, p.media.files], [['https://media.beincom.com/a'], 3, 1]);
+  assert.deepEqual(p.linkPreview, { url: 'http://vd.vn/bai', title: 'Bài', domain: 'vd.vn', image: '' });
+  assert.deepEqual([p.tags, p.series, p.mentions, p.createdAt], [['DEFI'], ['Nhập môn'], ['kai'], '2026-10-08T01:00:00Z']);
+  // Bài không có gì thêm
+  const q = BG.slimScheduled({ id: 's2', content: 'x' });
+  assert.deepEqual([q.thumbs, q.linkPreview, q.tags, q.setting.canComment], [[], null, [], true]);
+});
+
+test('pickMedia: đúng loại, không quá dung lượng / số lượng, mỗi bài một loại đính kèm', () => {
+  const f = (name, type, size = 1000) => ({ name, type, size });
+  const a = BG.pickMedia('image', [f('a.png', 'image/png'), f('b.gif', 'image/gif'), f('c.exe', 'application/x-msdownload'), f('d.jpg', 'image/jpeg', 26 * 1024 * 1024)], {});
+  assert.deepEqual(a.accepted.map((x) => x.name), ['a.png', 'b.gif']);
+  assert.equal(a.errors.length, 2);
+  assert.match(a.errors[1], /26 MB, tối đa 25 MB/);
+  // Đã có 9 ảnh: chỉ nhận thêm 1
+  const b = BG.pickMedia('image', [f('1.png', 'image/png'), f('2.png', 'image/png')], { image: 9 });
+  assert.deepEqual([b.accepted.length, b.errors], [1, ['Tối đa 10 ảnh mỗi bài']]);
+  // Đang có ảnh thì không thêm video
+  assert.match(BG.pickMedia('video', [f('v.mp4', 'video/mp4')], { image: 2 }).errors[0], /một loại/);
+  // Tệp xét theo đuôi; video theo loại video/*
+  assert.deepEqual(BG.pickMedia('file', [f('bao-cao.PDF', ''), f('x.exe', '')], {}).accepted.map((x) => x.name), ['bao-cao.PDF']);
+  assert.equal(BG.pickMedia('video', [f('v.mov', 'video/quicktime')], {}).accepted.length, 1);
+  assert.equal(BG.pickMedia('video', [f('v1.mp4', 'video/mp4')], { video: 1 }).accepted.length, 0);
+});
+
+test('mediaItem, mediaSummary và đăng bài kèm media', () => {
+  assert.deepEqual(BG.mediaItem('image', 'i1', { url: 'https://m/1', status: 'DONE', properties: { width: 4, mime_type: 'image/png' } }), { url: 'https://m/1', id: 'i1', width: 4, mime_type: 'image/png' });
+  assert.deepEqual(BG.mediaItem('video', 'v1', { url: 'https://m/v', properties: { size: 9 }, thumbnails: [] }), { id: 'v1', url: 'https://m/v', size: 9, status: 'waiting_process', thumbnails: [] });
+  assert.deepEqual(BG.mediaItem('file', 'f1', { id: 'f1', origin_url: 'https://m/f', properties: { mime_type: 'application/pdf' } }), { id: 'f1', url: 'https://m/f', mimeType: 'application/pdf' });
+  assert.equal(BG.mediaSummary({ images: [1, 2, 3], videos: [], files: [] }), '3 ảnh');
+  assert.equal(BG.mediaSummary(null), '');
+  const now = Date.parse('2026-10-08T00:00:00Z');
+  const base = { groupIds: ['g1'], content: '' };
+  // Chỉ có ảnh, không có chữ: vẫn đăng được
+  assert.equal(BG.validateCompose({ ...base, media: { images: [{ id: 'i1' }] } }, now), '');
+  assert.match(BG.validateCompose(base, now), /chưa có nội dung/);
+  assert.match(BG.validateCompose({ ...base, media: { images: [{}], files: [{}] } }, now), /một loại/);
+  assert.match(BG.validateCompose({ ...base, media: { videos: [{}, {}] } }, now), /Tối đa 1 video/);
+  const body = BG.composeBody({ ...base, media: { images: [{ id: 'i1', url: 'u' }] } });
+  assert.deepEqual(body.media, { images: [{ id: 'i1', url: 'u' }], videos: [], files: [] });
+  assert.deepEqual(BG.composeBody(base).media, { images: [], videos: [], files: [] });
+});
+
+test('nhắc tên: nhận ra @đang gõ, chỉ giữ người còn được nhắc, tô màu ở xem trước', () => {
+  assert.deepEqual(BG.mentionQuery('Chào @ka'), { start: 5, query: 'ka' });
+  assert.deepEqual(BG.mentionQuery('@'), { start: 0, query: '' });
+  assert.deepEqual(BG.mentionQuery('dòng 1\n@nguyễn'), { start: 7, query: 'nguyễn' });
+  assert.equal(BG.mentionQuery('email a@b'), null); // @ dính chữ trước: không phải nhắc tên
+  assert.equal(BG.mentionQuery('@kai xong'), null);
+  const known = { kai: { id: 'u1', name: 'kai' }, 'phungnhan.eth': { id: 'u2', name: 'phungnhan.eth' }, lan: { id: 'u3', name: 'lan' } };
+  // lan đã bị xoá khỏi bài; dấu câu sau tên bị bỏ; x@kai không tính
+  assert.deepEqual(Object.keys(BG.usedMentions('Cảm ơn @kai, @phungnhan.eth. và x@kai', known)), ['kai', 'phungnhan.eth']);
+  assert.deepEqual(BG.usedMentions('không nhắc ai', known), {});
+  assert.equal(BG.renderMarkdown('Chào @kai và @lan2', { mentions: known }), '<p>Chào <span class="mention">@kai</span> và @lan2</p>');
+  assert.equal(BG.renderMarkdown('Chào @kai'), '<p>Chào @kai</p>');
+  assert.deepEqual(BG.slimMentionable({ id: 'u1', username: 'kai', fullname: 'Kai', avatar: 'a', is_verified: true }), { id: 'u1', username: 'kai', fullname: 'Kai', avatar: 'a', isVerified: true });
+  assert.deepEqual(BG.mentionEntry({ id: 'u1', username: 'kai', fullname: 'Kai', avatar: 'a', isVerified: true }), { id: 'u1', avatar: 'a', name: 'kai', fullname: 'Kai', isVerified: true });
+});
+
+test('xem trước link: lấy link cuối, gửi kèm khi bài không có ảnh / video / tệp', () => {
+  assert.equal(BG.lastLink('xem https://a.com/x và www.b.vn/y.'), 'https://www.b.vn/y');
+  assert.equal(BG.lastLink('vào t.me/abc nhé'), 'https://t.me/abc');
+  assert.equal(BG.lastLink('không có link'), '');
+  const lp = BG.slimLinkPreview({ url: 'https://a.com', domain: 'A', title: 'Tiêu đề', image: 'http://a.com/x.png', description: 'Mô tả', publisher: 'A' });
+  assert.deepEqual(lp, { url: 'https://a.com', domain: 'A', title: 'Tiêu đề', image: '', description: 'Mô tả' });
+  assert.equal(BG.slimLinkPreview({ title: 'không có url' }), null);
+  const base = { groupIds: ['g1'], content: 'Chào @kai xem https://a.com', mentions: { kai: { id: 'u1', name: 'kai' }, lan: { id: 'u3' } }, linkPreview: lp };
+  const body = BG.composeBody(base);
+  assert.deepEqual(body.mentions, { kai: { id: 'u1', name: 'kai' } });
+  assert.deepEqual(body.linkPreview, lp);
+  assert.equal(BG.composeBody({ ...base, media: { images: [{ id: 'i1' }] } }).linkPreview, undefined);
+  assert.equal(BG.composeBody({ groupIds: ['g1'], content: 'x' }).linkPreview, undefined);
+});
+
+test('tag và series: giới hạn 5 / 3, body chỉ gửi id, câu báo lỗi có tên', () => {
+  assert.deepEqual(BG.slimTag({ id: 't1', name: 'AMA', slug: 'ama', totalUsed: 4, groups: [{}] }), { id: 't1', name: 'AMA', totalUsed: 4 });
+  assert.deepEqual(BG.slimSeries({ id: 's1', title: 'Nhập môn', coverMedia: { url: 'https://m/c' }, summary: 'x', audience: {} }), { id: 's1', title: 'Nhập môn', cover: 'https://m/c', summary: 'x' });
+  const now = Date.parse('2026-10-08T00:00:00Z');
+  const base = { groupIds: ['g1'], content: 'x' };
+  const many = (n, p) => Array.from({ length: n }, (_, i) => ({ id: p + i }));
+  assert.equal(BG.validateCompose({ ...base, tags: many(5, 't'), series: many(3, 's') }, now), '');
+  assert.match(BG.validateCompose({ ...base, tags: many(6, 't') }, now), /Tối đa 5 tag/);
+  assert.match(BG.validateCompose({ ...base, series: many(4, 's') }, now), /Tối đa 3 series/);
+  const body = BG.composeBody({ ...base, tags: [{ id: 't1', name: 'AMA' }], series: ['s1'] });
+  assert.deepEqual([body.tags, body.series], [['t1'], ['s1']]);
+  assert.deepEqual([BG.composeBody(base).tags, BG.composeBody(base).series], [[], []]);
+  const err = { code: 'tag_series_invalid', meta: { errors: { seriesIds: ['s1'], tagIds: ['t2', 'tX'] } } };
+  assert.equal(BG.tagSeriesError(err, [{ id: 't2', name: 'DEFI' }], [{ id: 's1', title: 'Nhập môn' }]), 'series Nhập môn; tag DEFI, tX không dùng được với các group đã chọn — bỏ ra rồi đăng lại');
 });

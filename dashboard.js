@@ -2,13 +2,13 @@ const $ = (id) => document.getElementById(id);
 const RULE_BOOLS = ['requireAvatar', 'requireAnswers', 'requireVerified', 'declineDeactivated'];
 const RULE_LISTS = { bannedKeywords: false, allowUsernames: true, blockUsernames: true }; // true = danh sách username
 const POST_RULE_LISTS = ['bannedKeywords', 'blockedDomains', 'allowedDomains'];
-const SETTING_BOOLS = ['active', 'dryRun', 'notify', 'scanPosts', 'autoApprove', 'autoDecline'];
+const SETTING_BOOLS = ['active', 'dryRun', 'notify', 'scanPosts', 'scanReports', 'autoApprove', 'autoDecline'];
 const SETTING_NUMS = ['intervalMin', 'actionDelaySec'];
 const LOG_PAGE = 50;
 const RECENT_PAGE = 30;
 
 let data = { settings: { ...BG.DEFAULT_SETTINGS }, rules: { ...BG.DEFAULT_RULES }, postRules: { ...BG.DEFAULT_POST_RULES }, state: {}, log: [] };
-const TABS = ['overview', 'members', 'content', 'compose', 'stats', 'settings', 'log'];
+const TABS = ['overview', 'members', 'content', 'reports', 'compose', 'stats', 'settings', 'log'];
 const hashParams = () => new URLSearchParams(location.hash.slice(1));
 let selectedGroupId = hashParams().get('group');
 // Tab mở lúc đầu: theo địa chỉ (#tab=…), link cũ #group=… mở tab Thành viên, #recent mở tab Bài viết
@@ -142,6 +142,8 @@ async function renderKpis() {
   const flagged = flaggedRecent().length;
   const recent = (st.recentPosts || []).length;
   kpi('kpi-flagged', data.settings.scanPosts ? flagged : '–', data.settings.scanPosts ? `trong ${recent} bài mới đã quét` : 'đang tắt quét bài mới', flagged > 0);
+  const reports = t.reports + t.autoFlagged;
+  kpi('kpi-reports', data.settings.scanReports ? reports : '–', data.settings.scanReports ? `${t.reports} báo cáo chờ xử lý · ${t.autoFlagged} bài bị gắn cờ` : 'đang tắt quét báo cáo', reports > 0);
 
   $('kpi-scan').textContent = st.lastScan ? fmtTime(st.lastScan) : '–';
   let sub = st.lastResult?.mode === 'tab' ? 'qua tab Beincom' : st.lastResult?.mode === 'direct' ? 'gọi trực tiếp' : '';
@@ -158,12 +160,20 @@ function onOff(v) {
   return el('span', { class: 'tag ' + (v ? 'ok' : 'info'), text: v ? 'Bật' : 'Tắt' });
 }
 
+// Báo cáo chờ xử lý (chỉ group gốc của community mình làm admin) + bài bị Beincom gắn cờ
+function reportCell(g) {
+  if (!g.reportIds && !g.flaggedIds) return el('td', { class: 'num', text: '–' });
+  const [r, f] = [g.reportIds?.length || 0, g.flaggedIds?.length || 0];
+  const parts = [g.reportIds ? `${r} báo cáo chờ xử lý` : '', `${f} bài bị gắn cờ`].filter(Boolean);
+  return el('td', { class: 'num' + (r + f ? ' count-hot' : ''), title: parts.join(', '), text: String(r + f) });
+}
+
 function renderGroups() {
   const body = $('groups-body');
   body.replaceChildren();
   const gs = groups();
   if (!gs.length) {
-    body.append(el('tr', { class: 'empty-row' }, el('td', { colspan: 8, text: data.state.snapshot ? 'Không có group nào' : 'Chưa có dữ liệu' })));
+    body.append(el('tr', { class: 'empty-row' }, el('td', { colspan: 9, text: data.state.snapshot ? 'Không có group nào' : 'Chưa có dữ liệu' })));
     return;
   }
   for (const g of gs) {
@@ -191,6 +201,7 @@ function renderGroups() {
       el('td', {}, g.settings ? onOff(g.settings.contentApproval) : '–'),
       el('td', { class: 'num' + (g.pendingTotal ? ' count-hot' : ''), text: g.canApprove ? String(g.pendingTotal || 0) : '–' }),
       el('td', { class: 'num' + (g.approvalCount ? ' count-hot' : ''), text: g.approvalCount != null ? String(g.approvalCount) : '–' }),
+      reportCell(g),
       links,
     );
     tr.addEventListener('click', (e) => {
@@ -232,7 +243,7 @@ async function send(msg, doneText) {
     else if (r?.status === 'error' && !r.failed) toast(r.message || 'Có lỗi', 'err');
     else if (r?.dryRun) toast(`Chạy thử: đã ghi ${r.dry} thao tác vào nhật ký, chưa gửi lên Beincom.`, 'warn');
     else if (r?.failed) toast(`Xong ${r.ok}, lỗi ${r.failed}: ${r.errors.join('; ')}`, 'err');
-    else toast(doneText(r?.ok ?? 0));
+    else toast(doneText(r?.ok ?? 0) + (r?.gone ? ` (${r.gone} bài đã bị xoá trên Beincom từ trước, đã bỏ khỏi danh sách)` : ''));
     return r;
   } finally {
     busy = false;
@@ -295,6 +306,7 @@ function ensureTabData() {
   if (!data.state.snapshot) return;
   if (currentTab === 'members' && !mem.groupId && memberGroup()) loadMembers(true);
   if (currentTab === 'compose' && !sched.loaded && !sched.loading) loadScheduled();
+  if (currentTab === 'reports' && !rep.loading && reportGroup() && !rep.data[repKey()]?.loaded) loadReports();
   if (currentTab === 'stats' && !stats.loaded && !stats.loading && statsGroup()) loadStats();
 }
 
@@ -312,6 +324,7 @@ const TAB_REFRESH = {
     },
   },
   content: { title: 'Tải lại bài chờ duyệt và bài mới đăng (không đọc yêu cầu tham gia)', run: () => refreshPart('content') },
+  reports: { title: 'Tải lại mục báo cáo đang xem', run: () => loadReports() },
   compose: { title: 'Tải lại danh sách bài đã hẹn giờ', run: () => loadScheduled() },
   stats: { title: 'Tính lại số liệu thống kê', run: () => loadStats() },
 };
@@ -358,6 +371,8 @@ function renderBadges() {
   set('badge-members', t.requests);
   set('badge-content', t.posts + flaggedRecent().length);
   set('badge-compose', sched.loaded ? sched.items.length : 0);
+  // Báo cáo chờ xử lý + bài bị gắn cờ, theo lần quét gần nhất (mở tab Báo cáo cũng cập nhật số này)
+  set('badge-reports', t.reports + t.autoFlagged);
 }
 
 function evaluated(g) {
@@ -1053,6 +1068,238 @@ async function hidePosts(posts) {
   renderRecent();
 }
 
+// ---------- Báo cáo vi phạm ----------
+
+// Dữ liệu tải theo yêu cầu, theo cặp group + loại; không lưu vào storage
+const rep = { groupId: null, kind: 'reported', status: 'CREATED', data: {}, loading: false, detail: {} };
+const selectedReports = new Set();
+
+function reportGroups() {
+  return groups().filter((g) => !g.error && g.communityId);
+}
+
+function reportGroup() {
+  const gs = reportGroups();
+  return gs.find((g) => g.id === rep.groupId) || gs.find((g) => g.isCommunity && g.isCommunityAdmin) || gs[0] || null;
+}
+
+const canSeeReported = (g) => !!(g?.isCommunity && g?.isCommunityAdmin);
+const repKey = (g = reportGroup(), kind = rep.kind) => `${g?.id}:${kind}`;
+
+async function loadReports() {
+  const g = reportGroup();
+  if (!g || rep.loading) return;
+  rep.groupId = g.id;
+  const key = repKey(g);
+  if (rep.kind === 'reported' && !canSeeReported(g)) {
+    rep.data[key] = { items: [], loaded: true, error: '', notAdmin: true };
+    renderReports();
+    return;
+  }
+  rep.loading = true;
+  renderReports();
+  try {
+    const r = await chrome.runtime.sendMessage({ type: 'reports', groupId: g.id, kind: rep.kind });
+    if (r?.status === 'ok') rep.data[key] = { items: r.items, timedOut: r.timedOut, loaded: true, error: '', at: Date.now() };
+    else rep.data[key] = { items: [], loaded: true, error: r?.status === 'need_login' ? 'Phiên đăng nhập Beincom đã hết hạn.' : r?.message || 'Có lỗi', notAdmin: r?.code === 'not_admin' };
+  } finally {
+    rep.loading = false;
+    renderReports();
+    renderBadges();
+  }
+}
+
+// Gợi ý lý do ẩn từ danh mục vi phạm của hệ thống kiểm duyệt tự động
+function hideReasonFor(violations) {
+  const v = (violations || []).join(' ').toLowerCase();
+  if (/spam|scam|fraud/.test(v)) return 'SPAM';
+  if (/sex|porn|nud|violen|gore|weapon/.test(v)) return 'VIOLENT_OR_PORN';
+  if (/hate|harass|bully|threat/.test(v)) return 'BULLYING_THREATENING_OR_HARASSING';
+  if (/child|minor/.test(v)) return 'CHILD_ABUSE_EXPLOITATION';
+  if (/illegal|drug|gambl/.test(v)) return 'ILLEGAL';
+  return 'OTHERS';
+}
+
+function reportRows() {
+  const d = rep.data[repKey()];
+  const items = d?.items || [];
+  if (rep.kind !== 'reported') return items;
+  return items.filter((r) => rep.status === 'all' || r.status === rep.status);
+}
+
+function reportHead() {
+  const cols = {
+    reported: ['', 'Nội dung bị báo cáo', 'Tác giả', 'Lý do báo cáo', 'Báo cáo lúc', 'Trạng thái', 'Thao tác'],
+    flagged: ['', 'Người đăng', 'Nội dung', 'Vi phạm (tự động)', 'Đăng lúc', 'Thao tác'],
+    hidden: ['Người đăng', 'Nội dung', 'Đăng vào', 'Đăng lúc', ''],
+  }[rep.kind];
+  $('reports-head').replaceChildren(el('tr', {}, cols.map((c, i) => el('th', { class: i === 0 && rep.kind !== 'hidden' ? 'cb' : i === cols.length - 1 ? 'act' : null, text: c }))));
+  return cols.length;
+}
+
+function reasonCell(r) {
+  const det = rep.detail[r.id];
+  const box = el(
+    'td',
+    {},
+    el('ul', { class: 'reason-list' }, r.reasons.map((x) => el('li', {}, x.label, el('span', { class: 'count', text: ` ×${x.total}` }), x.description ? el('div', { class: 'desc', text: x.description }) : null))),
+  );
+  if (det?.reasons) {
+    const who = det.reasons.flatMap((x) => x.reporters.map((p) => '@' + (p.username || p.fullname)));
+    box.append(el('div', { class: 'reporters', text: who.length ? 'Người báo cáo: ' + who.join(', ') : 'Beincom không trả danh sách người báo cáo' }));
+  } else {
+    box.append(
+      el('button', {
+        class: 'link-btn',
+        text: det?.loading ? 'Đang tải…' : det?.error ? 'Lỗi: ' + det.error : 'Ai đã báo cáo?',
+        disabled: !!det?.loading,
+        onclick: async () => {
+          rep.detail[r.id] = { loading: true };
+          renderReports();
+          const res = await chrome.runtime.sendMessage({ type: 'reportDetail', groupId: reportGroup().id, reportId: r.id });
+          rep.detail[r.id] = res?.status === 'ok' ? { reasons: res.reasons } : { error: res?.message || 'Có lỗi' };
+          renderReports();
+        },
+      }),
+    );
+  }
+  return box;
+}
+
+function renderReports() {
+  const gs = reportGroups();
+  const g = reportGroup();
+  $('reports-group').replaceChildren(...gs.map((x) => el('option', { value: x.id, selected: x.id === g?.id, text: BG.groupIndent(x) + x.name + (canSeeReported(x) ? ' (admin community)' : '') })));
+  $('reports-group').disabled = !gs.length || rep.loading;
+  setSegActive('reports-kind', rep.kind);
+  setSegActive('reports-status', rep.status);
+  $('reports-status').hidden = rep.kind !== 'reported';
+  for (const k of ['reported', 'flagged', 'hidden']) {
+    const d = rep.data[repKey(g, k)];
+    // Chưa mở mục nào thì lấy số từ lần quét
+    const scanned = { reported: g?.reportIds, flagged: g?.flaggedIds }[k]?.length || 0;
+    const n = d?.loaded ? (k === 'reported' ? d.items.filter((r) => r.status === 'CREATED').length : d.items.length) : scanned;
+    $('rk-' + k).textContent = n ? `(${n})` : '';
+  }
+
+  const d = rep.data[repKey()];
+  const note = $('reports-note');
+  note.classList.toggle('err-text', !!d?.error && !d?.notAdmin);
+  if (!g) note.textContent = data.state.snapshot ? 'Không có group nào.' : 'Chưa quét lần nào.';
+  else if (rep.loading) note.textContent = rep.kind === 'reported' ? 'Đang tải báo cáo… (Beincom có lúc trả chậm, tối đa 25 giây)' : 'Đang tải…';
+  else if (d?.notAdmin) note.textContent = 'Báo cáo của người dùng chỉ dành cho chủ / admin community — hãy chọn group gốc của community bạn làm admin (có ghi "admin community"). Bạn vẫn xem được mục "Gắn cờ tự động" và "Đã ẩn".';
+  else if (d?.error) note.textContent = d.error;
+  else if (d?.timedOut) note.textContent = 'Beincom không phản hồi sau 25 giây. Thường gặp khi community chưa có báo cáo nào — bấm Tải lại để thử lại.';
+  else if (rep.kind === 'reported') note.textContent = 'Bỏ qua: đánh dấu nội dung không vi phạm. Ẩn: ẩn nội dung bị báo cáo khỏi community (bình luận bị ẩn cũng biến mất khỏi bài).';
+  else if (rep.kind === 'flagged') note.textContent = 'Bài do hệ thống kiểm duyệt tự động của Beincom phát hiện có dấu hiệu vi phạm. Ẩn bài: gỡ bài khỏi các group bạn quản trị mà bài được đăng vào.';
+  else note.textContent = 'Bài đã bị ẩn trong group (do admin hoặc do xử lý báo cáo). Addon chưa hiện lại được bài đã ẩn.';
+
+  const ncol = reportHead();
+  const rows = reportRows();
+  pruneSelection(selectedReports, new Set(rows.map((r) => r.targetId || r.id)));
+  const idOf = (r) => r.targetId || r.id;
+  const pickable = rep.kind === 'reported' ? rows.filter((r) => r.status === 'CREATED') : rep.kind === 'flagged' ? rows : [];
+  const bulk = () => renderBulk({ set: selectedReports, shown: pickable, idOf, checkAll: 'reports-check-all', countEl: 'reports-selected', buttons: rep.kind === 'reported' ? ['btn-reports-ignore', 'btn-reports-hide'] : ['btn-reports-hide'] });
+  $('reports-bulk').hidden = rep.kind === 'hidden';
+  $('btn-reports-ignore').hidden = rep.kind !== 'reported';
+  $('btn-reports-hide').textContent = rep.kind === 'flagged' ? 'Ẩn bài đã chọn' : 'Ẩn đã chọn';
+
+  const body = $('reports-body');
+  body.replaceChildren();
+  if (!rows.length) {
+    const msg = rep.loading ? 'Đang tải…' : !d?.loaded ? 'Bấm "Tải lại" để xem' : d.error || d.notAdmin ? '—' : d.timedOut ? 'Chưa đọc được báo cáo' : rep.kind === 'reported' ? 'Không có báo cáo nào đang chờ xử lý 🎉' : rep.kind === 'flagged' ? 'Không có bài nào bị gắn cờ 🎉' : 'Không có bài nào đã ẩn';
+    body.append(el('tr', { class: 'empty-row' }, el('td', { colspan: ncol, text: msg })));
+  }
+  for (const r of rows) {
+    if (rep.kind === 'reported') {
+      const open = BG.reportUrl(r);
+      const pending = r.status === 'CREATED';
+      body.append(
+        el(
+          'tr',
+          { class: pending ? null : 'muted-row' },
+          el('td', { class: 'cb' }, pending ? rowCheckbox(selectedReports, r.targetId, 'nội dung của ' + (r.actor?.fullname || r.actor?.username || ''), bulk) : null),
+          el(
+            'td',
+            {},
+            el('span', { class: 'tag accent', text: BG.REPORT_TARGET[r.targetType] || r.targetType }),
+            el('div', { class: 'post-text clamp', title: 'Bấm để xem hết / thu gọn', text: r.content || '(không có chữ)', onclick: (e) => e.currentTarget.classList.toggle('clamp') }),
+            open ? el('a', { class: 'small', href: open, target: '_blank', text: r.targetType === 'COMMENT' ? 'Mở bài chứa bình luận ↗' : 'Mở ↗' }) : null,
+          ),
+          el('td', {}, r.actor ? postAuthor(r.actor) : '—'),
+          reasonCell(r),
+          el('td', { title: fmtTime(r.createdAt), text: ago(r.createdAt) || '—' }),
+          el('td', {}, el('span', { class: 'tag ' + (pending ? 'warn' : 'info'), text: BG.REPORT_STATUS[r.status] || r.status })),
+          el(
+            'td',
+            { class: 'act' },
+            pending ? el('button', { class: 'ghost sm', disabled: busy, text: 'Bỏ qua', onclick: () => actReports('ignore', [r]) }) : null,
+            pending ? el('button', { class: 'danger sm', disabled: busy, text: 'Ẩn', onclick: () => actReports('hide', [r]) }) : null,
+          ),
+        ),
+      );
+    } else if (rep.kind === 'flagged') {
+      body.append(
+        el(
+          'tr',
+          {},
+          el('td', { class: 'cb' }, rowCheckbox(selectedReports, r.id, 'bài của ' + (r.actor.fullname || r.actor.username), bulk)),
+          el('td', {}, postAuthor(r.actor)),
+          el('td', {}, postContent(r)),
+          el('td', {}, el('div', { class: 'badges' }, (r.violations.length ? r.violations : ['(không rõ)']).map((v) => el('span', { class: 'tag err', text: v })))),
+          el('td', { title: fmtTime(r.publishedAt), text: ago(r.publishedAt) }),
+          el('td', { class: 'act' }, el('a', { href: BG.postUrl(r), target: '_blank', text: 'Mở ↗' }), el('button', { class: 'danger sm', disabled: busy, text: 'Ẩn bài', onclick: () => actReports('hidePost', [r]) })),
+        ),
+      );
+    } else {
+      body.append(el('tr', {}, el('td', {}, postAuthor(r.actor)), el('td', {}, postContent(r)), el('td', {}, postGroups(r)), el('td', { title: fmtTime(r.publishedAt), text: ago(r.publishedAt) }), el('td', { class: 'act' }, el('a', { href: BG.postUrl(r), target: '_blank', text: 'Mở ↗' }))));
+    }
+  }
+  bulk();
+}
+
+async function actReports(action, rows) {
+  if (busy || !rows.length) return;
+  const g = reportGroup();
+  const isPost = action === 'hidePost';
+  const items = rows.map((r) =>
+    isPost
+      ? { targetId: r.id, targetType: r.type, snippet: r.title || r.text, actor: r.actor, groups: r.groups }
+      : { reportId: r.id, targetId: r.targetId, targetType: r.targetType, snippet: r.content, actor: r.actor },
+  );
+  let select = null;
+  if (isPost) {
+    select = el('select', {}, Object.entries(BG.HIDE_REASONS).map(([k, label]) => el('option', { value: k, text: label })));
+    select.value = hideReasonFor(rows.flatMap((r) => r.violations));
+  }
+  const T = {
+    ignore: { title: `Bỏ qua ${rows.length} báo cáo?`, text: 'Nội dung được giữ nguyên, báo cáo được đánh dấu là không vi phạm.', ok: 'Bỏ qua', danger: false },
+    hide: { title: `Ẩn ${rows.length} nội dung bị báo cáo?`, text: 'Nội dung bị ẩn khỏi community. Addon chưa hiện lại được nội dung đã ẩn.', ok: 'Ẩn', danger: true },
+    hidePost: { title: `Ẩn ${rows.length} bài bị gắn cờ?`, text: 'Bài bị gỡ khỏi các group bạn quản trị mà bài được đăng vào. Addon chưa hiện lại được bài đã ẩn.', ok: 'Ẩn bài', danger: true },
+  }[action];
+  const ok = await confirmDialog({
+    title: T.title,
+    text: T.text,
+    names: items.map((it) => `${it.actor?.fullname || it.actor?.username || '?'}: ${String(it.snippet || '').replace(/\s+/g, ' ').slice(0, 70)}`),
+    okText: T.ok,
+    danger: T.danger,
+    extra: select ? el('label', { class: 'text-row' }, el('span', {}, el('b', { text: 'Lý do ẩn' })), select) : null,
+  });
+  if (!ok) return;
+  const r = await send({ type: 'reportAct', action, groupId: g.id, items, reasonType: select?.value }, (n) => (action === 'ignore' ? `Đã bỏ qua ${n} báo cáo.` : `Đã ẩn ${n} nội dung.`));
+  const done = new Set(r?.done || []);
+  if (done.size) {
+    const d = rep.data[repKey(g)];
+    if (d) {
+      if (isPost) d.items = d.items.filter((x) => !done.has(x.id));
+      else d.items = d.items.map((x) => (done.has(x.targetId) ? { ...x, status: action === 'ignore' ? 'IGNORED' : 'HID' } : x));
+    }
+    for (const id of done) selectedReports.delete(id);
+  }
+  renderReports();
+  renderBadges();
+}
+
 // ---------- Đăng bài ----------
 
 const compose = { groupIds: new Set(), draftLoaded: false };
@@ -1074,6 +1321,15 @@ function composeWhen() {
   return document.querySelector('input[name="compose-when"]:checked')?.value || 'now';
 }
 
+// Ngày hết "Quan trọng": hạn chọn sẵn tính từ lúc bài được đăng (giờ hẹn hoặc bây giờ)
+function importantExpiry(later) {
+  if (!$('compose-important').checked) return null;
+  const preset = $('compose-important-for').value;
+  if (preset === 'custom') return $('compose-important-until').value ? new Date($('compose-important-until').value).toISOString() : 'invalid';
+  const base = later && $('compose-at').value ? new Date($('compose-at').value) : new Date();
+  return BG.importantUntil(preset, base);
+}
+
 function readCompose() {
   const later = composeWhen() === 'later';
   const important = $('compose-important').checked;
@@ -1084,7 +1340,7 @@ function readCompose() {
       canComment: $('compose-canComment').checked,
       canReact: $('compose-canReact').checked,
       isImportant: important,
-      importantExpiredAt: important && $('compose-important-until').value ? new Date($('compose-important-until').value).toISOString() : null,
+      importantExpiredAt: importantExpiry(later),
     },
     scheduledAt: later && $('compose-at').value ? new Date($('compose-at').value).toISOString() : later ? 'invalid' : null,
   };
@@ -1126,11 +1382,17 @@ function updateCompose() {
   const later = composeWhen() === 'later';
   $('compose-at').disabled = !later;
   if (later && !$('compose-at').value) $('compose-at').value = toLocalInput(nextQuarter());
-  $('compose-important-until').disabled = !$('compose-important').checked;
-  if ($('compose-important').checked && !$('compose-important-until').value) $('compose-important-until').value = toLocalInput(nextQuarter(24 * 3));
+  const important = $('compose-important').checked;
+  const custom = $('compose-important-for').value === 'custom';
+  $('compose-important-for').disabled = !important;
+  $('compose-important-until').hidden = !important || !custom;
+  if (important && custom && !$('compose-important-until').value) $('compose-important-until').value = toLocalInput(nextQuarter(24 * 3));
+  const until = c.setting.importantExpiredAt;
+  $('compose-important-hint').textContent = !important || custom ? '' : until ? '→ đến ' + fmtTime(until) : '→ không hết hạn';
   const btn = $('btn-compose');
   btn.textContent = later ? 'Hẹn giờ đăng' : 'Đăng ngay';
-  btn.disabled = busy || !c.groupIds.length || !len;
+  btn.disabled = busy || !c.groupIds.length || (!len && !compose.media.length);
+  loadTagsSeries();
   renderPreview();
 }
 
@@ -1141,9 +1403,15 @@ function draftValue() {
     canComment: $('compose-canComment').checked,
     canReact: $('compose-canReact').checked,
     important: $('compose-important').checked,
+    importantFor: $('compose-important-for').value,
     importantUntil: $('compose-important-until').value,
     when: composeWhen(),
     at: $('compose-at').value,
+    mentions: BG.usedMentions($('compose-text').value, compose.mentions),
+    link: compose.link?.preview ? { url: compose.link.url, preview: compose.link.preview } : null,
+    linkRemoved: [...compose.linkRemoved],
+    tags: compose.tags,
+    series: compose.series,
   };
 }
 
@@ -1153,9 +1421,18 @@ function applyDraft(d) {
   $('compose-canComment').checked = d.canComment !== false;
   $('compose-canReact').checked = d.canReact !== false;
   $('compose-important').checked = !!d.important;
+  // Nháp cũ chỉ có ngày giờ tự chọn
+  $('compose-important-for').value = d.importantFor || (d.importantUntil ? 'custom' : '1w');
   $('compose-important-until').value = d.importantUntil || '';
   for (const r of document.querySelectorAll('input[name="compose-when"]')) r.checked = r.value === (d.when || 'now');
   $('compose-at').value = d.at || '';
+  compose.mentions = { ...(d.mentions || {}) };
+  compose.link = d.link?.preview ? d.link : null;
+  compose.linkRemoved = new Set(d.linkRemoved || []);
+  compose.tags = [...(d.tags || [])];
+  compose.series = [...(d.series || [])];
+  renderLink();
+  renderTagsSeries();
   renderComposeGroups();
   updateCompose();
 }
@@ -1176,27 +1453,479 @@ async function loadDraftOnce() {
   if (composeDraft) applyDraft(composeDraft);
 }
 
+// ---------- Ảnh, video, tệp đính kèm ----------
+// File chỉ giữ trong lúc mở trang (không lưu được vào nháp); tải lên Beincom lúc bấm Đăng.
+// Mỗi mục: { key, kind, file, name, size, preview, status: 'local' | 'uploading' | 'done' | 'error', progress, item, error }
+compose.media = [];
+let mediaSeq = 0;
+const uploader = Upload.createUploader({ send: (m) => chrome.runtime.sendMessage(m) });
+const MEDIA_TITLES = {
+  image: `Tối đa ${BG.MEDIA.image.max} ảnh, mỗi ảnh ≤ ${BG.sizeText(BG.MEDIA.image.size)}`,
+  video: `${BG.MEDIA.video.max} video ≤ ${BG.sizeText(BG.MEDIA.video.size)}`,
+  file: `Tối đa ${BG.MEDIA.file.max} tệp, mỗi tệp ≤ ${BG.sizeText(BG.MEDIA.file.size)}: ${BG.MEDIA.file.exts.join(', ')}`,
+};
+
+// { images: [...], videos: [...], files: [...] } từ danh sách mục (map: lấy gì từ mỗi mục)
+function mediaByField(list, map = (m) => m) {
+  const out = { images: [], videos: [], files: [] };
+  for (const m of list) out[BG.MEDIA_FIELD[m.kind]].push(map(m));
+  return out;
+}
+
+function mediaCounts() {
+  const c = {};
+  for (const m of compose.media) c[m.kind] = (c[m.kind] || 0) + 1;
+  return c;
+}
+
+function addMedia(kind, files) {
+  const { accepted, errors } = BG.pickMedia(kind, [...files], mediaCounts());
+  for (const f of accepted) {
+    compose.media.push({ key: ++mediaSeq, kind, file: f, name: f.name, size: f.size, preview: kind === 'image' ? URL.createObjectURL(f) : '', status: 'local', progress: 0, item: null, error: '' });
+  }
+  if (errors.length) toast(errors.slice(0, 3).join('; ') + (errors.length > 3 ? ` (và ${errors.length - 3} lỗi khác)` : ''), 'err');
+  renderMedia();
+  updateCompose();
+}
+
+function removeMedia(key) {
+  const i = compose.media.findIndex((m) => m.key === key);
+  if (i < 0) return;
+  if (compose.media[i].preview) URL.revokeObjectURL(compose.media[i].preview);
+  compose.media.splice(i, 1);
+  renderMedia();
+  updateCompose();
+}
+
+function clearMedia() {
+  for (const m of compose.media) if (m.preview) URL.revokeObjectURL(m.preview);
+  compose.media = [];
+  renderMedia();
+}
+
+const MEDIA_STATUS = { local: 'Chưa tải lên', uploading: 'Đang tải lên', done: 'Đã tải lên', error: 'Lỗi' };
+
+function renderMedia() {
+  const counts = mediaCounts();
+  const uploading = compose.media.some((m) => m.status === 'uploading');
+  for (const k of Object.keys(BG.MEDIA)) {
+    const other = Object.keys(counts).some((x) => x !== k);
+    const full = (counts[k] || 0) >= BG.MEDIA[k].max;
+    const btn = $('media-btn-' + k);
+    btn.disabled = busy || uploading || other || full;
+    btn.title = other ? 'Mỗi bài chỉ đính kèm một loại: ảnh, video hoặc tệp' : full ? `Đã đủ ${BG.MEDIA[k].max} ${BG.MEDIA[k].label}` : MEDIA_TITLES[k];
+  }
+  const list = compose.media;
+  $('media-note').textContent = list.length ? `${BG.mediaSummary(mediaByField(list))} · chưa lưu vào nháp, tải lên Beincom khi bấm Đăng` : '';
+  const tray = $('compose-media');
+  tray.hidden = !list.length;
+  const bar = (m) => {
+    const fill = el('span', { style: `width:${Math.round(m.progress * 100)}%` });
+    m.bar = fill; // cập nhật tiến độ trực tiếp, khỏi vẽ lại cả khay
+    return el('span', { class: 'media-progress' + (m.status === 'uploading' ? '' : ' idle') }, fill);
+  };
+  const remove = (m) => el('button', { type: 'button', class: 'media-remove', title: 'Bỏ ' + m.name, 'aria-label': 'Bỏ ' + m.name, disabled: busy || uploading, text: '×', onclick: () => removeMedia(m.key) });
+  const state = (m) => (m.status === 'error' ? el('span', { class: 'err-text small', title: m.error, text: 'Lỗi: ' + m.error }) : m.status === 'local' ? null : el('span', { class: 'muted small', text: MEDIA_STATUS[m.status] }));
+  const images = list.filter((m) => m.kind === 'image');
+  const others = list.filter((m) => m.kind !== 'image');
+  tray.replaceChildren(
+    ...(images.length
+      ? [
+          el(
+            'div',
+            { class: 'media-grid' },
+            images.map((m) =>
+              el(
+                'div',
+                { class: 'media-thumb' + (m.status === 'error' ? ' failed' : ''), title: `${m.name} · ${BG.sizeText(m.size)}${m.error ? ' · ' + m.error : ''}` },
+                el('img', { src: m.preview, alt: m.name }),
+                remove(m),
+                bar(m),
+                m.status === 'done' ? el('span', { class: 'media-done', text: '✓' }) : null,
+                m.status === 'error' ? el('span', { class: 'media-done media-err', title: m.error, text: '!' }) : null,
+              ),
+            ),
+          ),
+        ]
+      : []),
+    ...others.map((m) =>
+      el(
+        'div',
+        { class: 'media-row' + (m.status === 'error' ? ' failed' : '') },
+        el('span', { class: 'media-icon', text: m.kind === 'video' ? '🎬' : '📎' }),
+        el('span', { class: 'media-name', title: m.name, text: m.name }),
+        el('span', { class: 'muted small', text: BG.sizeText(m.size) }),
+        bar(m),
+        state(m),
+        remove(m),
+      ),
+    ),
+  );
+  renderLink();
+}
+
+// Tải lần lượt từng file; mục đã tải ở lần trước (đăng lỗi) thì dùng lại. Lỗi thì dừng, trả về null.
+async function uploadMedia() {
+  busy = true;
+  updateCompose(); // khoá nút Đăng trong lúc tải
+  try {
+    for (const [i, m] of compose.media.entries()) {
+      if (m.status === 'done') continue;
+      $('btn-compose').textContent = `Đang tải lên ${i + 1}/${compose.media.length}…`;
+      m.status = 'uploading';
+      m.progress = 0;
+      m.error = '';
+      renderMedia();
+      try {
+        m.item = await uploader.upload(m.kind, m.file, (p) => {
+          m.progress = p;
+          if (m.bar) m.bar.style.width = Math.round(p * 100) + '%';
+        });
+        m.status = 'done';
+      } catch (e) {
+        m.status = 'error';
+        m.error = e.message || String(e);
+        toast(`${m.name}: ${m.error}`, 'err');
+        return null;
+      } finally {
+        renderMedia();
+      }
+    }
+    return mediaByField(compose.media, (m) => m.item);
+  } finally {
+    busy = false;
+    renderMedia();
+    updateCompose();
+  }
+}
+
+// ---------- Nhắc tên (@) ----------
+// Gõ @ rồi vài chữ: tìm người trong các group đã chọn (giống web), chọn để chèn @username.
+// compose.mentions: username -> dạng web lưu trong mentions của bài
+compose.mentions = {};
+const mention = { open: false, start: 0, query: '', items: [], active: 0, note: '', seq: 0, timer: 0, cache: new Map() };
+const MENTION_SHOW = 8;
+
+// Toạ độ con trỏ trong ô soạn (so với .editor-body), đo bằng một bản sao ẩn của ô chữ
+function caretXY(ta, pos) {
+  const cs = getComputedStyle(ta);
+  const div = document.createElement('div');
+  for (const p of ['boxSizing', 'width', 'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft', 'borderTopWidth', 'borderRightWidth', 'borderBottomWidth', 'borderLeftWidth', 'fontFamily', 'fontSize', 'fontWeight', 'lineHeight', 'letterSpacing', 'tabSize', 'wordSpacing']) div.style[p] = cs[p];
+  Object.assign(div.style, { position: 'absolute', visibility: 'hidden', whiteSpace: 'pre-wrap', overflowWrap: 'break-word', top: '0', left: '-9999px', borderStyle: 'solid' });
+  div.textContent = ta.value.slice(0, pos);
+  const mark = el('span', { text: ta.value.slice(pos) || '.' });
+  div.append(mark);
+  document.body.append(div);
+  const x = mark.offsetLeft;
+  const y = mark.offsetTop;
+  div.remove();
+  return { x: ta.offsetLeft + x - ta.scrollLeft, y: ta.offsetTop + y - ta.scrollTop, line: parseFloat(cs.lineHeight) || parseFloat(cs.fontSize) * 1.5 };
+}
+
+function closeMention() {
+  mention.open = false;
+  mention.seq++;
+  clearTimeout(mention.timer);
+  renderMention();
+}
+
+function showMention(items, note = '') {
+  mention.open = true;
+  mention.items = items;
+  mention.note = note;
+  mention.active = Math.min(mention.active, Math.max(0, Math.min(MENTION_SHOW, items.length) - 1));
+  renderMention();
+}
+
+// Gọi khi gõ / bấm chuột / di con trỏ trong ô soạn
+function checkMention() {
+  const ta = $('compose-text');
+  const q = ta.selectionStart === ta.selectionEnd ? BG.mentionQuery(ta.value.slice(0, ta.selectionStart)) : null;
+  if (!q) return mention.open && closeMention();
+  if (q.start !== mention.start || q.query !== mention.query) mention.active = 0;
+  mention.start = q.start;
+  mention.query = q.query;
+  const ids = readCompose().groupIds;
+  if (!ids.length) return showMention([], 'Chọn group để đăng trước, rồi mới tìm được người để nhắc tên');
+  const key = ids.join(',') + '|' + q.query.toLowerCase();
+  const seq = ++mention.seq;
+  clearTimeout(mention.timer);
+  if (mention.cache.has(key)) return showMention(mention.cache.get(key));
+  showMention(mention.items, 'Đang tìm…');
+  mention.timer = setTimeout(async () => {
+    const r = await chrome.runtime.sendMessage({ type: 'mentionable', groupIds: ids, key: q.query });
+    if (seq !== mention.seq) return; // đã gõ tiếp
+    if (r?.status !== 'ok') return showMention([], r?.status === 'need_login' ? 'Phiên đăng nhập Beincom đã hết hạn' : r?.message || 'Có lỗi');
+    mention.cache.set(key, r.users);
+    showMention(r.users);
+  }, 250);
+}
+
+function renderMention() {
+  const pop = $('mention-pop');
+  pop.hidden = !mention.open;
+  if (!mention.open) return;
+  const list = mention.note === 'Đang tìm…' ? [] : mention.items.slice(0, MENTION_SHOW);
+  pop.replaceChildren(
+    ...(list.length
+      ? list.map((u, i) =>
+          el(
+            'div',
+            { class: 'mention-item' + (i === mention.active ? ' active' : ''), role: 'option', 'aria-selected': i === mention.active ? 'true' : 'false', onmousedown: (e) => (e.preventDefault(), pickMention(u)) },
+            avatarOf(u),
+            el('span', { class: 'name', text: u.fullname || u.username }),
+            u.isVerified ? el('span', { class: 'tick', title: 'Đã xác minh', text: '✓' }) : null,
+            el('span', { class: 'muted small', text: '@' + u.username }),
+          ),
+        )
+      : [el('div', { class: 'mention-note muted small', text: mention.note || (mention.query ? `Không có ai tên "${mention.query}" trong các group đã chọn` : 'Gõ tên để tìm người') })]),
+  );
+  const ta = $('compose-text');
+  const c = caretXY(ta, mention.start);
+  const box = $('editor-body');
+  pop.style.left = Math.max(4, Math.min(c.x, box.clientWidth - pop.offsetWidth - 4)) + 'px';
+  pop.style.top = c.y + c.line + 4 + 'px';
+}
+
+function pickMention(u) {
+  if (!u) return;
+  const ta = $('compose-text');
+  const text = '@' + u.username + ' ';
+  compose.mentions[u.username] = BG.mentionEntry(u);
+  const end = ta.selectionStart;
+  closeMention();
+  editReplace(ta, mention.start, end, text, mention.start + text.length, mention.start + text.length);
+  updateCompose();
+  saveDraft();
+}
+
+// ---------- Xem trước link ----------
+// Giống web: lấy link cuối trong bài; chỉ hiện (và gửi) khi bài không có ảnh / video / tệp; bấm × để bỏ.
+compose.link = null; // { url, preview } | { url, loading } | { url, error }
+compose.linkRemoved = new Set();
+let linkTimer = 0;
+let linkSeq = 0;
+
+function checkLink() {
+  clearTimeout(linkTimer);
+  linkTimer = setTimeout(async () => {
+    const url = BG.lastLink($('compose-text').value);
+    if (!url || compose.linkRemoved.has(url)) {
+      if (compose.link) {
+        compose.link = null;
+        renderLink();
+        saveDraft();
+      }
+      return;
+    }
+    if (compose.link?.url === url) return;
+    const seq = ++linkSeq;
+    compose.link = { url, loading: true };
+    renderLink();
+    const r = await chrome.runtime.sendMessage({ type: 'linkPreview', url });
+    if (seq !== linkSeq || compose.link?.url !== url) return;
+    compose.link = r?.status === 'ok' ? { url, preview: r.preview } : { url, error: r?.message || 'không lấy được thông tin' };
+    renderLink();
+    saveDraft();
+  }, 700);
+}
+
+function renderLink() {
+  const box = $('compose-link');
+  const l = compose.link;
+  box.hidden = !l || compose.media.length > 0; // có ảnh / video / tệp thì Beincom không hiện xem trước link
+  if (box.hidden) return box.replaceChildren();
+  const remove = el('button', {
+    type: 'button',
+    class: 'media-remove',
+    title: 'Bỏ xem trước link này',
+    'aria-label': 'Bỏ xem trước link này',
+    text: '×',
+    onclick: () => {
+      compose.linkRemoved.add(l.url);
+      compose.link = null;
+      renderLink();
+      saveDraft();
+    },
+  });
+  if (l.loading) return box.replaceChildren(el('span', { class: 'muted small', text: `Đang lấy thông tin ${l.url}…` }), remove);
+  if (l.error) return box.replaceChildren(el('span', { class: 'muted small', text: `Không có xem trước cho ${l.url} (${l.error})` }), remove);
+  const p = l.preview;
+  box.replaceChildren(
+    p.image ? el('img', { src: p.image, alt: '', loading: 'lazy', referrerpolicy: 'no-referrer' }) : null,
+    el('div', { class: 'compose-link-text' }, el('b', { text: p.title || p.url }), p.description ? el('span', { class: 'desc', text: p.description }) : null, el('span', { class: 'muted small', text: p.domain || BG.linkDomains(p.url)[0] || '' })),
+    remove,
+  );
+}
+
+// ---------- Tag và series ----------
+// Danh sách tải theo các group đã chọn (tag theo community, series theo group), lọc ngay trên máy khi gõ.
+compose.tags = []; // [{ id, name }]
+compose.series = []; // [{ id, title }]
+const ts = { key: '', loading: false, loaded: false, tags: [], series: [], note: '', seq: 0, timer: 0 };
+const PICKERS = {
+  tag: { max: BG.TAG_MAX, unit: 'tag', chosen: () => compose.tags, options: () => ts.tags, label: (x) => x.name, sub: (x) => (x.totalUsed ? `${x.totalUsed} bài` : ''), keep: (x) => ({ id: x.id, name: x.name }) },
+  series: { max: BG.SERIES_MAX, unit: 'series', chosen: () => compose.series, options: () => ts.series, label: (x) => x.title, sub: (x) => x.summary || '', keep: (x) => ({ id: x.id, title: x.title }) },
+};
+const pickState = { tag: { open: false, active: 0 }, series: { open: false, active: 0 } };
+
+// Gọi mỗi lần vẽ lại khung soạn: chỉ tải khi danh sách group đã chọn đổi
+function loadTagsSeries() {
+  const ids = readCompose().groupIds;
+  const key = ids.join(',');
+  if (key === ts.key) return;
+  ts.key = key;
+  clearTimeout(ts.timer);
+  const seq = ++ts.seq;
+  if (!ids.length) {
+    Object.assign(ts, { loading: false, loaded: false, tags: [], series: [], note: '' });
+    return renderTagsSeries();
+  }
+  ts.loading = true;
+  renderTagsSeries();
+  ts.timer = setTimeout(async () => {
+    const r = await chrome.runtime.sendMessage({ type: 'tagsSeries', groupIds: ids });
+    if (seq !== ts.seq) return;
+    const ok = r?.status === 'ok';
+    Object.assign(ts, { loading: false, loaded: ok, tags: ok ? r.tags : [], series: ok ? r.series : [], note: ok ? r.note || '' : r?.status === 'need_login' ? 'Phiên đăng nhập Beincom đã hết hạn' : r?.message || 'Có lỗi' });
+    renderTagsSeries();
+  }, 300);
+}
+
+// Tag / series đã chọn nhưng không có trong danh sách của các group đang chọn
+function invalidPicks(kind) {
+  if (!ts.loaded) return [];
+  const p = PICKERS[kind];
+  return p.chosen().filter((x) => !p.options().some((o) => o.id === x.id));
+}
+
+function pickMatches(kind) {
+  const p = PICKERS[kind];
+  const q = BG.norm($(kind + '-input').value.trim());
+  return p
+    .options()
+    .filter((o) => !p.chosen().some((x) => x.id === o.id) && (!q || BG.norm(p.label(o)).includes(q)))
+    .slice(0, 8);
+}
+
+function renderPicker(kind) {
+  const p = PICKERS[kind];
+  const st = pickState[kind];
+  const chosen = p.chosen();
+  const bad = new Set(invalidPicks(kind).map((x) => x.id));
+  $(kind + '-chips').replaceChildren(
+    ...chosen.map((x) =>
+      el(
+        'span',
+        { class: 'chip' + (bad.has(x.id) ? ' invalid' : ''), title: bad.has(x.id) ? 'Không dùng được với các group đã chọn' : '' },
+        (kind === 'tag' ? '#' : '📚 ') + p.label(x),
+        el('button', { type: 'button', title: 'Bỏ ' + p.label(x), 'aria-label': 'Bỏ ' + p.label(x), text: '×', onclick: () => removePick(kind, x.id) }),
+      ),
+    ),
+  );
+  const input = $(kind + '-input');
+  const groupsPicked = !!ts.key;
+  const full = chosen.length >= p.max;
+  input.disabled = busy || !groupsPicked || full;
+  input.placeholder = !groupsPicked ? 'Chọn group để đăng trước' : full ? `Đã đủ ${p.max} ${p.unit}` : ts.loading ? 'Đang tải…' : kind === 'tag' ? `Thêm tag (tối đa ${p.max})…` : `Thêm vào series (tối đa ${p.max})…`;
+  const pop = $(kind + '-pop');
+  pop.hidden = !st.open || input.disabled;
+  if (pop.hidden) return;
+  const items = pickMatches(kind);
+  st.active = Math.min(st.active, Math.max(0, items.length - 1));
+  pop.replaceChildren(
+    ...(items.length
+      ? items.map((o, i) =>
+          el(
+            'div',
+            { class: 'picker-item' + (i === st.active ? ' active' : ''), role: 'option', 'aria-selected': i === st.active ? 'true' : 'false', onmousedown: (e) => (e.preventDefault(), addPick(kind, o)) },
+            kind === 'series' && o.cover ? el('img', { src: o.cover, alt: '', loading: 'lazy', referrerpolicy: 'no-referrer' }) : null,
+            el('span', { class: 'name', text: (kind === 'tag' ? '#' : '') + p.label(o) }),
+            p.sub(o) ? el('span', { class: 'muted small', text: p.sub(o).slice(0, 60) }) : null,
+          ),
+        )
+      : [el('div', { class: 'mention-note muted small', text: ts.loading ? 'Đang tải…' : p.options().length ? 'Không có kết quả' : kind === 'tag' ? 'Community chưa có tag nào' : 'Các group đã chọn chưa có series nào' })]),
+  );
+}
+
+function renderTagsSeries() {
+  renderPicker('tag');
+  renderPicker('series');
+  const bad = [...invalidPicks('tag'), ...invalidPicks('series')];
+  $('tags-note').classList.toggle('err-text', bad.length > 0);
+  $('tags-note').textContent = bad.length ? 'Mục màu đỏ không dùng được với các group đã chọn — bỏ ra trước khi đăng' : ts.note;
+}
+
+function addPick(kind, o) {
+  const p = PICKERS[kind];
+  if (!o || p.chosen().length >= p.max) return;
+  p.chosen().push(p.keep(o));
+  $(kind + '-input').value = '';
+  pickState[kind].active = 0;
+  renderTagsSeries();
+  saveDraft();
+}
+
+function removePick(kind, id) {
+  const p = PICKERS[kind];
+  const list = p.chosen();
+  const i = list.findIndex((x) => x.id === id);
+  if (i >= 0) list.splice(i, 1);
+  renderTagsSeries();
+  saveDraft();
+}
+
+function linkToSend() {
+  return !compose.media.length && compose.link?.preview ? compose.link.preview : null;
+}
+
 async function submitCompose() {
   if (busy) return;
   const c = readCompose();
   if (c.scheduledAt === 'invalid') return toast('Chưa chọn giờ hẹn', 'err');
-  const err = BG.validateCompose(c);
+  const attached = BG.mediaSummary(mediaByField(compose.media));
+  const err = BG.validateCompose({ ...c, media: mediaByField(compose.media), tags: compose.tags, series: compose.series });
   if (err) return toast(err, 'err');
+  const badPicks = [...invalidPicks('tag').map((x) => '#' + x.name), ...invalidPicks('series').map((x) => x.title)];
+  if (badPicks.length) return toast(`${badPicks.join(', ')} không dùng được với các group đã chọn — bỏ ra rồi đăng lại`, 'err');
   const targets = groups().filter((g) => compose.groupIds.has(g.id));
   const later = !!c.scheduledAt;
   const text = c.content.trim();
   const ev = BG.evaluatePost({ title: '', text, link: '' }, data.postRules);
   const warn = ev.verdict === 'ok' ? '' : '⚠ Bài dính quy tắc bài viết của bạn: ' + ev.reasons.map((r) => r.text).join('; ') + '. ';
+  const mentions = BG.usedMentions(c.content, compose.mentions);
+  const lp = linkToSend();
+  const extras = [
+    attached && 'Kèm ' + attached,
+    Object.keys(mentions).length && 'Nhắc ' + Object.keys(mentions).map((u) => '@' + u).join(', '),
+    lp && 'Xem trước link ' + (lp.domain || lp.url),
+    compose.tags.length && 'Tag ' + compose.tags.map((x) => '#' + x.name).join(' '),
+    compose.series.length && 'Series ' + compose.series.map((x) => x.title).join(', '),
+  ].filter(Boolean);
   const ok = await confirmDialog({
     title: later ? `Hẹn giờ đăng lúc ${fmtTime(c.scheduledAt)}?` : `Đăng bài vào ${targets.length} group?`,
-    text: text.length > 200 ? text.slice(0, 200) + '…' : text,
+    text: (extras.length ? `[${extras.join(' · ')}] ` : '') + (text.length > 200 ? text.slice(0, 200) + '…' : text),
     names: targets.map((g) => groupPath(g) + (g.settings?.contentApproval ? ' (group bật duyệt bài)' : '')),
     okText: later ? 'Hẹn giờ' : 'Đăng',
-    sendNote: warn + (later ? 'Sẽ gửi lên Beincom ngay; tới giờ Beincom tự đăng.' : 'Sẽ đăng ngay lên Beincom.'),
+    sendNote: warn + (attached && !data.settings.dryRun ? `Tải ${attached} lên Beincom trước, rồi đăng. ` : '') + (later ? 'Sẽ gửi lên Beincom ngay; tới giờ Beincom tự đăng.' : 'Sẽ đăng ngay lên Beincom.'),
   });
   if (!ok) return;
-  const r = await send({ type: 'compose', ...c }, () => (later ? `Đã hẹn giờ đăng lúc ${fmtTime(c.scheduledAt)}.` : 'Đã đăng bài.'));
+  // Chạy thử: không tải file lên, chỉ báo số lượng để ghi nhật ký
+  let media = null;
+  if (compose.media.length) {
+    media = data.settings.dryRun ? mediaByField(compose.media, (m) => ({ name: m.name })) : await uploadMedia();
+    if (!media) return;
+  }
+  const r = await send({ type: 'compose', ...c, media, mentions, linkPreview: lp, tags: compose.tags, series: compose.series }, () => (later ? `Đã hẹn giờ đăng lúc ${fmtTime(c.scheduledAt)}.` : 'Đã đăng bài.'));
   if (r?.status === 'ok' && !r.dryRun) {
+    clearMedia();
+    compose.mentions = {};
+    compose.link = null;
+    compose.linkRemoved.clear();
+    compose.tags = [];
+    compose.series = [];
+    renderLink();
+    renderTagsSeries();
     $('compose-text').value = '';
     await chrome.storage.local.set({ composeDraft: draftValue() });
     $('compose-saved').textContent = '';
@@ -1298,7 +2027,7 @@ function setEditorMode(mode) {
 function renderPreview() {
   if (editorMode === 'write') return;
   // renderMarkdown đã mã hoá HTML và chỉ sinh thẻ an toàn
-  $('compose-preview').innerHTML = BG.renderMarkdown($('compose-text').value);
+  $('compose-preview').innerHTML = BG.renderMarkdown($('compose-text').value, { mentions: compose.mentions });
 }
 
 // ---------- Mẫu bài ----------
@@ -1320,7 +2049,7 @@ async function saveTemplate() {
   if (!name?.trim()) return;
   const list = data.templates || [];
   const existing = list.find((t) => t.name === name.trim());
-  const tpl = { id: existing?.id || 'tpl' + Date.now(), name: name.trim(), text: d.text, groupIds: d.groupIds, canComment: d.canComment, canReact: d.canReact };
+  const tpl = { id: existing?.id || 'tpl' + Date.now(), name: name.trim(), text: d.text, groupIds: d.groupIds, canComment: d.canComment, canReact: d.canReact, mentions: d.mentions, tags: d.tags, series: d.series };
   await chrome.storage.local.set({ templates: existing ? list.map((t) => (t.id === tpl.id ? tpl : t)) : [...list, tpl] });
   $('tpl-select').value = tpl.id;
   toast(`Đã lưu mẫu "${tpl.name}".`);
@@ -1330,7 +2059,8 @@ function useTemplate() {
   const t = (data.templates || []).find((x) => x.id === $('tpl-select').value);
   if (!t) return;
   if ($('compose-text').value.trim() && !confirm('Thay nội dung đang viết bằng mẫu này?')) return;
-  applyDraft({ ...draftValue(), text: t.text, groupIds: t.groupIds, canComment: t.canComment, canReact: t.canReact });
+  applyDraft({ ...draftValue(), text: t.text, groupIds: t.groupIds, canComment: t.canComment, canReact: t.canReact, mentions: { ...compose.mentions, ...(t.mentions || {}) }, link: null, linkRemoved: [], tags: t.tags || [], series: t.series || [] });
+  checkLink();
   saveDraft();
 }
 
@@ -1356,6 +2086,59 @@ async function loadScheduled() {
   }
 }
 
+// "còn 2 giờ 15 phút" tới giờ đăng
+function untilText(t) {
+  const min = Math.round((new Date(t).getTime() - Date.now()) / 60e3);
+  if (!Number.isFinite(min)) return '';
+  if (min < 0) return 'đã quá giờ';
+  if (min < 60) return `còn ${min} phút`;
+  if (min < 48 * 60) return `còn ${Math.floor(min / 60)} giờ${min % 60 ? ` ${min % 60} phút` : ''}`;
+  return `còn ${Math.round(min / 1440)} ngày`;
+}
+
+// Nội dung bài hẹn giờ đã định dạng (thu gọn, bấm để xem hết); ảnh, link, tag, series, người được nhắc tên
+function scheduledContent(p) {
+  const full = el('div', { class: 'md-preview sched-full collapsed', title: 'Bấm để xem hết / thu gọn' });
+  full.innerHTML = p.text ? BG.renderMarkdown(p.text) : '<p>(không có chữ)</p>'; // renderMarkdown đã escape HTML
+  full.addEventListener('click', (e) => !e.target.closest('a') && full.classList.toggle('collapsed'));
+  const more = p.media.images - p.thumbs.length;
+  const lp = p.linkPreview;
+  return el(
+    'div',
+    {},
+    full,
+    p.thumbs.length
+      ? el('div', { class: 'thumbs' }, p.thumbs.map((src) => el('img', { src, alt: '', loading: 'lazy', referrerpolicy: 'no-referrer' })), more > 0 ? el('span', { class: 'thumb-more', text: '+' + more }) : null)
+      : null,
+    lp?.url
+      ? el(
+          'a',
+          { class: 'link-card', href: lp.url, target: '_blank', rel: 'noreferrer' },
+          lp.image ? el('img', { src: lp.image, alt: '', loading: 'lazy', referrerpolicy: 'no-referrer' }) : null,
+          el('span', {}, el('b', { text: lp.title || lp.url }), el('span', { class: 'muted small', text: lp.domain || BG.linkDomains(lp.url)[0] || '' })),
+        )
+      : null,
+    el(
+      'div',
+      { class: 'post-meta' },
+      p.media.videos ? el('span', { class: 'tag info', text: `🎬 ${p.media.videos} video` }) : null,
+      p.media.files ? el('span', { class: 'tag info', text: `📎 ${p.media.files} tệp` }) : null,
+      p.tags.map((t) => el('span', { class: 'tag accent', text: '#' + t })),
+      p.series.map((x) => el('span', { class: 'tag info', title: 'Series', text: '📚 ' + x })),
+      p.mentions.length ? el('span', { class: 'tag info', title: 'Nhắc tên', text: p.mentions.map((u) => '@' + u).join(', ') }) : null,
+    ),
+  );
+}
+
+// Cài đặt của bài: chỉ hiện những gì khác mặc định
+function scheduledSetting(s) {
+  const lines = [];
+  if (s.isImportant) lines.push(el('div', { class: 'warn-text', text: '⭐ Quan trọng' }), el('div', { class: 'muted', text: s.importantExpiredAt ? 'đến ' + fmtTime(s.importantExpiredAt) : 'không hết hạn' }));
+  if (!s.canComment) lines.push(el('div', { text: '🚫 Tắt bình luận' }));
+  if (!s.canReact) lines.push(el('div', { text: '🚫 Tắt cảm xúc' }));
+  return lines.length ? el('div', { class: 'small sched-setting' }, lines) : el('span', { class: 'muted small', text: 'Mặc định' });
+}
+
 function renderScheduled() {
   renderBadges();
   $('scheduled-note').textContent = sched.loading ? 'Đang tải…' : sched.error || sched.errors.join('; ') || (sched.loaded ? `${sched.items.length} bài đang chờ (theo các community bạn quản trị group gốc)` : '');
@@ -1368,17 +2151,30 @@ function renderScheduled() {
       el(
         'tr',
         {},
-        el('td', { title: fmtTime(p.scheduledAt) }, el('b', { text: fmtTime(p.scheduledAt) })),
+        el(
+          'td',
+          { class: 'nowrap' },
+          el('b', { text: fmtTime(p.scheduledAt) }),
+          // Chờ tới giờ đăng: hiện thời gian còn lại; trạng thái khác (lỗi…) hiện nhãn
+          p.status === 'WAITING_SCHEDULE' || !p.status
+            ? el('div', { class: 'small', text: untilText(p.scheduledAt) })
+            : el('div', {}, el('span', { class: 'tag ' + (failed ? 'err' : 'info'), text: BG.CONTENT_STATUS[p.status] || p.status })),
+          p.createdAt ? el('div', { class: 'muted small', text: 'Tạo lúc ' + fmtTime(p.createdAt) }) : null,
+        ),
         el('td', {}, postAuthor(p.actor)),
-        el('td', {}, postContent(p)),
+        el('td', { class: 'sched-content' }, scheduledContent(p)),
         el('td', {}, postGroups(p)),
-        el('td', {}, el('span', { class: 'tag ' + (failed ? 'err' : 'info'), text: BG.CONTENT_STATUS[p.status] || p.status || '—' })),
+        el('td', {}, scheduledSetting(p.setting)),
         el(
           'td',
           { class: 'act' },
-          el('a', { href: BG.postUrl(p), target: '_blank', text: 'Mở ↗' }),
-          el('button', { class: 'ghost sm', disabled: busy, text: 'Đổi giờ', onclick: () => reschedulePost(p) }),
-          el('button', { class: 'danger sm', disabled: busy, text: 'Huỷ', onclick: () => cancelPost(p) }),
+          el(
+            'div',
+            { class: 'act-stack' },
+            el('button', { class: 'ghost sm', disabled: busy, text: 'Đổi giờ', onclick: () => reschedulePost(p) }),
+            el('button', { class: 'danger sm', disabled: busy, text: 'Huỷ', onclick: () => cancelPost(p) }),
+            el('a', { href: BG.postUrl(p), target: '_blank', text: 'Mở ↗' }),
+          ),
         ),
       ),
     );
@@ -1650,14 +2446,19 @@ const ACTION_LABELS = {
   manage: { remove: 'Xoá thành viên', assignAdmin: 'Gán admin group', revokeAdmin: 'Gỡ admin group', ban: 'Cấm thành viên' },
   compose: { publish: 'Đăng bài', schedule: 'Hẹn giờ đăng', reschedule: 'Đổi giờ đăng', cancel: 'Huỷ bài hẹn giờ' },
   post: { approve: 'Duyệt bài', reject: 'Từ chối bài', hide: 'Ẩn bài', delete: 'Xoá bài' },
+  report: { ignore: 'Bỏ qua báo cáo', hide: 'Ẩn nội dung bị báo cáo', hidePost: 'Ẩn bài gắn cờ' },
 };
 const STATUS_TAGS = { ok: ['ok', 'Thành công'], dry: ['warn', 'Chạy thử'], error: ['err', 'Lỗi'] };
 
 const kindOf = (e) => e.kind || 'member'; // nhật ký cũ chưa có kind
 const actionLabel = (e) => ACTION_LABELS[kindOf(e)]?.[e.action] || e.action;
-const isPostKind = (e) => kindOf(e) === 'post' || kindOf(e) === 'compose';
+const isPostKind = (e) => kindOf(e) === 'post' || kindOf(e) === 'compose' || kindOf(e) === 'report';
 const targetText = (e) =>
-  kindOf(e) === 'compose' ? e.snippet || '' : kindOf(e) === 'post' ? `${e.fullname || e.username || '?'}: ${e.snippet || ''}` : `${e.fullname || ''}${e.username ? ' @' + e.username : ''}`;
+  kindOf(e) === 'compose'
+    ? e.snippet || ''
+    : kindOf(e) === 'post' || kindOf(e) === 'report'
+      ? `${e.fullname || e.username || '?'}: ${e.snippet || ''}`
+      : `${e.fullname || ''}${e.username ? ' @' + e.username : ''}`;
 const noteText = (e) => [e.scheduledAt ? 'Giờ đăng: ' + fmtTime(e.scheduledAt) : '', e.reason ? 'Lý do: ' + e.reason : '', e.message || ''].filter(Boolean).join(' · ');
 
 function filteredLog() {
@@ -1793,8 +2594,36 @@ onSeg('activity-filter', (f) => {
 });
 $('btn-activity-more').addEventListener('click', () => loadActivity(false));
 
+// Báo cáo vi phạm
+$('reports-group').addEventListener('change', (e) => {
+  rep.groupId = e.target.value;
+  selectedReports.clear();
+  if (rep.data[repKey()]?.loaded) renderReports();
+  else loadReports();
+});
+onSeg('reports-kind', (f) => {
+  rep.kind = f;
+  selectedReports.clear();
+  if (rep.data[repKey()]?.loaded) renderReports();
+  else loadReports();
+});
+onSeg('reports-status', (f) => {
+  rep.status = f;
+  renderReports();
+});
+$('reports-check-all').addEventListener('change', (e) => {
+  const rows = reportRows().filter((r) => (rep.kind === 'reported' ? r.status === 'CREATED' : true));
+  for (const r of rows) e.target.checked ? selectedReports.add(r.targetId || r.id) : selectedReports.delete(r.targetId || r.id);
+  renderReports();
+});
+const pickedReports = () => reportRows().filter((r) => selectedReports.has(r.targetId || r.id));
+$('btn-reports-ignore').addEventListener('click', () => actReports('ignore', pickedReports()));
+$('btn-reports-hide').addEventListener('click', () => actReports(rep.kind === 'flagged' ? 'hidePost' : 'hide', pickedReports()));
+
 // Đăng bài
-for (const id of ['compose-text', 'compose-canComment', 'compose-canReact', 'compose-important', 'compose-important-until', 'compose-at']) {
+$('compose-important-for').replaceChildren(...Object.entries(BG.IMPORTANT_FOR).map(([v, label]) => el('option', { value: v, text: label })));
+$('compose-important-for').value = '1w';
+for (const id of ['compose-text', 'compose-canComment', 'compose-canReact', 'compose-important', 'compose-important-for', 'compose-important-until', 'compose-at']) {
   $(id).addEventListener('input', () => {
     updateCompose();
     saveDraft();
@@ -1812,6 +2641,30 @@ $('editor').querySelector('.editor-toolbar').addEventListener('click', (e) => {
   const b = e.target.closest('button[data-md]');
   if (b && MD_ACTIONS[b.dataset.md]) MD_ACTIONS[b.dataset.md]();
 });
+// Nhắc tên: ↑ ↓ chọn, Enter / Tab chèn, Esc đóng
+$('compose-text').addEventListener('keydown', (e) => {
+  if (!mention.open) return;
+  const n = Math.min(MENTION_SHOW, mention.items.length);
+  if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && n && mention.note !== 'Đang tìm…') {
+    e.preventDefault();
+    mention.active = (mention.active + (e.key === 'ArrowDown' ? 1 : n - 1)) % n;
+    renderMention();
+  } else if ((e.key === 'Enter' || e.key === 'Tab') && n && mention.note !== 'Đang tìm…') {
+    e.preventDefault();
+    pickMention(mention.items[mention.active]);
+  } else if (e.key === 'Escape') {
+    e.preventDefault();
+    closeMention();
+  }
+});
+$('compose-text').addEventListener('input', () => {
+  checkMention();
+  checkLink();
+});
+$('compose-text').addEventListener('click', checkMention);
+$('compose-text').addEventListener('keyup', (e) => ['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key) && checkMention());
+$('compose-text').addEventListener('blur', () => mention.open && closeMention());
+$('compose-text').addEventListener('scroll', () => mention.open && renderMention());
 $('compose-text').addEventListener('keydown', (e) => {
   if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
   const k = { b: 'bold', i: 'italic', k: 'link' }[e.key.toLowerCase()];
@@ -1820,12 +2673,64 @@ $('compose-text').addEventListener('keydown', (e) => {
   MD_ACTIONS[k]();
 });
 onSeg('editor-mode', setEditorMode);
+for (const k of Object.keys(BG.MEDIA)) {
+  const input = $('media-input-' + k);
+  if (k === 'image') input.accept = BG.MEDIA.image.types.join(',');
+  if (k === 'file') input.accept = BG.MEDIA.file.exts.map((x) => '.' + x).join(',');
+  $('media-btn-' + k).addEventListener('click', () => input.click());
+  input.addEventListener('change', () => {
+    addMedia(k, input.files);
+    input.value = '';
+  });
+}
 $('btn-compose-clear').addEventListener('click', () => {
-  if ($('compose-text').value.trim() && !confirm('Xoá nội dung đang viết?')) return;
+  if (($('compose-text').value.trim() || compose.media.length) && !confirm('Xoá nội dung và file đính kèm đang soạn?')) return;
+  clearMedia();
+  compose.mentions = {};
+  compose.link = null;
+  compose.linkRemoved.clear();
+  compose.tags = [];
+  compose.series = [];
+  renderLink();
+  renderTagsSeries();
   $('compose-text').value = '';
   updateCompose();
   saveDraft();
 });
+// Ô chọn tag / series: gõ để lọc, ↑ ↓ chọn, Enter thêm, Esc đóng, Backspace khi ô trống thì bỏ mục cuối
+for (const kind of Object.keys(PICKERS)) {
+  const input = $(kind + '-input');
+  const st = pickState[kind];
+  const open = () => {
+    st.open = true;
+    renderPicker(kind);
+  };
+  input.addEventListener('focus', open);
+  input.addEventListener('input', () => {
+    st.active = 0;
+    open();
+  });
+  input.addEventListener('blur', () => {
+    st.open = false;
+    renderPicker(kind);
+  });
+  input.addEventListener('keydown', (e) => {
+    const items = pickMatches(kind);
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (items.length) st.active = (st.active + (e.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length;
+      open();
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      addPick(kind, items[st.active]);
+    } else if (e.key === 'Escape') {
+      st.open = false;
+      renderPicker(kind);
+    } else if (e.key === 'Backspace' && !input.value && PICKERS[kind].chosen().length) {
+      removePick(kind, PICKERS[kind].chosen().at(-1).id);
+    }
+  });
+}
 $('tpl-select').addEventListener('change', renderTemplates);
 $('btn-tpl-use').addEventListener('click', useTemplate);
 $('btn-tpl-save').addEventListener('click', saveTemplate);
@@ -1905,7 +2810,7 @@ $('tabs').addEventListener('keydown', (e) => {
   document.querySelector(`#tabs [data-tab="${currentTab}"]`).focus();
 });
 // Bấm ô số liệu ở Tổng quan để mở tab tương ứng
-for (const [id, tab, anchor] of [['kpi-requests', 'members', 'review'], ['kpi-posts', 'content', 'approval'], ['kpi-flagged', 'content', 'recent']]) {
+for (const [id, tab, anchor] of [['kpi-requests', 'members', 'review'], ['kpi-posts', 'content', 'approval'], ['kpi-flagged', 'content', 'recent'], ['kpi-reports', 'reports', 'reports']]) {
   const tile = $(id).parentElement;
   tile.classList.add('link');
   tile.title = 'Mở tab ' + document.querySelector(`#tabs [data-tab="${tab}"]`).textContent.trim();
@@ -1931,8 +2836,11 @@ function renderAll() {
   else renderActivity();
   renderApproval();
   renderRecent();
+  renderReports();
   renderComposeGroups();
   renderTemplates();
+  renderMedia();
+  renderTagsSeries();
   updateCompose();
   renderScheduled();
   renderRules();

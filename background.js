@@ -26,20 +26,27 @@ const ALARM = 'beingroup-scan';
 const DASHBOARD = 'dashboard.html';
 const LOG_MAX = 500;
 const KNOWN_MAX = 3000;
-const PAGE = 50;
+const PAGE = 50; // API nhóm group/
+const CONTENT_PAGE = 25; // API nội dung content/ chỉ nhận limit ≤ 25 ("limit must not be greater than 25")
+const SCHEDULED_PAGES = 8;
 const MAX_REQUESTS = 500; // mỗi group, đủ cho một lần duyệt
 const MAX_APPROVALS = 200; // bài chờ duyệt mỗi community
 const DETAIL_PER_SCAN = 30; // số bài chờ duyệt tải nội dung đầy đủ mỗi lần quét
 const TIMELINE_LIMIT = 20; // bài mới mỗi group mỗi lần quét
 const RECENT_MAX = 300; // số bài mới giữ lại để xem
+const REPORT_SCAN_TIMEOUT = 15000; // quét định kỳ chờ API báo cáo ngắn hơn khi mở tab Báo cáo
 
 // Phải tự chứa (không dùng biến ngoài) vì còn được inject vào tab group.beincom.com.
 // version: header x-version-id; '' = không gửi (user/me/profile báo lỗi phiên bản nếu có header này)
-async function beincomRequest(method, url, body, version = '2.0.0') {
+// timeoutMs: > 0 thì huỷ khi chờ quá lâu, trả { status: 0, timeout: true } (API báo cáo vi phạm có lúc treo)
+async function beincomRequest(method, url, body, version = '2.0.0', timeoutMs = 0) {
+  const ctl = timeoutMs > 0 ? new AbortController() : null;
+  const timer = ctl ? setTimeout(() => ctl.abort(), timeoutMs) : 0;
   try {
     const res = await fetch(url, {
       method,
       credentials: 'include',
+      signal: ctl?.signal,
       headers: {
         Accept: 'application/json, text/plain, */*',
         'x-application': 'BIC_GROUP',
@@ -55,7 +62,9 @@ async function beincomRequest(method, url, body, version = '2.0.0') {
     } catch {}
     return { status: res.status, body: data };
   } catch (e) {
-    return { status: 0, error: String(e) };
+    return ctl?.signal.aborted ? { status: 0, timeout: true, error: 'Beincom không phản hồi' } : { status: 0, error: String(e) };
+  } finally {
+    if (timer) clearTimeout(timer);
   }
 }
 
@@ -110,9 +119,9 @@ async function tabOnLoginPage(tabId) {
 let directUntil = 0;
 
 function directClient() {
-  const call = async (m, p, b, v) => {
-    const r = await beincomRequest(m, BG.API + p, b, v);
-    if (r.status === 401 || r.status === 0) directUntil = 0;
+  const call = async (m, p, b, v, t) => {
+    const r = await beincomRequest(m, BG.API + p, b, v, t);
+    if (r.status === 401 || (r.status === 0 && !r.timeout)) directUntil = 0; // API treo không phải do bị chặn
     return r;
   };
   return { mode: 'direct', call, close: async () => {} };
@@ -127,12 +136,12 @@ async function createClient() {
   }
 
   const { tabId, created } = await acquireTab();
-  const call = async (method, path, body, version = '2.0.0') => {
+  const call = async (method, path, body, version = '2.0.0', timeoutMs = 0) => {
     try {
       const [res] = await chrome.scripting.executeScript({
         target: { tabId },
         func: beincomRequest,
-        args: [method, BG.API + path, body ?? null, version],
+        args: [method, BG.API + path, body ?? null, version, timeoutMs],
       });
       return res?.result ?? { status: 0, error: 'Không chạy được script trong tab' };
     } catch (e) {
@@ -184,6 +193,7 @@ async function readGroup(client, admin) {
     communityId: d.communityId,
     communityName: d.community?.name || d.name || '',
     isCommunity: !!d.isCommunity,
+    rootGroupId: d.rootGroupId || (d.isCommunity ? d.id : ''),
     level: d.level ?? 0,
     privacy: d.privacy || '',
     userCount: d.userCount ?? null,
@@ -220,7 +230,7 @@ async function readApprovals(client, g, prevById) {
   const raw = [];
   let after = '';
   while (raw.length < MAX_APPROVALS) {
-    const q = `content/manage/communities/${g.id}/approval-contents?limit=${PAGE}&approvalStatus=WAITING_APPROVAL` + (after ? `&after=${encodeURIComponent(after)}` : '');
+    const q = `content/manage/communities/${g.id}/approval-contents?limit=${CONTENT_PAGE}&approvalStatus=WAITING_APPROVAL` + (after ? `&after=${encodeURIComponent(after)}` : '');
     const r = await client.call('GET', q);
     if (!BG.isOk(r)) {
       g.approvalError = 'Đọc bài chờ duyệt lỗi: ' + BG.errMsg(r);
@@ -271,7 +281,10 @@ async function scanGroupsPart(client, { approvalCounts = true } = {}) {
 
   const groups = [];
   for (const admin of BG.adminGroups(p.body.data)) groups.push(await readGroup(client, admin));
-  for (const g of groups) g.canBan = BG.canBan(p.body.data, g.communityId);
+  for (const g of groups) {
+    g.canBan = BG.canBan(p.body.data, g.communityId);
+    g.isCommunityAdmin = BG.isCommunityAdmin(p.body.data, g.communityId);
+  }
   if (approvalCounts) for (const g of groups) await readApprovalCount(client, g);
   // Community có việc lên trước; trong community, group gốc trước rồi tới group con
   return { status: 'ok', groups: BG.sortGroupTree(groups) };
@@ -303,10 +316,33 @@ async function scanContentPart(client, groups, prevGroups, scanPosts) {
   return [...posts.values()];
 }
 
-async function scanGroups(client, { prevGroups = [], scanPosts = true } = {}) {
+// Phần báo cáo: bài bị Beincom gắn cờ tự động (mọi group đang quản trị) và báo cáo chờ xử lý
+// (group gốc của community mình làm chủ / admin). Chỉ đọc trang đầu để đếm và báo cái mới.
+// Các group đọc song song vì API báo cáo có lúc treo tới hết thời hạn chờ. Sửa trực tiếp các group được truyền vào.
+async function scanReportsPart(client, groups, prevGroups) {
+  const prev = new Map((prevGroups || []).map((g) => [g.id, g]));
+  await Promise.all(
+    groups
+      .filter((g) => !g.error)
+      .map(async (g) => {
+        const old = prev.get(g.id) || {};
+        const f = await client.call('GET', `content/manage/groups/${g.id}/contents/flagged?${qs({ limit: TIMELINE_LIMIT })}`);
+        g.flaggedIds = BG.isOk(f) ? (f.body.data?.list || []).map((p) => p.id) : old.flaggedIds; // lỗi: giữ số cũ
+        if (!(g.isCommunity && g.isCommunityAdmin)) return;
+        const r = await client.call('GET', `content/manage/communities/${g.id}/content-reports?${qs({ limit: CONTENT_PAGE })}`, null, '2.0.0', REPORT_SCAN_TIMEOUT);
+        if (BG.isOk(r)) g.reportIds = (r.body.data?.list || []).filter((x) => (x.status || 'CREATED') === 'CREATED').map((x) => x.id);
+        // Đã gặp API treo ở community chưa có báo cáo nào -> coi như không có
+        else if (r.timeout) g.reportIds = [];
+        else g.reportIds = old.reportIds;
+      }),
+  );
+}
+
+async function scanGroups(client, { prevGroups = [], scanPosts = true, scanReports = true } = {}) {
   const r = await scanGroupsPart(client, { approvalCounts: false });
   if (r.status !== 'ok') return r;
-  const posts = await scanContentPart(client, r.groups, prevGroups, scanPosts);
+  // Hai phần sửa các trường khác nhau của group nên chạy song song được
+  const [posts] = await Promise.all([scanContentPart(client, r.groups, prevGroups, scanPosts), scanReports ? scanReportsPart(client, r.groups, prevGroups) : null]);
 
   // Tài khoản đang đăng nhập (để nhận ra bài của chính mình). API này không nhận header phiên bản.
   const meRes = await client.call('GET', 'user/me/profile', null, '');
@@ -342,6 +378,7 @@ function flaggedPosts(recent, postRules) {
 // ---------- Thao tác ghi ----------
 
 const DRY_MSG = 'Chạy thử — chưa gửi lên Beincom';
+const GONE_MSG = 'Bài không còn trên Beincom (đã bị xoá) — đã bỏ khỏi danh sách';
 
 function memberLog(source, action, g, req) {
   return {
@@ -376,10 +413,11 @@ function postLog(source, action, post, g) {
   };
 }
 
-// items: [{ log, call(client) }]. Chạy thử thì không gọi API.
+// items: [{ log, call(client), gone? }]. Chạy thử thì không gọi API.
+// gone: thao tác trên một bài; Beincom báo bài không còn thì tính là xong (entry có gone: true) để bỏ bài khỏi danh sách.
 async function performActions(items, settings) {
   const entries = [];
-  const entry = (it, status, message = '') => entries.push({ time: Date.now(), ...it.log, status, message });
+  const entry = (it, status, message = '', extra = {}) => entries.push({ time: Date.now(), ...it.log, status, message, ...extra });
   if (!items.length) return { status: 'ok', entries };
 
   if (settings.dryRun) {
@@ -396,7 +434,9 @@ async function performActions(items, settings) {
         entry(items[i], 'error', NEED_LOGIN.message);
         return { ...NEED_LOGIN };
       }
-      entry(items[i], BG.isOk(r) ? 'ok' : 'error', BG.isOk(r) ? '' : BG.errMsg(r));
+      if (BG.isOk(r)) entry(items[i], 'ok');
+      else if (items[i].gone && BG.isContentGone(r)) entry(items[i], 'ok', GONE_MSG, { gone: true });
+      else entry(items[i], 'error', BG.errMsg(r));
     }
     return { status: 'ok' };
   });
@@ -427,6 +467,12 @@ function removeHandledPosts(groups, entries) {
     const removed = g.approvals.length - left.length;
     return removed ? { ...g, approvals: left, approvalCount: Math.max(0, (g.approvalCount || 0) - removed) } : g;
   });
+}
+
+// Bỏ các ID đã xử lý khỏi một trường của mọi group trong ảnh chụp (bài gắn cờ, báo cáo chờ xử lý)
+function dropFromSnapshot(snapshot, field, done) {
+  if (!snapshot || !done.size) return snapshot;
+  return { ...snapshot, groups: snapshot.groups.map((x) => (x[field]?.some((id) => done.has(id)) ? { ...x, [field]: x[field].filter((id) => !done.has(id)) } : x)) };
 }
 
 function autoItems(groups, settings, rules, skipIds) {
@@ -461,8 +507,11 @@ async function updateBadge() {
     text = '!';
     color = '#c62828';
   } else {
-    const t = BG.totals(state.snapshot?.groups);
-    const n = t.requests + t.posts + flaggedPosts(state.recentPosts, postRules).length;
+    const groups = state.snapshot?.groups;
+    const t = BG.totals(groups);
+    // Bài vi phạm quy tắc và bài Beincom gắn cờ có thể trùng nhau: đếm một lần
+    const flagged = new Set([...flaggedPosts(state.recentPosts, postRules).map((p) => p.id), ...BG.autoFlaggedIds(groups)]);
+    const n = t.requests + t.posts + t.reports + flagged.size;
     text = n > 999 ? '999+' : n ? String(n) : '';
   }
   await chrome.action.setBadgeText({ text });
@@ -482,6 +531,7 @@ function summary(r, settings) {
     ok: r.entries.filter((e) => e.status === 'ok').length,
     dry: r.entries.filter((e) => e.status === 'dry').length,
     failed: r.entries.filter((e) => e.status === 'error').length,
+    gone: r.entries.filter((e) => e.gone).length,
     errors: [...new Set(r.entries.filter((e) => e.status === 'error').map((e) => e.message))],
   };
 }
@@ -526,6 +576,27 @@ function applyPosts(state, next, posts, postRules, notifyAllowed, now) {
   next.recentPosts = list;
 }
 
+// Báo cáo chờ xử lý mới và bài mới bị Beincom gắn cờ (lần quét đầu chỉ ghi nhận)
+function applyReports(state, next, groups, notifyAllowed) {
+  const kinds = [
+    { field: 'reportIds', known: 'knownReportIds', id: 'bg-reports', title: (n) => `BeinGroup: ${n} báo cáo vi phạm mới`, name: (g) => g.communityName || g.name },
+    { field: 'flaggedIds', known: 'knownFlaggedIds', id: 'bg-autoflag', title: (n) => `BeinGroup: ${n} bài bị Beincom gắn cờ vi phạm`, name: (g) => g.name },
+  ];
+  for (const k of kinds) {
+    const known = new Set(state[k.known] || []);
+    const fresh = new Set();
+    const names = [];
+    for (const g of groups) {
+      const ids = (g[k.field] || []).filter((id) => !known.has(id) && !fresh.has(id));
+      if (!ids.length) continue;
+      ids.forEach((id) => fresh.add(id));
+      names.push(k.name(g));
+    }
+    if (state[k.known] && fresh.size && notifyAllowed) notify(k.id, k.title(fresh.size), names.join(', '));
+    next[k.known] = [...fresh, ...(state[k.known] || [])].slice(0, KNOWN_MAX);
+  }
+}
+
 // Tải lại một phần (nút "Tải lại" trên từng tab), nhanh hơn quét toàn bộ:
 //  - 'groups':  quyền, thông tin group, yêu cầu tham gia, số bài chờ duyệt (không đọc bài viết)
 //  - 'content': hàng chờ duyệt bài và bài mới đăng (không đọc yêu cầu tham gia)
@@ -540,9 +611,12 @@ async function doRefresh({ part }) {
     if (part === 'groups') {
       const r = await scanGroupsPart(client);
       if (r.status !== 'ok') return r;
-      // Giữ hàng chờ duyệt bài đã tải (phần nội dung sẽ làm mới)
+      // Giữ hàng chờ duyệt bài và số báo cáo đã tải (phần nội dung / tab Báo cáo sẽ làm mới)
       const prev = new Map(prevGroups.map((g) => [g.id, g]));
-      for (const g of r.groups) if (prev.get(g.id)?.approvals) g.approvals = prev.get(g.id).approvals;
+      for (const g of r.groups) {
+        const old = prev.get(g.id);
+        for (const k of ['approvals', 'flaggedIds', 'reportIds']) if (old?.[k]) g[k] = old[k];
+      }
       return r;
     }
     const groups = prevGroups.map((g) => ({ ...g, approvalError: undefined, timelineError: undefined }));
@@ -567,7 +641,7 @@ async function doScan({ source = 'alarm' } = {}) {
   const auto = source === 'alarm' || source === 'startup' || source === 'install' || source === 'resume';
   if (auto && !settings.active) return state;
 
-  const result = await withClient((client) => scanGroups(client, { prevGroups: state.snapshot?.groups, scanPosts: settings.scanPosts }));
+  const result = await withClient((client) => scanGroups(client, { prevGroups: state.snapshot?.groups, scanPosts: settings.scanPosts, scanReports: settings.scanReports }));
   const now = Date.now();
   const next = { ...state, lastScan: now, lastResult: { status: result.status, message: result.message || '', mode: result.mode || '' } };
   const notifyAllowed = settings.active && settings.notify && source !== 'popup' && source !== 'dashboard';
@@ -589,6 +663,7 @@ async function doScan({ source = 'alarm' } = {}) {
     }
 
     applyGroups(state, next, groups, notifyAllowed, now);
+    if (settings.scanReports) applyReports(state, next, groups, notifyAllowed);
     if (result.me) next.me = result.me;
     if (settings.scanPosts) applyPosts(state, next, result.posts, postRules, notifyAllowed, now);
   } else if (result.status === 'need_login' && notifyAllowed && state.lastLoginNotifyDay !== BG.vnDay()) {
@@ -637,6 +712,7 @@ async function doApprovalAct({ action, groupId, contentIds, reason = '', source 
     .map((post) => ({
       log: { ...postLog(source, action, post, g), ...(action === 'reject' && body.rejectionReason.reason ? { reason: body.rejectionReason.reason } : {}) },
       call: (c) => c.call('PUT', `content/contents/approval-contents/${post.id}`, body),
+      gone: true,
     }));
   if (!items.length) return { status: 'error', message: 'Không còn bài nào để xử lý — hãy quét lại' };
 
@@ -667,7 +743,7 @@ async function doPostAct({ action, contentIds, reasonType = 'OTHERS', source = '
     const groups = state.snapshot?.groups || [];
     const items = recent
       .filter((p) => ids.has(p.id) && p.actor?.id === meId)
-      .map((post) => ({ log: postLog(source, 'delete', post, groups.find((g) => post.seenIn?.includes(g.id))), call: (c) => c.call('DELETE', `content/posts/${post.id}`) }));
+      .map((post) => ({ log: postLog(source, 'delete', post, groups.find((g) => post.seenIn?.includes(g.id))), call: (c) => c.call('DELETE', `content/posts/${post.id}`), gone: true }));
     if (!items.length) return { status: 'error', message: 'Chỉ xoá được bài của chính bạn. Bài của người khác hãy dùng "Ẩn bài".' };
     const r = await performActions(items, settings);
     pushLog(log, r.entries);
@@ -692,6 +768,7 @@ async function doPostAct({ action, contentIds, reasonType = 'OTHERS', source = '
     items.push({
       log: { ...postLog(source, 'hide', post, g), reason: BG.HIDE_REASONS[reasonType], groupIds },
       call: (c) => c.call('POST', `content/contents/${post.id}/hide`, { reasonType, groupIds }),
+      gone: true,
     });
   }
   if (!items.length) return { status: 'error', message: 'Không có bài nào ẩn được (bài đã ẩn hoặc không thuộc group bạn quản trị)' };
@@ -699,7 +776,12 @@ async function doPostAct({ action, contentIds, reasonType = 'OTHERS', source = '
   const r = await performActions(items, settings);
   pushLog(log, r.entries);
   const hidden = new Set(r.entries.filter((e) => e.status === 'ok').map((e) => e.contentId));
-  const next = { ...state, recentPosts: recent.map((p) => (hidden.has(p.id) ? { ...p, isHidden: true } : p)) };
+  const gone = new Set(r.entries.filter((e) => e.gone).map((e) => e.contentId));
+  const next = {
+    ...state,
+    recentPosts: recent.filter((p) => !gone.has(p.id)).map((p) => (hidden.has(p.id) ? { ...p, isHidden: true } : p)),
+    snapshot: dropFromSnapshot(state.snapshot, 'flaggedIds', hidden),
+  };
   if (r.status === 'need_login') next.lastResult = { status: 'need_login', message: NEED_LOGIN.message, mode: r.mode || '' };
   await chrome.storage.local.set({ state: next, log });
   await updateBadge();
@@ -814,8 +896,8 @@ async function doMemberAct({ action, groupId, users, reason = 'VIOLATE_RULE', so
 // Giống web: POST content/posts (tạo nháp, nhận id) -> PUT content/posts/{id}/publish | schedule.
 // Bước 2 lỗi thì xoá bản nháp vừa tạo (Beincom giới hạn số bản nháp).
 
-async function doCompose({ groupIds, content, setting, scheduledAt = null, source = 'manual' }) {
-  const err = BG.validateCompose({ groupIds, content, setting, scheduledAt });
+async function doCompose({ groupIds, content, setting, scheduledAt = null, media = null, mentions = null, linkPreview = null, tags = [], series = [], source = 'manual' }) {
+  const err = BG.validateCompose({ groupIds, content, setting, scheduledAt, media, tags, series });
   if (err) return { status: 'error', message: err };
   const { settings, state, log } = await load();
   const known = new Map((state.snapshot?.groups || []).map((g) => [g.id, g]));
@@ -823,7 +905,8 @@ async function doCompose({ groupIds, content, setting, scheduledAt = null, sourc
   if (targets.length !== groupIds.length) return { status: 'error', message: 'Có group không còn trong danh sách — hãy quét lại' };
 
   const action = scheduledAt ? 'schedule' : 'publish';
-  const body = BG.composeBody({ groupIds, content, setting, scheduledAt });
+  const body = BG.composeBody({ groupIds, content, setting, scheduledAt, media, mentions, linkPreview, tags, series });
+  const attached = BG.mediaSummary(body.media);
   const base = {
     kind: 'compose',
     source,
@@ -831,7 +914,7 @@ async function doCompose({ groupIds, content, setting, scheduledAt = null, sourc
     groupId: targets[0].id,
     groupName: targets.map((g) => g.name).join(', '),
     communityName: [...new Set(targets.map((g) => g.communityName))].join(', '),
-    snippet: body.content.replace(/\s+/g, ' ').slice(0, 120),
+    snippet: ((attached ? `[${attached}] ` : '') + body.content.replace(/\s+/g, ' ')).slice(0, 120),
     scheduledAt: body.scheduledAt || null,
   };
 
@@ -839,6 +922,12 @@ async function doCompose({ groupIds, content, setting, scheduledAt = null, sourc
   if (settings.dryRun) r = { status: 'ok', dry: true };
   else {
     r = await withClient(async (client) => {
+      // Tag / series phải dùng được với các group đã chọn: kiểm tra trước khi tạo bản nháp (lỗi khác thì để bước đăng kiểm tra)
+      if (body.tags.length || body.series.length) {
+        const v = await client.call('POST', 'content/contents/validate-series-tags', { groups: body.audience.groupIds, series: body.series, tags: body.tags });
+        if (v.status === 401) return { ...NEED_LOGIN };
+        if (v.body?.code === 'tag_series_invalid') return { status: 'error', message: BG.tagSeriesError(v.body, tags, series) };
+      }
       const d = await client.call('POST', 'content/posts', { audience: { groupIds: body.audience.groupIds }, isEnableDonation: false });
       if (d.status === 401) return { ...NEED_LOGIN };
       if (!BG.isOk(d) || !d.body.data?.id) return { status: 'error', message: 'Tạo bài nháp lỗi: ' + BG.errMsg(d) };
@@ -846,6 +935,7 @@ async function doCompose({ groupIds, content, setting, scheduledAt = null, sourc
       const p = await client.call('PUT', `content/posts/${id}/${action}`, body);
       if (!BG.isOk(p)) {
         await client.call('DELETE', `content/posts/${id}`);
+        if (p.body?.code === 'tag_series_invalid') return { status: 'error', message: BG.tagSeriesError(p.body, tags, series) };
         return { status: 'error', message: (action === 'schedule' ? 'Hẹn giờ lỗi: ' : 'Đăng bài lỗi: ') + BG.errMsg(p) };
       }
       return { status: 'ok', contentId: id, postStatus: p.body.data?.status || null };
@@ -871,6 +961,117 @@ async function doCompose({ groupIds, content, setting, scheduledAt = null, sourc
   };
 }
 
+// ---------- Tải ảnh / video / tệp lên (Dashboard gửi nội dung file, background lo phần gọi API có đăng nhập) ----------
+// Giống web Beincom:
+//  - ảnh:  POST upload/images/ { properties: { mime_type }, resource: 'post:content' } -> { id, presigned_post }
+//  - video: POST upload/videos/ { properties: { mime_type } } (kèm x-version-id) -> { id, presigned_post }
+//  - tệp:  POST upload/files/ -> { id }; Dashboard gửi file tới upload/files/{id}
+// Ảnh / video: Dashboard gửi file lên presigned_post.url rồi gọi uploadWait để chờ Beincom xử lý.
+const UPLOAD_PATH = { image: 'upload/images/', video: 'upload/videos/', file: 'upload/files/' };
+const UPLOAD_WAIT_MS = { image: 120e3, video: 600e3 };
+
+async function doUploadInit({ kind, mimeType = '' }) {
+  if (!UPLOAD_PATH[kind]) return { status: 'error', message: 'Loại file không hợp lệ' };
+  return withClient(async (client) => {
+    const body = kind === 'file' ? null : { properties: { mime_type: mimeType }, ...(kind === 'image' ? { resource: 'post:content' } : {}) };
+    const r = await client.call('POST', UPLOAD_PATH[kind], body, kind === 'video' ? '2.0.0' : '');
+    if (r.status === 401) return { ...NEED_LOGIN };
+    const d = r.body?.data;
+    if (!BG.isOk(r) || !d?.id) return { status: 'error', message: 'Không xin được chỗ tải lên: ' + BG.errMsg(r) };
+    if (kind === 'file') return { status: 'ok', id: d.id };
+    if (!d.presigned_post?.url) return { status: 'error', message: 'Beincom không trả link tải lên' };
+    return { status: 'ok', id: d.id, url: d.presigned_post.url, fields: d.presigned_post.fields || {} };
+  });
+}
+
+// unsure: Dashboard không đọc được phản hồi của kho lưu trữ (bị chặn CORS) nên chưa chắc file đã lên
+async function doUploadWait({ kind, id, unsure = false }) {
+  if (kind !== 'image' && kind !== 'video') return { status: 'error', message: 'Loại file không hợp lệ' };
+  return withClient(async (client) => {
+    const r = await client.call('GET', `${UPLOAD_PATH[kind]}${id}?wait=true`, null, kind === 'video' ? '2.0.0' : '', UPLOAD_WAIT_MS[kind]);
+    if (r.status === 401) return { ...NEED_LOGIN };
+    if (r.timeout) return { status: 'error', message: kind === 'video' ? 'Beincom xử lý video quá lâu, thử lại sau' : 'Beincom xử lý ảnh quá lâu' };
+    const d = r.body?.data;
+    if (!BG.isOk(r) || !d) return { status: 'error', message: 'Beincom chưa nhận file: ' + BG.errMsg(r) };
+    if (d.status === 'ERROR') return { status: 'error', message: 'Beincom báo lỗi file: ' + (d.error_message || 'không rõ') };
+    if (!d.url && (kind === 'image' || unsure)) return { status: 'error', message: unsure ? 'File chưa lên được kho lưu trữ (trình duyệt có thể đã chặn)' : 'Beincom chưa xử lý xong ảnh' };
+    return { status: 'ok', item: BG.mediaItem(kind, id, d) };
+  });
+}
+
+// ---------- Tag và series (đọc khi soạn bài) ----------
+
+// Group gốc của một group: lần quét mới có rootGroupId; bản cũ thì lấy group gốc cùng community nếu đang quản trị
+function rootOf(g, groups) {
+  if (!g) return '';
+  if (g.rootGroupId) return g.rootGroupId;
+  if (g.isCommunity) return g.id;
+  return groups.find((x) => x.isCommunity && x.communityId === g.communityId)?.id || '';
+}
+
+const TAG_SERIES_PAGES = 8; // tối đa 8 trang × 25
+
+// Tag lấy theo group gốc của các group sẽ đăng (giống web), series theo chính các group đó
+async function doTagsSeries({ groupIds = [] }) {
+  if (!groupIds.length) return { status: 'ok', tags: [], series: [] };
+  const { state } = await load();
+  const groups = state.snapshot?.groups || [];
+  const byId = new Map(groups.map((g) => [g.id, g]));
+  const roots = [...new Set(groupIds.map((id) => rootOf(byId.get(id), groups)).filter(Boolean))];
+  const ids = (list) => list.map((id) => 'groupIds[]=' + encodeURIComponent(id)).join('&');
+  return withClient(async (client) => {
+    const readAll = async (path, slim) => {
+      const out = [];
+      for (let page = 0, offset = 0; page < TAG_SERIES_PAGES; page++) {
+        const r = await client.call('GET', `${path}&offset=${offset}`);
+        if (r.status === 401) return { error: NEED_LOGIN };
+        if (!BG.isOk(r)) return { error: { status: 'error', message: 'Đọc tag / series lỗi: ' + BG.errMsg(r) } };
+        const list = r.body.data?.list || [];
+        out.push(...list.map(slim));
+        offset += list.length;
+        if (!list.length || offset >= (r.body.data?.meta?.total ?? 0)) break;
+      }
+      return { list: out };
+    };
+    const t = roots.length ? await readAll(`content/tags?${ids(roots)}`, BG.slimTag) : { list: [] };
+    if (t.error) return t.error;
+    const s = await readAll(`content/series?${ids(groupIds)}`, BG.slimSeries);
+    if (s.error) return s.error;
+    const note = roots.length < new Set(groupIds.map((id) => byId.get(id)?.communityId)).size ? 'Bấm "Quét ngay" để tải tag của các group con' : '';
+    return { status: 'ok', tags: t.list, series: s.list, note };
+  });
+}
+
+// ---------- Nhắc tên và xem trước link (đọc khi soạn bài) ----------
+
+// Người nhắc tên được trong các group sẽ đăng. API người dùng không nhận header phiên bản (bị 400).
+async function doMentionable({ groupIds = [], key = '' }) {
+  if (!groupIds.length) return { status: 'ok', users: [] };
+  return withClient(async (client) => {
+    // Dấu phẩy để nguyên như web gửi (axios không mã hoá dấu phẩy)
+    const ids = groupIds.map(encodeURIComponent).join(',');
+    const r = await client.call('GET', `user/users/mentionable?group_ids=${ids}${key.trim() ? '&' + qs({ key: key.trim() }) : ''}`, null, '');
+    if (r.status === 401) return { ...NEED_LOGIN };
+    if (!BG.isOk(r)) return { status: 'error', message: 'Tìm người lỗi: ' + BG.errMsg(r) };
+    return { status: 'ok', users: (r.body.data || []).map(BG.slimMentionable) };
+  });
+}
+
+// Xem trước link: bài / article / series trên Beincom dùng API nội dung, link ngoài dùng url-metadata (giống web)
+const BIC_CONTENT_URL = /^https?:\/\/(?:www\.)?group\.beincom\.com\/(?:posts|article|series)\/([^/?#]+)/i;
+
+async function doLinkPreview({ url = '' }) {
+  if (!/^https?:\/\//i.test(url)) return { status: 'error', message: 'Link không hợp lệ' };
+  const own = BIC_CONTENT_URL.exec(url);
+  return withClient(async (client) => {
+    const r = await client.call('GET', own ? `content/contents/${own[1]}/link-preview` : `group/url-metadata?${qs({ url })}`, null, '2.0.0', 15000);
+    if (r.status === 401) return { ...NEED_LOGIN };
+    const preview = BG.isOk(r) ? BG.slimLinkPreview(r.body.data) : null;
+    if (!preview) return { status: 'error', message: r.timeout ? 'Beincom không phản hồi' : 'Không lấy được thông tin link: ' + BG.errMsg(r) };
+    return { status: 'ok', preview };
+  });
+}
+
 // Bài đang chờ tới giờ đăng trong các community mình quản trị group gốc
 async function doScheduled() {
   const { state } = await load();
@@ -879,13 +1080,19 @@ async function doScheduled() {
     const map = new Map();
     const errors = [];
     for (const g of roots) {
-      const r = await client.call('GET', `content/manage/groups/${g.id}/contents/scheduled?${qs({ limit: PAGE, type: 'POST' })}`);
-      if (r.status === 401) return { ...NEED_LOGIN };
-      if (!BG.isOk(r)) {
-        errors.push(`${g.name}: ${BG.errMsg(r)}`);
-        continue;
+      let after = '';
+      for (let page = 0; page < SCHEDULED_PAGES; page++) {
+        const r = await client.call('GET', `content/manage/groups/${g.id}/contents/scheduled?${qs({ limit: CONTENT_PAGE, type: 'POST', after })}`);
+        if (r.status === 401) return { ...NEED_LOGIN };
+        if (!BG.isOk(r)) {
+          errors.push(`${g.name}: ${BG.errMsg(r)}`);
+          break;
+        }
+        const list = r.body.data?.list || [];
+        for (const p of list) if (!map.has(p.id)) map.set(p.id, { ...BG.slimScheduled(p), communityName: g.communityName || g.name });
+        after = r.body.data?.meta?.endCursor || '';
+        if (!r.body.data?.meta?.hasNextPage || !after || !list.length) break;
       }
-      for (const p of r.body.data?.list || []) if (!map.has(p.id)) map.set(p.id, { ...BG.slimPost(p), communityName: g.communityName || g.name });
     }
     const items = [...map.values()].sort((a, b) => String(a.scheduledAt || '').localeCompare(String(b.scheduledAt || '')));
     return { status: 'ok', items, errors };
@@ -904,6 +1111,7 @@ async function doScheduleAct({ action, contentId, scheduledAt, snippet = '', gro
   const item = {
     log: { kind: 'compose', source, action, contentId, contentType: 'POST', snippet, groupName, communityName: '', ...(iso ? { scheduledAt: iso } : {}) },
     call: (c) => (action === 'reschedule' ? c.call('PUT', `content/contents/${contentId}/reschedule`, { scheduledAt: iso }) : c.call('DELETE', `content/posts/${contentId}`)),
+    gone: true,
   };
   const r = await performActions([item], settings);
   pushLog(log, r.entries);
@@ -985,6 +1193,139 @@ async function doStats({ groupId, days = 30 }) {
   });
 }
 
+// ---------- Báo cáo vi phạm ----------
+// 'reported': người dùng báo cáo bài / article / bình luận — chỉ chủ / admin community (gọi bằng ID group gốc).
+//             API danh sách có lúc treo (gặp khi community chưa có báo cáo nào) nên đặt giới hạn chờ.
+// 'flagged':  bài bị hệ thống kiểm duyệt tự động của Beincom gắn cờ — admin group xem được.
+// 'hidden':   bài đã bị ẩn trong group.
+
+const REPORT_TIMEOUT = 25000;
+const REPORT_PAGES = 4;
+
+async function doReports({ groupId, kind = 'reported' }) {
+  const g = await findGroup(groupId);
+  if (!g) return { status: 'error', message: 'Không tìm thấy group — hãy quét lại' };
+  if (kind === 'reported' && !(g.isCommunity && g.isCommunityAdmin)) {
+    return { status: 'error', code: 'not_admin', message: 'Chỉ chủ / admin community mới xem được báo cáo của người dùng (chọn group gốc của community bạn làm admin).' };
+  }
+  if (!['reported', 'flagged', 'hidden'].includes(kind)) return { status: 'error', message: 'Loại báo cáo không hợp lệ' };
+  const result = await withClient(async (client) => {
+    const items = [];
+    let after = '';
+    for (let page = 0; page < REPORT_PAGES; page++) {
+      const path =
+        kind === 'reported'
+          ? `content/manage/communities/${g.id}/content-reports?${qs({ limit: CONTENT_PAGE, after })}`
+          : `content/manage/groups/${g.id}/contents/${kind}?${qs({ limit: TIMELINE_LIMIT, after })}`;
+      const r = await client.call('GET', path, null, '2.0.0', kind === 'reported' ? REPORT_TIMEOUT : 0);
+      if (r.status === 401) return { ...NEED_LOGIN };
+      if (r.timeout) return { status: 'ok', items, timedOut: true };
+      if (!BG.isOk(r)) return { status: 'error', message: 'Đọc báo cáo lỗi: ' + BG.errMsg(r) };
+      const list = r.body.data?.list || [];
+      items.push(...list.map(kind === 'reported' ? BG.slimReport : BG.slimPost));
+      after = r.body.data?.meta?.endCursor || '';
+      if (!r.body.data?.meta?.hasNextPage || !after || !list.length) break;
+    }
+    return { status: 'ok', items, timedOut: false };
+  });
+  if (result.status === 'ok') syncReportCounts(g.id, kind, result.items);
+  return result;
+}
+
+// Danh sách vừa đọc ở tab Báo cáo mới hơn lần quét: cập nhật số đếm (huy hiệu) và đánh dấu đã thấy để khỏi báo lại.
+// Xếp hàng sau lần quét / thao tác đang chạy nhưng không bắt tab Báo cáo phải chờ.
+function syncReportCounts(groupId, kind, items) {
+  const field = { reported: 'reportIds', flagged: 'flaggedIds' }[kind];
+  if (!field) return;
+  const known = field === 'reportIds' ? 'knownReportIds' : 'knownFlaggedIds';
+  const ids = (kind === 'reported' ? items.filter((x) => x.status === 'CREATED') : items).map((x) => x.id);
+  exclusive(async () => {
+    const { state } = await load();
+    const g = state.snapshot?.groups?.find((x) => x.id === groupId);
+    if (!g) return;
+    const unseen = state[known] ? ids.filter((id) => !state[known].includes(id)) : [];
+    if (!unseen.length && (g[field] || []).join() === ids.join()) return;
+    g[field] = ids;
+    if (unseen.length) state[known] = [...unseen, ...state[known]].slice(0, KNOWN_MAX);
+    await chrome.storage.local.set({ state });
+    await updateBadge();
+  });
+}
+
+// Chi tiết một báo cáo: ai báo cáo, lý do gì
+async function doReportDetail({ groupId, reportId }) {
+  const g = await findGroup(groupId);
+  if (!g) return { status: 'error', message: 'Không tìm thấy group — hãy quét lại' };
+  return withClient(async (client) => {
+    const r = await client.call('GET', `content/manage/communities/${g.id}/content-reports/${reportId}`, null, '2.0.0', REPORT_TIMEOUT);
+    if (r.status === 401) return { ...NEED_LOGIN };
+    if (!BG.isOk(r)) return { status: 'error', message: r.timeout ? 'Beincom không phản hồi' : 'Đọc chi tiết lỗi: ' + BG.errMsg(r) };
+    const d = r.body.data || {};
+    const reasons = (d.reasonsCount || d.reasons || []).map((x) => ({
+      label: BG.HIDE_REASONS[x.reasonType] || x.reasonType || 'Khác',
+      total: x.total || 0,
+      description: x.description || '',
+      reporters: (x.reporters || []).map((p) => ({ id: p.id, username: p.username || '', fullname: p.fullname || '' })),
+    }));
+    return { status: 'ok', reasons };
+  });
+}
+
+// items: [{ reportId?, targetId, targetType, snippet, actor, groups? }] lấy từ danh sách đang xem trên Dashboard
+//  - ignore / hide: PUT content/manage/communities/{groupId gốc}/content-reports/{targetId}/status { status: IGNORED | HID }
+//  - hidePost:      POST content/contents/{id}/hide { reasonType, groupIds } (bài bị gắn cờ tự động)
+async function doReportAct({ action, groupId, items, reasonType = 'OTHERS', source = 'manual' }) {
+  if (!['ignore', 'hide', 'hidePost'].includes(action)) return { status: 'error', message: 'Thao tác không hợp lệ' };
+  const { settings, state, log } = await load();
+  const groups = state.snapshot?.groups || [];
+  const g = groups.find((x) => x.id === groupId);
+  if (!g) return { status: 'error', message: 'Không tìm thấy group — hãy quét lại' };
+  if (action !== 'hidePost' && !(g.isCommunity && g.isCommunityAdmin)) return { status: 'error', message: 'Chỉ chủ / admin community mới xử lý được báo cáo' };
+  if (action === 'hidePost' && !BG.HIDE_REASONS[reasonType]) return { status: 'error', message: 'Lý do ẩn không hợp lệ' };
+  const adminIds = new Set(groups.map((x) => x.id));
+  const list = (items || []).filter((it) => it?.targetId);
+  if (!list.length) return { status: 'error', message: 'Chưa chọn nội dung nào' };
+
+  const work = [];
+  for (const it of list) {
+    const logBase = {
+      kind: 'report',
+      source,
+      action,
+      groupId: g.id,
+      groupName: g.name,
+      communityName: g.communityName || '',
+      contentId: it.targetId,
+      contentType: it.targetType === 'COMMENT' ? 'POST' : it.targetType,
+      targetType: it.targetType,
+      reportId: it.reportId || '',
+      snippet: String(it.snippet || '').replace(/\s+/g, ' ').slice(0, 120),
+      userId: it.actor?.id || '',
+      username: it.actor?.username || '',
+      fullname: it.actor?.fullname || '',
+    };
+    if (action === 'hidePost') {
+      // Chỉ ẩn ở các group bài được đăng mà mình quản trị; không rõ thì ẩn ở group đang xem
+      const ids = (it.groups || []).map((x) => x.id).filter((id) => adminIds.has(id));
+      const groupIds = ids.length ? ids : [g.id];
+      work.push({ log: { ...logBase, reason: BG.HIDE_REASONS[reasonType], groupIds }, call: (c) => c.call('POST', `content/contents/${it.targetId}/hide`, { reasonType, groupIds }), gone: true });
+    } else {
+      const status = action === 'ignore' ? 'IGNORED' : 'HID';
+      work.push({ log: logBase, call: (c) => c.call('PUT', `content/manage/communities/${g.id}/content-reports/${it.targetId}/status`, { status }) });
+    }
+  }
+  const r = await performActions(work, settings);
+  pushLog(log, r.entries);
+  const next = r.status === 'need_login' ? { ...state, lastResult: { status: 'need_login', message: NEED_LOGIN.message, mode: r.mode || '' } } : { ...state };
+  // Bỏ mục đã xử lý khỏi số đếm để huy hiệu cập nhật ngay
+  const ok = r.entries.filter((e) => e.status === 'ok');
+  if (action === 'hidePost') next.snapshot = dropFromSnapshot(next.snapshot, 'flaggedIds', new Set(ok.map((e) => e.contentId)));
+  else next.snapshot = dropFromSnapshot(next.snapshot, 'reportIds', new Set(ok.map((e) => e.reportId)));
+  await chrome.storage.local.set({ state: next, log });
+  if (r.status === 'need_login' || ok.length) await updateBadge();
+  return { ...summary(r, settings), done: ok.map((e) => e.contentId) };
+}
+
 // Không chạy chồng nhau
 let queue = Promise.resolve();
 function exclusive(fn) {
@@ -1037,14 +1378,36 @@ chrome.storage.onChanged.addListener((changes, area) => {
   }
 });
 
+// Bấm thông báo: mở thẳng tab Dashboard liên quan
+function notificationTab(id) {
+  if (id === 'bg-requests' || id === 'bg-auto') return 'members';
+  if (id === 'bg-flagged' || id.startsWith('bg-posts-')) return 'content';
+  if (id === 'bg-reports' || id === 'bg-autoflag') return 'reports';
+  return '';
+}
+
 chrome.notifications.onClicked.addListener((id) => {
-  chrome.tabs.create({ url: id === 'bg-login' ? BG.SITE + '/' : chrome.runtime.getURL(DASHBOARD) });
+  const tab = notificationTab(id);
+  chrome.tabs.create({ url: id === 'bg-login' ? BG.SITE + '/' : chrome.runtime.getURL(DASHBOARD + (tab ? '#tab=' + tab : '')) });
   chrome.notifications.clear(id);
 });
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   // Đọc danh sách thành viên / nhật ký không cần chờ lần quét đang chạy
-  const reads = { members: () => doMembers(msg), activity: () => doActivity(msg), scheduled: () => doScheduled(), stats: () => doStats(msg) };
+  const reads = {
+    members: () => doMembers(msg),
+    activity: () => doActivity(msg),
+    scheduled: () => doScheduled(),
+    stats: () => doStats(msg),
+    reports: () => doReports(msg),
+    reportDetail: () => doReportDetail(msg),
+    // Tải file lên trước khi đăng: không chờ lần quét đang chạy
+    uploadInit: () => doUploadInit(msg),
+    uploadWait: () => doUploadWait(msg),
+    mentionable: () => doMentionable(msg),
+    tagsSeries: () => doTagsSeries(msg),
+    linkPreview: () => doLinkPreview(msg),
+  };
   if (reads[msg?.type]) {
     reads[msg.type]().then(sendResponse);
     return true;
@@ -1058,6 +1421,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     memberAct: () => doMemberAct(msg),
     compose: () => doCompose(msg),
     scheduleAct: () => doScheduleAct(msg),
+    reportAct: () => doReportAct(msg),
   };
   const h = handlers[msg?.type];
   if (!h) return;

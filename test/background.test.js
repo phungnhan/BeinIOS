@@ -99,6 +99,17 @@ function fixture() {
       ],
     },
     postSeq: 0,
+    // Tag theo group gốc (Crypto Life có 30 tag: 2 trang), series theo group
+    tags: { gFood: [{ id: 'tF1', name: 'AMA', totalUsed: 3 }], gCL: Array.from({ length: 30 }, (_, i) => ({ id: 'tC' + i, name: 'TAG ' + i, totalUsed: i })) },
+    series: { gFood: [{ id: 'sF1', title: 'Lịch sự kiện', coverMedia: { url: 'https://media.beincom.com/c1' }, summary: 'Các sự kiện' }], gCLsub: [{ id: 'sC1', title: 'Nhập môn crypto', coverMedia: null }] },
+    reports: {
+      gFood: [
+        { id: 'rp1', targetId: 'c1', targetType: 'COMMENT', commentPostId: 'p77', content: 'Bình luận spam', targetActor: user(61), reasonsCount: [{ reasonType: 'SPAM', total: 3 }], status: 'CREATED', createdAt: '2026-10-08T01:00:00Z' },
+        { id: 'rp2', targetId: 'p88', targetType: 'POST', content: 'Bài lừa đảo', targetActor: user(62), reasonsCount: [{ reasonType: 'ILLEGAL', total: 1 }, { reasonType: 'OTHERS', total: 1, description: 'lừa đảo' }], status: 'CREATED' },
+      ],
+    },
+    flagged: { gCL: [post('f1', 'Nội dung bạo lực', { audience: { groups: [CL, CLsub] }, postScan: { dataViolation: { violatedCategories: [{ name: 'Violence' }, { name: 'Hate' }] } } })] },
+    hidden: { gCL: [post('h1', 'Bài đã ẩn')] },
     // Thống kê chính thức: chỉ Food Research (chủ community) có
     officialMembers: {
       cFood: [
@@ -121,11 +132,13 @@ function fixture() {
 function makeEnv({ data = fixture(), settings = {}, rules = {}, postRules = {}, loggedIn = true } = {}) {
   const calls = [];
   const bodies = [];
+  const headers = {};
   const fetch = async (url, opts = {}) => {
     const method = opts.method || 'GET';
     const p = url.replace(API, '');
     calls.push(`${method} ${p}`);
     if (opts.body) bodies.push([`${method} ${p}`, JSON.parse(opts.body)]);
+    headers[`${method} ${p}`] = opts.headers;
     const reply = (status, body) => ({ status, json: async () => body });
     if (!loggedIn) return reply(401, { code: 'unauthorized', meta: { message: 'Unauthorized' } });
     let m;
@@ -140,6 +153,7 @@ function makeEnv({ data = fixture(), settings = {}, rules = {}, postRules = {}, 
     if ((m = p.match(/^group\/groups\/(\w+)\/membership-questions$/))) return reply(200, ok(data.questions[m[1]] || []));
     if ((m = p.match(/^content\/manage\/communities\/(\w+)\/approval-contents\/count\?approvalStatus=WAITING_APPROVAL$/))) return reply(200, ok((data.approvals[m[1]] || []).length));
     if ((m = p.match(/^content\/manage\/communities\/(\w+)\/approval-contents\?limit=(\d+)&approvalStatus=WAITING_APPROVAL(?:&after=(\d+))?$/))) {
+      if (Number(m[2]) > 25) return reply(400, { code: 'api.validation_error', meta: { message: 'Bad Request Exception', errors: ['limit must not be greater than 25'] } });
       const all = data.approvals[m[1]] || [];
       const [limit, start] = [Number(m[2]), Number(m[3] || 0)];
       // Danh sách không có nội dung đầy đủ, chỉ có title (500 ký tự đầu)
@@ -161,6 +175,7 @@ function makeEnv({ data = fixture(), settings = {}, rules = {}, postRules = {}, 
     // Thành viên: đọc query thật để kiểm tra tham số addon gửi
     const [path, query = ''] = p.split('?');
     const q = Object.fromEntries(new URLSearchParams(query));
+    if (path.startsWith('content/') && Number(q.limit) > 25) return reply(400, { code: 'api.validation_error', meta: { message: 'Bad Request Exception', errors: ['limit must not be greater than 25'] } });
     if ((m = path.match(/^content\/timeline\/(\w+)$/))) {
       const all = data.timeline[m[1]] || [];
       const start = Number(q.after || 0);
@@ -196,14 +211,66 @@ function makeEnv({ data = fixture(), settings = {}, rules = {}, postRules = {}, 
       const all = (data.activity[m[1]] || []).filter((e) => !q.useCase || e.useCase === q.useCase);
       return reply(200, ok(all, { total: all.length, hasNextPage: false }));
     }
+    // Báo cáo vi phạm
+    if ((m = path.match(/^content\/manage\/communities\/(\w+)\/content-reports$/))) {
+      // Giả lập API treo: chỉ trả lời khi bị huỷ vì quá thời gian chờ
+      if (data.reportsHang) return new Promise((_, reject) => opts.signal?.addEventListener('abort', () => reject(new Error('aborted'))));
+      return reply(200, ok({ list: data.reports[m[1]] || [], meta: { hasNextPage: false } }));
+    }
+    if ((m = path.match(/^content\/manage\/communities\/(\w+)\/content-reports\/(\w+)$/)) && method === 'GET') {
+      return reply(200, ok({ reasonsCount: [{ reasonType: 'SPAM', total: 2, reporters: [user(51), user(52)] }] }));
+    }
+    if (path.match(/^content\/manage\/communities\/\w+\/content-reports\/\w+\/status$/) && method === 'PUT') return reply(200, ok(true));
+    if ((m = path.match(/^content\/manage\/groups\/(\w+)\/contents\/(flagged|hidden)$/))) return reply(200, ok({ list: data[m[2]][m[1]] || [], meta: { hasNextPage: false } }));
+    // Tag và series
+    const all = new URLSearchParams(query);
+    if (path === 'content/tags' || path === 'content/series') {
+      const kind = path.split('/')[1];
+      const list = all.getAll('groupIds[]').flatMap((id) => data[kind][id] || []);
+      const offset = Number(q.offset || 0);
+      return reply(200, ok({ list: list.slice(offset, offset + 25), meta: { limit: 25, offset, total: list.length } }));
+    }
+    if (path === 'content/contents/validate-series-tags' && method === 'POST') {
+      const b = JSON.parse(opts.body);
+      const tagIds = b.tags.filter((id) => id.startsWith('tBad'));
+      const seriesIds = b.series.filter((id) => id.startsWith('sBad'));
+      if (tagIds.length || seriesIds.length) return reply(400, { code: 'tag_series_invalid', meta: { message: 'Invalid', errors: { tagIds, seriesIds } } });
+      return reply(201, ok(true));
+    }
+    // Nhắc tên và xem trước link
+    if (path === 'user/users/mentionable') {
+      const ids = (q.group_ids || '').split(',');
+      const all = [{ id: 'u61', username: 'kai', fullname: 'Kai', avatar: '', is_verified: true }, { id: 'u62', username: 'lan', fullname: 'Lan', avatar: '', is_verified: false }];
+      return reply(200, { code: 'api.ok', data: ids.includes('gFood') ? all.filter((u) => !q.key || u.username.includes(q.key)) : [], meta: { total: 2 } });
+    }
+    if (path === 'group/url-metadata') {
+      if (q.url.includes('loi')) return reply(400, { code: 'api.validation_error', meta: { message: 'Cannot fetch url' } });
+      return reply(200, ok({ url: q.url, domain: 'Ví dụ', title: 'Trang ví dụ', image: 'https://vd.vn/a.png', description: 'Mô tả', publisher: 'Ví dụ' }));
+    }
+    if ((m = path.match(/^content\/contents\/(\w+)\/link-preview$/))) return reply(200, ok({ url: 'https://group.beincom.com/posts/' + m[1], domain: 'Beincom', title: 'Bài trên Beincom', image: '', description: '' }));
+    // Tải file lên
+    if ((m = path.match(/^upload\/(images|videos)\/$/)) && method === 'POST') return reply(201, ok({ id: `up-${m[1]}`, presigned_post: { url: 'https://bucket.s3.amazonaws.com/', fields: { key: 'k', Policy: 'p' } } }));
+    if (path === 'upload/files/' && method === 'POST') return reply(201, ok({ id: 'up-file' }));
+    if ((m = path.match(/^upload\/(images|videos)\/([\w-]+)$/)) && method === 'GET') {
+      if (data.uploadWaitHang) return new Promise((_, reject) => opts.signal?.addEventListener('abort', () => reject(new Error('aborted'))));
+      return reply(200, ok(data.uploadResult || { url: 'https://media.beincom.com/' + m[2], status: 'DONE', properties: { width: 800, height: 600, mime_type: 'image/png' } }));
+    }
     // Đăng bài
     if (path === 'content/posts' && method === 'POST') return reply(201, ok({ id: `new${++data.postSeq}`, status: 'DRAFT' }));
     if ((m = path.match(/^content\/posts\/(\w+)\/(publish|schedule)$/)) && method === 'PUT') {
       if (data.failPublish) return reply(400, { code: 'api.validation_error', meta: { message: 'Content is invalid' } });
       return reply(200, ok({ id: m[1], status: m[2] === 'publish' ? 'PUBLISHED' : 'WAITING_SCHEDULE' }));
     }
-    if (path.match(/^content\/posts\/\w+$/) && method === 'DELETE') return reply(200, ok(true));
-    if ((m = path.match(/^content\/manage\/groups\/(\w+)\/contents\/scheduled$/))) return reply(200, ok({ list: data.scheduled[m[1]] || [], meta: { hasNextPage: false } }));
+    const goneReply = () => reply(400, { code: 'content.not_found', meta: { message: 'Content not found' } });
+    if ((m = path.match(/^content\/posts\/(\w+)$/)) && method === 'DELETE') return m[1].startsWith('gone') ? goneReply() : reply(200, ok(true));
+    if ((m = path.match(/^content\/contents\/(gone\w*)\/(hide|reschedule)$/))) return goneReply();
+    if ((m = path.match(/^content\/manage\/groups\/(\w+)\/contents\/scheduled$/))) {
+      const all = data.scheduled[m[1]] || [];
+      const start = Number(q.after || 0);
+      const list = all.slice(start, start + Number(q.limit));
+      const more = start + list.length < all.length;
+      return reply(200, ok({ list, meta: { hasNextPage: more, endCursor: more ? String(start + list.length) : null } }));
+    }
     if (path.match(/^content\/contents\/\w+\/reschedule$/) && method === 'PUT') return reply(200, ok(true));
     if (path.match(/^group\/groups\/\w+\/(users\/remove|assign-admin|revoke-admin)$/) && method === 'PUT') return reply(200, ok(true));
     if (path.match(/^group\/communities\/\w+\/users\/\w+\/ban$/) && method === 'POST') return reply(201, ok(true));
@@ -222,6 +289,7 @@ function makeEnv({ data = fixture(), settings = {}, rules = {}, postRules = {}, 
   const listeners = {};
   const ev = (name) => ({ addListener: (fn) => (listeners[name] = fn), removeListener: () => {} });
   const notifications = [];
+  const tabsCreated = [];
   const badge = {};
   const chrome = {
     storage: {
@@ -242,7 +310,7 @@ function makeEnv({ data = fixture(), settings = {}, rules = {}, postRules = {}, 
       // Chưa đăng nhập: tab Beincom đang ở trang /login
       query: async () => [{ id: 5 }],
       get: async (id) => ({ id, status: 'complete', url: 'https://group.beincom.com/login' }),
-      create: async () => ({ id: 6 }),
+      create: async (o) => (tabsCreated.push(o?.url), { id: 6 }),
       remove: async () => {},
       onUpdated: ev('updated'),
     },
@@ -259,12 +327,13 @@ function makeEnv({ data = fixture(), settings = {}, rules = {}, postRules = {}, 
     console,
     structuredClone,
     URL,
+    AbortController,
   });
   vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'background.js'), 'utf8'), ctx);
 
   // structuredClone: đưa kết quả về realm của test để deepEqual so được
   const send = (msg) => new Promise((resolve) => listeners.message(msg, {}, (r) => resolve(structuredClone(r))));
-  return { send, storage, calls, bodies, notifications, badge, data, listeners };
+  return { send, storage, calls, bodies, headers, notifications, tabsCreated, badge, data, listeners };
 }
 
 const scan = (env, source = 'dashboard') => env.send({ type: 'scan', source });
@@ -286,8 +355,8 @@ test('quét: gom group đang quản trị, yêu cầu, câu hỏi và bài chờ
   assert.equal(gs[2].communityName, 'Crypto Life');
   // Không tải câu hỏi khi không có yêu cầu
   assert.ok(!env.calls.includes('GET group/groups/gCL/membership-questions'));
-  // Huy hiệu = 3 yêu cầu + 2 bài
-  assert.equal(env.badge.text, '5');
+  // Huy hiệu = 3 yêu cầu + 2 bài + 2 báo cáo chờ xử lý (Food Research) + 1 bài Beincom gắn cờ (Crypto Life)
+  assert.equal(env.badge.text, '8');
   // Lần quét đầu không thông báo
   assert.equal(env.notifications.length, 0);
   // Chỉ gọi GET
@@ -337,7 +406,7 @@ test('duyệt và từ chối thật: gọi đúng API, cập nhật danh sách 
   const food = env.storage.state.snapshot.groups.find((g) => g.id === 'gFood');
   assert.equal(food.requests.length, 0);
   assert.equal(food.pendingTotal, 0);
-  assert.equal(env.badge.text, '2'); // còn 2 bài chờ duyệt
+  assert.equal(env.badge.text, '5'); // còn 2 bài chờ duyệt + 2 báo cáo + 1 bài gắn cờ
   assert.deepEqual(env.storage.log.map((e) => [e.requestId, e.action, e.status]), [
     ['jr3', 'decline', 'ok'],
     ['jr2', 'approve', 'ok'],
@@ -448,8 +517,8 @@ test('quét bài mới: gộp bài đăng nhiều group, mới nhất trước, 
   const t2 = state.recentPosts.find((p) => p.id === 't2');
   assert.deepEqual(t2.seenIn, ['gCL', 'gCLsub']);
   assert.equal(t2.media.images, 1);
-  // 3 yêu cầu + 2 bài chờ duyệt + 1 bài vi phạm (t2 có bit.ly)
-  assert.equal(env.badge.text, '6');
+  // 3 yêu cầu + 2 bài chờ duyệt + 1 bài vi phạm (t2 có bit.ly) + 2 báo cáo + 1 bài gắn cờ
+  assert.equal(env.badge.text, '9');
   assert.equal(env.notifications.length, 0); // lần đầu chỉ ghi nhận
   // Bài mới vi phạm ở lần quét tự động sau -> thông báo
   env.data.timeline.gCL.unshift(post('t4', 'Vào nhóm t.me/xyz nhận quà', { publishedAt: '2026-10-07T11:00:00Z' }));
@@ -496,12 +565,12 @@ test('duyệt bài khi chạy thử: không gửi PUT, bài vẫn trong hàng ch
 test('ẩn bài: chỉ ẩn ở group mình quản trị, đánh dấu đã ẩn, không ẩn lại lần hai', async () => {
   const env = makeEnv({ settings: { dryRun: false }, postRules: RULES_LINK });
   await scan(env);
-  assert.equal(env.badge.text, '6');
+  assert.equal(env.badge.text, '9'); // như trên: 6 + 2 báo cáo + 1 bài gắn cờ
   const r = await env.send({ type: 'postAct', action: 'hide', contentIds: ['t2'], reasonType: 'SPAM' });
   assert.deepEqual([r.status, r.ok], ['ok', 1]);
   assert.deepEqual(env.bodies, [['POST content/contents/t2/hide', { reasonType: 'SPAM', groupIds: ['gCL', 'gCLsub'] }]]);
   assert.equal(env.storage.state.recentPosts.find((p) => p.id === 't2').isHidden, true);
-  assert.equal(env.badge.text, '5');
+  assert.equal(env.badge.text, '8');
   assert.equal(env.storage.log[0].reason, 'Spam / quảng cáo');
   const again = await env.send({ type: 'postAct', action: 'hide', contentIds: ['t2'], reasonType: 'SPAM' });
   assert.equal(again.status, 'error');
@@ -518,11 +587,11 @@ test('bỏ qua bài: chỉ đánh dấu trong addon, không gọi API, giữ qua
   const before = env.calls.length;
   await env.send({ type: 'postAct', action: 'dismiss', contentIds: ['t2'] });
   assert.equal(env.calls.length, before);
-  assert.equal(env.badge.text, '5');
+  assert.equal(env.badge.text, '8');
   await scan(env);
   assert.equal(env.storage.state.recentPosts.find((p) => p.id === 't2').dismissed, true);
   await env.send({ type: 'postAct', action: 'undismiss', contentIds: ['t2'] });
-  assert.equal(env.badge.text, '6');
+  assert.equal(env.badge.text, '9');
 });
 
 // ---------- Thành viên ----------
@@ -685,7 +754,8 @@ test('bài đã hẹn giờ: liệt kê theo giờ, đổi giờ và huỷ', asy
     ['s1', 'WAITING_SCHEDULE', 'Crypto Life'],
     ['s2', 'WAITING_SCHEDULE', 'Crypto Life'],
   ]);
-  assert.ok(env.calls.includes('GET content/manage/groups/gFood/contents/scheduled?limit=50&type=POST'));
+  assert.deepEqual(list.items[0].setting, { canComment: true, canReact: true, isImportant: false, importantExpiredAt: null }); // có đủ dữ liệu để xem lại bài
+  assert.ok(env.calls.includes('GET content/manage/groups/gFood/contents/scheduled?limit=25&type=POST'));
   const at = new Date(Date.now() + 86400e3).toISOString();
   const r1 = await env.send({ type: 'scheduleAct', action: 'reschedule', contentId: 's1', scheduledAt: at, snippet: 'Bài hẹn giờ trước' });
   assert.equal(r1.ok, 1);
@@ -721,7 +791,7 @@ test('tải lại phần group: chỉ đọc group, yêu cầu tham gia, số b�
   assert.equal(s.lastScan, before.lastScan); // giờ quét toàn bộ giữ nguyên
   assert.ok(s.knownRequestIds.includes('jr9'));
   assert.equal(env.notifications.length, 0); // tải lại không báo
-  assert.equal(env.badge.text, '7'); // 4 yêu cầu + 2 bài chờ duyệt + 1 bài vi phạm
+  assert.equal(env.badge.text, '10'); // 4 yêu cầu + 2 bài chờ duyệt + 1 bài vi phạm + 2 báo cáo + 1 bài gắn cờ (giữ từ lần quét trước)
 });
 
 test('tải lại phần nội dung: chỉ đọc bài chờ duyệt và bài mới, giữ đánh dấu bỏ qua', async () => {
@@ -749,6 +819,353 @@ test('tải lại khi chưa quét lần nào thì quét toàn bộ; phần lạ 
   assert.ok(env.calls.includes('GET user/me/profile'));
   const bad = await env.send({ type: 'refresh', part: 'xyz' });
   assert.match(bad.message, /không hợp lệ/);
+});
+
+// ---------- Báo cáo vi phạm ----------
+
+test('báo cáo của người dùng: chủ community đọc được, có lý do và số lượt; admin group bị chặn', async () => {
+  const env = makeEnv();
+  await scan(env);
+  const r = await env.send({ type: 'reports', groupId: 'gFood', kind: 'reported' });
+  assert.deepEqual([r.status, r.timedOut], ['ok', false]);
+  assert.deepEqual(r.items.map((x) => [x.id, x.targetType, x.total, x.reasons.map((y) => y.label).join('+'), x.actor.username]), [
+    ['rp1', 'COMMENT', 3, 'Spam / quảng cáo', 'user61'],
+    ['rp2', 'POST', 2, 'Vi phạm pháp luật+Lý do khác', 'user62'],
+  ]);
+  assert.equal(BG.reportUrl(r.items[0]), 'https://group.beincom.com/posts/p77');
+  env.calls.length = 0;
+  const cl = await env.send({ type: 'reports', groupId: 'gCL', kind: 'reported' });
+  assert.deepEqual([cl.status, cl.code], ['error', 'not_admin']);
+  assert.ok(!env.calls.some((c) => c.includes('content-reports'))); // không gọi API khi biết chắc không có quyền
+});
+
+test('API báo cáo treo: dừng theo giới hạn chờ và báo timedOut thay vì treo addon', async () => {
+  const data = fixture();
+  data.reportsHang = true;
+  const env = makeEnv({ data });
+  await scan(env);
+  const r = await env.send({ type: 'reports', groupId: 'gFood', kind: 'reported' });
+  assert.deepEqual([r.status, r.timedOut, r.items], ['ok', true, []]);
+});
+
+test('chi tiết báo cáo: người báo cáo theo từng lý do', async () => {
+  const env = makeEnv();
+  await scan(env);
+  const r = await env.send({ type: 'reportDetail', groupId: 'gFood', reportId: 'rp1' });
+  assert.deepEqual(r.reasons.map((x) => [x.label, x.total, x.reporters.map((p) => p.username)]), [['Spam / quảng cáo', 2, ['user51', 'user52']]]);
+});
+
+test('xử lý báo cáo: bỏ qua / ẩn gửi đúng body, ghi nhật ký; chạy thử không gửi', async () => {
+  const env = makeEnv({ settings: { dryRun: false } });
+  await scan(env);
+  const it = (id, type = 'POST') => ({ targetId: id, targetType: type, snippet: 'x', actor: { id: 'u61', username: 'user61', fullname: 'N' } });
+  const a = await env.send({ type: 'reportAct', action: 'ignore', groupId: 'gFood', items: [it('c1', 'COMMENT')] });
+  const b = await env.send({ type: 'reportAct', action: 'hide', groupId: 'gFood', items: [it('p88')] });
+  assert.deepEqual([a.ok, b.ok, b.done], [1, 1, ['p88']]);
+  assert.deepEqual(env.bodies, [
+    ['PUT content/manage/communities/gFood/content-reports/c1/status', { status: 'IGNORED' }],
+    ['PUT content/manage/communities/gFood/content-reports/p88/status', { status: 'HID' }],
+  ]);
+  assert.deepEqual([env.storage.log[0].kind, env.storage.log[0].action, env.storage.log[1].targetType], ['report', 'hide', 'COMMENT']);
+  // Admin group không xử lý được báo cáo cấp community
+  assert.match((await env.send({ type: 'reportAct', action: 'ignore', groupId: 'gCL', items: [it('x')] })).message, /chủ \/ admin community/);
+  // Chạy thử
+  const dry = makeEnv();
+  await scan(dry);
+  const d = await dry.send({ type: 'reportAct', action: 'hide', groupId: 'gFood', items: [it('p88')] });
+  assert.deepEqual([d.dryRun, d.dry], [true, 1]);
+  assert.ok(!dry.calls.some((c) => c.startsWith('PUT')));
+});
+
+test('gắn cờ tự động: admin group xem được, có danh mục vi phạm; ẩn bài ở các group mình quản trị', async () => {
+  const env = makeEnv({ settings: { dryRun: false } });
+  await scan(env);
+  const f = await env.send({ type: 'reports', groupId: 'gCL', kind: 'flagged' });
+  assert.deepEqual(f.items.map((p) => [p.id, p.violations]), [['f1', ['Violence', 'Hate']]]);
+  const h = await env.send({ type: 'reports', groupId: 'gCL', kind: 'hidden' });
+  assert.deepEqual(h.items.map((p) => p.id), ['h1']);
+  const p = f.items[0];
+  const r = await env.send({ type: 'reportAct', action: 'hidePost', groupId: 'gCL', reasonType: 'VIOLENT_OR_PORN', items: [{ targetId: p.id, targetType: p.type, snippet: p.text, actor: p.actor, groups: p.groups }] });
+  assert.equal(r.ok, 1);
+  assert.deepEqual(env.bodies.at(-1), ['POST content/contents/f1/hide', { reasonType: 'VIOLENT_OR_PORN', groupIds: ['gCL', 'gCLsub'] }]);
+  assert.equal(env.storage.log[0].reason, 'Bạo lực, khiêu dâm');
+});
+
+// ---------- Quét báo cáo định kỳ ----------
+
+const groupOf = (env, id) => env.storage.state.snapshot.groups.find((g) => g.id === id);
+// Chờ các việc đang xếp hàng (đồng bộ số báo cáo) chạy xong: gửi một lệnh xếp hàng không làm gì
+const flush = (env) => env.send({ type: 'refresh', part: 'none' });
+
+test('quét báo cáo: đếm báo cáo chờ xử lý (chỉ community mình làm admin) và bài Beincom gắn cờ', async () => {
+  const data = fixture();
+  data.reports.gFood.push({ id: 'rp3', targetId: 'p5', targetType: 'POST', content: 'đã xử lý', targetActor: user(63), reasonsCount: [], status: 'IGNORED' });
+  const env = makeEnv({ data });
+  await scan(env);
+  assert.deepEqual(groupOf(env, 'gFood').reportIds, ['rp1', 'rp2']); // bỏ báo cáo đã xử lý
+  assert.deepEqual(['gFood', 'gCL', 'gCLsub'].map((id) => groupOf(env, id).flaggedIds), [[], ['f1'], []]);
+  assert.equal(groupOf(env, 'gCL').reportIds, undefined); // admin group: không gọi API báo cáo
+  assert.deepEqual(env.calls.filter((c) => c.includes('content-reports')), ['GET content/manage/communities/gFood/content-reports?limit=25']);
+  assert.ok(env.calls.includes('GET content/manage/groups/gCLsub/contents/flagged?limit=20'));
+  assert.ok(env.calls.every((c) => c.startsWith('GET ')));
+  assert.equal(env.notifications.length, 0); // lần đầu chỉ ghi nhận
+});
+
+test('quét báo cáo lần sau: báo báo cáo mới và bài mới bị gắn cờ; bấm thông báo mở tab Báo cáo', async () => {
+  const env = makeEnv();
+  await scan(env);
+  env.data.reports.gFood.unshift({ id: 'rp9', targetId: 'p9', targetType: 'POST', content: 'mới', targetActor: user(64), reasonsCount: [{ reasonType: 'SPAM', total: 1 }], status: 'CREATED' });
+  env.data.flagged.gCLsub = [post('f2', 'Mới bị gắn cờ', { audience: { groups: [CLsub] } }), env.data.flagged.gCL[0]];
+  env.listeners.alarm({ name: 'beingroup-scan' });
+  await scan(env, 'popup');
+  assert.deepEqual(env.notifications.map((n) => [n.id, n.title, n.message]), [
+    ['bg-reports', 'BeinGroup: 1 báo cáo vi phạm mới', 'Food Research'],
+    ['bg-autoflag', 'BeinGroup: 1 bài bị Beincom gắn cờ vi phạm', 'Crypto Life - General'], // f1 đã biết
+  ]);
+  assert.equal(env.badge.text, '10'); // 3 yêu cầu + 2 bài chờ duyệt + 3 báo cáo + 2 bài gắn cờ (f1 ở 2 group đếm một lần)
+  env.listeners.notif('bg-reports');
+  env.listeners.notif('bg-requests');
+  assert.deepEqual(env.tabsCreated, ['chrome-extension://x/dashboard.html#tab=reports', 'chrome-extension://x/dashboard.html#tab=members']);
+});
+
+test('quét báo cáo khi API treo: lần quét vẫn xong, coi như không có báo cáo, không bỏ chế độ gọi trực tiếp', async () => {
+  const data = fixture();
+  data.reportsHang = true;
+  const env = makeEnv({ data });
+  const state = await scan(env);
+  assert.equal(state.lastResult.status, 'ok');
+  assert.deepEqual(groupOf(env, 'gFood').reportIds, []);
+  assert.deepEqual(groupOf(env, 'gCL').flaggedIds, ['f1']);
+  const probes = env.calls.filter((c) => c === 'GET group/me/permissions').length;
+  await env.send({ type: 'members', groupId: 'gFood' });
+  assert.equal(env.calls.filter((c) => c === 'GET group/me/permissions').length, probes); // không gọi thử lại
+});
+
+test('tắt "Quét báo cáo": không gọi API báo cáo, không đếm', async () => {
+  const env = makeEnv({ settings: { scanReports: false } });
+  await scan(env);
+  assert.ok(!env.calls.some((c) => c.includes('content-reports') || c.includes('/contents/flagged')));
+  assert.equal(env.badge.text, '5');
+  assert.equal(env.storage.state.knownReportIds, undefined);
+});
+
+test('xử lý báo cáo / ẩn bài gắn cờ: bỏ khỏi số đếm ngay, chạy thử thì giữ nguyên', async () => {
+  const dry = makeEnv();
+  await scan(dry);
+  await dry.send({ type: 'reportAct', action: 'ignore', groupId: 'gFood', items: [{ reportId: 'rp1', targetId: 'c1', targetType: 'COMMENT' }] });
+  assert.deepEqual(groupOf(dry, 'gFood').reportIds, ['rp1', 'rp2']);
+
+  const env = makeEnv({ settings: { dryRun: false } });
+  await scan(env);
+  assert.equal(env.badge.text, '8');
+  await env.send({ type: 'reportAct', action: 'ignore', groupId: 'gFood', items: [{ reportId: 'rp1', targetId: 'c1', targetType: 'COMMENT' }] });
+  assert.deepEqual(groupOf(env, 'gFood').reportIds, ['rp2']);
+  assert.equal(env.storage.log[0].reportId, 'rp1');
+  await env.send({ type: 'reportAct', action: 'hidePost', groupId: 'gCL', reasonType: 'SPAM', items: [{ targetId: 'f1', targetType: 'POST', groups: [CL, CLsub] }] });
+  assert.deepEqual(groupOf(env, 'gCL').flaggedIds, []);
+  assert.equal(env.badge.text, '6');
+});
+
+test('mở tab Báo cáo: cập nhật số đếm theo danh sách mới đọc và đánh dấu đã thấy (lần quét sau không báo lại)', async () => {
+  const env = makeEnv();
+  await scan(env);
+  // Trên web: rp2 đã được xử lý, có báo cáo mới rp9
+  env.data.reports.gFood = [env.data.reports.gFood[0], { id: 'rp9', targetId: 'p9', targetType: 'POST', content: 'mới', targetActor: user(64), reasonsCount: [], status: 'CREATED' }];
+  const r = await env.send({ type: 'reports', groupId: 'gFood', kind: 'reported' });
+  assert.deepEqual(r.items.map((x) => x.id), ['rp1', 'rp9']);
+  await flush(env);
+  assert.deepEqual(groupOf(env, 'gFood').reportIds, ['rp1', 'rp9']);
+  assert.ok(env.storage.state.knownReportIds.includes('rp9'));
+  // Bài gắn cờ đã hết trên web
+  env.data.flagged.gCL = [];
+  await env.send({ type: 'reports', groupId: 'gCL', kind: 'flagged' });
+  await flush(env);
+  assert.deepEqual(groupOf(env, 'gCL').flaggedIds, []);
+  assert.equal(env.badge.text, '7'); // 3 yêu cầu + 2 bài chờ duyệt + 2 báo cáo
+  env.listeners.alarm({ name: 'beingroup-scan' });
+  await scan(env, 'popup');
+  assert.equal(env.notifications.length, 0);
+});
+
+// ---------- Ảnh, video, tệp ----------
+
+test('xin chỗ tải lên: ảnh / video / tệp gọi đúng API, đúng body, video mới kèm x-version-id', async () => {
+  const env = makeEnv();
+  await scan(env);
+  const img = await env.send({ type: 'uploadInit', kind: 'image', mimeType: 'image/png' });
+  assert.deepEqual(img, { status: 'ok', id: 'up-images', url: 'https://bucket.s3.amazonaws.com/', fields: { key: 'k', Policy: 'p' }, mode: 'direct' });
+  const vid = await env.send({ type: 'uploadInit', kind: 'video', mimeType: 'video/mp4' });
+  const file = await env.send({ type: 'uploadInit', kind: 'file' });
+  assert.deepEqual([vid.id, file.id, file.url], ['up-videos', 'up-file', undefined]);
+  assert.deepEqual(env.bodies.filter(([c]) => c.startsWith('POST upload')), [
+    ['POST upload/images/', { properties: { mime_type: 'image/png' }, resource: 'post:content' }],
+    ['POST upload/videos/', { properties: { mime_type: 'video/mp4' } }],
+  ]);
+  assert.ok(env.calls.includes('POST upload/files/'));
+  assert.equal(env.headers['POST upload/images/']['x-version-id'], undefined);
+  assert.equal(env.headers['POST upload/videos/']['x-version-id'], '2.0.0');
+  assert.match((await env.send({ type: 'uploadInit', kind: 'exe' })).message, /không hợp lệ/);
+});
+
+test('chờ xử lý file: trả đối tượng media; báo lỗi khi Beincom báo ERROR, chưa có ảnh hoặc quá lâu', async () => {
+  const env = makeEnv();
+  await scan(env);
+  const w = await env.send({ type: 'uploadWait', kind: 'image', id: 'up-images' });
+  assert.deepEqual(w.item, { url: 'https://media.beincom.com/up-images', id: 'up-images', width: 800, height: 600, mime_type: 'image/png' });
+  assert.ok(env.calls.includes('GET upload/images/up-images?wait=true'));
+  env.data.uploadResult = { status: 'ERROR', error_message: 'Unsupported image' };
+  assert.match((await env.send({ type: 'uploadWait', kind: 'image', id: 'x' })).message, /Unsupported image/);
+  env.data.uploadResult = { status: 'PENDING' };
+  assert.match((await env.send({ type: 'uploadWait', kind: 'image', id: 'x' })).message, /chưa xử lý xong/);
+  assert.match((await env.send({ type: 'uploadWait', kind: 'video', id: 'x', unsure: true })).message, /chưa lên được kho/);
+  env.data.uploadResult = { status: 'PROCESSING', properties: { size: 5 } };
+  assert.deepEqual((await env.send({ type: 'uploadWait', kind: 'video', id: 'v1' })).item, { id: 'v1', url: undefined, size: 5, status: 'waiting_process', thumbnails: undefined });
+  env.data.uploadWaitHang = true;
+  assert.match((await env.send({ type: 'uploadWait', kind: 'image', id: 'x' })).message, /quá lâu/);
+});
+
+test('đăng bài kèm ảnh: gửi media trong body; chạy thử chỉ ghi số ảnh vào nhật ký', async () => {
+  const env = makeEnv({ settings: { dryRun: false } });
+  await scan(env);
+  const images = [{ url: 'https://media.beincom.com/i1', id: 'i1', width: 800 }, { url: 'https://media.beincom.com/i2', id: 'i2' }];
+  const r = await env.send({ type: 'compose', groupIds: ['gFood'], content: '', media: { images, videos: [], files: [] } });
+  assert.equal(r.ok, 1);
+  const pub = env.bodies.find(([c]) => c.endsWith('/publish'))[1];
+  assert.deepEqual(pub.media, { images, videos: [], files: [] });
+  assert.equal(env.storage.log[0].snippet, '[2 ảnh] ');
+  // Hai loại đính kèm: từ chối trước khi gọi API
+  const bad = await env.send({ type: 'compose', groupIds: ['gFood'], content: 'x', media: { images, files: [{ id: 'f' }] } });
+  assert.match(bad.message, /một loại/);
+  const dry = makeEnv();
+  await scan(dry);
+  const d = await dry.send({ type: 'compose', groupIds: ['gFood'], content: 'Bài thử', media: { images: [{ name: 'a.png' }], videos: [], files: [] } });
+  assert.equal(d.dry, 1);
+  assert.equal(dry.storage.log[0].snippet, '[1 ảnh] Bài thử');
+  assert.ok(!dry.calls.some((c) => c.startsWith('POST content') || c.startsWith('POST upload')));
+});
+
+// ---------- Nhắc tên và xem trước link ----------
+
+test('tìm người để nhắc tên: gọi API người dùng không kèm phiên bản, dấu phẩy giữa các group', async () => {
+  const env = makeEnv();
+  await scan(env);
+  const r = await env.send({ type: 'mentionable', groupIds: ['gFood', 'gCL'], key: 'ka' });
+  assert.deepEqual(r.users, [{ id: 'u61', username: 'kai', fullname: 'Kai', avatar: '', isVerified: true }]);
+  assert.ok(env.calls.includes('GET user/users/mentionable?group_ids=gFood,gCL&key=ka'));
+  assert.equal(env.headers['GET user/users/mentionable?group_ids=gFood,gCL&key=ka']['x-version-id'], undefined);
+  assert.deepEqual((await env.send({ type: 'mentionable', groupIds: [] })).users, []); // chưa chọn group: không gọi API
+});
+
+test('xem trước link: link ngoài dùng url-metadata, bài Beincom dùng API nội dung, lỗi thì báo', async () => {
+  const env = makeEnv();
+  await scan(env);
+  const a = await env.send({ type: 'linkPreview', url: 'https://vd.vn/bai viết' });
+  assert.deepEqual(a.preview, { url: 'https://vd.vn/bai viết', domain: 'Ví dụ', title: 'Trang ví dụ', image: 'https://vd.vn/a.png', description: 'Mô tả' });
+  assert.ok(env.calls.includes('GET group/url-metadata?url=https%3A%2F%2Fvd.vn%2Fbai%20vi%E1%BA%BFt'));
+  const b = await env.send({ type: 'linkPreview', url: 'https://group.beincom.com/posts/p77?x=1' });
+  assert.equal(b.preview.title, 'Bài trên Beincom');
+  assert.ok(env.calls.includes('GET content/contents/p77/link-preview'));
+  assert.match((await env.send({ type: 'linkPreview', url: 'https://loi.vn' })).message, /Cannot fetch url/);
+  assert.match((await env.send({ type: 'linkPreview', url: 'javascript:alert(1)' })).message, /không hợp lệ/);
+});
+
+test('đăng bài có nhắc tên và link: mentions chỉ gồm người còn trong bài, kèm linkPreview', async () => {
+  const env = makeEnv({ settings: { dryRun: false } });
+  await scan(env);
+  const linkPreview = { url: 'https://vd.vn', domain: 'Ví dụ', title: 'Trang ví dụ', image: '', description: '' };
+  const mentions = { kai: { id: 'u61', avatar: '', name: 'kai', fullname: 'Kai', isVerified: true }, lan: { id: 'u62', name: 'lan' } };
+  await env.send({ type: 'compose', groupIds: ['gFood'], content: 'Chào @kai, xem https://vd.vn', mentions, linkPreview });
+  const pub = env.bodies.find(([c]) => c.endsWith('/publish'))[1];
+  assert.deepEqual(pub.mentions, { kai: mentions.kai });
+  assert.deepEqual(pub.linkPreview, linkPreview);
+});
+
+// ---------- Tag và series ----------
+
+test('tải tag (theo group gốc, đủ các trang) và series (theo group) cho các group sẽ đăng', async () => {
+  const env = makeEnv();
+  await scan(env);
+  assert.deepEqual(env.storage.state.snapshot.groups.map((g) => [g.id, g.rootGroupId]), [['gFood', 'gFood'], ['gCL', 'gCL'], ['gCLsub', '']]);
+  env.calls.length = 0;
+  // gCLsub chưa có rootGroupId: lấy group gốc cùng community (gCL) đang quản trị
+  const r = await env.send({ type: 'tagsSeries', groupIds: ['gFood', 'gCLsub'] });
+  assert.equal(r.tags.length, 31);
+  assert.deepEqual(r.tags[0], { id: 'tF1', name: 'AMA', totalUsed: 3 });
+  assert.deepEqual(r.series.map((x) => [x.id, x.title, x.cover]), [['sF1', 'Lịch sự kiện', 'https://media.beincom.com/c1'], ['sC1', 'Nhập môn crypto', '']]);
+  assert.deepEqual(env.calls, [
+    'GET content/tags?groupIds[]=gFood&groupIds[]=gCL&offset=0',
+    'GET content/tags?groupIds[]=gFood&groupIds[]=gCL&offset=25',
+    'GET content/series?groupIds[]=gFood&groupIds[]=gCLsub&offset=0',
+  ]);
+  assert.equal(r.note, '');
+  assert.deepEqual(await env.send({ type: 'tagsSeries', groupIds: [] }), { status: 'ok', tags: [], series: [] });
+});
+
+test('chỉ quản trị group con, chưa quét lại: không có tag, nhắc quét lại', async () => {
+  const data = fixture();
+  delete data.perms.groups.gCL;
+  const env = makeEnv({ data });
+  await scan(env);
+  // Bản cũ chưa lưu rootGroupId
+  env.storage.state.snapshot.groups = env.storage.state.snapshot.groups.map(({ rootGroupId, ...g }) => g);
+  const r = await env.send({ type: 'tagsSeries', groupIds: ['gCLsub'] });
+  assert.deepEqual([r.tags, r.series.length], [[], 1]);
+  assert.match(r.note, /Quét ngay/);
+});
+
+test('đăng bài có tag / series: kiểm tra hợp lệ trước khi tạo nháp, body gửi id; không hợp lệ thì báo tên, không tạo nháp', async () => {
+  const env = makeEnv({ settings: { dryRun: false } });
+  await scan(env);
+  const tags = [{ id: 'tF1', name: 'AMA' }];
+  const series = [{ id: 'sF1', title: 'Lịch sự kiện' }];
+  const r = await env.send({ type: 'compose', groupIds: ['gFood'], content: 'Bài có tag', tags, series });
+  assert.equal(r.ok, 1);
+  assert.deepEqual(env.bodies.find(([c]) => c === 'POST content/contents/validate-series-tags')[1], { groups: ['gFood'], series: ['sF1'], tags: ['tF1'] });
+  const pub = env.bodies.find(([c]) => c.endsWith('/publish'))[1];
+  assert.deepEqual([pub.tags, pub.series], [['tF1'], ['sF1']]);
+  const before = env.calls.filter((c) => c === 'POST content/posts').length;
+  const bad = await env.send({ type: 'compose', groupIds: ['gFood'], content: 'x', tags: [{ id: 'tBad1', name: 'SAI' }], series: [{ id: 'sBad', title: 'Series lạ' }] });
+  assert.equal(bad.failed, 1);
+  assert.match(bad.errors[0], /series Series lạ; tag SAI không dùng được/);
+  assert.equal(env.calls.filter((c) => c === 'POST content/posts').length, before); // không tạo nháp
+  // Không có tag / series: không gọi kiểm tra
+  env.calls.length = 0;
+  await env.send({ type: 'compose', groupIds: ['gFood'], content: 'y' });
+  assert.ok(!env.calls.some((c) => c.includes('validate-series-tags')));
+});
+
+// ---------- Giới hạn của Beincom và bài đã bị xoá ----------
+
+test('API nội dung chỉ nhận 25 mục mỗi trang: bài hẹn giờ đọc nhiều trang; lỗi hiện đủ chi tiết', async () => {
+  const data = fixture();
+  data.scheduled.gCL = Array.from({ length: 30 }, (_, i) => post('s' + i, 'Hẹn ' + i, { status: 'WAITING_SCHEDULE', scheduledAt: new Date(Date.UTC(2026, 10, 1 + i)).toISOString() }));
+  const env = makeEnv({ data });
+  await scan(env);
+  const list = await env.send({ type: 'scheduled' });
+  assert.deepEqual([list.items.length, list.errors], [30, []]);
+  assert.ok(env.calls.includes('GET content/manage/groups/gCL/contents/scheduled?limit=25&type=POST&after=25'));
+  assert.ok(env.calls.every((c) => !c.startsWith('GET content/') || !/limit=(2[6-9]|[3-9]\d|\d{3})/.test(c)));
+  assert.equal(BG.errMsg({ status: 400, body: { code: 'api.validation_error', meta: { message: 'Bad Request Exception', errors: ['limit must not be greater than 25'] } } }), 'Bad Request Exception: limit must not be greater than 25');
+  assert.equal(BG.errMsg({ status: 400, body: { meta: { message: 'Lỗi', errors: [{ message: ['content is too long'] }] } } }), 'Lỗi: content is too long');
+});
+
+test('bài đã bị xoá trên Beincom: xoá / ẩn / huỷ hẹn giờ tính là xong, bỏ khỏi danh sách, nhật ký ghi rõ', async () => {
+  const data = fixture();
+  data.timeline.gCL.push(post('goneMine', 'Bài của Kai đã xoá trên web', { actor: { id: 'me1', username: 'kai', fullname: 'Kai Crypto' } }), post('goneOther', 'Bài người khác đã bị xoá'));
+  const env = makeEnv({ data, settings: { dryRun: false } });
+  await scan(env);
+  const del = await env.send({ type: 'postAct', action: 'delete', contentIds: ['goneMine'] });
+  assert.deepEqual([del.ok, del.failed, del.gone], [1, 0, 1]);
+  assert.equal(env.storage.log[0].message, 'Bài không còn trên Beincom (đã bị xoá) — đã bỏ khỏi danh sách');
+  const hide = await env.send({ type: 'postAct', action: 'hide', contentIds: ['goneOther', 't1'], reasonType: 'SPAM' });
+  assert.deepEqual([hide.ok, hide.gone], [2, 1]);
+  const ids = env.storage.state.recentPosts.map((p) => p.id);
+  assert.ok(!ids.includes('goneMine') && !ids.includes('goneOther'));
+  assert.equal(env.storage.state.recentPosts.find((p) => p.id === 't1').isHidden, true);
+  const cancel = await env.send({ type: 'scheduleAct', action: 'cancel', contentId: 'goneSched' });
+  assert.deepEqual([cancel.ok, cancel.gone], [1, 1]);
+  // Lỗi khác vẫn là lỗi
+  assert.equal(BG.isContentGone({ body: { code: 'api.validation_error', meta: { message: 'Bad Request' } } }), false);
 });
 
 // ---------- Xoá bài của mình ----------

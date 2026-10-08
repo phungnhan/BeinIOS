@@ -17,6 +17,7 @@
     autoApprove: false, // tự duyệt yêu cầu được gợi ý "Duyệt"
     autoDecline: false, // tự từ chối yêu cầu được gợi ý "Từ chối"
     scanPosts: true, // quét bài mới đăng trong các group đang quản trị
+    scanReports: true, // quét báo cáo chờ xử lý và bài bị Beincom gắn cờ tự động
   };
 
   // Quy tắc cho bài viết (bài chờ duyệt và bài mới đăng)
@@ -111,9 +112,27 @@
     return !!r && r.status >= 200 && r.status < 300 && r.body?.code === 'api.ok';
   }
 
+  // Chi tiết lỗi kiểm tra dữ liệu: ["limit must not be greater than 25"] hoặc [{ message: ["…"] }]
+  function errDetails(errors) {
+    if (!Array.isArray(errors)) return '';
+    return errors
+      .map((e) => (typeof e === 'string' ? e : [].concat(e?.message || []).join(', ')))
+      .filter(Boolean)
+      .join('; ');
+  }
+
+  // Beincom báo bài không còn (đã bị xoá trên web): code content.not_found / "Content not found"
+  function isContentGone(r) {
+    return /content[._ ]?not[._ ]?found/i.test(`${r?.body?.code || ''} ${r?.body?.meta?.message || ''}`);
+  }
+
   function errMsg(r) {
     if (!r) return 'Không có phản hồi';
-    if (r.body?.meta?.message || r.body?.code) return r.body.meta?.message || r.body.code;
+    if (r.body?.meta?.message || r.body?.code) {
+      const base = r.body.meta?.message || r.body.code;
+      const more = errDetails(r.body.meta?.errors);
+      return more && !base.includes(more) ? `${base}: ${more}` : base;
+    }
     if (r.status === 0) return 'Không kết nối được API Beincom' + (r.error ? ` — ${r.error}` : '');
     if (r.status === 401) return 'Phiên đăng nhập hết hạn';
     if (r.status === 403) return 'Không có quyền hoặc bị Cloudflare chặn (403)';
@@ -142,6 +161,11 @@
   // Quyền cấm thành viên nằm ở cấp community
   function canBan(permData, communityId) {
     return !!permData?.communities?.[communityId]?.includes('ban_member');
+  }
+
+  // Chủ / admin community (xem được báo cáo vi phạm, thống kê chính thức)
+  function isCommunityAdmin(permData, communityId) {
+    return !!permData?.communities?.[communityId]?.includes('manage');
   }
 
   // Xếp group theo cây: community có nhiều việc lên trước; trong community, group gốc trước rồi tới group con theo cấp.
@@ -379,7 +403,64 @@
       status: p.status || null,
       scheduledAt: p.scheduledAt || null,
       reactions: Object.values(p.reactionsCount || {}).reduce((s, n) => s + (Number(n) || 0), 0),
+      // Bài bị hệ thống kiểm duyệt tự động gắn cờ: các danh mục vi phạm
+      violations: (p.postScan?.dataViolation?.violatedCategories || []).map((c) => c?.name).filter(Boolean),
     };
+  }
+
+  // Chỉ nhận link web; ảnh phải https (trang Dashboard không tải ảnh http)
+  const webUrl = (u) => (/^https?:\/\//i.test(String(u || '')) ? String(u) : '');
+  const httpsUrl = (u) => (/^https:\/\//i.test(String(u || '')) ? String(u) : '');
+
+  // Bài hẹn giờ: thêm những gì cần để xem lại bài trước giờ đăng
+  function slimScheduled(p) {
+    const s = p.setting || {};
+    const lp = p.linkPreview;
+    return {
+      ...slimPost(p),
+      createdAt: p.createdAt || null,
+      updatedAt: p.updatedAt || null,
+      setting: { canComment: s.canComment !== false, canReact: s.canReact !== false, isImportant: !!s.isImportant, importantExpiredAt: s.importantExpiredAt || null },
+      thumbs: (p.media?.images || []).map((x) => httpsUrl(x?.url)).filter(Boolean).slice(0, 4),
+      linkPreview: lp?.url ? { url: webUrl(lp.url), title: lp.title || '', domain: lp.domain || '', image: httpsUrl(lp.image) } : null,
+      tags: (p.tags || []).map((t) => t?.name).filter(Boolean),
+      series: (p.series || []).map((x) => x?.title || x?.name).filter(Boolean),
+      mentions: Object.values(p.mentions || {}).map((u) => u?.username).filter(Boolean),
+    };
+  }
+
+  // ---------- Báo cáo vi phạm ----------
+
+  const REPORT_STATUS = { CREATED: 'Chờ xử lý', IGNORED: 'Đã bỏ qua', HID: 'Đã ẩn' };
+  const REPORT_TARGET = { POST: 'Bài viết', ARTICLE: 'Article', COMMENT: 'Bình luận' };
+
+  // Một báo cáo nội dung (GET content/manage/communities/{groupId gốc}/content-reports)
+  function slimReport(r) {
+    const reasons = (r.reasonsCount || []).map((x) => ({
+      type: x.reasonType || 'OTHERS',
+      label: HIDE_REASONS[x.reasonType] || x.reasonType || 'Khác',
+      total: x.total || 0,
+      description: x.description || '',
+    }));
+    return {
+      id: r.id,
+      targetId: r.targetId,
+      targetType: r.targetType || 'POST',
+      content: String(r.content || '').slice(0, TEXT_MAX),
+      actor: slimPerson(r.targetActor),
+      reasons,
+      total: reasons.reduce((s, x) => s + x.total, 0),
+      status: r.status || 'CREATED',
+      createdAt: r.createdAt || null,
+      updatedAt: r.updatedAt || null,
+      commentPostId: r.commentPostId || null,
+    };
+  }
+
+  // Link tới nội dung bị báo cáo: bình luận thì mở bài chứa bình luận
+  function reportUrl(r) {
+    if (r.targetType === 'COMMENT') return r.commentPostId ? `${SITE}/posts/${r.commentPostId}` : '';
+    return postUrl({ id: r.targetId, type: r.targetType });
   }
 
   // Link trong bài: http(s)://…, www.…, hoặc tên miền có đuôi phổ biến (t.me/…, bit.ly/…)
@@ -402,6 +483,54 @@
       if (d && d.includes('.') && !out.includes(d)) out.push(d);
     }
     return out;
+  }
+
+  // ---------- Nhắc tên (@username) và xem trước link khi đăng bài ----------
+  // Ký tự trong username giống trình soạn thảo web Beincom
+  const MENTION_CHAR = '[\\w\\-.À-ÖØ-öø-ÿĀ-ňŊ-ſА-я々-〆぀-ゟ゠-ヿ㄰-㆏가-힣一-龥؀-ۿÀ-ỹ]';
+  const MENTION_AT_END = new RegExp(`(^|\\s)@(${MENTION_CHAR}*)$`);
+  const MENTION_ALL = new RegExp(`(^|\\s)@(${MENTION_CHAR}+)`, 'g');
+  const MENTION_TAIL = /[.|?,!$%*)(#]+$/; // web bỏ dấu câu dính sau tên
+
+  // Chữ trước con trỏ kết thúc bằng "@abc" (đầu dòng hoặc sau khoảng trắng) thì đang gõ nhắc tên
+  function mentionQuery(before) {
+    const m = MENTION_AT_END.exec(String(before || ''));
+    return m ? { start: m.index + m[1].length, query: m[2] } : null;
+  }
+
+  // Người trong danh sách nhắc tên được (API trả snake_case)
+  function slimMentionable(u) {
+    return { id: u.id, username: u.username || '', fullname: u.fullname || '', avatar: u.avatar || '', isVerified: !!(u.is_verified ?? u.isVerified) };
+  }
+
+  // Dạng web lưu trong mentions của bài: { [username]: { id, avatar, name, fullname, isVerified } }
+  function mentionEntry(u) {
+    return { id: u.id, avatar: u.avatar || '', name: u.username, fullname: u.fullname || '', isVerified: !!u.isVerified };
+  }
+
+  // Chỉ giữ những người còn được nhắc trong nội dung (@username đứng đầu dòng hoặc sau khoảng trắng)
+  function usedMentions(content, known) {
+    const out = {};
+    for (const m of String(content || '').matchAll(MENTION_ALL)) {
+      const name = m[2].replace(MENTION_TAIL, '');
+      if (known?.[name]) out[name] = known[name];
+    }
+    return out;
+  }
+
+  // Link cuối cùng trong bài (web xem trước link cuối); thêm https:// nếu thiếu
+  function lastLink(text) {
+    const all = [...String(text || '').matchAll(LINK_RE)].map((m) => m[0].replace(/[.,!?;:]+$/, ''));
+    const url = all.at(-1);
+    if (!url) return '';
+    return /^https?:\/\//i.test(url) ? url : 'https://' + url;
+  }
+
+  // Thông tin xem trước link (GET group/url-metadata hoặc content/contents/{id}/link-preview)
+  function slimLinkPreview(d) {
+    if (!d?.url) return null;
+    const str = (v) => (typeof v === 'string' ? v : '');
+    return { url: d.url, domain: str(d.domain), title: str(d.title), image: httpsUrl(d.image), description: str(d.description).slice(0, 300) };
   }
 
   function domainIn(d, list) {
@@ -440,6 +569,128 @@
 
   const DEFAULT_POST_SETTING = { canComment: true, canReact: true, isImportant: false, importantExpiredAt: null };
 
+  // ---------- Ảnh, video, tệp đính kèm (giới hạn giống web Beincom) ----------
+  const MB = 1024 * 1024;
+  const MEDIA = {
+    image: {
+      label: 'ảnh',
+      max: 10,
+      size: 25 * MB,
+      types: ['image/bmp', 'image/x-ms-bmp', 'image/gif', 'image/jpeg', 'image/png', 'image/svg+xml', 'image/heic', 'image/heif', 'image/heif-sequence', 'image/heic-sequence', 'image/avif', 'image/avif-sequence', 'image/webp'],
+    },
+    video: { label: 'video', max: 1, size: 300 * MB, prefix: 'video/' },
+    file: { label: 'tệp', max: 25, size: 5 * MB, exts: ['pdf', 'doc', 'docx', 'htm', 'html', 'odt', 'xls', 'xlsx', 'ods', 'ppt', 'pptx', 'txt', 'zip', 'csv'] },
+  };
+  const MEDIA_FIELD = { image: 'images', video: 'videos', file: 'files' };
+
+  function sizeText(n) {
+    return n < MB ? `${Math.max(1, Math.round(n / 1024))} KB` : `${(n / MB).toFixed(n < 10 * MB ? 1 : 0)} MB`;
+  }
+
+  // Lọc file vừa chọn: đúng loại, không quá dung lượng, không quá số lượng. current = { image: số đã có, ... }.
+  // Một bài chỉ đính kèm một loại (ảnh, video hoặc tệp), giống web.
+  function pickMedia(kind, files, current = {}) {
+    const rule = MEDIA[kind];
+    const other = Object.keys(MEDIA).find((k) => k !== kind && current[k] > 0);
+    if (other) return { accepted: [], errors: [`Bài đang có ${MEDIA[other].label}: mỗi bài chỉ đính kèm một loại (ảnh, video hoặc tệp)`] };
+    const accepted = [];
+    const errors = [];
+    let count = current[kind] || 0;
+    for (const f of files) {
+      const ext = String(f.name || '').split('.').pop().toLowerCase();
+      const type = String(f.type || '');
+      const okType = rule.types ? rule.types.includes(type) : rule.prefix ? type.startsWith(rule.prefix) : rule.exts.includes(ext);
+      if (!okType) errors.push(`${f.name}: Beincom không nhận loại ${rule.label} này`);
+      else if (f.size > rule.size) errors.push(`${f.name}: ${sizeText(f.size)}, tối đa ${sizeText(rule.size)}`);
+      else if (count >= rule.max) {
+        errors.push(`Tối đa ${rule.max} ${rule.label} mỗi bài`);
+        break;
+      } else {
+        accepted.push(f);
+        count += 1;
+      }
+    }
+    return { accepted, errors };
+  }
+
+  // "3 ảnh" / "1 video" / "2 tệp" / ''
+  function mediaSummary(media) {
+    return Object.entries(MEDIA_FIELD)
+      .map(([k, f]) => (media?.[f]?.length ? `${media[f].length} ${MEDIA[k].label}` : ''))
+      .filter(Boolean)
+      .join(', ');
+  }
+
+  const camelKey = (k) => k.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
+
+  // Đối tượng đính kèm gửi trong media của bài, giống web dựng sau khi tải lên:
+  //  - ảnh:  { url, id, ...properties }
+  //  - video: { id, url, ...properties, status: 'waiting_process', thumbnails }
+  //  - tệp:  { id, url, ...properties } (web đổi khoá sang camelCase)
+  function mediaItem(kind, id, d = {}) {
+    if (kind === 'image') return { url: d.url, id, ...(d.properties || {}) };
+    if (kind === 'video') return { id, url: d.url, ...(d.properties || {}), status: 'waiting_process', thumbnails: d.thumbnails };
+    const props = Object.fromEntries(Object.entries(d.properties || {}).map(([k, v]) => [camelKey(k), v]));
+    return { id: d.id || id, url: d.origin_url || d.originUrl || d.url || '', ...props };
+  }
+
+  // ---------- Tag và series (giới hạn như web: 5 tag, 3 series mỗi bài) ----------
+  const TAG_MAX = 5;
+  const SERIES_MAX = 3;
+
+  // GET content/tags?groupIds[]=… : tag của community (theo group gốc)
+  function slimTag(t) {
+    return { id: t.id, name: t.name || '', totalUsed: t.totalUsed ?? null };
+  }
+
+  // GET content/series?groupIds[]=… : series có các group đó trong phạm vi
+  function slimSeries(x) {
+    return { id: x.id, title: x.title || '', cover: httpsUrl(x.coverMedia?.url), summary: String(x.summary || '').slice(0, 160) };
+  }
+
+  // Câu báo khi Beincom trả tag_series_invalid: meta.errors = { seriesIds, tagIds }
+  function tagSeriesError(body, tags = [], series = []) {
+    const e = body?.meta?.errors || {};
+    const names = (list, ids, f) => (ids || []).map((id) => list.find((x) => x.id === id)?.[f] || id);
+    const parts = [];
+    const s = names(series, e.seriesIds, 'title');
+    const t = names(tags, e.tagIds || e.tagsIds, 'name');
+    if (s.length) parts.push('series ' + s.join(', '));
+    if (t.length) parts.push('tag ' + t.join(', '));
+    return `${parts.length ? parts.join('; ') : 'Tag / series'} không dùng được với các group đã chọn — bỏ ra rồi đăng lại`;
+  }
+
+  // Hạn "Quan trọng" giống web Beincom, tính từ lúc bài được đăng
+  const IMPORTANT_FOR = {
+    never: 'Không hết hạn',
+    '1d': '1 ngày',
+    '3d': '3 ngày',
+    '1w': '1 tuần',
+    '2w': '2 tuần',
+    '1m': '1 tháng',
+    '3m': '3 tháng',
+    '6m': '6 tháng',
+    '1y': '1 năm',
+    custom: 'Tự chọn ngày giờ',
+  };
+
+  // Ngày hết "Quan trọng" (ISO) theo hạn đã chọn; null = không hết hạn; tự chọn thì do người dùng nhập
+  function importantUntil(preset, base) {
+    if (preset === 'never') return null;
+    const d = new Date(base);
+    const days = { '1d': 1, '3d': 3, '1w': 7, '2w': 14 }[preset];
+    const months = { '1m': 1, '3m': 3, '6m': 6, '1y': 12 }[preset];
+    if (days) d.setDate(d.getDate() + days);
+    else if (months) {
+      // 31/01 + 1 tháng = 28 hoặc 29/02, không nhảy sang tháng 3
+      const day = d.getDate();
+      d.setDate(1);
+      d.setMonth(d.getMonth() + months);
+      d.setDate(Math.min(day, new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate()));
+    } else return undefined;
+    return d.toISOString();
+  }
+
   const CONTENT_STATUS = {
     DRAFT: 'Bản nháp',
     PROCESSING: 'Đang xử lý',
@@ -451,17 +702,23 @@
   };
 
   // Kiểm tra trước khi đăng; trả về câu báo lỗi hoặc '' nếu được
-  function validateCompose({ groupIds, content, scheduledAt, setting }, now = Date.now()) {
+  function validateCompose({ groupIds, content, scheduledAt, setting, media, tags, series }, now = Date.now()) {
     if (!groupIds?.length) return 'Chưa chọn group để đăng';
     const text = String(content || '').trim();
-    if (!text) return 'Bài chưa có nội dung';
+    const kinds = Object.keys(MEDIA).filter((k) => media?.[MEDIA_FIELD[k]]?.length);
+    if (!text && !kinds.length) return 'Bài chưa có nội dung';
+    if (kinds.length > 1) return 'Mỗi bài chỉ đính kèm một loại: ảnh, video hoặc tệp';
+    for (const k of kinds) if (media[MEDIA_FIELD[k]].length > MEDIA[k].max) return `Tối đa ${MEDIA[k].max} ${MEDIA[k].label} mỗi bài`;
+    if ((tags?.length || 0) > TAG_MAX) return `Tối đa ${TAG_MAX} tag mỗi bài`;
+    if ((series?.length || 0) > SERIES_MAX) return `Tối đa ${SERIES_MAX} series mỗi bài`;
     if (text.length > POST_MAX) return `Bài dài ${text.length} ký tự, Beincom chỉ cho tối đa ${POST_MAX}`;
     if (scheduledAt) {
       const t = new Date(scheduledAt).getTime();
       if (!Number.isFinite(t)) return 'Giờ hẹn không hợp lệ';
       if (t < now + MIN_SCHEDULE_MIN * 60e3) return `Giờ hẹn phải sau bây giờ ít nhất ${MIN_SCHEDULE_MIN} phút`;
     }
-    if (setting?.isImportant) {
+    // importantExpiredAt = null: Quan trọng không hết hạn
+    if (setting?.isImportant && setting.importantExpiredAt !== null) {
       const t = new Date(setting.importantExpiredAt).getTime();
       if (!Number.isFinite(t) || t <= (scheduledAt ? new Date(scheduledAt).getTime() : now)) return 'Ngày hết "Quan trọng" phải sau lúc bài được đăng';
     }
@@ -469,17 +726,22 @@
   }
 
   // Body cho PUT content/posts/{id}/publish | schedule (giống web gửi)
-  function composeBody({ groupIds, content, setting, scheduledAt }) {
+  // mentions: { username: {...} } đã lọc theo nội dung; linkPreview: chỉ gửi khi bài không có ảnh / video / tệp (web chỉ hiện lúc đó)
+  // tags / series: [{ id, … }] hoặc [id]; body chỉ gửi id (giống web)
+  function composeBody({ groupIds, content, setting, scheduledAt, media, mentions, linkPreview, tags, series }) {
     const s = { ...DEFAULT_POST_SETTING, ...setting };
     const body = {
       audience: { groupIds: [...groupIds], userIds: [] },
-      content: String(content).trim(),
-      media: { images: [], videos: [], files: [] },
-      setting: { canComment: !!s.canComment, canReact: !!s.canReact, isImportant: !!s.isImportant, importantExpiredAt: s.isImportant ? new Date(s.importantExpiredAt).toISOString() : null },
-      mentions: {},
-      tags: [],
-      series: [],
+      content: String(content || '').trim(),
+      media: { images: [...(media?.images || [])], videos: [...(media?.videos || [])], files: [...(media?.files || [])] },
+      setting: { canComment: !!s.canComment, canReact: !!s.canReact, isImportant: !!s.isImportant, importantExpiredAt: s.isImportant && s.importantExpiredAt ? new Date(s.importantExpiredAt).toISOString() : null },
+      mentions: usedMentions(content, mentions),
+      tags: (tags || []).map((x) => x?.id ?? x).filter(Boolean),
+      series: (series || []).map((x) => x?.id ?? x).filter(Boolean),
     };
+    const hasMedia = body.media.images.length + body.media.videos.length + body.media.files.length > 0;
+    const lp = slimLinkPreview(linkPreview);
+    if (lp && !hasMedia) body.linkPreview = lp;
     if (scheduledAt) body.scheduledAt = new Date(scheduledAt).toISOString();
     return body;
   }
@@ -497,9 +759,15 @@
     return out;
   }
 
+  // Bài bị Beincom gắn cờ tự động: một bài có thể nằm ở nhiều group, chỉ đếm một lần
+  function autoFlaggedIds(groups) {
+    return [...new Set((groups || []).flatMap((g) => g.flaggedIds || []))];
+  }
+
   function totals(groups) {
     let requests = 0;
     let posts = 0;
+    let reports = 0;
     const seenCommunity = new Set();
     for (const g of groups || []) {
       requests += g.pendingTotal || 0;
@@ -508,8 +776,10 @@
         seenCommunity.add(g.communityId);
         posts += g.approvalCount;
       }
+      // Báo cáo chờ xử lý chỉ đọc ở group gốc của community
+      reports += (g.reportIds || []).length;
     }
-    return { requests, posts };
+    return { requests, posts, reports, autoFlagged: autoFlaggedIds(groups).length };
   }
 
   // ---------- Xem trước markdown ----------
@@ -528,7 +798,7 @@
 
   const MARK = String.fromCharCode(1); // giữ chỗ cho `code` khi xử lý các định dạng khác
 
-  function inlineMd(s) {
+  function inlineMdBase(s, mentions) {
     const codes = [];
     s = s.replace(/`([^`\n]+)`/g, (_, c) => {
       codes.push(c);
@@ -540,10 +810,14 @@
     s = s.replace(/~~([^~\n]+)~~/g, '<del>$1</del>');
     s = s.replace(/(^|[^\w*])\*([^*\n]+)\*(?!\w)/g, '$1<em>$2</em>');
     s = s.replace(/(^|[^\w])_([^_\n]+)_(?!\w)/g, '$1<em>$2</em>');
+    // @username đã chọn từ danh sách nhắc tên
+    if (mentions) s = s.replace(MENTION_ALL, (all, pre, name) => (mentions[name.replace(MENTION_TAIL, '')] ? `${pre}<span class="mention">@${name}</span>` : all));
     return s.replace(new RegExp(MARK + '(\\d+)' + MARK, 'g'), (_, i) => `<code>${codes[Number(i)]}</code>`);
   }
 
-  function renderMarkdown(md) {
+  // opts.mentions: tô màu các @username có trong bảng nhắc tên
+  function renderMarkdown(md, opts = {}) {
+    const inlineMd = (x) => inlineMdBase(x, opts.mentions);
     const lines = escapeHtml(String(md ?? '').replace(/\r\n?/g, '\n')).split('\n');
     const out = [];
     let para = [];
@@ -723,6 +997,26 @@
     DEFAULT_POST_SETTING,
     CONTENT_STATUS,
     validateCompose,
+    TAG_MAX,
+    SERIES_MAX,
+    slimTag,
+    slimSeries,
+    tagSeriesError,
+    mentionQuery,
+    slimMentionable,
+    mentionEntry,
+    usedMentions,
+    lastLink,
+    slimLinkPreview,
+    MEDIA,
+    MEDIA_FIELD,
+    sizeText,
+    pickMedia,
+    mediaSummary,
+    mediaItem,
+    slimScheduled,
+    IMPORTANT_FOR,
+    importantUntil,
     composeBody,
     VERDICT_LABELS,
     POST_VERDICT_LABELS,
@@ -731,8 +1025,14 @@
     vnDay,
     isOk,
     errMsg,
+    isContentGone,
     adminGroups,
     canBan,
+    isCommunityAdmin,
+    REPORT_STATUS,
+    REPORT_TARGET,
+    slimReport,
+    reportUrl,
     sortGroupTree,
     groupIndent,
     roleLabel,
@@ -754,6 +1054,7 @@
     evaluateRequest,
     newRequestIds,
     totals,
+    autoFlaggedIds,
     escapeHtml,
     renderMarkdown,
     dayRange,

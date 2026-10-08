@@ -27,6 +27,7 @@
     <button role="tab" data-tab="overview">Tổng quan</button>
     <button role="tab" data-tab="members">Thành viên <span class="badge" id="badge-members"></span></button>
     <button role="tab" data-tab="content">Bài viết <span class="badge" id="badge-content"></span></button>
+    <button role="tab" data-tab="reports">Báo cáo <span class="badge" id="badge-reports"></span></button>
     <button role="tab" data-tab="compose">Đăng bài <span class="badge info" id="badge-compose"></span></button>
     <button role="tab" data-tab="stats">Thống kê</button>
     <button role="tab" data-tab="settings">Quy tắc &amp; cài đặt</button>
@@ -61,6 +62,11 @@
         <div class="kpi-sub" id="kpi-flagged-sub"></div>
       </div>
       <div class="kpi">
+        <div class="kpi-label">Báo cáo vi phạm</div>
+        <div class="kpi-value" id="kpi-reports">–</div>
+        <div class="kpi-sub" id="kpi-reports-sub"></div>
+      </div>
+      <div class="kpi">
         <div class="kpi-label">Lần quét gần nhất</div>
         <div class="kpi-value small-value" id="kpi-scan">–</div>
         <div class="kpi-sub" id="kpi-scan-sub"></div>
@@ -75,7 +81,7 @@
       <div class="table-wrap">
         <table>
           <thead>
-            <tr><th>Group</th><th>Vai trò</th><th class="num">Thành viên</th><th>Duyệt thành viên</th><th>Duyệt bài</th><th class="num">Yêu cầu chờ</th><th class="num">Bài chờ</th><th>Mở trên Beincom</th></tr>
+            <tr><th>Group</th><th>Vai trò</th><th class="num">Thành viên</th><th>Duyệt thành viên</th><th>Duyệt bài</th><th class="num">Yêu cầu chờ</th><th class="num">Bài chờ</th><th class="num">Báo cáo</th><th>Mở trên Beincom</th></tr>
           </thead>
           <tbody id="groups-body"></tbody>
         </table>
@@ -243,6 +249,38 @@
       <button id="btn-recent-more" class="ghost more" hidden>Xem thêm</button>
     </section>
 
+    <section class="card span-3" id="reports" data-tab="reports">
+      <div class="card-head">
+        <h2>Báo cáo vi phạm</h2>
+        <div class="review-tools">
+          <select id="reports-group" aria-label="Chọn community hoặc group"></select>
+          <div class="seg" id="reports-kind" aria-label="Loại">
+            <button data-f="reported" class="active">Người dùng báo cáo <span id="rk-reported"></span></button>
+            <button data-f="flagged">Gắn cờ tự động <span id="rk-flagged"></span></button>
+            <button data-f="hidden">Đã ẩn <span id="rk-hidden"></span></button>
+          </div>
+          <div class="seg" id="reports-status" aria-label="Trạng thái">
+            <button data-f="CREATED" class="active">Chờ xử lý</button>
+            <button data-f="all">Tất cả</button>
+          </div>
+        </div>
+      </div>
+      <div id="reports-note" class="muted small review-note"></div>
+      <div class="bulk-bar" id="reports-bulk">
+        <label class="check"><input type="checkbox" id="reports-check-all" /> Chọn tất cả đang hiện</label>
+        <span class="muted small" id="reports-selected">Đã chọn 0</span>
+        <span class="spacer"></span>
+        <button id="btn-reports-ignore" class="ghost" disabled>Bỏ qua đã chọn</button>
+        <button id="btn-reports-hide" class="danger" disabled>Ẩn đã chọn</button>
+      </div>
+      <div class="table-wrap">
+        <table class="requests posts">
+          <thead id="reports-head"></thead>
+          <tbody id="reports-body"></tbody>
+        </table>
+      </div>
+    </section>
+
     <section class="card span-3" id="compose" data-tab="compose">
       <div class="card-head">
         <h2>Đăng bài</h2>
@@ -284,7 +322,34 @@
             <div class="editor-body" id="editor-body">
               <textarea id="compose-text" rows="12" placeholder="Viết nội dung bài… Bôi đen chữ rồi bấm nút trên thanh công cụ để định dạng. Xuống dòng giữ nguyên." aria-label="Nội dung bài"></textarea>
               <div id="compose-preview" class="md-preview" aria-label="Xem trước bài" hidden></div>
+              <div id="mention-pop" class="mention-pop" role="listbox" aria-label="Chọn người để nhắc tên" hidden></div>
             </div>
+          </div>
+          <div class="media-bar">
+            <button type="button" class="ghost sm" id="media-btn-image">🖼 Ảnh</button>
+            <input type="file" id="media-input-image" multiple hidden />
+            <button type="button" class="ghost sm" id="media-btn-video">🎬 Video</button>
+            <input type="file" id="media-input-video" accept="video/*" hidden />
+            <button type="button" class="ghost sm" id="media-btn-file">📎 Tệp</button>
+            <input type="file" id="media-input-file" multiple hidden />
+            <span class="muted small" id="media-note"></span>
+          </div>
+          <div id="compose-media" class="media-tray" hidden></div>
+          <div id="compose-link" class="compose-link" hidden></div>
+          <div class="compose-tags">
+            <div class="picker" id="picker-tag">
+              <span class="picker-label">Tag</span>
+              <span class="chips" id="tag-chips"></span>
+              <input type="text" id="tag-input" autocomplete="off" aria-label="Thêm tag" />
+              <div class="picker-pop" id="tag-pop" role="listbox" aria-label="Chọn tag" hidden></div>
+            </div>
+            <div class="picker" id="picker-series">
+              <span class="picker-label">Series</span>
+              <span class="chips" id="series-chips"></span>
+              <input type="text" id="series-input" autocomplete="off" aria-label="Thêm vào series" />
+              <div class="picker-pop" id="series-pop" role="listbox" aria-label="Chọn series" hidden></div>
+            </div>
+            <span class="muted small" id="tags-note"></span>
           </div>
           <div class="compose-meta">
             <span id="compose-count" class="muted small">0/3000</span>
@@ -295,8 +360,10 @@
           <div class="compose-options">
             <label class="check"><input type="checkbox" id="compose-canComment" checked /> Cho bình luận</label>
             <label class="check"><input type="checkbox" id="compose-canReact" checked /> Cho thả cảm xúc</label>
-            <label class="check"><input type="checkbox" id="compose-important" /> Đánh dấu Quan trọng đến</label>
-            <input type="datetime-local" id="compose-important-until" disabled aria-label="Quan trọng đến lúc" />
+            <label class="check"><input type="checkbox" id="compose-important" /> Đánh dấu Quan trọng</label>
+            <select id="compose-important-for" aria-label="Hết Quan trọng sau" disabled></select>
+            <input type="datetime-local" id="compose-important-until" hidden aria-label="Quan trọng đến lúc" />
+            <span id="compose-important-hint" class="muted small"></span>
           </div>
           <div class="compose-when">
             <label class="check"><input type="radio" name="compose-when" value="now" checked /> Đăng ngay</label>
@@ -306,7 +373,7 @@
             <button id="btn-compose-clear" class="ghost">Xoá nội dung</button>
             <button id="btn-compose" class="primary">Đăng ngay</button>
           </div>
-          <div class="muted small">Hẹn giờ dùng chức năng có sẵn của Beincom: tới giờ Beincom tự đăng, không cần mở trình duyệt. Bản này chưa đính kèm ảnh/video.</div>
+          <div class="muted small">Hẹn giờ dùng chức năng có sẵn của Beincom: tới giờ Beincom tự đăng, không cần mở trình duyệt. Ảnh, video, tệp được tải lên Beincom lúc bấm Đăng (Chạy thử thì không tải).</div>
         </div>
       </div>
     </section>
@@ -321,7 +388,7 @@
       <div class="table-wrap">
         <table class="requests posts">
           <thead>
-            <tr><th>Giờ đăng</th><th>Người đăng</th><th>Nội dung</th><th>Đăng vào</th><th>Trạng thái</th><th class="act">Thao tác</th></tr>
+            <tr><th>Giờ đăng</th><th>Người đăng</th><th>Nội dung</th><th>Đăng vào</th><th>Cài đặt</th><th class="act">Thao tác</th></tr>
           </thead>
           <tbody id="scheduled-body"></tbody>
         </table>
@@ -448,8 +515,9 @@
       </label>
       <div class="group" id="settings-group">
         <label class="switch-row dry"><input type="checkbox" id="dryRun" /><span><b>Chạy thử</b><br /><span class="muted small">Duyệt/từ chối chỉ ghi nhật ký, chưa gửi lên Beincom. Tắt khi đã kiểm tra quy tắc ổn.</span></span></label>
-        <label class="switch-row"><input type="checkbox" id="notify" /><span><b>Thông báo</b><br /><span class="muted small">Khi có yêu cầu tham gia, bài chờ duyệt hoặc bài mới vi phạm</span></span></label>
+        <label class="switch-row"><input type="checkbox" id="notify" /><span><b>Thông báo</b><br /><span class="muted small">Khi có yêu cầu tham gia, bài chờ duyệt, bài mới vi phạm hoặc báo cáo vi phạm</span></span></label>
         <label class="switch-row"><input type="checkbox" id="scanPosts" /><span><b>Quét bài mới đăng</b><br /><span class="muted small">20 bài mới nhất của mỗi group, chấm theo quy tắc bài viết</span></span></label>
+        <label class="switch-row"><input type="checkbox" id="scanReports" /><span><b>Quét báo cáo vi phạm</b><br /><span class="muted small">Báo cáo chờ xử lý (community bạn làm chủ / admin) và bài bị Beincom gắn cờ tự động</span></span></label>
         <label class="select-row">
           <span><b>Chu kỳ quét</b></span>
           <select id="intervalMin">
@@ -555,6 +623,7 @@
   </footer>
 
   <script src="common.js"></script>
+  <script src="upload.js"></script>
   <script src="charts.js"></script>
   <script src="dashboard.js"></script>
 </body>

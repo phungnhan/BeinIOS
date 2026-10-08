@@ -5,7 +5,7 @@ function fmtTime(t) {
   return new Date(t).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' });
 }
 
-function renderStatus(state, flagged = 0) {
+function renderStatus(state, flagged = 0, reports = 0) {
   const el = $('status');
   const r = state.lastResult;
   el.className = 'status';
@@ -20,30 +20,33 @@ function renderStatus(state, flagged = 0) {
     el.classList.add('err');
   } else {
     const t = BG.totals(state.snapshot?.groups);
-    const busy = t.requests || t.posts || flagged;
+    const busy = t.requests || t.posts || flagged || reports;
     el.textContent = busy ? 'Có việc cần xử lý' : '✓ Không có gì đang chờ';
     el.classList.add(busy ? 'warn' : 'ok');
   }
   $('last-scan').textContent = state.lastScan ? 'Lần quét gần nhất: ' + fmtTime(state.lastScan) : '';
 }
 
-function renderTodo(groups, flagged) {
+function todoLine(ul, text, hash, count) {
+  const li = document.createElement('li');
+  const a = document.createElement('a');
+  a.href = chrome.runtime.getURL('dashboard.html') + hash;
+  a.target = '_blank';
+  a.textContent = text;
+  const cnt = document.createElement('span');
+  cnt.className = 'cnt';
+  cnt.textContent = count;
+  li.append(a, cnt);
+  ul.append(li);
+}
+
+function renderTodo(groups, flagged, reports) {
   const ul = $('todo');
   ul.replaceChildren();
   const todo = groups.filter((g) => g.pendingTotal || g.approvalCount);
-  if (flagged) {
-    const li = document.createElement('li');
-    const a = document.createElement('a');
-    a.href = chrome.runtime.getURL('dashboard.html') + '#tab=content';
-    a.target = '_blank';
-    a.textContent = 'Bài mới vi phạm quy tắc';
-    const cnt = document.createElement('span');
-    cnt.className = 'cnt';
-    cnt.textContent = `${flagged} bài`;
-    li.append(a, cnt);
-    ul.append(li);
-  }
-  if (!todo.length && !flagged) {
+  if (flagged) todoLine(ul, 'Bài mới vi phạm quy tắc', '#tab=content', `${flagged} bài`);
+  if (reports) todoLine(ul, 'Báo cáo vi phạm', '#tab=reports', String(reports));
+  if (!todo.length && !flagged && !reports) {
     const li = document.createElement('li');
     li.className = 'empty';
     li.textContent = 'Không có';
@@ -51,20 +54,12 @@ function renderTodo(groups, flagged) {
     return;
   }
   for (const g of todo.slice(0, 5)) {
-    const li = document.createElement('li');
-    const a = document.createElement('a');
-    // Có yêu cầu tham gia -> tab Thành viên; chỉ có bài chờ duyệt -> tab Bài viết
-    a.href = chrome.runtime.getURL('dashboard.html') + (g.pendingTotal ? '#tab=members&group=' + encodeURIComponent(g.id) : '#tab=content');
-    a.target = '_blank';
-    a.textContent = g.isCommunity || !g.communityName ? g.name : `${g.communityName} › ${g.name}`;
-    const cnt = document.createElement('span');
-    cnt.className = 'cnt';
     const parts = [];
     if (g.pendingTotal) parts.push(`${g.pendingTotal} yêu cầu`);
     if (g.approvalCount) parts.push(`${g.approvalCount} bài`);
-    cnt.textContent = parts.join(' · ');
-    li.append(a, cnt);
-    ul.append(li);
+    // Có yêu cầu tham gia -> tab Thành viên; chỉ có bài chờ duyệt -> tab Bài viết
+    const hash = g.pendingTotal ? '#tab=members&group=' + encodeURIComponent(g.id) : '#tab=content';
+    todoLine(ul, g.isCommunity || !g.communityName ? g.name : `${g.communityName} › ${g.name}`, hash, parts.join(' · '));
   }
 }
 
@@ -86,11 +81,14 @@ async function refresh() {
   $('requests').textContent = st.snapshot ? t.requests : '–';
   $('posts').textContent = st.snapshot ? t.posts : '–';
   $('flagged').textContent = st.recentPosts && s.scanPosts ? flagged : '–';
+  const reports = t.reports + t.autoFlagged;
+  $('reports').textContent = st.snapshot && s.scanReports ? reports : '–';
+  $('reports').classList.toggle('hot', reports > 0);
   $('requests').classList.toggle('hot', t.requests > 0);
   $('posts').classList.toggle('hot', t.posts > 0);
   $('flagged').classList.toggle('hot', flagged > 0);
-  renderStatus(st, flagged);
-  renderTodo(groups, flagged);
+  renderStatus(st, flagged, reports);
+  renderTodo(groups, flagged, reports);
 }
 
 for (const key of POPUP_SETTINGS) {
