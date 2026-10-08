@@ -1,8 +1,8 @@
 const $ = (id) => document.getElementById(id);
-const RULE_BOOLS = ['requireAvatar', 'requireAnswers', 'requireVerified', 'declineDeactivated'];
+const RULE_BOOLS = ['requireAvatar', 'requireAnswers', 'requireVerified', 'declineDeactivated', 'reviewViolators'];
 const RULE_LISTS = { bannedKeywords: false, allowUsernames: true, blockUsernames: true }; // true = danh sách username
 const POST_RULE_LISTS = ['bannedKeywords', 'blockedDomains', 'allowedDomains'];
-const SETTING_BOOLS = ['active', 'dryRun', 'notify', 'scanPosts', 'scanReports', 'autoApprove', 'autoDecline'];
+const SETTING_BOOLS = ['active', 'dryRun', 'notify', 'scanPosts', 'scanReports', 'trackViolations', 'autoApprove', 'autoDecline'];
 const SETTING_NUMS = ['intervalMin', 'actionDelaySec'];
 const LOG_PAGE = 50;
 const RECENT_PAGE = 30;
@@ -320,7 +320,7 @@ const TAB_REFRESH = {
     run: async () => {
       await refreshPart('groups');
       if (mem.tab === 'list') await loadMembers(true);
-      else await loadActivity(true);
+      else if (mem.tab === 'activity') await loadActivity(true);
     },
   },
   content: { title: 'Tải lại bài chờ duyệt và bài mới đăng (không đọc yêu cầu tham gia)', run: () => refreshPart('content') },
@@ -376,12 +376,36 @@ function renderBadges() {
 }
 
 function evaluated(g) {
-  return (g?.requests || []).map((req) => ({ req, ev: BG.evaluateRequest(req, data.rules, g.questions) }));
+  return (g?.requests || []).map((req) => ({ req, ev: BG.evaluateRequest(req, data.rules, g.questions, profileOf(req.user?.id || req.userId)) }));
 }
 
 function avatarOf(u) {
   if (BG.hasAvatar(u)) return el('img', { class: 'avatar', src: u.avatar, alt: '', loading: 'lazy', referrerpolicy: 'no-referrer' });
   return el('span', { class: 'avatar none', text: (u.fullname || u.username || '?').trim().charAt(0).toUpperCase() });
+}
+
+// ---------- Hồ sơ vi phạm: huy hiệu cạnh tên ----------
+
+function profileOf(id) {
+  return (data.settings.trackViolations && id && data.profiles?.users?.[id]) || null;
+}
+
+// "⚠ 3" cạnh tên người có hồ sơ; đỏ nếu từng bị xoá / cấm. Bấm để mở hồ sơ.
+function violationBadge(u) {
+  const p = profileOf(u?.id);
+  if (!p?.events.length) return null;
+  const sum = BG.profileSummary(p);
+  return el('button', {
+    type: 'button',
+    class: 'vio-badge' + (sum.severe ? '' : ' light'),
+    title: BG.profileText(sum) + ' — bấm để xem hồ sơ vi phạm',
+    'aria-label': 'Hồ sơ vi phạm: ' + BG.profileText(sum),
+    text: '⚠ ' + sum.total,
+    onclick: (e) => {
+      e.stopPropagation();
+      openProfile(p.user);
+    },
+  });
 }
 
 function userCell(u) {
@@ -400,7 +424,7 @@ function userCell(u) {
     el(
       'div',
       {},
-      el('div', { class: 'name', text: u.fullname || u.username || '(không tên)' }),
+      el('div', { class: 'name' }, u.fullname || u.username || '(không tên)', violationBadge(u)),
       u.username ? el('a', { class: 'uname', href: BG.userUrl(u.username), target: '_blank', text: '@' + u.username }) : null,
       badges,
     ),
@@ -589,7 +613,7 @@ function memberCell(u) {
     'div',
     { class: 'user' },
     avatarOf(u),
-    el('div', {}, el('div', { class: 'name', text: u.fullname || u.username || '(không tên)' }), u.username ? el('a', { class: 'uname', href: BG.userUrl(u.username), target: '_blank', text: '@' + u.username }) : null, memberBadges(u)),
+    el('div', {}, el('div', { class: 'name' }, u.fullname || u.username || '(không tên)', violationBadge(u)), u.username ? el('a', { class: 'uname', href: BG.userUrl(u.username), target: '_blank', text: '@' + u.username }) : null, memberBadges(u)),
   );
 }
 
@@ -601,7 +625,140 @@ function renderMembersHead() {
   setSegActive('members-tab', mem.tab);
   $('members-list-pane').hidden = mem.tab !== 'list';
   $('members-activity-pane').hidden = mem.tab !== 'activity';
+  $('members-profiles-pane').hidden = mem.tab !== 'profiles';
+  $('members-group').hidden = mem.tab === 'profiles'; // hồ sơ gom mọi group
   return g;
+}
+
+// ---------- Hồ sơ vi phạm ----------
+
+const prof = { key: '', filter: 'all', open: null };
+
+function openProfile(u) {
+  prof.key = u.username || u.fullname || '';
+  prof.filter = 'all';
+  prof.open = u.id;
+  mem.tab = 'profiles';
+  $('profiles-key').value = prof.key;
+  showTab('members');
+  renderMembers();
+  renderProfiles();
+  document.querySelector(`#profiles-body tr[data-user="${CSS.escape(u.id)}"]`)?.scrollIntoView({ block: 'center' });
+}
+
+function profileRows() {
+  const q = BG.norm(prof.key);
+  return Object.values(data.profiles?.users || {})
+    .map((p) => ({ p, sum: BG.profileSummary(p) }))
+    .filter(({ p, sum }) => sum.total && (prof.filter === 'all' || (prof.filter === 'repeat' ? sum.repeat : sum.severe)) && (!q || BG.norm(`${p.user.fullname} ${p.user.username}`).includes(q)))
+    .sort((a, b) => b.sum.score - a.sum.score || b.sum.last.time.localeCompare(a.sum.last.time));
+}
+
+function renderProfiles() {
+  setSegActive('profiles-filter', prof.filter);
+  const rows = profileRows();
+  const all = Object.keys(data.profiles?.users || {}).length;
+  $('profiles-count').textContent = all ? `${rows.length}/${all} người` : '';
+  $('btn-profiles-export').disabled = !rows.length;
+  $('profiles-note').textContent = !data.settings.trackViolations
+    ? 'Đang tắt "Ghi hồ sơ vi phạm" ở phần Cài đặt.'
+    : 'Addon tự ghi khi: bạn ẩn bài / từ chối / xoá / cấm qua addon; nhật ký hoạt động Beincom có người bị xoá, cấm, từ chối (kể cả do admin khác làm); có báo cáo của người dùng; bài bị Beincom gắn cờ; bài vi phạm quy tắc. Báo cáo bị bỏ qua thì không tính. Chỉ lưu trong trình duyệt này.';
+  const body = $('profiles-body');
+  body.replaceChildren();
+  if (!rows.length) body.append(el('tr', { class: 'empty-row' }, el('td', { colspan: 5, text: all ? 'Không có ai khớp' : 'Chưa có ai trong hồ sơ vi phạm' })));
+  for (const { p, sum } of rows) {
+    const open = prof.open === p.user.id;
+    const toggle = () => {
+      prof.open = open ? null : p.user.id;
+      renderProfiles();
+    };
+    body.append(
+      el(
+        'tr',
+        { 'data-user': p.user.id, class: open ? 'vio-open' : null },
+        el('td', {}, postAuthor({ ...p.user, id: null })),
+        el(
+          'td',
+          {},
+          el(
+            'div',
+            { class: 'vio-counts' },
+            Object.keys(BG.VIOLATION_TYPES)
+              .filter((k) => sum.counts[k])
+              .map((k) => el('span', { class: 'tag ' + (BG.VIOLATION_TYPES[k].member && k !== 'declined' ? 'err' : k === 'hidden' ? 'warn' : 'info'), text: `${BG.VIOLATION_TYPES[k].label} ${sum.counts[k]}` })),
+          ),
+        ),
+        el('td', { class: 'num' }, el('b', { text: String(sum.score) })),
+        el('td', {}, el('div', { title: fmtTime(sum.last.time), text: ago(sum.last.time) }), el('div', { class: 'muted small', text: BG.VIOLATION_TYPES[sum.last.type]?.label + (sum.last.group ? ' · ' + sum.last.group : '') })),
+        el(
+          'td',
+          { class: 'act' },
+          el('button', { class: 'ghost sm', text: open ? 'Thu gọn' : 'Chi tiết', 'aria-expanded': open ? 'true' : 'false', onclick: toggle }),
+          el('button', { class: 'ghost sm danger', disabled: busy, text: 'Xoá hồ sơ', onclick: () => forgetProfile(p) }),
+        ),
+      ),
+    );
+    if (open) {
+      body.append(
+        el(
+          'tr',
+          { class: 'vio-detail' },
+          el(
+            'td',
+            { colspan: 5 },
+            el(
+              'table',
+              { class: 'vio-events' },
+              el(
+                'tbody',
+                {},
+                p.events.map((e) =>
+                  el(
+                    'tr',
+                    {},
+                    el('td', { text: fmtTime(e.time) }),
+                    el('td', {}, el('b', { text: BG.VIOLATION_TYPES[e.type]?.label || e.type })),
+                    el('td', { text: e.group || '' }),
+                    el('td', {}, e.snippet ? el('div', { text: '“' + e.snippet + '”' }) : null, e.reason ? el('div', { class: 'muted', text: 'Lý do: ' + e.reason }) : null),
+                    el('td', { class: 'muted', text: e.by ? 'Bởi ' + e.by : '' }),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+  }
+}
+
+async function forgetProfile(p) {
+  const ok = await confirmDialog({
+    title: 'Xoá hồ sơ vi phạm của người này?',
+    text: 'Chỉ xoá trong addon (trên máy này). Người này sẽ không còn bị cảnh báo khi xin vào group. Vi phạm mới vẫn được ghi lại.',
+    names: [personName(p.user)],
+    okText: 'Xoá hồ sơ',
+    danger: true,
+    sendNote: 'Không gửi gì lên Beincom.',
+  });
+  if (!ok) return;
+  if (prof.open === p.user.id) prof.open = null;
+  await send({ type: 'profileAct', action: 'forget', userId: p.user.id }, () => 'Đã xoá hồ sơ.');
+}
+
+function exportProfiles() {
+  const rows = profileRows();
+  const cols = [
+    { label: 'Họ tên', get: (r) => r.p.user.fullname },
+    { label: 'Username', get: (r) => r.p.user.username },
+    { label: 'User ID', get: (r) => r.p.user.id },
+    { label: 'Điểm', get: (r) => r.sum.score },
+    ...Object.entries(BG.VIOLATION_TYPES).map(([k, t]) => ({ label: t.label, get: (r) => r.sum.counts[k] || '' })),
+    { label: 'Vi phạm gần nhất', get: (r) => BG.VIOLATION_TYPES[r.sum.last.type]?.label || '' },
+    { label: 'Lúc', get: (r) => r.sum.last.time },
+    { label: 'Group', get: (r) => r.sum.last.group },
+  ];
+  download(`beingroup-ho-so-vi-pham-${BG.vnDay()}.csv`, BG.toCsv(rows, cols), 'text/csv;charset=utf-8');
 }
 
 function renderMembers() {
@@ -822,7 +979,7 @@ function postAuthor(a) {
     'div',
     { class: 'user' },
     avatarOf(a),
-    el('div', {}, el('div', { class: 'name', text: a.fullname || a.username || '(không tên)' }), a.username ? el('a', { class: 'uname', href: BG.userUrl(a.username), target: '_blank', text: '@' + a.username }) : null),
+    el('div', {}, el('div', { class: 'name' }, a.fullname || a.username || '(không tên)', violationBadge(a)), a.username ? el('a', { class: 'uname', href: BG.userUrl(a.username), target: '_blank', text: '@' + a.username }) : null),
   );
 }
 
@@ -1100,7 +1257,7 @@ async function loadReports() {
   renderReports();
   try {
     const r = await chrome.runtime.sendMessage({ type: 'reports', groupId: g.id, kind: rep.kind });
-    if (r?.status === 'ok') rep.data[key] = { items: r.items, timedOut: r.timedOut, loaded: true, error: '', at: Date.now() };
+    if (r?.status === 'ok') rep.data[key] = { items: r.items, timedOut: r.timedOut, none: !!r.none, loaded: true, error: '', at: Date.now() };
     else rep.data[key] = { items: [], loaded: true, error: r?.status === 'need_login' ? 'Phiên đăng nhập Beincom đã hết hạn.' : r?.message || 'Có lỗi', notAdmin: r?.code === 'not_admin' };
   } finally {
     rep.loading = false;
@@ -1189,6 +1346,7 @@ function renderReports() {
   else if (rep.loading) note.textContent = rep.kind === 'reported' ? 'Đang tải báo cáo… (Beincom có lúc trả chậm, tối đa 25 giây)' : 'Đang tải…';
   else if (d?.notAdmin) note.textContent = 'Báo cáo của người dùng chỉ dành cho chủ / admin community — hãy chọn group gốc của community bạn làm admin (có ghi "admin community"). Bạn vẫn xem được mục "Gắn cờ tự động" và "Đã ẩn".';
   else if (d?.error) note.textContent = d.error;
+  else if (d?.none) note.textContent = 'Không có báo cáo nào đang chờ xử lý (Beincom đếm 0) — các báo cáo đã xử lý không được tải lại.';
   else if (d?.timedOut) note.textContent = 'Beincom không phản hồi sau 25 giây. Thường gặp khi community chưa có báo cáo nào — bấm Tải lại để thử lại.';
   else if (rep.kind === 'reported') note.textContent = 'Bỏ qua: đánh dấu nội dung không vi phạm. Ẩn: ẩn nội dung bị báo cáo khỏi community (bình luận bị ẩn cũng biến mất khỏi bài).';
   else if (rep.kind === 'flagged') note.textContent = 'Bài do hệ thống kiểm duyệt tự động của Beincom phát hiện có dấu hiệu vi phạm. Ẩn bài: gỡ bài khỏi các group bạn quản trị mà bài được đăng vào.';
@@ -2560,10 +2718,20 @@ $('members-group').addEventListener('change', (e) => {
   mem.groupId = e.target.value;
   mem.key = '';
   if (mem.tab === 'list') loadMembers(true);
-  else loadActivity(true);
+  else if (mem.tab === 'activity') loadActivity(true);
 });
+onSeg('profiles-filter', (f) => {
+  prof.filter = f;
+  renderProfiles();
+});
+$('profiles-key').addEventListener('input', (e) => {
+  prof.key = e.target.value;
+  renderProfiles();
+});
+$('btn-profiles-export').addEventListener('click', exportProfiles);
 onSeg('members-tab', (f) => {
   mem.tab = f;
+  if (f === 'profiles') renderProfiles();
   if (f === 'activity' && (act.groupId !== memberGroup()?.id || !act.items.length)) loadActivity(true);
   if (f === 'list' && (mem.groupId !== memberGroup()?.id || (!mem.items.length && mem.total == null))) loadMembers(true);
   renderMembers();
@@ -2833,7 +3001,11 @@ function renderAll() {
   renderGroups();
   renderReview();
   if (mem.tab === 'list') renderMembers();
-  else renderActivity();
+  else if (mem.tab === 'activity') renderActivity();
+  else {
+    renderMembersHead();
+    renderProfiles();
+  }
   renderApproval();
   renderRecent();
   renderReports();
@@ -2849,7 +3021,7 @@ function renderAll() {
 }
 
 async function loadAll() {
-  const { settings, rules, postRules, state, log, templates } = await chrome.storage.local.get(['settings', 'rules', 'postRules', 'state', 'log', 'templates']);
+  const { settings, rules, postRules, state, log, templates, profiles } = await chrome.storage.local.get(['settings', 'rules', 'postRules', 'state', 'log', 'templates', 'profiles']);
   data = {
     settings: { ...BG.DEFAULT_SETTINGS, ...settings },
     rules: { ...BG.DEFAULT_RULES, ...rules },
@@ -2857,6 +3029,7 @@ async function loadAll() {
     state: state || {},
     log: log || [],
     templates: templates || [],
+    profiles: profiles || { users: {} },
   };
   renderAll();
   await loadDraftOnce();

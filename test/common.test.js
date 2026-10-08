@@ -424,3 +424,75 @@ test('tag và series: giới hạn 5 / 3, body chỉ gửi id, câu báo lỗi c
   const err = { code: 'tag_series_invalid', meta: { errors: { seriesIds: ['s1'], tagIds: ['t2', 'tX'] } } };
   assert.equal(BG.tagSeriesError(err, [{ id: 't2', name: 'DEFI' }], [{ id: 's1', title: 'Nhập môn' }]), 'series Nhập môn; tag DEFI, tX không dùng được với các group đã chọn — bỏ ra rồi đăng lại');
 });
+
+test('hồ sơ vi phạm: gộp sự kiện, chống trùng (cùng lần xoá từ hai nguồn), bỏ khi báo cáo được bỏ qua, giới hạn', () => {
+  const u = { id: 'u1', username: 'lan', fullname: 'Lan' };
+  const ev = (type, key, time, extra = {}) => ({ user: u, type, key, time, group: 'Crypto Life', ...extra });
+  let r = BG.addViolations(null, [
+    ev('removed', 'remove:g:u1:1', '2026-10-08T10:00:00Z'),
+    ev('removed', 'act:e9', '2026-10-08T10:04:00Z'), // nhật ký Beincom của cùng lần xoá
+    ev('removed', 'act:e10', '2026-10-09T10:00:00Z'), // lần xoá khác
+    ev('hidden', 'hidden:p1', '2026-10-07T08:00:00Z', { snippet: 'Bài   spam', reason: 'Spam' }),
+    ev('hidden', 'hidden:p1', '2026-10-07T09:00:00Z'), // cùng bài
+    ev('reported', 'report:r1', '2026-10-06T08:00:00Z'),
+    { user: { id: 'x' }, type: 'khác', key: 'k' },
+  ]);
+  assert.equal(r.added, 4);
+  const p = r.store.users.u1;
+  assert.deepEqual(p.events.map((e) => e.key), ['act:e10', 'remove:g:u1:1', 'hidden:p1', 'report:r1']); // mới nhất trước
+  assert.equal(p.events[2].snippet, 'Bài spam');
+  const sum = BG.profileSummary(p);
+  assert.deepEqual([sum.counts, sum.score, sum.total, sum.repeat, sum.severe], [{ removed: 2, hidden: 1, reported: 1 }, 9, 4, true, true]);
+  assert.equal(BG.profileText(sum), 'Bị xoá khỏi group 2 · Nội dung bị ẩn 1 · Bị báo cáo 1');
+  // Báo cáo được bỏ qua: bỏ khỏi hồ sơ; hết sự kiện thì bỏ cả người
+  r = BG.addViolations(r.store, [{ user: u, clear: 'report:r1' }, { user: u, clear: 'report:không-có' }]);
+  assert.equal(r.added, 1);
+  assert.equal(r.store.users.u1.events.length, 3);
+  const one = BG.addViolations(null, [ev('reported', 'report:r2', '2026-10-06T08:00:00Z')]).store;
+  assert.deepEqual(BG.addViolations(one, [{ user: u, clear: 'report:r2' }]).store.users, {});
+  // Mỗi người tối đa 30 sự kiện
+  const many = BG.addViolations(null, Array.from({ length: 40 }, (_, i) => ev('rule', 'rule:' + i, new Date(Date.UTC(2026, 0, 1, 0, i)).toISOString())));
+  assert.equal(many.store.users.u1.events.length, 30);
+});
+
+test('hồ sơ vi phạm: dựng sự kiện từ nhật ký addon, nhật ký Beincom, báo cáo, bài', () => {
+  const base = { time: Date.parse('2026-10-08T10:00:00Z'), status: 'ok', userId: 'u1', username: 'lan', fullname: 'Lan', groupId: 'g1', groupName: 'Food Research', source: 'manual' };
+  const evs = BG.violationsFromLog([
+    { ...base, kind: 'member', action: 'decline', requestId: 'jr1' },
+    { ...base, kind: 'member', action: 'approve', requestId: 'jr2' },
+    { ...base, kind: 'manage', action: 'ban', reason: 'Vi phạm nội quy' },
+    { ...base, kind: 'post', action: 'hide', contentId: 'p1', reason: 'Spam', source: 'auto' },
+    { ...base, kind: 'post', action: 'reject', contentId: 'p2' },
+    { ...base, kind: 'post', action: 'delete', contentId: 'p3' },
+    { ...base, kind: 'report', action: 'hidePost', contentId: 'p4' },
+    { ...base, kind: 'report', action: 'ignore', contentId: 'c1', reportId: 'r1' },
+    { ...base, kind: 'post', action: 'hide', contentId: 'p5', status: 'dry' },
+    { ...base, kind: 'post', action: 'hide', contentId: 'p6', status: 'error' },
+    { ...base, kind: 'post', action: 'hide', contentId: 'p7', gone: true },
+  ]);
+  assert.deepEqual(evs.map((e) => e.type || 'clear:' + e.clear), ['declined', 'banned', 'hidden', 'rejected', 'hidden', 'clear:report:r1']);
+  assert.deepEqual([evs[1].reason, evs[1].group, evs[2].by, evs[3].by], ['Vi phạm nội quy', 'Food Research', 'Addon tự xử lý', 'Bạn (qua addon)']);
+  const act = BG.violationsFromActivity([
+    { id: 'e1', useCase: 'remove.member', time: '2026-10-08T10:00:00Z', user: { id: 'u2', username: 'b' }, actor: { id: 'a', fullname: 'Admin A' }, groupName: 'G' },
+    { id: 'e2', useCase: 'leave.group', time: '2026-10-08T10:00:00Z', user: { id: 'u3' } },
+    { id: 'e3', useCase: 'ban.member', time: '2026-10-08T11:00:00Z', user: { id: 'u2' }, actor: null, groupName: 'G' },
+  ]);
+  assert.deepEqual(act.map((e) => [e.type, e.key, e.by]), [['removed', 'act:e1', 'Admin A'], ['banned', 'act:e3', '']]);
+  const rep = BG.violationsFromReports([
+    { id: 'r1', actor: { id: 'u4' }, status: 'CREATED', content: 'x', createdAt: '2026-10-08T00:00:00Z', reasons: [{ label: 'Spam / quảng cáo', total: 3 }] },
+    { id: 'r2', actor: { id: 'u5' }, status: 'IGNORED', reasons: [] },
+  ], 'Food Research');
+  assert.deepEqual(rep.map((e) => [e.user.id, e.key, e.reason, e.group]), [['u4', 'report:r1', 'Spam / quảng cáo ×3', 'Food Research']]);
+  const posts = BG.violationsFromPosts([{ id: 'f1', actor: { id: 'u6' }, title: '', text: 'Bạo lực', publishedAt: '2026-10-08T00:00:00Z', groups: [{ name: 'CL' }], violations: ['Violence'] }], 'flagged', (p) => p.violations.join(', '));
+  assert.deepEqual([posts[0].key, posts[0].reason, posts[0].group, posts[0].snippet], ['flag:f1', 'Violence', 'CL', 'Bạo lực']);
+  assert.equal(BG.violationsFromPosts([{ id: 'h1', actor: { id: 'u6' }, groups: [] }], 'hidden')[0].key, 'hidden:h1');
+});
+
+test('evaluateRequest: người có hồ sơ vi phạm thành "Cần xem" (tắt quy tắc thì bỏ qua)', () => {
+  const req = { user: { id: 'u1', username: 'lan', avatar: 'https://media.beincom.com/a', isVerified: true }, answers: [] };
+  const profile = { user: { id: 'u1' }, events: [{ type: 'banned', key: 'k', time: '2026-10-08T00:00:00Z' }] };
+  const r = BG.evaluateRequest(req, {}, [], profile);
+  assert.deepEqual([r.verdict, r.reasons[0].text], ['review', 'Có hồ sơ vi phạm: Bị cấm 1']);
+  assert.equal(BG.evaluateRequest(req, { reviewViolators: false }, [], profile).verdict, 'approve');
+  assert.equal(BG.evaluateRequest(req, {}, [], null).verdict, 'approve');
+});

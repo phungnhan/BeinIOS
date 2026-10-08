@@ -127,6 +127,7 @@
           <div class="seg" id="members-tab">
             <button data-f="list" class="active">Danh sách</button>
             <button data-f="activity">Vào / rời gần đây</button>
+            <button data-f="profiles">Hồ sơ vi phạm</button>
           </div>
         </div>
       </div>
@@ -161,6 +162,29 @@
           </table>
         </div>
         <button id="btn-members-more" class="ghost more" hidden>Tải thêm</button>
+      </div>
+
+      <div id="members-profiles-pane" hidden>
+        <div class="bulk-bar">
+          <input type="search" id="profiles-key" class="search-input" placeholder="Tìm theo tên hoặc username" aria-label="Tìm trong hồ sơ vi phạm" />
+          <div class="seg" id="profiles-filter">
+            <button data-f="all" class="active">Tất cả</button>
+            <button data-f="repeat">Tái phạm (≥ 2 lần)</button>
+            <button data-f="severe">Từng bị xoá / cấm</button>
+          </div>
+          <span class="muted small" id="profiles-count"></span>
+          <span class="spacer"></span>
+          <button id="btn-profiles-export" class="ghost sm">Xuất CSV</button>
+        </div>
+        <div id="profiles-note" class="muted small review-note"></div>
+        <div class="table-wrap">
+          <table class="requests">
+            <thead>
+              <tr><th>Thành viên</th><th>Vi phạm</th><th class="num">Điểm</th><th>Gần nhất</th><th class="act">Thao tác</th></tr>
+            </thead>
+            <tbody id="profiles-body"></tbody>
+          </table>
+        </div>
       </div>
 
       <div id="members-activity-pane" hidden>
@@ -481,6 +505,7 @@
             <span class="inline"><input type="number" id="minAnswerLength" min="0" max="200" /> ký tự</span>
           </label>
           <label class="switch-row"><input type="checkbox" id="requireVerified" /><span><b>Tài khoản chưa xác minh</b></span></label>
+          <label class="switch-row"><input type="checkbox" id="reviewViolators" /><span><b>Có hồ sơ vi phạm</b><br /><span class="muted small">Từng bị cấm, bị xoá, bị ẩn bài… (xem tab Thành viên → Hồ sơ vi phạm). Người có hồ sơ không bao giờ được tự duyệt.</span></span></label>
         </div>
         <div class="group">
           <div class="group-title">✕ Gợi ý từ chối khi</div>
@@ -518,6 +543,7 @@
         <label class="switch-row"><input type="checkbox" id="notify" /><span><b>Thông báo</b><br /><span class="muted small">Khi có yêu cầu tham gia, bài chờ duyệt, bài mới vi phạm hoặc báo cáo vi phạm</span></span></label>
         <label class="switch-row"><input type="checkbox" id="scanPosts" /><span><b>Quét bài mới đăng</b><br /><span class="muted small">20 bài mới nhất của mỗi group, chấm theo quy tắc bài viết</span></span></label>
         <label class="switch-row"><input type="checkbox" id="scanReports" /><span><b>Quét báo cáo vi phạm</b><br /><span class="muted small">Báo cáo chờ xử lý (community bạn làm chủ / admin) và bài bị Beincom gắn cờ tự động</span></span></label>
+        <label class="switch-row"><input type="checkbox" id="trackViolations" /><span><b>Ghi hồ sơ vi phạm</b><br /><span class="muted small">Ghi lại ai bị cấm, xoá, ẩn bài, báo cáo… (mỗi lần quét đọc thêm nhật ký hoạt động của group). Chỉ lưu trong trình duyệt này.</span></span></label>
         <label class="select-row">
           <span><b>Chu kỳ quét</b></span>
           <select id="intervalMin">

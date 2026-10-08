@@ -92,6 +92,11 @@ function fixture() {
       gCLsub: [{ ...user(41), isAdmin: true }, { ...user(42) }, { ...user(43), subscriptions: [{ type: 'premium' }] }],
     },
     activity: {
+      // Food Research: admin khác xoá user(34), cấm user(35) trên web
+      gFood: [
+        { id: 'eF1', eventTime: '2026-09-01T08:00:00Z', eventType: 'DELETE', useCase: 'remove.member', data: { actor: user(33), user: user(34), group: { name: 'Food Research' } } },
+        { id: 'eF2', eventTime: '2026-09-01T07:00:00Z', eventType: 'UPDATE', useCase: 'ban.member', data: { actor: user(33), user: user(35), group: { name: 'Food Research' } } },
+      ],
       gCLsub: [
         { id: 'e1', eventTime: '2026-10-07T10:00:00Z', eventType: 'CREATE', useCase: 'join.group.as_member', data: { actor: user(42), group: { name: 'Crypto Life - General' } } },
         { id: 'e2', eventTime: '2026-10-07T09:00:00Z', eventType: 'UPDATE', useCase: 'assign.group_admin', data: { actor: user(41), user: user(43), changes: { old: 'MEMBER', new: 'GROUP_ADMIN' } } },
@@ -177,6 +182,11 @@ function makeEnv({ data = fixture(), settings = {}, rules = {}, postRules = {}, 
     const q = Object.fromEntries(new URLSearchParams(query));
     if (path.startsWith('content/') && Number(q.limit) > 25) return reply(400, { code: 'api.validation_error', meta: { message: 'Bad Request Exception', errors: ['limit must not be greater than 25'] } });
     if ((m = path.match(/^content\/timeline\/(\w+)$/))) {
+      // Giả lập máy chủ quá tải: trả 504 (trang HTML) vài lần đầu
+      if (data.timeline504?.[m[1]] > 0) {
+        data.timeline504[m[1]]--;
+        return { status: 504, json: async () => { throw new Error('not json'); } };
+      }
       const all = data.timeline[m[1]] || [];
       const start = Number(q.after || 0);
       const list = all.slice(start, start + Number(q.limit));
@@ -212,6 +222,9 @@ function makeEnv({ data = fixture(), settings = {}, rules = {}, postRules = {}, 
       return reply(200, ok(all, { total: all.length, hasNextPage: false }));
     }
     // Báo cáo vi phạm
+    if ((m = path.match(/^content\/manage\/communities\/(\w+)\/content-reports\/count$/))) {
+      return reply(200, ok({ total: (data.reports[m[1]] || []).filter((r) => r.status === 'CREATED').length }));
+    }
     if ((m = path.match(/^content\/manage\/communities\/(\w+)\/content-reports$/))) {
       // Giả lập API treo: chỉ trả lời khi bị huỷ vì quá thời gian chờ
       if (data.reportsHang) return new Promise((_, reject) => opts.signal?.addEventListener('abort', () => reject(new Error('aborted'))));
@@ -905,7 +918,7 @@ test('quét báo cáo: đếm báo cáo chờ xử lý (chỉ community mình l�
   assert.deepEqual(groupOf(env, 'gFood').reportIds, ['rp1', 'rp2']); // bỏ báo cáo đã xử lý
   assert.deepEqual(['gFood', 'gCL', 'gCLsub'].map((id) => groupOf(env, id).flaggedIds), [[], ['f1'], []]);
   assert.equal(groupOf(env, 'gCL').reportIds, undefined); // admin group: không gọi API báo cáo
-  assert.deepEqual(env.calls.filter((c) => c.includes('content-reports')), ['GET content/manage/communities/gFood/content-reports?limit=25']);
+  assert.deepEqual(env.calls.filter((c) => c.includes('content-reports')), ['GET content/manage/communities/gFood/content-reports/count', 'GET content/manage/communities/gFood/content-reports?limit=25']);
   assert.ok(env.calls.includes('GET content/manage/groups/gCLsub/contents/flagged?limit=20'));
   assert.ok(env.calls.every((c) => c.startsWith('GET ')));
   assert.equal(env.notifications.length, 0); // lần đầu chỉ ghi nhận
@@ -1092,10 +1105,10 @@ test('tải tag (theo group gốc, đủ các trang) và series (theo group) cho
   assert.equal(r.tags.length, 31);
   assert.deepEqual(r.tags[0], { id: 'tF1', name: 'AMA', totalUsed: 3 });
   assert.deepEqual(r.series.map((x) => [x.id, x.title, x.cover]), [['sF1', 'Lịch sự kiện', 'https://media.beincom.com/c1'], ['sC1', 'Nhập môn crypto', '']]);
-  assert.deepEqual(env.calls, [
+  assert.deepEqual([...env.calls].sort(), [
+    'GET content/series?groupIds[]=gFood&groupIds[]=gCLsub&offset=0',
     'GET content/tags?groupIds[]=gFood&groupIds[]=gCL&offset=0',
     'GET content/tags?groupIds[]=gFood&groupIds[]=gCL&offset=25',
-    'GET content/series?groupIds[]=gFood&groupIds[]=gCLsub&offset=0',
   ]);
   assert.equal(r.note, '');
   assert.deepEqual(await env.send({ type: 'tagsSeries', groupIds: [] }), { status: 'ok', tags: [], series: [] });
@@ -1166,6 +1179,102 @@ test('bài đã bị xoá trên Beincom: xoá / ẩn / huỷ hẹn giờ tính l
   assert.deepEqual([cancel.ok, cancel.gone], [1, 1]);
   // Lỗi khác vẫn là lỗi
   assert.equal(BG.isContentGone({ body: { code: 'api.validation_error', meta: { message: 'Bad Request' } } }), false);
+});
+
+// ---------- Hồ sơ vi phạm ----------
+
+const profileTypes = (env, id) => (env.storage.profiles?.users?.[id]?.events || []).map((e) => e.type).sort();
+
+test('hồ sơ vi phạm: lần quét ghi người bị xoá / cấm (nhật ký Beincom), bị báo cáo, bài bị gắn cờ, bài vi phạm quy tắc', async () => {
+  const env = makeEnv({ postRules: { blockedDomains: ['bit.ly'] } });
+  await scan(env);
+  assert.ok(env.calls.includes('GET group/groups/gFood/activity-logs?limit=50&page=1&sort=desc'));
+  assert.deepEqual(profileTypes(env, 'u34'), ['removed']);
+  assert.deepEqual(profileTypes(env, 'u35'), ['banned']);
+  assert.equal(env.storage.profiles.users.u34.events[0].by, 'Người 33');
+  assert.deepEqual(profileTypes(env, 'u61'), ['reported']); // báo cáo rp1 ở Food Research
+  assert.deepEqual(profileTypes(env, 'af1'), ['flagged']);
+  assert.deepEqual(profileTypes(env, 'at2'), ['rule']); // t2 có link bit.ly
+  // Quét lại: không ghi trùng
+  await scan(env);
+  assert.deepEqual(profileTypes(env, 'u34'), ['removed']);
+});
+
+test('hồ sơ vi phạm: thao tác qua addon (từ chối bài, ẩn, xoá thành viên) được ghi; trùng với nhật ký Beincom thì gộp; bỏ qua báo cáo thì bỏ', async () => {
+  const env = makeEnv({ settings: { dryRun: false } });
+  await scan(env);
+  await env.send({ type: 'approvalAct', action: 'reject', groupId: 'gCL', contentIds: ['p2'], reason: 'Lạc đề' });
+  await env.send({ type: 'postAct', action: 'hide', contentIds: ['t1'], reasonType: 'SPAM' });
+  await env.send({ type: 'memberAct', action: 'remove', groupId: 'gFood', users: [user(34)] });
+  assert.deepEqual(profileTypes(env, 'ap2'), ['rejected']);
+  assert.deepEqual(profileTypes(env, 'at1'), ['hidden']);
+  assert.equal(env.storage.profiles.users.ap2.events[0].reason, 'Lạc đề');
+  // Xoá u34 lúc này cách lần xoá trong nhật ký Beincom (01/09) xa hơn 15 phút: tính là lần khác
+  assert.deepEqual(profileTypes(env, 'u34'), ['removed', 'removed']);
+  // Bỏ qua báo cáo rp1: không còn tính "bị báo cáo"
+  await env.send({ type: 'reportAct', action: 'ignore', groupId: 'gFood', items: [{ reportId: 'rp1', targetId: 'c1', targetType: 'COMMENT', actor: user(61) }] });
+  assert.equal(env.storage.profiles.users.u61, undefined);
+});
+
+test('hồ sơ vi phạm: không tự duyệt người có hồ sơ; tắt ghi hồ sơ thì không đọc nhật ký, không ghi', async () => {
+  const data = fixture();
+  data.requests.gFood = [jr(35, { membershipAnswers: [{ questionId: 'q1', answer: 'Bạn bè giới thiệu' }] })]; // u35 từng bị cấm
+  const env = makeEnv({ data, settings: { dryRun: false, autoApprove: true } });
+  await scan(env); // nhật ký Beincom cho biết u35 từng bị cấm: ghi hồ sơ trước bước tự duyệt
+  assert.ok(!env.calls.some((c) => c.includes('joining-requests/jr35/approve')));
+  assert.equal(BG.evaluateRequest(env.storage.state.snapshot.groups[0].requests[0], BG.DEFAULT_RULES, [], env.storage.profiles.users.u35).verdict, 'review');
+
+  const off = makeEnv({ settings: { trackViolations: false } });
+  await scan(off);
+  assert.ok(!off.calls.some((c) => c.includes('activity-logs')));
+  assert.equal(off.storage.profiles, undefined);
+});
+
+test('hồ sơ vi phạm: lần đầu dựng từ nhật ký thao tác cũ; đọc nhật ký vào/rời cũng ghi; xoá hồ sơ một người', async () => {
+  const env = makeEnv({ settings: { trackViolations: false } });
+  env.storage.log = [{ time: Date.parse('2026-10-01T00:00:00Z'), kind: 'manage', action: 'ban', status: 'ok', groupId: 'gFood', groupName: 'Food Research', userId: 'u90', username: 'cu', fullname: 'Cũ', source: 'manual' }];
+  env.storage.settings.trackViolations = true;
+  await env.send({ type: 'activity', groupId: 'gFood' }).catch(() => {}); // chưa quét: không có group
+  await scan(env);
+  assert.deepEqual(profileTypes(env, 'u90'), ['banned']); // từ nhật ký cũ
+  const r = await env.send({ type: 'profileAct', action: 'forget', userId: 'u90' });
+  assert.equal(r.ok, 1);
+  assert.equal(env.storage.profiles.users.u90, undefined);
+  assert.ok(env.storage.profiles.users.u34); // người khác giữ nguyên
+});
+
+test('máy chủ Beincom lỗi tạm thời (504): lệnh đọc tự thử lại; lỗi mãi thì báo dễ hiểu', async () => {
+  const data = fixture();
+  data.timeline504 = { gCL: 2, gCLsub: 9 };
+  const env = makeEnv({ data });
+  const state = await scan(env);
+  const gs = Object.fromEntries(state.snapshot.groups.map((g) => [g.id, g]));
+  assert.equal(gs.gCL.timelineError, undefined); // lỗi 2 lần, lần 3 được
+  assert.equal(env.calls.filter((c) => c === 'GET content/timeline/gCL?limit=20').length, 3);
+  assert.equal(gs.gCLsub.timelineError, 'Đọc bài mới lỗi: Máy chủ Beincom không phản hồi kịp (HTTP 504), thường tự hết — lần quét sau sẽ thử lại');
+  assert.equal(env.calls.filter((c) => c === 'GET content/timeline/gCLsub?limit=20').length, 3); // tối đa 2 lần thử lại
+  assert.ok(state.recentPosts.some((p) => p.id === 't1')); // bài của gCL vẫn được đọc
+});
+
+test('báo cáo: Beincom đếm 0 thì không gọi API danh sách (vốn treo khi không có báo cáo) cả lúc quét lẫn ở tab Báo cáo', async () => {
+  const data = fixture();
+  data.reports.gFood = [];
+  data.reportsHang = true; // nếu lỡ gọi danh sách thì sẽ treo tới hết thời hạn
+  const env = makeEnv({ data });
+  await scan(env);
+  assert.deepEqual(env.storage.state.snapshot.groups.find((g) => g.id === 'gFood').reportIds, []);
+  assert.ok(!env.calls.includes('GET content/manage/communities/gFood/content-reports?limit=25'));
+  const r = await env.send({ type: 'reports', groupId: 'gFood', kind: 'reported' });
+  assert.deepEqual([r.status, r.items, r.none, r.timedOut], ['ok', [], true, false]);
+  assert.ok(!env.calls.some((c) => c.startsWith('GET content/manage/communities/gFood/content-reports?')));
+});
+
+test('đọc song song: kết quả quét giống đọc lần lượt (thứ tự group, gộp bài nhiều group, chi tiết bài chờ duyệt)', async () => {
+  const env = makeEnv();
+  const state = await scan(env);
+  assert.deepEqual(state.snapshot.groups.map((g) => g.id), ['gFood', 'gCL', 'gCLsub']);
+  assert.deepEqual(state.recentPosts.find((p) => p.id === 't2').seenIn, ['gCL', 'gCLsub']);
+  assert.deepEqual(state.snapshot.groups.find((g) => g.id === 'gCL').approvals.map((p) => [p.id, p.full]), [['p1', true], ['p2', true]]);
 });
 
 // ---------- Xoá bài của mình ----------

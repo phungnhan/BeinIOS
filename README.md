@@ -36,6 +36,13 @@ Tab Quy tắc & cài đặt và Nhật ký chỉ dùng dữ liệu trong máy n�
   - Thao tác (chỉ hiện khi có quyền): **Gán / gỡ admin group**, **Xoá** (ở group gốc là xoá khỏi community), **Cấm** khỏi community (cần quyền admin community).
   - **Xuất CSV** toàn bộ danh sách, tải 100 người mỗi lần, bấm lại để dừng. File không có email.
   - **Vào / rời gần đây**: từ nhật ký hoạt động của group, có số người vào/rời trong 24 giờ và 7 ngày. Sự kiện mới kể từ lần xem trước có viền tím.
+  - **Hồ sơ vi phạm**: mỗi người một hồ sơ, gom từ mọi community bạn quản trị. Addon tự ghi khi:
+    - bạn ẩn bài, từ chối bài, từ chối yêu cầu tham gia, xoá hoặc cấm thành viên qua addon (cả tự xử lý; chạy thử thì không);
+    - nhật ký hoạt động Beincom có người bị xoá, bị cấm, bị từ chối vào — kể cả do admin khác làm trên web (mỗi lần quét đọc trang mới nhất của từng group);
+    - có báo cáo của người dùng (báo cáo bị bỏ qua thì gỡ khỏi hồ sơ), bài bị Beincom gắn cờ, bài đã bị ẩn trong group, bài mới vi phạm quy tắc bài viết.
+
+    Cùng một lần xoá / cấm ghi từ addon và từ nhật ký Beincom chỉ tính một lần. Điểm: bị cấm 5, bị xoá 3, nội dung bị ẩn 2, còn lại 1. Danh sách xếp theo điểm, lọc **Tái phạm** (≥ 2 lần) / **Từng bị xoá / cấm**, tìm theo tên, bấm **Chi tiết** để xem từng lần (lúc nào, ở group nào, bài gì, lý do, ai làm), **Xoá hồ sơ** để quên một người, **Xuất CSV**. Mỗi người giữ 30 sự kiện gần nhất, tối đa 500 người.
+  - Người có hồ sơ có huy hiệu **⚠ số lần** cạnh tên (đỏ nếu từng bị xoá / cấm) ở yêu cầu tham gia, danh sách thành viên và mọi bảng bài viết; bấm để mở hồ sơ.
 - **Bài viết**
   - **Duyệt bài** (community bật duyệt bài và bạn quản trị group gốc): bài chờ duyệt kèm nội dung đầy đủ và đánh giá theo quy tắc bài viết. Duyệt hoặc từ chối kèm lý do gửi người đăng; từ chối một bài thì lý do được điền sẵn.
   - **Bài mới đăng**: 20 bài mới nhất của mỗi group sau mỗi lần quét, chấm theo quy tắc. Mục **Cần xử lý** gồm bài vi phạm và bài cần xem.
@@ -84,7 +91,7 @@ Tab Quy tắc & cài đặt và Nhật ký chỉ dùng dữ liệu trong máy n�
   - Nguồn số liệu:
     - **Chủ / admin community**: số liệu chính thức của Beincom (thành viên và số bài theo ngày).
     - **Admin group**: addon tự tính từ nhật ký hoạt động, bài trên các group bạn quản trị, và số thành viên addon ghi lại sau mỗi lần quét. Biểu đồ số thành viên chỉ có từ ngày cài addon.
-- **Quy tắc & cài đặt**: quy tắc lọc thành viên, quy tắc bài viết, cài đặt addon (công tắc tổng, chạy thử, thông báo, quét bài mới, quét báo cáo vi phạm, chu kỳ quét, nghỉ giữa hai thao tác, tự xử lý yêu cầu tham gia).
+- **Quy tắc & cài đặt**: quy tắc lọc thành viên, quy tắc bài viết, cài đặt addon (công tắc tổng, chạy thử, thông báo, quét bài mới, quét báo cáo vi phạm, ghi hồ sơ vi phạm, chu kỳ quét, nghỉ giữa hai thao tác, tự xử lý yêu cầu tham gia).
 - **Nhật ký**: mọi thao tác (bấm tay, tự động, chạy thử, lỗi) kèm lý do và giờ đăng; lọc theo thành viên / bài viết; xuất CSV hoặc JSON.
 - Mọi thao tác ghi đều có hộp xác nhận ghi rõ số mục, group và đang chạy thử hay gửi thật.
 - **Thông báo và huy hiệu**:
@@ -98,7 +105,7 @@ Mỗi yêu cầu được xếp vào một trong ba mức:
 | Mức | Khi nào |
 |---|---|
 | **Gợi ý từ chối** | Tài khoản bị vô hiệu hoá, hoặc tên / username / câu trả lời chứa **từ khoá cấm** (không phân biệt hoa thường và dấu: `kiem tien` khớp `Kiếm Tiền`) |
-| **Cần xem** | Không có ảnh đại diện, chưa trả lời câu hỏi bắt buộc, câu trả lời ngắn hơn số ký tự tối thiểu, hoặc chưa xác minh (nếu bật) |
+| **Cần xem** | Không có ảnh đại diện, chưa trả lời câu hỏi bắt buộc, câu trả lời ngắn hơn số ký tự tối thiểu, chưa xác minh (nếu bật), hoặc **có hồ sơ vi phạm** (từng bị cấm, xoá, ẩn bài… — nên người có hồ sơ không bao giờ được tự duyệt) |
 | **Gợi ý duyệt** | Đạt mọi quy tắc |
 
 **Username luôn duyệt** và **Username luôn từ chối** thắng mọi quy tắc khác.
@@ -133,7 +140,8 @@ Chi tiết từng API nằm trong [API.md](API.md). Tóm tắt:
   - `GET content/timeline/{id}?limit=20`
   - Báo cáo (nếu bật **Quét báo cáo vi phạm**; đọc song song với phần bài viết):
     - `GET content/manage/groups/{id}/contents/flagged?limit=20` cho mọi group đang quản trị
-    - `GET content/manage/communities/{groupId gốc}/content-reports?limit=50` cho community bạn làm chủ / admin, chờ tối đa 15 giây
+    - `GET content/manage/communities/{groupId gốc}/content-reports/count` cho community bạn làm chủ / admin; chỉ khi khác 0 mới đọc `…/content-reports?limit=25` (chờ tối đa 15 giây)
+  - Hồ sơ vi phạm (nếu bật **Ghi hồ sơ vi phạm**): `GET group/groups/{id}/activity-logs?limit=50&page=1&sort=desc` cho mọi group đang quản trị
 - **Duyệt / từ chối thành viên**: `PUT group/groups/{id}/joining-requests/{requestId}/approve` hoặc `/decline`
 - **Duyệt / từ chối bài**: `PUT content/contents/approval-contents/{contentId}` với `{ status: "APPROVED" }` hoặc `{ status: "REJECTED", rejectionReason: { reason } }`
 - **Ẩn bài**: `POST content/contents/{contentId}/hide` với `{ reasonType, groupIds }`
@@ -166,6 +174,10 @@ Chi tiết từng API nằm trong [API.md](API.md). Tóm tắt:
   - `GET group/manage/communities/{communityId}/stats/member-count` và `GET content/stats/communities/{groupId gốc}/contents/daily-counts`: số liệu chính thức cho chủ / admin community.
   - Không có số liệu chính thức thì addon tự tính từ `activity-logs` (tối đa 6 trang × 50 sự kiện), `content/timeline` (tối đa 8 trang × 20 bài mỗi group) và số thành viên ghi sau mỗi lần quét (giữ 120 ngày).
 - Thao tác hàng loạt chạy từng mục một, nghỉ 1–5 giây giữa hai mục (chỉnh được).
+- **Tốc độ**: một lần quét ~5–6 giây với 5 group (trước ~23 giây):
+  - Các group, bài mới, chi tiết bài chờ duyệt, bài hẹn giờ, tag / series, thống kê đọc song song, tối đa 4 lệnh cùng lúc (không dồn quá nhiều vào Beincom).
+  - Báo cáo: hỏi Beincom **số báo cáo chờ xử lý** trước (`content-reports/count`, dưới 1 giây); bằng 0 thì không gọi API danh sách vốn treo 15–25 giây ở community chưa có báo cáo.
+- Lệnh đọc gặp lỗi tạm thời ở máy chủ Beincom (HTTP 502 / 503 / 504) được thử lại tối đa 2 lần (cách 1,5 rồi 3 giây); vẫn lỗi thì báo "Máy chủ Beincom không phản hồi kịp", lần quét sau tự đọc lại. Lệnh ghi không tự thử lại để tránh làm hai lần.
 - API nội dung (`content/…`) của Beincom chỉ nhận tối đa 25 mục mỗi trang; addon đọc nhiều trang khi cần. API nhóm (`group/…`) nhận 50–100.
 - Xoá / ẩn / duyệt / huỷ hẹn giờ một bài mà Beincom báo "Content not found" (bài đã bị xoá trên web): addon tính là xong, bỏ bài khỏi danh sách và ghi "Bài không còn trên Beincom" vào nhật ký.
 - **Xác thực**: header `x-application: BIC_GROUP`, `x-platform: WEB`, cookie của beincom.com. Gọi trực tiếp bị chặn thì addon mở tạm một tab Beincom ở nền rồi gọi trong tab đó, giống addon Beincom Check-in.
@@ -189,6 +201,7 @@ node --test "test/*.test.js"
   - Tag / series: tải theo group gốc (kể cả bản cũ chưa lưu group gốc), đủ các trang, kiểm tra hợp lệ trước khi tạo nháp, báo tên mục không hợp lệ
   - Nhắc tên và xem trước link: đúng API / header, chỉ gửi người còn trong bài, không gửi xem trước khi có ảnh
   - Tải file: xin chỗ tải lên đúng API / body / header, chờ xử lý (lỗi, chưa xong, quá lâu), đăng bài kèm ảnh, chạy thử không tải
+  - Hồ sơ vi phạm: ghi từ lần quét (nhật ký Beincom, báo cáo, gắn cờ, vi phạm quy tắc) và từ thao tác qua addon, không ghi trùng, gộp cùng một lần xoá từ hai nguồn, bỏ báo cáo bị bỏ qua, không tự duyệt người có hồ sơ (kể cả người vừa bị cấm trong chính lần quét), tắt thì không đọc / ghi, dựng lần đầu từ nhật ký cũ, xoá hồ sơ
   - Quét báo cáo: đếm đúng, lần sau báo cái mới (bài gắn cờ ở nhiều group báo một lần), API treo không làm hỏng lần quét, tắt thì không gọi API, xử lý xong thì trừ số đếm, mở tab thì cập nhật số đếm và không báo lại
 
 ## Giới hạn
@@ -200,7 +213,7 @@ node --test "test/*.test.js"
   - **Báo cáo thành viên** (người dùng báo cáo một tài khoản): web Beincom chưa có giao diện và API cho phần này.
   - **Quét bình luận**: chưa tìm ra API đọc bình luận.
   - **Hiện lại bài đã ẩn**: không thấy API.
-- **Danh sách báo cáo**: với community không có báo cáo nào, Beincom có lúc không trả lời (đã gặp ở Food Research và The Heroic Spirit).
+- **Danh sách báo cáo**: với community không có báo cáo nào, API danh sách của Beincom treo (đã gặp ở Food Research và The Heroic Spirit). Addon đếm trước nên thường không gặp; khi lệnh đếm lỗi thì mới rơi vào trường hợp dưới đây. Khi Beincom đếm 0, tab Báo cáo không tải lại các báo cáo đã xử lý.
   - Ở tab Báo cáo: addon chờ 25 giây rồi báo "Beincom không phản hồi"; bấm ↻ Tải lại để thử lại.
   - Khi quét: chờ 15 giây rồi coi như community đó không có báo cáo. Nếu Beincom cũng treo khi *có* báo cáo thì addon sẽ không đếm được; mở tab Báo cáo để kiểm tra.
 - **Gỡ cấm** chưa có trong addon: làm trên Beincom (Admin panel → Thành viên bị cấm).

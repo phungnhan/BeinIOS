@@ -8,6 +8,7 @@ Ký hiệu cột **Thử**: ✅ đã gọi, trả 200 · ⏱ gọi nhưng không
 - **Giới hạn trang**: API nội dung `content/…` (duyệt bài, báo cáo, bài hẹn giờ, tag, series…) báo `400 limit must not be greater than 25` nếu `limit` > 25 (gặp từ 10/2026). API nhóm `group/…` (yêu cầu tham gia, thành viên, nhật ký) vẫn nhận 50–100.
 - Lỗi kiểm tra dữ liệu: `meta.message` chỉ là "Bad Request Exception", chi tiết nằm trong `meta.errors` (mảng chuỗi hoặc `{ message: [...] }`).
 - Thao tác trên bài đã bị xoá trên web: `code: "content.not_found"`, `message: "Content not found"`.
+- Thỉnh thoảng gặp `504` (trang HTML, không phải JSON) ở `content/timeline/{id}`; gọi lại ngay sau đó thì bình thường.
 - Gốc API:
   - `https://api.beincom.com/v1/group/…` — community, group, thành viên, quyền
   - `https://api.beincom.com/v1/content/…` — bài viết, duyệt bài, báo cáo
@@ -119,6 +120,7 @@ Báo cáo của người dùng (bài viết, article, bình luận). `{groupId}`
 | Method | Đường dẫn | Body / tham số | Thử |
 |---|---|---|---|
 | GET | `content/manage/communities/{groupId}/content-reports` | `limit`, `after`; mỗi dòng: `id`, `targetId`, `targetType`, `content`, `targetActor`, `reasonsCount [{ reasonType, total, description }]`, `status`, `commentPostId` (bình luận) | ⏱ / 400 |
+| GET | `content/manage/communities/{groupId}/content-reports/count` | → `{ total }` số báo cáo chờ xử lý, trả nhanh kể cả khi danh sách treo (trang quản trị dùng để hiện số trên menu). Admin group gọi thì treo | ✅ |
 | GET | `content/manage/communities/{groupId}/content-reports/{id}` | Chi tiết: mỗi lý do có `reporters [...]`, `reasonType`, `total`, `description` (theo schema trong mã web) | ✅ (nhanh) |
 | PUT | `content/manage/communities/{groupId}/content-reports/{targetId}/status` | `{ status: "IGNORED" \| "HID" }`. Dùng **`targetId`** (ID nội dung), không phải ID báo cáo | — |
 

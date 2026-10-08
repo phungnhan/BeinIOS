@@ -18,6 +18,7 @@
     autoDecline: false, // tự từ chối yêu cầu được gợi ý "Từ chối"
     scanPosts: true, // quét bài mới đăng trong các group đang quản trị
     scanReports: true, // quét báo cáo chờ xử lý và bài bị Beincom gắn cờ tự động
+    trackViolations: true, // ghi hồ sơ vi phạm của thành viên (đọc thêm nhật ký hoạt động mỗi lần quét)
   };
 
   // Quy tắc cho bài viết (bài chờ duyệt và bài mới đăng)
@@ -76,6 +77,7 @@
     bannedKeywords: [], // có trong tên, username hoặc câu trả lời -> từ chối
     allowUsernames: [], // luôn gợi ý duyệt
     blockUsernames: [], // luôn gợi ý từ chối
+    reviewViolators: true, // có hồ sơ vi phạm (bị cấm, xoá, ẩn bài…) -> cần xem
   };
 
   // Quyền cho biết tài khoản quản trị group (lấy từ GET group/me/permissions)
@@ -134,6 +136,7 @@
       return more && !base.includes(more) ? `${base}: ${more}` : base;
     }
     if (r.status === 0) return 'Không kết nối được API Beincom' + (r.error ? ` — ${r.error}` : '');
+    if ([502, 503, 504].includes(r.status)) return `Máy chủ Beincom không phản hồi kịp (HTTP ${r.status}), thường tự hết — lần quét sau sẽ thử lại`;
     if (r.status === 401) return 'Phiên đăng nhập hết hạn';
     if (r.status === 403) return 'Không có quyền hoặc bị Cloudflare chặn (403)';
     return r.error || `HTTP ${r.status}`;
@@ -274,7 +277,8 @@
 
   // Gợi ý cho một yêu cầu tham gia.
   // verdict: 'approve' (đạt mọi quy tắc) · 'decline' (vi phạm quy tắc từ chối) · 'review' (cần người xem)
-  function evaluateRequest(req, rules = DEFAULT_RULES, questions = []) {
+  // profile: hồ sơ vi phạm của người xin vào (nếu có)
+  function evaluateRequest(req, rules = DEFAULT_RULES, questions = [], profile = null) {
     const r = { ...DEFAULT_RULES, ...rules };
     const u = req.user || {};
     const username = String(u.username || '').toLowerCase();
@@ -296,6 +300,7 @@
     const hits = r.bannedKeywords.filter((k) => norm(k) && haystack.includes(norm(k)));
     if (hits.length) bad('Chứa từ khoá cấm: ' + hits.join(', '));
 
+    if (r.reviewViolators && profile?.events?.length) warn('Có hồ sơ vi phạm: ' + profileText(profileSummary(profile)));
     if (r.requireAvatar && !hasAvatar(u)) warn('Không có ảnh đại diện');
     if (r.requireVerified && !u.isVerified) warn('Tài khoản chưa xác minh');
     if (r.requireAnswers) {
@@ -311,6 +316,129 @@
   }
 
   const VERDICT_LABELS = { approve: 'Gợi ý duyệt', decline: 'Gợi ý từ chối', review: 'Cần xem' };
+
+  // ---------- Hồ sơ vi phạm của thành viên ----------
+  // Addon tự ghi (lưu trong máy) từ: thao tác của bạn qua addon, nhật ký hoạt động Beincom (bị xoá / cấm / từ chối,
+  // kể cả do admin khác làm trên web), báo cáo của người dùng, bài Beincom gắn cờ, bài đã ẩn, bài vi phạm quy tắc.
+  // member: sự kiện về tư cách thành viên (một lần xoá / cấm có thể đến từ hai nguồn: gộp nếu gần nhau)
+  const VIOLATION_TYPES = {
+    banned: { label: 'Bị cấm', weight: 5, member: true },
+    removed: { label: 'Bị xoá khỏi group', weight: 3, member: true },
+    hidden: { label: 'Nội dung bị ẩn', weight: 2 },
+    rejected: { label: 'Bài bị từ chối duyệt', weight: 1 },
+    declined: { label: 'Bị từ chối vào group', weight: 1, member: true },
+    reported: { label: 'Bị báo cáo', weight: 1 },
+    flagged: { label: 'Bài bị Beincom gắn cờ', weight: 1 },
+    rule: { label: 'Bài vi phạm quy tắc', weight: 1 },
+  };
+  const PROFILE_MAX_USERS = 500;
+  const PROFILE_MAX_EVENTS = 30;
+  const SAME_ACT_MS = 15 * 60e3;
+
+  // events: [{ user: { id, username, fullname, avatar }, type, key, time, group, snippet, reason, by }]
+  //   hoặc { user, clear: key } để bỏ một sự kiện (vd báo cáo đã được bỏ qua)
+  // Trả về { store: { users: { [id]: { user, events } } }, added }: added = số sự kiện thêm / bỏ
+  function addViolations(store, events, now = Date.now()) {
+    const users = { ...(store?.users || {}) };
+    let added = 0;
+    for (const ev of events || []) {
+      const u = ev?.user;
+      if (!u?.id) continue;
+      const prev = users[u.id];
+      if (ev.clear) {
+        if (!prev?.events.some((e) => e.key === ev.clear)) continue;
+        const left = prev.events.filter((e) => e.key !== ev.clear);
+        if (left.length) users[u.id] = { ...prev, events: left };
+        else delete users[u.id];
+        added++;
+        continue;
+      }
+      const type = VIOLATION_TYPES[ev.type];
+      if (!type || !ev.key) continue;
+      const list = prev?.events || [];
+      const t = Date.parse(ev.time) || now;
+      const dup = list.some((e) => e.key === ev.key || (type.member && e.type === ev.type && e.group === (ev.group || '') && Math.abs(Date.parse(e.time) - t) < SAME_ACT_MS));
+      if (dup) continue;
+      const user = { id: u.id, username: u.username || prev?.user.username || '', fullname: u.fullname || prev?.user.fullname || '', avatar: u.avatar || prev?.user.avatar || '' };
+      const item = {
+        type: ev.type,
+        key: ev.key,
+        time: new Date(t).toISOString(),
+        group: ev.group || '',
+        snippet: String(ev.snippet || '').replace(/\s+/g, ' ').trim().slice(0, 100),
+        reason: String(ev.reason || '').slice(0, 160),
+        by: ev.by || '',
+      };
+      users[u.id] = { user, events: [item, ...list].sort((a, b) => b.time.localeCompare(a.time)).slice(0, PROFILE_MAX_EVENTS) };
+      added++;
+    }
+    const ids = Object.keys(users);
+    if (ids.length > PROFILE_MAX_USERS) {
+      ids.sort((a, b) => users[b].events[0].time.localeCompare(users[a].events[0].time));
+      for (const id of ids.slice(PROFILE_MAX_USERS)) delete users[id];
+    }
+    return { store: { users }, added };
+  }
+
+  // { counts: { banned: 1, … }, score, total, last, repeat (≥ 2 lần), severe (bị cấm / xoá) }
+  function profileSummary(p) {
+    const counts = {};
+    let score = 0;
+    for (const e of p?.events || []) {
+      counts[e.type] = (counts[e.type] || 0) + 1;
+      score += VIOLATION_TYPES[e.type]?.weight || 0;
+    }
+    const total = p?.events?.length || 0;
+    return { counts, score, total, last: p?.events?.[0] || null, repeat: total >= 2, severe: !!(counts.banned || counts.removed) };
+  }
+
+  // "Bị cấm 1 · Nội dung bị ẩn 2" (theo thứ tự nặng → nhẹ)
+  function profileText(sum) {
+    return Object.keys(VIOLATION_TYPES)
+      .filter((k) => sum.counts[k])
+      .map((k) => `${VIOLATION_TYPES[k].label} ${sum.counts[k]}`)
+      .join(' · ');
+  }
+
+  // Từ nhật ký thao tác của addon: chỉ thao tác đã gửi thành công (không tính chạy thử, bài đã bị xoá sẵn)
+  function violationsFromLog(entries) {
+    const out = [];
+    for (const e of entries || []) {
+      if (e.status !== 'ok' || e.gone || !e.userId) continue;
+      const user = { id: e.userId, username: e.username || '', fullname: e.fullname || '', avatar: '' };
+      const base = { user, time: new Date(e.time || Date.now()).toISOString(), group: e.groupName || e.communityName || '', snippet: e.snippet || '', reason: e.reason || '', by: e.source === 'auto' ? 'Addon tự xử lý' : 'Bạn (qua addon)' };
+      const { kind, action } = e;
+      if (kind === 'member' && action === 'decline') out.push({ ...base, type: 'declined', key: 'declined:' + e.requestId });
+      else if (kind === 'manage' && (action === 'remove' || action === 'ban')) out.push({ ...base, type: action === 'ban' ? 'banned' : 'removed', key: `${action}:${e.groupId}:${e.userId}:${e.time}` });
+      else if (kind === 'post' && action === 'hide') out.push({ ...base, type: 'hidden', key: 'hidden:' + e.contentId });
+      else if (kind === 'post' && action === 'reject') out.push({ ...base, type: 'rejected', key: 'rejected:' + e.contentId });
+      else if (kind === 'report' && (action === 'hide' || action === 'hidePost')) out.push({ ...base, type: 'hidden', key: 'hidden:' + e.contentId });
+      else if (kind === 'report' && action === 'ignore' && e.reportId) out.push({ user, clear: 'report:' + e.reportId }); // báo cáo sai: bỏ khỏi hồ sơ
+    }
+    return out;
+  }
+
+  // Từ nhật ký hoạt động Beincom (slimActivity)
+  const ACTIVITY_VIOLATION = { 'remove.member': 'removed', 'ban.member': 'banned', 'decline.join_request': 'declined' };
+  function violationsFromActivity(items) {
+    return (items || [])
+      .filter((a) => ACTIVITY_VIOLATION[a.useCase] && a.user?.id)
+      .map((a) => ({ user: a.user, type: ACTIVITY_VIOLATION[a.useCase], key: 'act:' + a.id, time: a.time, group: a.groupName || '', by: a.actor ? a.actor.fullname || a.actor.username : '' }));
+  }
+
+  // Từ báo cáo của người dùng (slimReport); báo cáo đã bỏ qua không tính
+  function violationsFromReports(reports, group = '') {
+    return (reports || [])
+      .filter((r) => r.actor?.id && r.status !== 'IGNORED')
+      .map((r) => ({ user: r.actor, type: 'reported', key: 'report:' + r.id, time: r.createdAt, group, snippet: r.content, reason: r.reasons.map((x) => `${x.label} ×${x.total}`).join(', ') }));
+  }
+
+  // Từ bài (slimPost): type 'flagged' | 'hidden' | 'rule'; reasonOf(p) -> lý do
+  function violationsFromPosts(posts, type, reasonOf = () => '') {
+    return (posts || [])
+      .filter((p) => p.actor?.id)
+      .map((p) => ({ user: p.actor, type, key: `${type === 'rule' ? 'rule' : type === 'flagged' ? 'flag' : 'hidden'}:${p.id}`, time: p.publishedAt || p.submittedAt, group: p.groups?.[0]?.name || '', snippet: p.title || p.text, reason: reasonOf(p) }));
+  }
 
   // ---------- Thành viên ----------
 
@@ -1052,6 +1180,14 @@
     hasAvatar,
     answersOf,
     evaluateRequest,
+    VIOLATION_TYPES,
+    addViolations,
+    profileSummary,
+    profileText,
+    violationsFromLog,
+    violationsFromActivity,
+    violationsFromReports,
+    violationsFromPosts,
     newRequestIds,
     totals,
     autoFlaggedIds,

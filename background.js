@@ -70,6 +70,23 @@ async function beincomRequest(method, url, body, version = '2.0.0', timeoutMs = 
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// Đọc song song nhưng không dồn quá nhiều lệnh vào Beincom cùng lúc (dễ bị 504)
+const PARALLEL = 4;
+
+// Chạy fn cho từng phần tử, tối đa `limit` việc cùng lúc; kết quả giữ đúng thứ tự
+async function mapLimit(list, limit, fn) {
+  const out = new Array(list.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < list.length) {
+      const i = next++;
+      out[i] = await fn(list[i], i);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, list.length) }, worker));
+  return out;
+}
+
 async function load() {
   const { settings, rules, postRules, state, log } = await chrome.storage.local.get(['settings', 'rules', 'postRules', 'state', 'log']);
   return {
@@ -118,13 +135,26 @@ async function tabOnLoginPage(tabId) {
 // Gọi trực tiếp vừa chạy được thì 5 phút sau khỏi gọi thử lại (tải nhiều trang thành viên liên tiếp)
 let directUntil = 0;
 
+// Lệnh đọc (GET) gặp lỗi tạm thời ở máy chủ Beincom (502 / 503 / 504) thì thử lại tối đa 2 lần, cách 1,5 rồi 3 giây
+const RETRY_STATUS = new Set([502, 503, 504]);
+function withRetry(call) {
+  return async (method, path, body, version, timeoutMs) => {
+    let r = await call(method, path, body, version, timeoutMs);
+    for (let i = 0; i < 2 && method === 'GET' && RETRY_STATUS.has(r.status); i++) {
+      await sleep(1500 * (i + 1));
+      r = await call(method, path, body, version, timeoutMs);
+    }
+    return r;
+  };
+}
+
 function directClient() {
   const call = async (m, p, b, v, t) => {
     const r = await beincomRequest(m, BG.API + p, b, v, t);
     if (r.status === 401 || (r.status === 0 && !r.timeout)) directUntil = 0; // API treo không phải do bị chặn
     return r;
   };
-  return { mode: 'direct', call, close: async () => {} };
+  return { mode: 'direct', call: withRetry(call), close: async () => {} };
 }
 
 async function createClient() {
@@ -151,7 +181,7 @@ async function createClient() {
   const close = async () => {
     if (created) await chrome.tabs.remove(tabId).catch(() => {});
   };
-  return { mode: 'tab', call, close, loginRequired: await tabOnLoginPage(tabId) };
+  return { mode: 'tab', call: withRetry(call), close, loginRequired: await tabOnLoginPage(tabId) };
 }
 
 const NEED_LOGIN = { status: 'need_login', message: 'Phiên đăng nhập hết hạn — hãy đăng nhập lại Beincom.' };
@@ -242,22 +272,19 @@ async function readApprovals(client, g, prevById) {
     if (!r.body.data?.meta?.hasNextPage || !list.length || !after) break;
   }
 
-  let fetched = 0;
-  g.approvals = [];
-  for (const it of raw) {
+  // Bài mới (chưa tải đầy đủ ở lần trước): tải chi tiết tối đa DETAIL_PER_SCAN bài, song song
+  const need = raw.filter((it) => !prevById.get(it.id)?.full).slice(0, DETAIL_PER_SCAN);
+  const details = new Map();
+  await mapLimit(need, PARALLEL, async (it) => {
+    const d = await client.call('GET', `content/manage/communities/${g.id}/approval-contents/${it.id}`);
+    if (BG.isOk(d) && d.body.data) details.set(it.id, d.body.data);
+  });
+  g.approvals = raw.map((it) => {
     const prev = prevById.get(it.id);
-    if (prev?.full) {
-      g.approvals.push({ ...BG.slimPost(it), text: prev.text, full: true });
-      continue;
-    }
-    let detail = null;
-    if (fetched < DETAIL_PER_SCAN) {
-      fetched++;
-      const d = await client.call('GET', `content/manage/communities/${g.id}/approval-contents/${it.id}`);
-      if (BG.isOk(d) && d.body.data) detail = d.body.data;
-    }
-    g.approvals.push({ ...BG.slimPost(detail ? { ...it, ...detail } : it), full: !!detail });
-  }
+    if (prev?.full) return { ...BG.slimPost(it), text: prev.text, full: true };
+    const detail = details.get(it.id);
+    return { ...BG.slimPost(detail ? { ...it, ...detail } : it), full: !!detail };
+  });
 }
 
 async function readTimeline(client, g) {
@@ -280,12 +307,12 @@ async function scanGroupsPart(client, { approvalCounts = true } = {}) {
   if (!BG.isOk(p)) return { status: 'error', message: 'Đọc quyền lỗi: ' + BG.errMsg(p) };
 
   const groups = [];
-  for (const admin of BG.adminGroups(p.body.data)) groups.push(await readGroup(client, admin));
+  groups.push(...(await mapLimit(BG.adminGroups(p.body.data), PARALLEL, (admin) => readGroup(client, admin))));
   for (const g of groups) {
     g.canBan = BG.canBan(p.body.data, g.communityId);
     g.isCommunityAdmin = BG.isCommunityAdmin(p.body.data, g.communityId);
   }
-  if (approvalCounts) for (const g of groups) await readApprovalCount(client, g);
+  if (approvalCounts) await mapLimit(groups, PARALLEL, (g) => readApprovalCount(client, g));
   // Community có việc lên trước; trong community, group gốc trước rồi tới group con
   return { status: 'ok', groups: BG.sortGroupTree(groups) };
 }
@@ -303,9 +330,10 @@ async function scanContentPart(client, groups, prevGroups, scanPosts) {
   // Bài mới đăng của từng group (một bài có thể đăng vào nhiều group)
   const posts = new Map();
   if (scanPosts) {
-    for (const g of groups) {
-      if (g.error) continue;
-      const t = await readTimeline(client, g);
+    const ok = groups.filter((g) => !g.error);
+    const results = await mapLimit(ok, PARALLEL, (g) => readTimeline(client, g));
+    for (const [i, g] of ok.entries()) {
+      const t = results[i];
       if (t.error) g.timelineError = t.error;
       for (const post of t.posts) {
         const old = posts.get(post.id);
@@ -314,6 +342,13 @@ async function scanContentPart(client, groups, prevGroups, scanPosts) {
     }
   }
   return [...posts.values()];
+}
+
+// Số báo cáo chờ xử lý (API trang quản trị Beincom dùng, trả nhanh). null = không đọc được -> đọc danh sách như cũ
+async function countReports(client, g) {
+  const c = await client.call('GET', `content/manage/communities/${g.id}/content-reports/count`, null, '2.0.0', REPORT_SCAN_TIMEOUT);
+  const n = c.body?.data?.total;
+  return BG.isOk(c) && Number.isFinite(n) ? n : null;
 }
 
 // Phần báo cáo: bài bị Beincom gắn cờ tự động (mọi group đang quản trị) và báo cáo chờ xử lý
@@ -328,9 +363,18 @@ async function scanReportsPart(client, groups, prevGroups) {
         const old = prev.get(g.id) || {};
         const f = await client.call('GET', `content/manage/groups/${g.id}/contents/flagged?${qs({ limit: TIMELINE_LIMIT })}`);
         g.flaggedIds = BG.isOk(f) ? (f.body.data?.list || []).map((p) => p.id) : old.flaggedIds; // lỗi: giữ số cũ
+        if (BG.isOk(f)) noteViolations(BG.violationsFromPosts((f.body.data?.list || []).map(BG.slimPost), 'flagged', (p) => p.violations.join(', ')));
         if (!(g.isCommunity && g.isCommunityAdmin)) return;
+        const n = await countReports(client, g);
+        if (n === 0) {
+          g.reportIds = [];
+          return;
+        }
         const r = await client.call('GET', `content/manage/communities/${g.id}/content-reports?${qs({ limit: CONTENT_PAGE })}`, null, '2.0.0', REPORT_SCAN_TIMEOUT);
-        if (BG.isOk(r)) g.reportIds = (r.body.data?.list || []).filter((x) => (x.status || 'CREATED') === 'CREATED').map((x) => x.id);
+        if (BG.isOk(r)) {
+          g.reportIds = (r.body.data?.list || []).filter((x) => (x.status || 'CREATED') === 'CREATED').map((x) => x.id);
+          noteViolations(BG.violationsFromReports((r.body.data?.list || []).map(BG.slimReport), g.name));
+        }
         // Đã gặp API treo ở community chưa có báo cáo nào -> coi như không có
         else if (r.timeout) g.reportIds = [];
         else g.reportIds = old.reportIds;
@@ -338,11 +382,27 @@ async function scanReportsPart(client, groups, prevGroups) {
   );
 }
 
-async function scanGroups(client, { prevGroups = [], scanPosts = true, scanReports = true } = {}) {
+// Nhật ký hoạt động mới nhất của từng group: ghi vào hồ sơ vi phạm những lần bị xoá / cấm / từ chối (kể cả do admin khác làm)
+async function scanActivityPart(client, groups) {
+  await Promise.all(
+    groups
+      .filter((g) => !g.error)
+      .map(async (g) => {
+        const r = await client.call('GET', `group/groups/${g.id}/activity-logs?${qs({ limit: PAGE, page: 1, sort: 'desc' })}`);
+        if (BG.isOk(r)) noteViolations(BG.violationsFromActivity((Array.isArray(r.body.data) ? r.body.data : []).map(BG.slimActivity)));
+      }),
+  );
+}
+
+async function scanGroups(client, { prevGroups = [], scanPosts = true, scanReports = true, trackViolations = true } = {}) {
   const r = await scanGroupsPart(client, { approvalCounts: false });
   if (r.status !== 'ok') return r;
-  // Hai phần sửa các trường khác nhau của group nên chạy song song được
-  const [posts] = await Promise.all([scanContentPart(client, r.groups, prevGroups, scanPosts), scanReports ? scanReportsPart(client, r.groups, prevGroups) : null]);
+  // Các phần sửa các trường khác nhau của group nên chạy song song được
+  const [posts] = await Promise.all([
+    scanContentPart(client, r.groups, prevGroups, scanPosts),
+    scanReports ? scanReportsPart(client, r.groups, prevGroups) : null,
+    trackViolations ? scanActivityPart(client, r.groups) : null,
+  ]);
 
   // Tài khoản đang đăng nhập (để nhận ra bài của chính mình). API này không nhận header phiên bản.
   const meRes = await client.call('GET', 'user/me/profile', null, '');
@@ -475,14 +535,14 @@ function dropFromSnapshot(snapshot, field, done) {
   return { ...snapshot, groups: snapshot.groups.map((x) => (x[field]?.some((id) => done.has(id)) ? { ...x, [field]: x[field].filter((id) => !done.has(id)) } : x)) };
 }
 
-function autoItems(groups, settings, rules, skipIds) {
+function autoItems(groups, settings, rules, skipIds, profiles = null) {
   const items = [];
   const skip = new Set(skipIds || []);
   for (const g of groups) {
     if (!g.canApprove) continue;
     for (const req of g.requests) {
       if (skip.has(req.id)) continue;
-      const { verdict } = BG.evaluateRequest(req, rules, g.questions);
+      const { verdict } = BG.evaluateRequest(req, rules, g.questions, profiles?.users?.[req.user?.id || req.userId]);
       if (verdict === 'approve' && settings.autoApprove) items.push(memberItem('auto', 'approve', g, req));
       if (verdict === 'decline' && settings.autoDecline) items.push(memberItem('auto', 'decline', g, req));
     }
@@ -521,6 +581,44 @@ async function updateBadge() {
 function pushLog(log, entries) {
   log.unshift(...entries.slice().reverse());
   log.length = Math.min(log.length, LOG_MAX);
+  noteViolations(BG.violationsFromLog(entries));
+}
+
+// ---------- Hồ sơ vi phạm ----------
+// Các phần quét / thao tác ghi sự kiện vào hàng đợi; ghi xuống storage một lần sau mỗi việc trong hàng đợi chung (exclusive).
+let pendingViolations = [];
+
+function noteViolations(events) {
+  if (events?.length) pendingViolations.push(...events);
+}
+
+async function flushViolations() {
+  if (!pendingViolations.length) return;
+  const events = pendingViolations;
+  pendingViolations = [];
+  const { settings, profiles, log } = await chrome.storage.local.get(['settings', 'profiles', 'log']);
+  if (!{ ...BG.DEFAULT_SETTINGS, ...settings }.trackViolations) return;
+  // Lần đầu: dựng hồ sơ từ nhật ký thao tác đã có
+  const base = profiles || BG.addViolations(null, BG.violationsFromLog(log || [])).store;
+  const r = BG.addViolations(base, events);
+  if (r.added || !profiles) await chrome.storage.local.set({ profiles: r.store });
+}
+
+// Đọc ngoài hàng đợi (tab Báo cáo, nhật ký vào/rời, thống kê) xong thì xếp một lượt ghi hồ sơ
+function noteAndFlush(events) {
+  noteViolations(events);
+  if (pendingViolations.length) exclusive(async () => {});
+}
+
+// Quên hồ sơ của một người (bấm trên Dashboard)
+async function doProfileAct({ action, userId }) {
+  if (action !== 'forget' || !userId) return { status: 'error', message: 'Thao tác không hợp lệ' };
+  const { profiles } = await chrome.storage.local.get('profiles');
+  if (!profiles?.users?.[userId]) return { status: 'ok', ok: 0 };
+  const users = { ...profiles.users };
+  delete users[userId];
+  await chrome.storage.local.set({ profiles: { users } });
+  return { status: 'ok', ok: 1, failed: 0, dry: 0, errors: [] };
 }
 
 function summary(r, settings) {
@@ -570,6 +668,7 @@ function applyPosts(state, next, posts, postRules, notifyAllowed, now) {
   const { list, fresh } = mergeRecent(state.recentPosts, posts, now);
   const freshSet = new Set(fresh);
   const badNew = list.filter((p) => freshSet.has(p.id) && !p.isHidden && BG.evaluatePost(p, postRules).verdict === 'bad');
+  noteViolations(BG.violationsFromPosts(badNew, 'rule', (p) => BG.evaluatePost(p, postRules).reasons.filter((x) => x.level !== 'ok').map((x) => x.text).join('; ')));
   if (state.recentPosts && badNew.length && notifyAllowed) {
     notify('bg-flagged', `BeinGroup: ${badNew.length} bài mới vi phạm quy tắc`, badNew.map((p) => p.actor.fullname || p.actor.username).join(', '));
   }
@@ -641,7 +740,7 @@ async function doScan({ source = 'alarm' } = {}) {
   const auto = source === 'alarm' || source === 'startup' || source === 'install' || source === 'resume';
   if (auto && !settings.active) return state;
 
-  const result = await withClient((client) => scanGroups(client, { prevGroups: state.snapshot?.groups, scanPosts: settings.scanPosts, scanReports: settings.scanReports }));
+  const result = await withClient((client) => scanGroups(client, { prevGroups: state.snapshot?.groups, scanPosts: settings.scanPosts, scanReports: settings.scanReports, trackViolations: settings.trackViolations }));
   const now = Date.now();
   const next = { ...state, lastScan: now, lastResult: { status: result.status, message: result.message || '', mode: result.mode || '' } };
   const notifyAllowed = settings.active && settings.notify && source !== 'popup' && source !== 'dashboard';
@@ -651,7 +750,9 @@ async function doScan({ source = 'alarm' } = {}) {
 
     // Tự xử lý theo quy tắc (chỉ khi addon đang bật). Chạy thử: mỗi yêu cầu chỉ ghi nhật ký một lần.
     if (settings.active && (settings.autoApprove || settings.autoDecline)) {
-      const items = autoItems(groups, settings, rules, settings.dryRun ? state.autoDryIds : []);
+      await flushViolations(); // hồ sơ vừa ghi trong lần quét này (vd người bị cấm trên web) phải có trước khi tự duyệt
+      const { profiles } = await chrome.storage.local.get('profiles');
+      const items = autoItems(groups, settings, rules, settings.dryRun ? state.autoDryIds : [], settings.trackViolations ? profiles : null);
       if (items.length) {
         const r = await performActions(items, settings);
         pushLog(log, r.entries);
@@ -838,7 +939,9 @@ async function doActivity({ groupId, page = 1, useCase = '' }) {
     if (r.status === 401) return { ...NEED_LOGIN };
     if (!BG.isOk(r)) return { status: 'error', message: 'Đọc nhật ký hoạt động lỗi: ' + BG.errMsg(r) };
     const list = Array.isArray(r.body.data) ? r.body.data : [];
-    return { status: 'ok', items: list.map(BG.slimActivity), total: r.body.meta?.total ?? null, hasNext: !!r.body.meta?.hasNextPage };
+    const items = list.map(BG.slimActivity);
+    noteAndFlush(BG.violationsFromActivity(items));
+    return { status: 'ok', items, total: r.body.meta?.total ?? null, hasNext: !!r.body.meta?.hasNextPage };
   });
 }
 
@@ -1033,9 +1136,8 @@ async function doTagsSeries({ groupIds = [] }) {
       }
       return { list: out };
     };
-    const t = roots.length ? await readAll(`content/tags?${ids(roots)}`, BG.slimTag) : { list: [] };
+    const [t, s] = await Promise.all([roots.length ? readAll(`content/tags?${ids(roots)}`, BG.slimTag) : { list: [] }, readAll(`content/series?${ids(groupIds)}`, BG.slimSeries)]);
     if (t.error) return t.error;
-    const s = await readAll(`content/series?${ids(groupIds)}`, BG.slimSeries);
     if (s.error) return s.error;
     const note = roots.length < new Set(groupIds.map((id) => byId.get(id)?.communityId)).size ? 'Bấm "Quét ngay" để tải tag của các group con' : '';
     return { status: 'ok', tags: t.list, series: s.list, note };
@@ -1079,21 +1181,20 @@ async function doScheduled() {
   return withClient(async (client) => {
     const map = new Map();
     const errors = [];
-    for (const g of roots) {
+    let needLogin = false;
+    await mapLimit(roots, PARALLEL, async (g) => {
       let after = '';
       for (let page = 0; page < SCHEDULED_PAGES; page++) {
         const r = await client.call('GET', `content/manage/groups/${g.id}/contents/scheduled?${qs({ limit: CONTENT_PAGE, type: 'POST', after })}`);
-        if (r.status === 401) return { ...NEED_LOGIN };
-        if (!BG.isOk(r)) {
-          errors.push(`${g.name}: ${BG.errMsg(r)}`);
-          break;
-        }
+        if (r.status === 401) return (needLogin = true);
+        if (!BG.isOk(r)) return errors.push(`${g.name}: ${BG.errMsg(r)}`);
         const list = r.body.data?.list || [];
         for (const p of list) if (!map.has(p.id)) map.set(p.id, { ...BG.slimScheduled(p), communityName: g.communityName || g.name });
         after = r.body.data?.meta?.endCursor || '';
         if (!r.body.data?.meta?.hasNextPage || !after || !list.length) break;
       }
-    }
+    });
+    if (needLogin) return { ...NEED_LOGIN };
     const items = [...map.values()].sort((a, b) => String(a.scheduledAt || '').localeCompare(String(b.scheduledAt || '')));
     return { status: 'ok', items, errors };
   });
@@ -1144,35 +1245,38 @@ async function doStats({ groupId, days = 30 }) {
   return withClient(async (client) => {
     const out = { status: 'ok', days, officialMembers: null, officialPosts: null, posts: [], activity: [], errors: [] };
     if (g.isCommunity) {
-      const mc = await client.call('GET', `group/manage/communities/${g.communityId}/stats/member-count?${range}`);
+      const [mc, dc] = await Promise.all([
+        client.call('GET', `group/manage/communities/${g.communityId}/stats/member-count?${range}`),
+        client.call('GET', `content/stats/communities/${g.id}/contents/daily-counts?${range}`),
+      ]);
       if (mc.status === 401) return { ...NEED_LOGIN };
       if (BG.isOk(mc) && Array.isArray(mc.body.data)) out.officialMembers = mc.body.data;
-      const dc = await client.call('GET', `content/stats/communities/${g.id}/contents/daily-counts?${range}`);
       if (BG.isOk(dc) && Array.isArray(dc.body.data)) out.officialPosts = dc.body.data;
     }
 
-    // Bài trên timeline trong khoảng thời gian (gộp bài đăng nhiều group)
-    const posts = new Map();
-    for (const sg of scope) {
+    // Bài trên timeline trong khoảng thời gian: các group đọc song song (mỗi group nhiều trang), gộp theo thứ tự group
+    let needLogin = false;
+    const timelineOf = async (sg) => {
+      const list = [];
       let after = '';
       for (let page = 0; page < STATS_TIMELINE_PAGES; page++) {
         const r = await client.call('GET', `content/timeline/${sg.id}?${qs({ limit: TIMELINE_LIMIT, after })}`);
-        if (r.status === 401) return { ...NEED_LOGIN };
+        if (r.status === 401) return (needLogin = true) && list;
         if (!BG.isOk(r)) {
           out.errors.push(`Bài viết ${sg.name}: ${BG.errMsg(r)}`);
           break;
         }
-        const list = r.body.data?.list || [];
-        for (const p of list) if (!posts.has(p.id)) posts.set(p.id, BG.slimPost(p));
+        const items = r.body.data?.list || [];
+        list.push(...items);
         after = r.body.data?.meta?.endCursor || '';
-        const oldest = list.at(-1)?.publishedAt;
-        if (!r.body.data?.meta?.hasNextPage || !after || !list.length || (oldest && new Date(oldest).getTime() < fromMs)) break;
+        const oldest = items.at(-1)?.publishedAt;
+        if (!r.body.data?.meta?.hasNextPage || !after || !items.length || (oldest && new Date(oldest).getTime() < fromMs)) break;
       }
-    }
-    out.posts = [...posts.values()].filter((p) => p.publishedAt && new Date(p.publishedAt).getTime() >= fromMs);
-
-    // Không có số liệu thành viên chính thức: đếm vào / rời từ nhật ký hoạt động của group đã chọn
-    if (!out.officialMembers) {
+      return list;
+    };
+    // Không có số liệu thành viên chính thức: đếm vào / rời từ nhật ký hoạt động (đọc cùng lúc với bài)
+    const activityOf = async () => {
+      if (out.officialMembers) return;
       for (let page = 1; page <= STATS_ACTIVITY_PAGES; page++) {
         const r = await client.call('GET', `group/groups/${g.id}/activity-logs?${qs({ limit: PAGE, page, sort: 'desc' })}`);
         if (r.status === 401) return { ...NEED_LOGIN };
@@ -1181,12 +1285,18 @@ async function doStats({ groupId, days = 30 }) {
           break;
         }
         const list = (Array.isArray(r.body.data) ? r.body.data : []).map(BG.slimActivity);
+        noteAndFlush(BG.violationsFromActivity(list));
         out.activity.push(...list.filter((a) => a.time && new Date(a.time).getTime() >= fromMs));
         const oldest = list.at(-1)?.time;
         if (!r.body.meta?.hasNextPage || !list.length || (oldest && new Date(oldest).getTime() < fromMs)) break;
         if (page === STATS_ACTIVITY_PAGES) out.activityTruncated = true;
       }
-    }
+    };
+    const [lists, activityResult] = await Promise.all([mapLimit(scope, PARALLEL, timelineOf), activityOf()]);
+    if (needLogin || activityResult?.status === 'need_login') return { ...NEED_LOGIN };
+    const posts = new Map();
+    for (const list of lists) for (const p of list) if (!posts.has(p.id)) posts.set(p.id, BG.slimPost(p));
+    out.posts = [...posts.values()].filter((p) => p.publishedAt && new Date(p.publishedAt).getTime() >= fromMs);
     out.history = state.memberHistory?.[g.id] || [];
     out.userCount = g.userCount ?? null;
     return out;
@@ -1210,6 +1320,11 @@ async function doReports({ groupId, kind = 'reported' }) {
   }
   if (!['reported', 'flagged', 'hidden'].includes(kind)) return { status: 'error', message: 'Loại báo cáo không hợp lệ' };
   const result = await withClient(async (client) => {
+    // Không có báo cáo chờ xử lý: khỏi gọi API danh sách (treo tới hết thời hạn chờ khi community không có báo cáo)
+    if (kind === 'reported') {
+      const n = await countReports(client, g);
+      if (n === 0) return { status: 'ok', items: [], timedOut: false, none: true };
+    }
     const items = [];
     let after = '';
     for (let page = 0; page < REPORT_PAGES; page++) {
@@ -1228,7 +1343,14 @@ async function doReports({ groupId, kind = 'reported' }) {
     }
     return { status: 'ok', items, timedOut: false };
   });
-  if (result.status === 'ok') syncReportCounts(g.id, kind, result.items);
+  if (result.status === 'ok') {
+    noteAndFlush(
+      kind === 'reported'
+        ? BG.violationsFromReports(result.items, g.name)
+        : BG.violationsFromPosts(result.items, kind === 'flagged' ? 'flagged' : 'hidden', (p) => (kind === 'flagged' ? p.violations.join(', ') : '')),
+    );
+    syncReportCounts(g.id, kind, result.items);
+  }
   return result;
 }
 
@@ -1329,7 +1451,13 @@ async function doReportAct({ action, groupId, items, reasonType = 'OTHERS', sour
 // Không chạy chồng nhau
 let queue = Promise.resolve();
 function exclusive(fn) {
-  const p = queue.then(fn);
+  const p = queue.then(async () => {
+    try {
+      return await fn();
+    } finally {
+      await flushViolations().catch(() => {});
+    }
+  });
   queue = p.catch(() => {});
   return p;
 }
@@ -1422,6 +1550,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     compose: () => doCompose(msg),
     scheduleAct: () => doScheduleAct(msg),
     reportAct: () => doReportAct(msg),
+    profileAct: () => doProfileAct(msg),
   };
   const h = handlers[msg?.type];
   if (!h) return;
