@@ -22,9 +22,9 @@
 
 //
 // Mã chia theo phần trong bg/: core (gọi API, thao tác ghi, thông báo), scan (quét), actions (thao tác),
-// compose (đăng bài), manage (cài đặt group, thống kê, báo cáo), sync (đồng bộ cài đặt giữa các máy). Tệp này: lịch chạy, sự kiện, nhận lệnh từ Dashboard / popup.
+// compose (đăng bài), manage (cài đặt group, thống kê, báo cáo), sync (đồng bộ cài đặt giữa các máy), telegram (gửi thông báo về Telegram). Tệp này: lịch chạy, sự kiện, nhận lệnh từ Dashboard / popup.
 
-importScripts('common.js', 'bg/core.js', 'bg/scan.js', 'bg/actions.js', 'bg/compose.js', 'bg/manage.js', 'bg/sync.js');
+importScripts('common.js', 'bg/core.js', 'bg/scan.js', 'bg/actions.js', 'bg/compose.js', 'bg/article.js', 'bg/manage.js', 'bg/sync.js', 'bg/telegram.js');
 
 // ---------- Lịch chạy ----------
 
@@ -110,6 +110,8 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     tagsSeries: () => doTagsSeries(msg),
     newMembers: () => doNewMembers(msg),
     syncStatus: () => doSyncStatus(),
+    telegramTest: () => doTelegramTest(msg),
+    telegramChatId: () => doTelegramChatId(msg),
     linkPreview: () => doLinkPreview(msg),
   };
   if (reads[msg?.type]) {
@@ -129,6 +131,9 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     syncNow: () => doSyncNow(msg),
     memberAct: () => doMemberAct(msg),
     compose: () => doCompose(msg),
+    composeArticle: () => doComposeArticle(msg),
+    composeSeries: () => doComposeSeries(msg),
+    categories: () => doCategories(),
     scheduleAct: () => doScheduleAct(msg),
     restoreBackup: () => doRestore(msg),
     reportAct: () => doReportAct(msg),

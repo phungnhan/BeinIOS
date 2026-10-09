@@ -227,6 +227,7 @@ function renderSettings() {
   $('settings-group').classList.toggle('paused', !s.active);
   fillList('watchKeywords', s.watchKeywords);
   renderSync();
+  renderTelegramStatus();
   const watchHours = document.querySelector('[data-requires="remindUnanswered"]');
   watchHours.classList.toggle('is-disabled', !s.remindUnanswered);
 }
@@ -262,6 +263,75 @@ for (const k of SETTING_BOOLS) {
 }
 for (const k of SETTING_NUMS) $(k).addEventListener('change', () => saveSettings({ [k]: Number($(k).value) }));
 $('watchKeywords').addEventListener('change', () => saveSettings({ watchKeywords: BG.parseList($('watchKeywords').value) }));
+
+// ---------- Gửi thông báo về Telegram ----------
+// Form chỉ nạp một lần (không ghi đè khi đang gõ); lưu khi bấm Lưu. Quyền gửi tới api.telegram.org xin ngay khi bấm (cần thao tác của người dùng).
+
+const TG_ORIGIN = 'https://api.telegram.org/*';
+
+async function loadTelegramForm() {
+  const { telegram } = await chrome.storage.local.get('telegram');
+  const cfg = { ...BG.DEFAULT_TELEGRAM, ...telegram, kinds: { ...BG.DEFAULT_TELEGRAM.kinds, ...telegram?.kinds } };
+  $('tg-enabled').checked = !!cfg.enabled;
+  $('tg-token').value = cfg.token || '';
+  $('tg-chat').value = cfg.chatId || '';
+  $('tg-quiet').checked = !!cfg.quietNight;
+  $('tg-kinds').replaceChildren(...Object.entries(BG.TELEGRAM_KINDS).map(([k, label]) => el('label', { class: 'check small' }, el('input', { type: 'checkbox', 'data-kind': k, checked: !!cfg.kinds[k] }), ' ' + label)));
+}
+
+function renderTelegramStatus() {
+  const st = data.telegramStatus;
+  $('tg-status').textContent = !st ? '' : st.ok ? `Gửi lần cuối ${fmtTime(st.at)} ✓` : `Lỗi lúc ${fmtTime(st.at)}: ${st.error}`;
+  $('tg-status').classList.toggle('err-text', !!st && !st.ok);
+}
+
+// Xin quyền gửi tới Telegram (hỏi một lần; đã cho phép thì trả về luôn)
+async function askTelegramPermission() {
+  try {
+    if (await chrome.permissions.contains({ origins: [TG_ORIGIN] })) return true;
+    return await chrome.permissions.request({ origins: [TG_ORIGIN] });
+  } catch {
+    return false;
+  }
+}
+
+$('btn-tg-show').addEventListener('click', () => {
+  const t = $('tg-token');
+  t.type = t.type === 'password' ? 'text' : 'password';
+  $('btn-tg-show').textContent = t.type === 'password' ? 'Hiện' : 'Ẩn';
+});
+
+$('btn-tg-chat').addEventListener('click', async () => {
+  if (!(await askTelegramPermission())) return toast('Cần cho phép addon kết nối api.telegram.org', 'err');
+  const r = await chrome.runtime.sendMessage({ type: 'telegramChatId', token: $('tg-token').value.trim() });
+  if (r?.status !== 'ok') return toast(r?.message || 'Không lấy được chat ID', 'err');
+  $('tg-chat').value = r.chatId;
+  $('tg-chat-name').textContent = r.name ? '· ' + r.name : '';
+  toast(`Đã lấy chat ID${r.name ? ' của ' + r.name : ''}. Bấm Gửi thử rồi Lưu.`);
+});
+
+$('btn-tg-test').addEventListener('click', async () => {
+  if (!(await askTelegramPermission())) return toast('Cần cho phép addon kết nối api.telegram.org', 'err');
+  const r = await chrome.runtime.sendMessage({ type: 'telegramTest', token: $('tg-token').value.trim(), chatId: $('tg-chat').value.trim() });
+  if (r?.status !== 'ok') return toast(r?.message || 'Gửi thử lỗi', 'err');
+  toast('Đã gửi tin thử — xem trong Telegram.');
+});
+
+$('btn-tg-save').addEventListener('click', async () => {
+  const enabled = $('tg-enabled').checked;
+  const token = $('tg-token').value.trim();
+  const chatId = $('tg-chat').value.trim();
+  if (enabled) {
+    if (!(await askTelegramPermission())) return toast('Cần cho phép addon kết nối api.telegram.org để bật gửi Telegram', 'err');
+    if (!BG.validTelegramToken(token)) return toast('Token bot chưa đúng dạng (vd 123456789:AA…)', 'err');
+    if (!chatId) return toast('Chưa có chat ID — bấm Lấy chat ID', 'err');
+  }
+  const kinds = Object.fromEntries([...document.querySelectorAll('#tg-kinds input')].map((i) => [i.dataset.kind, i.checked]));
+  await chrome.storage.local.set({ telegram: { enabled, token, chatId, kinds, quietNight: $('tg-quiet').checked } });
+  toast(enabled ? 'Đã lưu. Addon sẽ gửi thông báo về Telegram ở các lần quét tự động.' : 'Đã lưu (đang tắt gửi Telegram).');
+});
+
+loadTelegramForm();
 
 // ---------- Đồng bộ giữa các máy ----------
 

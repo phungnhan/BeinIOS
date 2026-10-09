@@ -574,12 +574,14 @@
   function slimScheduled(p) {
     const s = p.setting || {};
     const lp = p.linkPreview;
+    const article = p.type === 'ARTICLE';
     return {
       ...slimPost(p),
+      ...(article ? { text: [p.title && '### ' + p.title, p.summary].filter(Boolean).join('\n\n').slice(0, TEXT_MAX) } : {}),
       createdAt: p.createdAt || null,
       updatedAt: p.updatedAt || null,
       setting: { canComment: s.canComment !== false, canReact: s.canReact !== false, isImportant: !!s.isImportant, importantExpiredAt: s.importantExpiredAt || null },
-      thumbs: (p.media?.images || []).map((x) => httpsUrl(x?.url)).filter(Boolean).slice(0, 4),
+      thumbs: (article ? [p.coverMedia] : p.media?.images || []).map((x) => httpsUrl(x?.url)).filter(Boolean).slice(0, 4),
       linkPreview: lp?.url ? { url: webUrl(lp.url), title: lp.title || '', domain: lp.domain || '', image: httpsUrl(lp.image) } : null,
       tags: (p.tags || []).map((t) => t?.name).filter(Boolean),
       series: (p.series || []).map((x) => x?.title || x?.name).filter(Boolean),
@@ -1385,6 +1387,520 @@
     return { text, mentions: Object.fromEntries(named.map((r) => [r.user.username, mentionEntry(r.user)])) };
   }
 
+  // ---------- Giờ đăng tốt nhất ----------
+  // Tương tác của một bài = cảm xúc + 2 × bình luận. Gom theo thứ trong tuần × giờ (giờ Việt Nam).
+  // Ô ít bài được kéo về mức trung bình chung (điểm = (tổng + k × trung bình) / (số bài + k)) để một bài may mắn không lấn át.
+  const WEEKDAYS = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
+  const WEEKDAY_NAMES = ['Chủ nhật', 'Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy'];
+  const BEST_SHRINK = 2;
+
+  const vnParts = (t) => {
+    const d = new Date(t + 7 * 3600e3);
+    return { day: d.getUTCDay(), hour: d.getUTCHours() };
+  };
+
+  function bestTimes(posts, { top = 3 } = {}) {
+    const cells = Array.from({ length: 7 }, () => Array.from({ length: 24 }, () => ({ posts: 0, eng: 0 })));
+    let total = 0;
+    let sum = 0;
+    for (const p of posts || []) {
+      const t = Date.parse(p.publishedAt);
+      if (!Number.isFinite(t)) continue;
+      const { day, hour } = vnParts(t);
+      const e = (p.reactions || 0) + 2 * (p.commentsCount || 0);
+      cells[day][hour].posts++;
+      cells[day][hour].eng += e;
+      total++;
+      sum += e;
+    }
+    const mean = total ? sum / total : 0;
+    const score = (c) => (c.eng + BEST_SHRINK * mean) / (c.posts + BEST_SHRINK);
+    const grid = cells.map((row, day) => row.map((c, hour) => ({ day, hour, posts: c.posts, avg: c.posts ? c.eng / c.posts : 0, score: c.posts ? score(c) : 0 })));
+    const flat = grid.flat().filter((c) => c.posts);
+    const max = flat.reduce((m, c) => Math.max(m, c.score), 0);
+    // Gợi ý: điểm cao nhất, mỗi ngày tối đa một khung giờ để trải đều trong tuần
+    const picks = [];
+    for (const c of [...flat].sort((a, b) => b.score - a.score || b.posts - a.posts)) {
+      if (picks.length >= top) break;
+      if (picks.some((x) => x.day === c.day)) continue;
+      picks.push(c);
+    }
+    const byHour = Array.from({ length: 24 }, (_, h) => {
+      const list = grid.map((row) => row[h]).filter((c) => c.posts);
+      const n = list.reduce((s, c) => s + c.posts, 0);
+      return n ? list.reduce((s, c) => s + c.avg * c.posts, 0) / n : 0;
+    });
+    return { grid, max, mean, total, top: picks, byHour };
+  }
+
+  // Giờ tốt nhất của từng thứ trong tuần (0 = CN) theo bảng của bestTimes; null nếu ngày đó chưa có bài
+  function dayBestHours(b) {
+    return (b?.grid || []).map((row) => row.reduce((best, c) => (c.posts && (!best || c.score > best.score) ? c : best), null)?.hour ?? null);
+  }
+
+  // Lần tới (sau `now` ít nhất `minMinutes` phút) rơi vào thứ `day`, `hour` giờ đúng (giờ Việt Nam) -> ISO
+  function nextSlot(day, hour, now = Date.now(), minMinutes = MIN_SCHEDULE_MIN + 5) {
+    const vn = new Date(now + 7 * 3600e3);
+    for (let i = 0; i <= 7; i++) {
+      const d = new Date(Date.UTC(vn.getUTCFullYear(), vn.getUTCMonth(), vn.getUTCDate() + i, hour, 0, 0) - 7 * 3600e3);
+      if (vnParts(d.getTime()).day === day && d.getTime() >= now + minMinutes * 60e3) return d.toISOString();
+    }
+    return null;
+  }
+
+  // ---------- Article và Series ----------
+  // Giống web Beincom: tiêu đề ≤ 64 ký tự, tóm tắt ≤ 255, nội dung ≤ 100.000 ký tự chữ; bắt buộc ảnh bìa và ít nhất một chuyên mục.
+  // Nội dung Article là cây khối của trình soạn thảo (Plate/Slate) dạng JSON, không phải Markdown như bài thường:
+  // p, h1–h3, blockquote, ul/ol > li > lic, hr, a { url }, media_embed { url } (video); chữ đậm / nghiêng… là thuộc tính của đoạn chữ.
+  const ARTICLE_TITLE_MAX = 64;
+  const ARTICLE_SUMMARY_MAX = 255;
+  const ARTICLE_MAX = 100000;
+  const SERIES_TITLE_MAX = 64;
+  const SERIES_SUMMARY_MAX = 255;
+
+  // Mỗi khối có id 21 ký tự như web (nanoid)
+  const NODE_ID_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-';
+  function nodeId(rand = Math.random) {
+    let s = '';
+    for (let i = 0; i < 21; i++) s += NODE_ID_CHARS[Math.floor(rand() * 64) & 63];
+    return s;
+  }
+
+  // Một dòng chỉ có link YouTube / Vimeo -> khối video nhúng (web cũng nhúng như vậy)
+  const VIDEO_URL = /^https?:\/\/(?:www\.|m\.)?(?:youtube\.com\/(?:watch\?|shorts\/|embed\/|live\/)|youtu\.be\/|vimeo\.com\/\d)\S*$/i;
+
+  const INLINE_RULES = [
+    { re: /\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/, kind: 'link' },
+    { re: /`([^`\n]+)`/, kind: 'code' },
+    { re: /\*\*\*(?!\s)(.+?)\*\*\*/, marks: { bold: true, italic: true } },
+    { re: /\*\*(?!\s)(.+?)\*\*/, marks: { bold: true } },
+    { re: /~~(?!\s)(.+?)~~/, marks: { strikethrough: true } },
+    { re: /\+\+(?!\s)(.+?)\+\+/, marks: { underline: true } },
+    { re: /\*(?![\s*])([^*\n]+?)\*/, marks: { italic: true } },
+    { re: /(?<![\w\p{L}])_(?![\s_])([^_\n]+?)_(?![\w\p{L}])/u, marks: { italic: true } },
+    { re: /https?:\/\/[^\s<>()[\]]*[^\s<>()[\].,!?;:'"]/, kind: 'url' },
+  ];
+  const MARKS = ['bold', 'italic', 'underline', 'strikethrough', 'code'];
+  const sameMarks = (a, b) => MARKS.every((k) => !!a[k] === !!b[k]);
+
+  // Chữ một dòng Markdown -> các đoạn chữ / link
+  function inlineRaw(text, marks, inLink) {
+    const out = [];
+    let rest = text;
+    while (rest) {
+      let best = null;
+      for (const r of INLINE_RULES) {
+        if (inLink && (r.kind === 'link' || r.kind === 'url')) continue;
+        const m = r.re.exec(rest);
+        if (m && (!best || m.index < best.m.index)) best = { r, m };
+      }
+      if (!best) {
+        out.push({ text: rest, ...marks });
+        break;
+      }
+      const { r, m } = best;
+      if (m.index) out.push({ text: rest.slice(0, m.index), ...marks });
+      if (r.kind === 'link') out.push({ type: 'a', url: m[2], children: inlineRaw(m[1], marks, true) });
+      else if (r.kind === 'url') out.push({ type: 'a', url: m[0], children: [{ text: m[0], ...marks }] });
+      else if (r.kind === 'code') out.push({ text: m[1], ...marks, code: true });
+      else out.push(...inlineRaw(m[1], { ...marks, ...r.marks }, inLink));
+      rest = rest.slice(m.index + m[0].length);
+    }
+    return out;
+  }
+
+  // Gộp đoạn chữ cùng định dạng, bỏ đoạn rỗng; link luôn có chữ hai bên (quy ước của Slate)
+  function tidyInline(list) {
+    const out = [];
+    for (const n of list) {
+      if (n.type === 'a') {
+        n.children = tidyInline(n.children);
+        if (!out.length || out[out.length - 1].type === 'a') out.push({ text: '' });
+        out.push(n);
+        continue;
+      }
+      const prev = out[out.length - 1];
+      if (prev && !prev.type && sameMarks(prev, n)) prev.text += n.text;
+      else if (n.text || !prev || prev.type === 'a') out.push(n);
+    }
+    if (!out.length || out[out.length - 1].type === 'a') out.push({ text: '' });
+    return out.filter((n, i) => n.type || n.text || i === 0 || out[i - 1]?.type === 'a' || out.length === 1);
+  }
+
+  const inlineNodes = (text) => tidyInline(inlineRaw(String(text || ''), {}, false));
+
+  // Markdown -> nội dung Article. Mỗi dòng có chữ là một đoạn; dòng trống chỉ để tách khối.
+  function mdToPlate(md, { id = () => nodeId() } = {}) {
+    const lines = String(md || '').replace(/\r\n?/g, '\n').split('\n');
+    const nodes = [];
+    const block = (type, text, extra = {}) => ({ type, id: id(), ...extra, children: inlineNodes(text) });
+    let list = null;
+    let quote = null;
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      let m;
+      if (/^```/.test(line)) {
+        // Khối mã: mỗi dòng một đoạn chữ dạng mã
+        list = quote = null;
+        for (i++; i < lines.length && !/^```/.test(lines[i].trim()); i++) nodes.push({ type: 'p', id: id(), children: [lines[i] ? { text: lines[i], code: true } : { text: '' }] });
+        continue;
+      }
+      if (!line) {
+        list = quote = null;
+        continue;
+      }
+      if ((m = /^(#{1,6})\s+(.*)$/.exec(line))) {
+        list = quote = null;
+        nodes.push(block('h' + Math.min(3, m[1].length), m[2]));
+      } else if (/^(-{3,}|\*{3,}|_{3,})$/.test(line)) {
+        list = quote = null;
+        nodes.push({ type: 'hr', id: id(), children: [{ text: '' }] });
+      } else if ((m = /^>\s?(.*)$/.exec(line))) {
+        list = null;
+        if (quote) quote.children = tidyInline([...quote.children, { text: '\n' }, ...inlineRaw(m[1], {}, false)]);
+        else nodes.push((quote = block('blockquote', m[1])));
+      } else if ((m = /^(?:[-*+]|(\d{1,3})[.)])\s+(.*)$/.exec(line))) {
+        quote = null;
+        const type = m[1] ? 'ol' : 'ul';
+        if (!list || list.type !== type) nodes.push((list = { type, id: id(), children: [] }));
+        list.children.push({ type: 'li', id: id(), children: [{ type: 'lic', id: id(), indent: 0, listStyleType: '', children: inlineNodes(m[2]) }] });
+      } else if (VIDEO_URL.test(line)) {
+        list = quote = null;
+        nodes.push({ type: 'media_embed', id: id(), url: line, caption: [{ text: '' }], children: [{ text: '' }] });
+      } else {
+        list = quote = null;
+        nodes.push(block('p', line));
+      }
+    }
+    return nodes.length ? nodes : [{ type: 'p', id: id(), children: [{ text: '' }] }];
+  }
+
+  const nodeText = (n) => (typeof n?.text === 'string' ? n.text : (n?.children || []).map(nodeText).join(''));
+  // Chữ để đếm độ dài như web (nối các khối, bỏ xuống dòng và khoảng trắng đầu / cuối dòng)
+  function plateText(nodes) {
+    return (nodes || [])
+      .map(nodeText)
+      .join(' ')
+      .replace(/^\s+|\s+$|(\r\n|\n|\r)/gm, '');
+  }
+  // Số từ như web: đếm từ trong từng khối
+  function plateWords(nodes) {
+    return (nodes || []).reduce((n, b) => {
+      const t = nodeText(b).trim();
+      return n + (t ? t.split(/\s+/).length : 0);
+    }, 0);
+  }
+
+  // Xem trước nội dung Article (HTML đã escape; link chỉ http/https)
+  function plateHtml(nodes) {
+    const leaf = (n) => {
+      if (n.type === 'a') return `<a href="${escapeHtml(n.url)}" target="_blank" rel="noreferrer">${(n.children || []).map(leaf).join('')}</a>`;
+      let h = escapeHtml(n.text || '').replace(/\n/g, '<br>');
+      if (n.code) h = `<code>${h}</code>`;
+      if (n.bold) h = `<strong>${h}</strong>`;
+      if (n.italic) h = `<em>${h}</em>`;
+      if (n.underline) h = `<u>${h}</u>`;
+      if (n.strikethrough) h = `<s>${h}</s>`;
+      return h;
+    };
+    const inner = (n) => (n.children || []).map(leaf).join('');
+    const blockHtml = (n) => {
+      switch (n.type) {
+        case 'h1':
+        case 'h2':
+        case 'h3':
+        case 'blockquote':
+          return `<${n.type}>${inner(n)}</${n.type}>`;
+        case 'ul':
+        case 'ol':
+          return `<${n.type}>${(n.children || []).map((li) => `<li>${(li.children || []).map(inner).join('')}</li>`).join('')}</${n.type}>`;
+        case 'hr':
+          return '<hr>';
+        case 'media_embed':
+          return `<p class="embed">🎬 <a href="${escapeHtml(n.url)}" target="_blank" rel="noreferrer">${escapeHtml(n.url)}</a></p>`;
+        default:
+          return `<p>${inner(n) || '<br>'}</p>`;
+      }
+    };
+    return (nodes || []).map(blockHtml).join('');
+  }
+
+  function validateArticle({ groupIds, title, summary = '', content, categoryIds, hasCover, tags, series, scheduledAt, asGroup = false }, now = Date.now()) {
+    if (!groupIds?.length) return 'Chưa chọn group để đăng';
+    if (asGroup && groupIds.length !== 1) return 'Đăng dưới tên group: chỉ chọn một group';
+    const t = String(title || '').trim();
+    if (!t) return 'Article cần tiêu đề';
+    if (t.length > ARTICLE_TITLE_MAX) return `Tiêu đề dài ${t.length} ký tự, tối đa ${ARTICLE_TITLE_MAX}`;
+    if (String(summary || '').trim().length > ARTICLE_SUMMARY_MAX) return `Tóm tắt tối đa ${ARTICLE_SUMMARY_MAX} ký tự`;
+    const len = plateText(mdToPlate(content, { id: () => '' })).length;
+    if (!len) return 'Article chưa có nội dung';
+    if (len > ARTICLE_MAX) return `Nội dung dài ${len.toLocaleString('vi-VN')} ký tự, tối đa ${ARTICLE_MAX.toLocaleString('vi-VN')}`;
+    if (!categoryIds?.length) return 'Chọn ít nhất một chuyên mục';
+    if (!hasCover) return 'Article cần ảnh bìa';
+    if ((tags?.length || 0) > TAG_MAX) return `Tối đa ${TAG_MAX} tag mỗi bài`;
+    if ((series?.length || 0) > SERIES_MAX) return `Tối đa ${SERIES_MAX} series mỗi bài`;
+    if (scheduledAt) {
+      const at = new Date(scheduledAt).getTime();
+      if (!Number.isFinite(at)) return 'Giờ hẹn không hợp lệ';
+      if (at < now + MIN_SCHEDULE_MIN * 60e3) return `Giờ hẹn phải sau bây giờ ít nhất ${MIN_SCHEDULE_MIN} phút`;
+    }
+    return '';
+  }
+
+  // Body cho PUT content/articles/{id}/publish | schedule (giống web gửi)
+  function articleBody({ groupIds, title, summary = '', content, categoryIds, coverId, tags = [], series = [], scheduledAt = null }, { id } = {}) {
+    const nodes = mdToPlate(content, id ? { id } : {});
+    const ids = (list) => (list || []).map((x) => (typeof x === 'string' ? x : x.id));
+    return {
+      audience: { groupIds: [...groupIds], userIds: [] },
+      categories: ids(categoryIds),
+      series: ids(series),
+      content: JSON.stringify(nodes),
+      title: String(title).trim(),
+      mentions: {},
+      summary: String(summary || '').trim(),
+      coverMedia: { id: coverId },
+      tags: ids(tags),
+      wordCount: plateWords(nodes),
+      ...(scheduledAt ? { scheduledAt: new Date(scheduledAt).toISOString() } : {}),
+    };
+  }
+
+  function validateSeries({ groupIds, title, summary = '', hasCover, asGroup = false }) {
+    if (!groupIds?.length) return 'Chưa chọn group';
+    if (asGroup && groupIds.length !== 1) return 'Tạo dưới tên group: chỉ chọn một group';
+    const t = String(title || '').trim();
+    if (!t) return 'Series cần tên';
+    if (t.length > SERIES_TITLE_MAX) return `Tên series dài ${t.length} ký tự, tối đa ${SERIES_TITLE_MAX}`;
+    if (String(summary || '').trim().length > SERIES_SUMMARY_MAX) return `Mô tả tối đa ${SERIES_SUMMARY_MAX} ký tự`;
+    if (!hasCover) return 'Series cần ảnh bìa';
+    return '';
+  }
+
+  // Body cho POST content/series (hoặc content/manage/groups/{id}/series khi tạo dưới tên group) — giống web
+  function seriesBody({ groupIds, title, summary = '', coverId, isImportant = false }) {
+    return {
+      title: String(title).trim(),
+      summary: String(summary || '').trim(),
+      setting: { isImportant: !!isImportant, importantExpiredAt: null, canComment: true, canReact: true, canShare: true },
+      coverMedia: { id: coverId },
+      audience: { groupIds: [...groupIds] },
+    };
+  }
+
+  // Chuyên mục Article (GET content/category)
+  const slimCategory = (c) => ({ id: c.id, name: c.name || '', slug: c.slug || '' });
+
+  // ---------- Lịch nội dung ----------
+  // Lưới tháng (Thứ Hai đầu tuần) theo ngày Việt Nam: mảng tuần, mỗi tuần 7 ô { key: 'YYYY-MM-DD', day, inMonth }
+  function monthGrid(year, month) {
+    const first = new Date(Date.UTC(year, month, 1));
+    const lead = (first.getUTCDay() + 6) % 7; // số ô trước ngày 1 (Thứ Hai = 0)
+    const start = Date.UTC(year, month, 1 - lead);
+    const days = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+    const weeks = Math.ceil((lead + days) / 7);
+    return Array.from({ length: weeks }, (_, w) =>
+      Array.from({ length: 7 }, (_, d) => {
+        const t = new Date(start + (w * 7 + d) * 864e5);
+        return { key: t.toISOString().slice(0, 10), day: t.getUTCDate(), inMonth: t.getUTCMonth() === month };
+      }),
+    );
+  }
+
+  // ---------- Nhập nhiều bài từ CSV ----------
+  const CSV_MAX_ROWS = 100;
+
+  // Đọc CSV (dấu phẩy hoặc chấm phẩy — Excel tiếng Việt hay dùng chấm phẩy), có ngoặc kép, xuống dòng trong ô, BOM
+  function parseCsv(text) {
+    const src = String(text || '').replace(/^\uFEFF/, '');
+    const firstLine = src.split(/\r?\n/)[0] || '';
+    const delim = (firstLine.match(/;/g) || []).length > (firstLine.match(/,/g) || []).length ? ';' : ',';
+    const rows = [];
+    let row = [];
+    let cell = '';
+    let quoted = false;
+    for (let i = 0; i < src.length; i++) {
+      const ch = src[i];
+      if (quoted) {
+        if (ch === '"' && src[i + 1] === '"') {
+          cell += '"';
+          i++;
+        } else if (ch === '"') quoted = false;
+        else cell += ch;
+      } else if (ch === '"' && cell === '') quoted = true;
+      else if (ch === delim) {
+        row.push(cell);
+        cell = '';
+      } else if (ch === '\n' || ch === '\r') {
+        if (ch === '\r' && src[i + 1] === '\n') i++;
+        row.push(cell);
+        rows.push(row);
+        row = [];
+        cell = '';
+      } else cell += ch;
+    }
+    if (cell !== '' || row.length) {
+      row.push(cell);
+      rows.push(row);
+    }
+    return rows.filter((r) => r.some((c) => String(c).trim()));
+  }
+
+  const CSV_COLUMNS = {
+    content: ['noi dung', 'noi_dung', 'content', 'bai', 'bai viet', 'text'],
+    group: ['group', 'groups', 'nhom', 'dang vao'],
+    time: ['gio dang', 'gio_dang', 'thoi gian', 'thoi_gian', 'ngay gio', 'time', 'scheduled', 'scheduledat'],
+    important: ['quan trong', 'quan_trong', 'important'],
+    noComment: ['tat binh luan', 'tat_binh_luan', 'khong binh luan'],
+  };
+  const yes = (v) => /^(co|x|yes|true|1|bat)$/i.test(norm(v).trim());
+
+  // Giờ đăng theo giờ Việt Nam: dd/mm/yyyy HH:mm, yyyy-mm-dd HH:mm, yyyy-mm-ddTHH:mm; có Z / +07:00 thì đọc nguyên
+  function parseVnTime(s) {
+    const v = String(s || '').trim();
+    // Ngày giờ không có thật (31/02, 25:00) -> NaN thay vì để Date tự cộng dồn
+    const vn = (y, mo, d, h, mi) => {
+      const t = new Date(Date.UTC(y, mo - 1, d, h, mi));
+      return t.getUTCFullYear() === y && t.getUTCMonth() === mo - 1 && t.getUTCDate() === d && t.getUTCHours() === h && mi < 60 ? t.getTime() - 7 * 3600e3 : NaN;
+    };
+    let m = v.match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})[ T]+(\d{1,2})[:h](\d{2})(?::\d{2})?$/i);
+    if (m) return vn(+m[3], +m[2], +m[1], +m[4], +m[5]);
+    m = v.match(/^(\d{4})-(\d{1,2})-(\d{1,2})[ T]+(\d{1,2}):(\d{2})(?::\d{2})?$/);
+    if (m) return vn(+m[1], +m[2], +m[3], +m[4], +m[5]);
+    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:?\d{2})$/.test(v)) return Date.parse(v);
+    return NaN;
+  }
+
+  // Tên group để so khớp: bỏ dấu, chữ thường; "Community › Group", "Community > Group", "Community / Group" như nhau
+  const groupKey = (s) => norm(s).replace(/\s*[›>/]\s*/g, ' > ').replace(/\s+/g, ' ');
+
+  // Dòng CSV -> bài hẹn giờ (kèm lỗi từng dòng). groups: group đang quản trị { id, name, path? }
+  // Ô group: tên, "Community > Group" hoặc id; nhiều group cách nhau ; hoặc |
+  function csvPosts(rows, { groups = [], now = Date.now() } = {}) {
+    if (!rows.length) return { posts: [], error: 'Tệp trống' };
+    const head = rows[0].map((h) => norm(h).replace(/\s+/g, ' ').trim());
+    const col = Object.fromEntries(Object.entries(CSV_COLUMNS).map(([k, names]) => [k, head.findIndex((h) => names.includes(h))]));
+    if (col.content < 0 || col.group < 0 || col.time < 0) return { posts: [], error: 'Thiếu cột: cần có noi_dung, group, gio_dang (xem tệp mẫu)' };
+    const byKey = new Map(); // khoá -> các group khớp (tên trùng nhau ở nhiều community)
+    const add = (k, g) => {
+      if (!k) return;
+      const list = byKey.get(k) || [];
+      if (!list.includes(g)) list.push(g);
+      byKey.set(k, list);
+    };
+    for (const g of groups) {
+      add(g.id, g);
+      add(groupKey(g.name), g);
+      if (g.path) add(groupKey(g.path), g);
+    }
+    const body = rows.slice(1);
+    const posts = body.slice(0, CSV_MAX_ROWS).map((r, i) => {
+      const errors = [];
+      const content = String(r[col.content] ?? '').trim();
+      if (!content) errors.push('Thiếu nội dung');
+      else if (content.length > POST_MAX) errors.push(`Dài ${content.length} ký tự (tối đa ${POST_MAX})`);
+      const names = String(r[col.group] ?? '').split(/[;|]/).map((x) => x.trim()).filter(Boolean);
+      const targets = [];
+      for (const n of names) {
+        const list = byKey.get(n) || byKey.get(groupKey(n)) || [];
+        if (list.length === 1) targets.push(list[0]);
+        else if (list.length > 1) errors.push(`Tên "${n}" trùng ${list.length} group — ghi kèm community (vd "Community > Group")`);
+        else errors.push(`Không có group "${n}"`);
+      }
+      if (!names.length) errors.push('Thiếu group');
+      const rawTime = String(r[col.time] ?? '').trim();
+      const t = parseVnTime(rawTime);
+      if (!rawTime) errors.push('Thiếu giờ đăng');
+      else if (!Number.isFinite(t)) errors.push(`Giờ đăng "${rawTime}" không đọc được (vd 15/10/2026 20:00)`);
+      else if (t < now + (MIN_SCHEDULE_MIN + 5) * 60e3) errors.push('Giờ đăng đã qua hoặc quá gần (cần sau bây giờ ít nhất 10 phút)');
+      const important = col.important >= 0 && yes(r[col.important]);
+      const noComment = col.noComment >= 0 && yes(r[col.noComment]);
+      const post = {
+        line: i + 2,
+        content,
+        groupIds: [...new Set(targets.map((g) => g.id))],
+        groupNames: [...new Set(targets.map((g) => g.path || g.name))],
+        scheduledAt: Number.isFinite(t) ? new Date(t).toISOString() : null,
+        setting: { canComment: !noComment, canReact: true, isImportant: important, importantExpiredAt: null },
+        errors,
+      };
+      // Kiểm tra như khi bấm Đăng (cùng một hàm) để lỗi hiện ngay ở bản xem trước
+      if (!errors.length) {
+        const e = validateCompose(post, now);
+        if (e) errors.push(e);
+      }
+      return post;
+    });
+    return { posts, error: '', truncated: body.length > CSV_MAX_ROWS ? body.length - CSV_MAX_ROWS : 0 };
+  }
+
+  // Tệp mẫu (có BOM để Excel đọc đúng tiếng Việt)
+  function csvTemplate(groupNames = ['Tên group'], now = Date.now()) {
+    const day = (d, h) => {
+      const t = new Date(now + 7 * 3600e3 + d * 864e5);
+      return `${String(t.getUTCDate()).padStart(2, '0')}/${String(t.getUTCMonth() + 1).padStart(2, '0')}/${t.getUTCFullYear()} ${h}`;
+    };
+    const q = (s) => '"' + String(s).replace(/"/g, '""') + '"';
+    return '\uFEFF' + [
+      'noi_dung,group,gio_dang,quan_trong,tat_binh_luan',
+      [q('Chào cả nhà! Tối thứ 6 này có AMA, mọi người chuẩn bị câu hỏi nhé.'), q(groupNames[0]), day(1, '20:00'), 'không', 'không'].join(','),
+      [q('Nhắc lịch họp admin hằng tuần.\nDòng thứ hai cũng được.'), q(groupNames.slice(0, 2).join('; ')), day(2, '09:00'), 'có', 'không'].join(','),
+    ].join('\r\n') + '\r\n';
+  }
+
+  // ---------- Gửi thông báo về Telegram ----------
+  // Bot của chính người dùng (token từ @BotFather). Cấu hình lưu ở khoá `telegram`, không có trong sao lưu / đồng bộ.
+  const TELEGRAM_KINDS = {
+    spam: 'Đợt spam, tự ẩn spam',
+    reports: 'Báo cáo mới, bài Beincom gắn cờ',
+    violations: 'Bài / bình luận mới vi phạm',
+    queue: 'Yêu cầu tham gia, bài chờ duyệt, tự xử lý',
+    watch: 'Từ khoá theo dõi, bài chưa ai trả lời',
+    weekly: 'Tóm tắt tuần, việc đầu tuần',
+    login: 'Cần đăng nhập Beincom lại',
+  };
+  const DEFAULT_TELEGRAM = { enabled: false, token: '', chatId: '', kinds: { spam: true, reports: true, violations: true, queue: false, watch: true, weekly: true, login: true }, quietNight: false };
+
+  // Loại tin theo mã thông báo của addon
+  function telegramKind(id) {
+    if (id === 'bg-wave' || id === 'bg-autohide') return 'spam';
+    if (id === 'bg-reports' || id === 'bg-autoflag') return 'reports';
+    if (id === 'bg-flagged' || id === 'bg-comments') return 'violations';
+    if (id === 'bg-requests' || id === 'bg-auto' || String(id).startsWith('bg-posts-')) return 'queue';
+    if (id === 'bg-watch' || id === 'bg-unanswered') return 'watch';
+    if (id === 'bg-weekly' || id === 'bg-welcome') return 'weekly';
+    if (id === 'bg-login') return 'login';
+    return '';
+  }
+
+  const escHtml = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+  // Nội dung tin (parse_mode HTML): tiêu đề đậm, mô tả, link mở trên Beincom
+  function telegramText(title, message, url = '') {
+    const lines = [`<b>${escHtml(title)}</b>`];
+    if (message) lines.push(escHtml(String(message).slice(0, 900)));
+    if (/^https:\/\//.test(url)) lines.push(`<a href="${escHtml(url)}">Mở trên Beincom</a>`);
+    return lines.join('\n');
+  }
+
+  // 23:00 – 7:00 giờ Việt Nam
+  function isQuietHour(now = Date.now()) {
+    const h = new Date(now + 7 * 3600e3).getUTCHours();
+    return h >= 23 || h < 7;
+  }
+
+  function validTelegramToken(t) {
+    return /^\d{5,}:[A-Za-z0-9_-]{30,}$/.test(String(t || '').trim());
+  }
+
+  // Có gửi tin này không (bật, đủ token / chat ID, đúng loại, ngoài giờ yên lặng — đợt spam và cần đăng nhập vẫn gửi)
+  function telegramShouldSend(cfg, id, now = Date.now()) {
+    if (!cfg?.enabled || !cfg.token || !cfg.chatId) return false;
+    const kind = telegramKind(id);
+    if (!kind || !cfg.kinds?.[kind]) return false;
+    return !(cfg.quietNight && kind !== 'spam' && kind !== 'login' && isQuietHour(now));
+  }
+
   const CONTENT_STATUS = {
     DRAFT: 'Bản nháp',
     PROCESSING: 'Đang xử lý',
@@ -1887,6 +2403,39 @@
     newMembersFromActivity,
     welcomeText,
     watchHits,
+    ARTICLE_TITLE_MAX,
+    ARTICLE_SUMMARY_MAX,
+    ARTICLE_MAX,
+    SERIES_TITLE_MAX,
+    SERIES_SUMMARY_MAX,
+    nodeId,
+    mdToPlate,
+    plateText,
+    plateWords,
+    plateHtml,
+    validateArticle,
+    articleBody,
+    validateSeries,
+    seriesBody,
+    slimCategory,
+    monthGrid,
+    CSV_MAX_ROWS,
+    parseCsv,
+    parseVnTime,
+    csvPosts,
+    csvTemplate,
+    WEEKDAYS,
+    WEEKDAY_NAMES,
+    bestTimes,
+    dayBestHours,
+    nextSlot,
+    TELEGRAM_KINDS,
+    DEFAULT_TELEGRAM,
+    telegramKind,
+    telegramText,
+    isQuietHour,
+    validTelegramToken,
+    telegramShouldSend,
     DEFAULT_SHOUTOUT,
     topMembers,
     shoutoutText,

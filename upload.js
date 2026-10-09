@@ -45,8 +45,9 @@
     }
 
     // kind: 'image' | 'video' | 'file'. Trả về đối tượng để đưa vào media của bài.
-    async function upload(kind, file, onProgress = () => {}) {
-      const init = await send({ type: 'uploadInit', kind, mimeType: file.type });
+    // resource (ảnh): 'post:content' (mặc định) | 'article:cover' | 'series:cover'
+    async function upload(kind, file, onProgress = () => {}, { resource } = {}) {
+      const init = await send({ type: 'uploadInit', kind, mimeType: file.type, ...(resource ? { resource } : {}) });
       if (init?.status === 'need_login') throw new Error('Phiên đăng nhập Beincom đã hết hạn');
       if (init?.status !== 'ok') throw new Error(init?.message || 'Không xin được chỗ tải lên');
       if (kind === 'file') {

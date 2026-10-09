@@ -306,8 +306,12 @@ function autoItems(groups, settings, ctx, skipIds, profiles = null) {
 
 // ---------- Thông báo & huy hiệu ----------
 
-function notify(id, title, message) {
-  chrome.notifications.create(id, { type: 'basic', iconUrl: 'icons/icon128.png', title, message });
+// Thông báo trên máy tính (theo cài đặt "Thông báo") và gửi thêm về Telegram nếu bật (bg/telegram.js).
+// url: trang Beincom liên quan, dùng cho link trong tin Telegram.
+let notifyDesktop = true;
+function notify(id, title, message, url = '') {
+  if (notifyDesktop) chrome.notifications.create(id, { type: 'basic', iconUrl: 'icons/icon128.png', title, message });
+  forwardTelegram(id, title, message, url).catch(() => {});
 }
 
 async function updateBadge() {

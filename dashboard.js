@@ -48,46 +48,71 @@ const syncTopbar = () => document.documentElement.style.setProperty('--topbar-h'
 window.addEventListener('resize', syncTopbar);
 syncTopbar();
 
+// Vẽ theo tab: phần chung (thanh trên cùng, số trên thanh tab) luôn vẽ; phần của từng tab chỉ vẽ khi tab đó đang mở.
+// Dữ liệu đổi lúc đang ở tab khác: đánh dấu tab đó cần vẽ lại, vẽ khi mở (showTab gọi renderTab).
+const TAB_RENDER = {
+  overview: () => {
+    renderKpis();
+    renderTodo();
+    renderGroups();
+    renderWeekly();
+    renderGroupSettings();
+  },
+  members: () => {
+    renderReview();
+    if (mem.tab === 'list') renderMembers();
+    else if (mem.tab === 'activity') renderActivity();
+    else if (mem.tab === 'banned') renderBanned();
+    else {
+      renderMembersHead();
+      renderProfiles();
+    }
+  },
+  content: () => {
+    renderWaves();
+    renderApproval();
+    renderRecent();
+    renderComments();
+    renderPinned();
+  },
+  reports: () => renderReports(),
+  compose: () => {
+    renderComposeGroups();
+    renderTemplates();
+    renderMedia();
+    renderTagsSeries();
+    updateCompose();
+    renderArticle();
+    renderScheduled();
+    renderCsv();
+    renderWelcome();
+    renderShoutout();
+  },
+  stats: () => renderStatsHead(),
+  settings: () => {
+    renderRules();
+    renderSettings();
+    renderBackup();
+  },
+  log: () => renderLog(),
+};
+const tabDirty = new Set(TABS);
+
+function renderTab(t) {
+  tabDirty.delete(t);
+  TAB_RENDER[t]?.();
+}
+
 function renderAll() {
   renderTop();
-  renderKpis();
   renderBadges();
   renderTabRefresh();
-  renderStatsHead();
-  renderTodo();
-  renderGroups();
-  renderWeekly();
-  renderReview();
-  if (mem.tab === 'list') renderMembers();
-  else if (mem.tab === 'activity') renderActivity();
-  else if (mem.tab === 'banned') renderBanned();
-  else {
-    renderMembersHead();
-    renderProfiles();
-  }
-  renderWaves();
-  renderApproval();
-  renderRecent();
-  renderComments();
-  renderPinned();
-  renderGroupSettings();
-  renderReports();
-  renderComposeGroups();
-  renderTemplates();
-  renderMedia();
-  renderTagsSeries();
-  updateCompose();
-  renderScheduled();
-  renderWelcome();
-  renderShoutout();
-  renderRules();
-  renderSettings();
-  renderBackup();
-  renderLog();
+  for (const t of TABS) tabDirty.add(t);
+  renderTab(currentTab);
 }
 
 async function loadAll() {
-  const { settings, rules, postRules, groupRules, recurring, state, log, templates, profiles, syncStatus } = await chrome.storage.local.get(['settings', 'rules', 'postRules', 'groupRules', 'recurring', 'state', 'log', 'templates', 'profiles', 'syncStatus']);
+  const { settings, rules, postRules, groupRules, recurring, state, log, templates, profiles, syncStatus, telegramStatus } = await chrome.storage.local.get(['settings', 'rules', 'postRules', 'groupRules', 'recurring', 'state', 'log', 'templates', 'profiles', 'syncStatus', 'telegramStatus']);
   data = {
     settings: { ...BG.DEFAULT_SETTINGS, ...settings },
     rules: { ...BG.DEFAULT_RULES, ...rules },
@@ -99,6 +124,7 @@ async function loadAll() {
     templates: templates || [],
     profiles: profiles || { users: {} },
     syncStatus: syncStatus || null,
+    telegramStatus: telegramStatus || null,
   };
   renderAll();
   await loadDraftOnce();
@@ -112,7 +138,7 @@ async function loadAll() {
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== 'local') return;
   // Đánh dấu đã xem / lưu nháp: không cần vẽ lại cả trang
-  if (Object.keys(changes).every((k) => k === 'activitySeen' || k === 'composeDraft')) return;
+  if (Object.keys(changes).every((k) => k === 'activitySeen' || k === 'composeDraft' || k === 'articleDraft')) return;
   loadAll();
 });
 $('version').textContent = 'v' + chrome.runtime.getManifest().version;

@@ -54,10 +54,14 @@ async function doCompose({ groupIds, content, setting, scheduledAt = null, media
       return { status: 'ok', contentId: id, postStatus: p.body.data?.status || null };
     });
   }
+  return finishCompose(r, { base, contentType: 'POST', state, log });
+}
 
+// Ghi nhật ký một lần đăng (bài / Article / Series) và trả kết quả cho Dashboard
+async function finishCompose(r, { base, contentType, state, log }) {
   const status = r.dry ? 'dry' : r.status === 'ok' ? 'ok' : 'error';
   const message = r.dry ? 'Chạy thử — chưa gửi lên Beincom' : r.status === 'ok' ? BG.CONTENT_STATUS[r.postStatus] || r.postStatus || '' : r.message;
-  pushLog(log, [{ time: Date.now(), ...base, contentId: r.contentId || '', contentType: 'POST', status, message }]);
+  pushLog(log, [{ time: Date.now(), ...base, contentId: r.contentId || '', contentType, status, message }]);
   const next = r.status === 'need_login' ? { ...state, lastResult: { status: 'need_login', message: NEED_LOGIN.message, mode: r.mode || '' } } : state;
   await chrome.storage.local.set({ state: next, log });
   if (r.status === 'need_login') await updateBadge();
@@ -83,10 +87,13 @@ async function doCompose({ groupIds, content, setting, scheduledAt = null, media
 const UPLOAD_PATH = { image: 'upload/images/', video: 'upload/videos/', file: 'upload/files/' };
 const UPLOAD_WAIT_MS = { image: 120e3, video: 600e3 };
 
-async function doUploadInit({ kind, mimeType = '' }) {
+const IMAGE_RESOURCES = ['post:content', 'article:cover', 'series:cover'];
+
+async function doUploadInit({ kind, mimeType = '', resource = 'post:content' }) {
   if (!UPLOAD_PATH[kind]) return { status: 'error', message: 'Loại file không hợp lệ' };
+  if (kind === 'image' && !IMAGE_RESOURCES.includes(resource)) return { status: 'error', message: 'Loại ảnh không hợp lệ' };
   return withClient(async (client) => {
-    const body = kind === 'file' ? null : { properties: { mime_type: mimeType }, ...(kind === 'image' ? { resource: 'post:content' } : {}) };
+    const body = kind === 'file' ? null : { properties: { mime_type: mimeType }, ...(kind === 'image' ? { resource } : {}) };
     const r = await client.call('POST', UPLOAD_PATH[kind], body, kind === 'video' ? '2.0.0' : '');
     if (r.status === 401) return { ...NEED_LOGIN };
     const d = r.body?.data;
@@ -328,12 +335,13 @@ async function doScheduled() {
     const map = new Map();
     const errors = [];
     let needLogin = false;
-    await mapLimit(roots, PARALLEL, async (g) => {
+    const jobs = roots.flatMap((g) => ['POST', 'ARTICLE'].map((type) => ({ g, type })));
+    await mapLimit(jobs, PARALLEL, async ({ g, type }) => {
       let after = '';
       for (let page = 0; page < SCHEDULED_PAGES; page++) {
-        const r = await client.call('GET', `content/manage/groups/${g.id}/contents/scheduled?${qs({ limit: CONTENT_PAGE, type: 'POST', after })}`);
+        const r = await client.call('GET', `content/manage/groups/${g.id}/contents/scheduled?${qs({ limit: CONTENT_PAGE, type, after })}`);
         if (r.status === 401) return (needLogin = true);
-        if (!BG.isOk(r)) return errors.push(`${g.name}: ${BG.errMsg(r)}`);
+        if (!BG.isOk(r)) return errors.push(`${g.name}${type === 'ARTICLE' ? ' (Article)' : ''}: ${BG.errMsg(r)}`);
         const list = r.body.data?.list || [];
         for (const p of list) if (!map.has(p.id)) map.set(p.id, { ...BG.slimScheduled(p), communityName: g.communityName || g.name });
         after = r.body.data?.meta?.endCursor || '';
@@ -346,7 +354,7 @@ async function doScheduled() {
   });
 }
 
-async function doScheduleAct({ action, contentId, contentIds = null, scheduledAt, snippet = '', groupName = '', source = 'manual' }) {
+async function doScheduleAct({ action, contentId, contentIds = null, contentType = 'POST', scheduledAt, snippet = '', groupName = '', source = 'manual' }) {
   if (action !== 'reschedule' && action !== 'cancel') return { status: 'error', message: 'Thao tác không hợp lệ' };
   // Huỷ cả chuỗi bài định kỳ: nhiều bài một lần
   const ids = action === 'cancel' && contentIds?.length ? [...new Set(contentIds)] : contentId ? [contentId] : [];
@@ -357,9 +365,10 @@ async function doScheduleAct({ action, contentId, contentIds = null, scheduledAt
   }
   const { settings, state, log } = await load();
   const iso = action === 'reschedule' ? new Date(scheduledAt).toISOString() : null;
+  const article = contentType === 'ARTICLE';
   const items = ids.map((id) => ({
-    log: { kind: 'compose', source, action, contentId: id, contentType: 'POST', snippet, groupName, communityName: '', ...(iso ? { scheduledAt: iso } : {}) },
-    call: (c) => (action === 'reschedule' ? c.call('PUT', `content/contents/${id}/reschedule`, { scheduledAt: iso }) : c.call('DELETE', `content/posts/${id}`)),
+    log: { kind: 'compose', source, action, contentId: id, contentType: article ? 'ARTICLE' : 'POST', snippet, groupName, communityName: '', ...(iso ? { scheduledAt: iso } : {}) },
+    call: (c) => (action === 'reschedule' ? c.call('PUT', `content/contents/${id}/reschedule`, { scheduledAt: iso }) : c.call('DELETE', `content/${article ? 'articles' : 'posts'}/${id}`)),
     gone: true,
   }));
   const r = await performActions(items, settings);

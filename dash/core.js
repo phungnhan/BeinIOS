@@ -234,6 +234,7 @@ function showTab(t) {
   }
   writeHash();
   renderTabRefresh();
+  if (tabDirty.has(t)) renderTab(t); // dashboard.js: tab này có dữ liệu mới chưa vẽ
   ensureTabData();
   // Biểu đồ cần chiều rộng thật: vẽ lại sau khi tab hiện
   if (t === 'stats') renderStats();

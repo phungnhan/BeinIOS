@@ -53,6 +53,7 @@ function tile(label, value, sub) {
 
 function renderStats() {
   renderStatsHead();
+  renderBest();
   const g = statsGroup();
   const s = stats.built;
   const note = $('stats-note');
@@ -152,3 +153,46 @@ onSeg('stats-range', (f) => {
   loadStats();
 });
 $('btn-stats-csv').addEventListener('click', exportStats);
+
+// ---------- Giờ đăng tốt nhất ----------
+
+const HEAT_DAYS = [1, 2, 3, 4, 5, 6, 0]; // Thứ Hai trước
+
+function bestLabel(c) {
+  return `${BG.WEEKDAY_NAMES[c.day]} ${c.hour}:00`;
+}
+
+function renderBest() {
+  const posts = stats.raw?.posts;
+  const map = $('heatmap');
+  if (!posts) {
+    $('best-note').textContent = stats.loading ? 'Đang tính…' : 'Chọn group rồi bấm Tải lại để xem';
+    $('best-top').replaceChildren();
+    map.replaceChildren();
+    return;
+  }
+  const b = BG.bestTimes(posts);
+  const n = (x) => Math.round(x).toLocaleString('vi-VN');
+  $('best-note').textContent = `Theo ${b.total} bài trong ${stats.days} ngày (giờ Việt Nam). Tương tác = cảm xúc + 2 × bình luận.${b.total < 20 ? ' Ít bài nên chỉ để tham khảo.' : ''}`;
+  $('best-top').replaceChildren(
+    ...(b.top.length ? [el('b', { class: 'small', text: 'Nên đăng:' }), ...b.top.map((c) => el('span', { class: 'best-chip', title: `${c.posts} bài, trung bình ${n(c.avg)} tương tác`, text: bestLabel(c) }))] : [el('span', { class: 'muted small', text: 'Chưa có bài nào trong khoảng này.' })]),
+  );
+  const picks = new Set(b.top.map((c) => c.day * 24 + c.hour));
+  const cells = [el('div')];
+  for (let h = 0; h < 24; h++) cells.push(el('div', { class: 'hm-h', text: h % 3 === 0 ? String(h) : '' }));
+  for (const d of HEAT_DAYS) {
+    cells.push(el('div', { class: 'hm-d', text: BG.WEEKDAYS[d] }));
+    for (let h = 0; h < 24; h++) {
+      const c = b.grid[d][h];
+      const lv = b.max ? Math.round(12 + (78 * c.score) / b.max) : 0;
+      cells.push(
+        el('div', {
+          class: 'hm-c' + (c.posts ? ' has' : '') + (picks.has(d * 24 + h) ? ' pick' : ''),
+          style: c.posts ? `--lv: ${lv}%` : null,
+          title: c.posts ? `${bestLabel(c)}: ${c.posts} bài, trung bình ${n(c.avg)} tương tác` : `${bestLabel(c)}: chưa có bài`,
+        }),
+      );
+    }
+  }
+  map.replaceChildren(...cells);
+}

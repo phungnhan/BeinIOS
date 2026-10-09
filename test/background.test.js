@@ -140,8 +140,19 @@ function makeEnv({ data = fixture(), settings = {}, rules = {}, postRules = {}, 
   const calls = [];
   const bodies = [];
   const headers = {};
+  const tg = [];
   const fetch = async (url, opts = {}) => {
     const method = opts.method || 'GET';
+    // Telegram Bot API (giả lập): ghi lại tin gửi đi, không gọi mạng
+    if (url.startsWith('https://api.telegram.org/bot')) {
+      const [, token, apiMethod] = url.match(/^https:\/\/api\.telegram\.org\/bot([^/]+)\/(\w+)$/) || [];
+      tg.push({ token, method: apiMethod, body: opts.body ? JSON.parse(opts.body) : null });
+      const res = (status, body) => ({ status, json: async () => body });
+      if (data.tgBadToken) return res(401, { ok: false, error_code: 401, description: 'Unauthorized' });
+      if (apiMethod === 'getUpdates') return res(200, { ok: true, result: data.tgUpdates || [] });
+      if (data.tgNoChat) return res(400, { ok: false, error_code: 400, description: 'Bad Request: chat not found' });
+      return res(200, { ok: true, result: { message_id: tg.length } });
+    }
     const p = url.replace(API, '');
     calls.push(`${method} ${p}`);
     if (opts.body) bodies.push([`${method} ${p}`, JSON.parse(opts.body)]);
@@ -281,7 +292,7 @@ function makeEnv({ data = fixture(), settings = {}, rules = {}, postRules = {}, 
     if (path.match(/^content\/posts\/\w+$/) && method === 'PUT') return reply(200, ok({ status: 'PUBLISHED' }));
     // Tag và series
     const all = new URLSearchParams(query);
-    if (path === 'content/tags' || path === 'content/series') {
+    if ((path === 'content/tags' || path === 'content/series') && method === 'GET') {
       const kind = path.split('/')[1];
       const list = all.getAll('groupIds[]').flatMap((id) => data[kind][id] || []);
       const offset = Number(q.offset || 0);
@@ -312,6 +323,16 @@ function makeEnv({ data = fixture(), settings = {}, rules = {}, postRules = {}, 
       if (data.uploadWaitHang) return new Promise((_, reject) => opts.signal?.addEventListener('abort', () => reject(new Error('aborted'))));
       return reply(200, ok(data.uploadResult || { url: 'https://media.beincom.com/' + m[2], status: 'DONE', properties: { width: 800, height: 600, mime_type: 'image/png' } }));
     }
+    // Article, Series, chuyên mục
+    if (path === 'content/category') return reply(200, ok({ list: [{ id: 'cat1', name: 'Business & Finance', slug: 'business-finance', level: 1 }, { id: 'cat2', name: 'Technology', slug: 'technology', level: 1 }], meta: { total: 2 } }));
+    if (path === 'content/articles' && method === 'POST') return reply(201, ok({ id: `art${++data.postSeq}`, status: 'DRAFT', type: 'ARTICLE' }));
+    if (path.match(/^content\/manage\/groups\/\w+\/articles$/) && method === 'POST') return reply(201, ok({ id: `gart${++data.postSeq}`, status: 'DRAFT', type: 'ARTICLE' }));
+    if ((m = path.match(/^content\/articles\/(\w+)\/(publish|schedule)$/)) && method === 'PUT') {
+      if (data.failArticle) return reply(400, { code: 'api.validation_error', meta: { message: 'coverMedia is invalid' } });
+      return reply(200, ok({ id: m[1], type: 'ARTICLE', status: m[2] === 'publish' ? 'PUBLISHED' : 'WAITING_SCHEDULE' }));
+    }
+    if (path.match(/^content\/articles\/\w+$/) && method === 'DELETE') return reply(200, ok(true));
+    if ((path === 'content/series' || path.match(/^content\/manage\/groups\/\w+\/series$/)) && method === 'POST') return reply(201, ok({ id: `ser${++data.postSeq}`, type: 'SERIES', status: 'PUBLISHED' }));
     // Đăng bài
     if (path === 'content/posts' && method === 'POST') return reply(201, ok({ id: `new${++data.postSeq}`, status: 'DRAFT' }));
     if (path.match(/^content\/manage\/groups\/\w+\/posts$/) && method === 'POST') {
@@ -326,7 +347,7 @@ function makeEnv({ data = fixture(), settings = {}, rules = {}, postRules = {}, 
     if ((m = path.match(/^content\/posts\/(\w+)$/)) && method === 'DELETE') return m[1].startsWith('gone') ? goneReply() : reply(200, ok(true));
     if ((m = path.match(/^content\/contents\/(gone\w*)\/(hide|reschedule)$/))) return goneReply();
     if ((m = path.match(/^content\/manage\/groups\/(\w+)\/contents\/scheduled$/))) {
-      const all = data.scheduled[m[1]] || [];
+      const all = (data.scheduled[m[1]] || []).filter((x) => (x.type || 'POST') === (q.type || 'POST'));
       const start = Number(q.after || 0);
       const list = all.slice(start, start + Number(q.limit));
       const more = start + list.length < all.length;
@@ -412,7 +433,7 @@ function makeEnv({ data = fixture(), settings = {}, rules = {}, postRules = {}, 
 
   // structuredClone: đưa kết quả về realm của test để deepEqual so được
   const send = (msg) => new Promise((resolve) => listeners.message(msg, {}, (r) => resolve(structuredClone(r))));
-  return { send, storage, calls, bodies, headers, notifications, tabsCreated, badge, data, listeners, syncStore, syncWrites };
+  return { send, storage, calls, bodies, headers, notifications, tabsCreated, badge, data, listeners, syncStore, syncWrites, tg };
 }
 
 const scan = (env, source = 'dashboard') => env.send({ type: 'scan', source });
@@ -1977,4 +1998,182 @@ test('khôi phục sao lưu giữ công tắc đồng bộ của máy này', asy
   const env = makeEnv({ settings: { syncSettings: true } });
   await env.send({ type: 'restoreBackup', data: { settings: { syncSettings: false, intervalMin: 120 } } });
   assert.deepEqual([env.storage.settings.syncSettings, env.storage.settings.intervalMin], [true, 120]);
+});
+
+// ---------- Gửi thông báo về Telegram ----------
+
+const TG_TOKEN = '123456789:' + 'A'.repeat(35); // dạng token giả, không phải token thật
+
+test('Telegram: quét tự động gửi tin đúng loại (kể cả khi tắt thông báo máy tính), có link; loại tắt thì không gửi', async () => {
+  const data = fixture();
+  const env = makeEnv({ data, settings: { notify: false }, postRules: { blockedDomains: ['t.me'] } });
+  env.storage.telegram = { enabled: true, token: TG_TOKEN, chatId: '42', kinds: { violations: true, queue: false } };
+  await scan(env); // lần đầu: chỉ ghi nhận
+  env.data.timeline.gCL.unshift(post('t5', 'Vào t.me/abc <nhận quà>', { publishedAt: nowIso(5) }));
+  env.data.requests.gFood.push(jr(9)); // yêu cầu mới: loại "queue" đang tắt
+  env.listeners.alarm({ name: 'beingroup-scan' });
+  await scan(env, 'popup');
+  assert.equal(env.notifications.length, 0); // tắt thông báo máy tính
+  const sent = env.tg.filter((m) => m.method === 'sendMessage');
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].token, TG_TOKEN);
+  assert.deepEqual([sent[0].body.chat_id, sent[0].body.parse_mode, sent[0].body.disable_web_page_preview], ['42', 'HTML', true]);
+  assert.match(sent[0].body.text, /^<b>BeinGroup: 1 bài mới vi phạm quy tắc<\/b>\nTác giả t5\n<a href="https:\/\/group\.beincom\.com\/posts\/t5">Mở trên Beincom<\/a>$/);
+  assert.equal(env.storage.telegramStatus.ok, true);
+  // Bấm Quét ngay trên Dashboard: không gửi
+  env.data.timeline.gCL.unshift(post('t6', 'Lại t.me/xyz', { publishedAt: nowIso(1) }));
+  await scan(env);
+  assert.equal(env.tg.filter((m) => m.method === 'sendMessage').length, 1);
+  // Tắt Telegram: không gửi gì
+  const off = makeEnv({ data: fixture(), postRules: { blockedDomains: ['t.me'] } });
+  off.storage.telegram = { enabled: false, token: TG_TOKEN, chatId: '42' };
+  await scan(off);
+  off.data.timeline.gCL.unshift(post('t5', 'Vào t.me/abc', { publishedAt: nowIso(5) }));
+  off.listeners.alarm({ name: 'beingroup-scan' });
+  await scan(off, 'popup');
+  assert.equal(off.tg.length, 0);
+  assert.ok(off.notifications.some((n) => n.id === 'bg-flagged'));
+});
+
+test('Telegram: gửi thử, lấy chat ID, báo lỗi dễ hiểu (token sai, chưa bấm Start, sai dạng)', async () => {
+  const data = fixture();
+  data.tgUpdates = [{ update_id: 1, message: { chat: { id: 111, first_name: 'Cũ' } } }, { update_id: 2, message: { chat: { id: 777, first_name: 'Kai', last_name: 'Crypto' } } }];
+  const env = makeEnv({ data });
+  assert.match((await env.send({ type: 'telegramTest', token: 'abc', chatId: '1' })).message, /chưa đúng dạng/);
+  assert.match((await env.send({ type: 'telegramTest', token: TG_TOKEN, chatId: '' })).message, /Chưa có chat ID/);
+  assert.equal(env.tg.length, 0);
+  const ok = await env.send({ type: 'telegramTest', token: TG_TOKEN, chatId: '777' });
+  assert.equal(ok.status, 'ok');
+  assert.match(env.tg.at(-1).body.text, /tin thử/);
+  assert.deepEqual(await env.send({ type: 'telegramChatId', token: TG_TOKEN }), { status: 'ok', chatId: '777', name: 'Kai Crypto' });
+  env.data.tgUpdates = [];
+  assert.match((await env.send({ type: 'telegramChatId', token: TG_TOKEN })).message, /bấm Start/);
+  env.data.tgNoChat = true;
+  assert.match((await env.send({ type: 'telegramTest', token: TG_TOKEN, chatId: '5' })).message, /Chat ID không đúng/);
+  env.data.tgBadToken = true;
+  assert.match((await env.send({ type: 'telegramTest', token: TG_TOKEN, chatId: '5' })).message, /Token bot không đúng/);
+  assert.deepEqual([env.storage.telegramStatus.ok, env.storage.telegramStatus.error], [false, 'Token bot không đúng']);
+  // Token không nằm trong sao lưu / đồng bộ
+  env.storage.telegram = { enabled: true, token: TG_TOKEN, chatId: '5' };
+  assert.ok(!('telegram' in BG.makeBackup(env.storage).data));
+});
+
+// ---------- Article và Series ----------
+
+const ART = (extra = {}) => ({ type: 'composeArticle', groupIds: ['gCL'], title: '  Bản tin tuần  ', summary: 'Tóm tắt', content: '## Mở đầu\nĐoạn **đậm**', categoryIds: ['cat1'], coverId: 'cov1', ...extra });
+
+test('Article: đọc chuyên mục; đăng = tạo nháp rồi publish với nội dung dạng trình soạn thảo, ghi nhật ký', async () => {
+  const env = makeEnv({ settings: { dryRun: false } });
+  await scan(env);
+  const cats = await env.send({ type: 'categories' });
+  assert.deepEqual(cats.items, [{ id: 'cat1', name: 'Business & Finance', slug: 'business-finance' }, { id: 'cat2', name: 'Technology', slug: 'technology' }]);
+  assert.ok(env.calls.includes('GET content/category?name='));
+  const r = await env.send(ART());
+  assert.deepEqual([r.status, r.ok, r.contentId, r.postStatus], ['ok', 1, 'art1', 'PUBLISHED']);
+  assert.deepEqual(writes(env), ['POST content/articles', 'PUT content/articles/art1/publish']);
+  assert.deepEqual(env.bodies[0][1], { audience: { groupIds: ['gCL'] }, isEnableDonation: false });
+  const b = env.bodies[1][1];
+  assert.deepEqual(Object.keys(b).sort(), ['audience', 'categories', 'content', 'coverMedia', 'mentions', 'series', 'summary', 'tags', 'title', 'wordCount']);
+  assert.deepEqual([b.audience, b.categories, b.coverMedia, b.title, b.summary, b.wordCount, b.mentions], [{ groupIds: ['gCL'], userIds: [] }, ['cat1'], { id: 'cov1' }, 'Bản tin tuần', 'Tóm tắt', 4, {}]);
+  const nodes = JSON.parse(b.content);
+  assert.deepEqual(
+    nodes.map((n) => [n.type, n.id.length, n.children]),
+    [
+      ['h2', 21, [{ text: 'Mở đầu' }]],
+      ['p', 21, [{ text: 'Đoạn ' }, { text: 'đậm', bold: true }]],
+    ],
+  );
+  const [e] = env.storage.log;
+  assert.deepEqual([e.kind, e.action, e.status, e.contentType, e.contentId, e.snippet], ['compose', 'publish', 'ok', 'ARTICLE', 'art1', '[Article] Bản tin tuần — Tóm tắt']);
+});
+
+test('Article: hẹn giờ kèm series / tag (kiểm tra trước), dưới tên group; lỗi thì xoá nháp; thiếu dữ liệu thì không gọi API', async () => {
+  const env = makeEnv({ settings: { dryRun: false } });
+  await scan(env);
+  const at = new Date(Date.now() + 5 * 3600e3).toISOString();
+  const r = await env.send(ART({ groupIds: ['gFood'], scheduledAt: at, series: [{ id: 'sF1', title: 'Series F' }], tags: [{ id: 'tF1', name: 'tag' }], asGroup: true }));
+  assert.deepEqual([r.ok, r.postStatus], [1, 'WAITING_SCHEDULE']);
+  assert.deepEqual(writes(env), ['POST content/contents/validate-series-tags', 'POST content/manage/groups/gFood/articles', 'PUT content/articles/gart1/schedule']);
+  const b = env.bodies.find(([c]) => c === 'PUT content/articles/gart1/schedule')[1];
+  assert.deepEqual([b.scheduledAt, b.series, b.tags], [at, ['sF1'], ['tF1']]);
+  assert.match(env.storage.log[0].snippet, /^\[Article\] \[Tên group\] /);
+  // Tag không dùng được: báo tên, không tạo nháp
+  const bad = await env.send(ART({ groupIds: ['gFood'], tags: [{ id: 'tBad1', name: 'tag cũ' }] }));
+  assert.match(bad.message, /tag cũ/);
+  assert.equal(env.calls.filter((c) => c === 'POST content/articles').length, 0);
+  // Publish lỗi: xoá nháp
+  env.data.failArticle = true;
+  const fail = await env.send(ART());
+  assert.deepEqual([fail.status, fail.errors], ['error', ['Đăng Article lỗi: coverMedia is invalid']]);
+  assert.deepEqual(writes(env).slice(-3), ['POST content/articles', 'PUT content/articles/art2/publish', 'DELETE content/articles/art2']);
+  // Thiếu dữ liệu
+  const before = writes(env).length;
+  for (const [extra, re] of [
+    [{ title: ' ' }, /tiêu đề/],
+    [{ title: 'x'.repeat(65) }, /tối đa 64/],
+    [{ summary: 'x'.repeat(256) }, /255/],
+    [{ content: '   \n ' }, /chưa có nội dung/],
+    [{ categoryIds: [] }, /chuyên mục/],
+    [{ coverId: '' }, /ảnh bìa/],
+    [{ groupIds: ['gCL', 'gFood'], asGroup: true }, /một group/],
+    [{ scheduledAt: new Date(Date.now() + 60e3).toISOString() }, /ít nhất 5 phút/],
+    [{ groupIds: ['gOther'] }, /quét lại/],
+  ]) {
+    const x = await env.send(ART(extra));
+    assert.match(x.message, re, JSON.stringify(extra));
+  }
+  assert.equal(writes(env).length, before);
+});
+
+test('Article / Series: chạy thử chỉ ghi nhật ký', async () => {
+  const env = makeEnv();
+  await scan(env);
+  const a = await env.send(ART());
+  const s = await env.send({ type: 'composeSeries', groupIds: ['gCL'], title: 'Series mới', coverId: 'dry-run' });
+  assert.deepEqual([a.dryRun, s.dryRun], [true, true]);
+  assert.equal(writes(env).length, 0);
+  assert.deepEqual(env.storage.log.map((e) => [e.status, e.contentType]), [['dry', 'SERIES'], ['dry', 'ARTICLE']]);
+});
+
+test('Series: tạo bằng content/series (hoặc dưới tên group) với body giống web', async () => {
+  const env = makeEnv({ settings: { dryRun: false } });
+  await scan(env);
+  const r = await env.send({ type: 'composeSeries', groupIds: ['gCL', 'gCLsub'], title: ' Kiến thức ví ', summary: 'Gom bài về ví', coverId: 'scov', isImportant: true });
+  assert.deepEqual([r.status, r.contentId], ['ok', 'ser1'], r.message);
+  assert.deepEqual(env.bodies[0], [
+    'POST content/series',
+    { title: 'Kiến thức ví', summary: 'Gom bài về ví', setting: { isImportant: true, importantExpiredAt: null, canComment: true, canReact: true, canShare: true }, coverMedia: { id: 'scov' }, audience: { groupIds: ['gCL', 'gCLsub'] } },
+  ]);
+  await env.send({ type: 'composeSeries', groupIds: ['gFood'], title: 'S2', coverId: 'c2', asGroup: true });
+  assert.equal(writes(env).at(-1), 'POST content/manage/groups/gFood/series');
+  assert.deepEqual(env.storage.log.map((e) => e.snippet), ['[Series] [Tên group] S2', '[Series] Kiến thức ví — Gom bài về ví']);
+  const bad = await env.send({ type: 'composeSeries', groupIds: ['gCL'], title: 'S3', coverId: '' });
+  assert.match(bad.message, /ảnh bìa/);
+});
+
+test('ảnh bìa: xin chỗ tải lên với resource article:cover / series:cover; loại khác bị từ chối', async () => {
+  const env = makeEnv();
+  await scan(env);
+  await env.send({ type: 'uploadInit', kind: 'image', mimeType: 'image/jpeg', resource: 'article:cover' });
+  await env.send({ type: 'uploadInit', kind: 'image', mimeType: 'image/png', resource: 'series:cover' });
+  assert.deepEqual(env.bodies.map(([, b]) => b.resource), ['article:cover', 'series:cover']);
+  const bad = await env.send({ type: 'uploadInit', kind: 'image', mimeType: 'image/png', resource: 'user:avatar' });
+  assert.equal(bad.status, 'error');
+  assert.equal(env.bodies.length, 2);
+});
+
+test('bài đã hẹn giờ gồm cả Article (tiêu đề, tóm tắt, ảnh bìa); huỷ Article xoá đúng chỗ', async () => {
+  const data = fixture();
+  data.scheduled.gCL.push({ id: 'a1', type: 'ARTICLE', title: 'Bản tin tuần', summary: 'Tóm tắt', content: '[{"type":"p"}]', coverMedia: { url: 'https://media.beincom.com/image/variants/article/cover/c1' }, actor: { id: 'me1', username: 'kai', fullname: 'Kai' }, audience: { groups: [{ id: 'gCL', name: 'Crypto Life' }] }, status: 'WAITING_SCHEDULE', scheduledAt: '2026-10-09T05:00:00Z' });
+  const env = makeEnv({ data, settings: { dryRun: false } });
+  await scan(env);
+  const list = await env.send({ type: 'scheduled' });
+  assert.ok(env.calls.includes('GET content/manage/groups/gCL/contents/scheduled?limit=25&type=ARTICLE'));
+  const a = list.items.find((p) => p.id === 'a1');
+  assert.deepEqual([a.type, a.title, a.text, a.thumbs], ['ARTICLE', 'Bản tin tuần', '### Bản tin tuần\n\nTóm tắt', ['https://media.beincom.com/image/variants/article/cover/c1']]);
+  assert.equal(list.items.length, 3);
+  const r = await env.send({ type: 'scheduleAct', action: 'cancel', contentId: 'a1', contentType: 'ARTICLE' });
+  assert.equal(r.ok, 1);
+  assert.deepEqual(writes(env), ['DELETE content/articles/a1']);
+  assert.equal(env.storage.log[0].contentType, 'ARTICLE');
 });

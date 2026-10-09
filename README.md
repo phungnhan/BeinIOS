@@ -21,7 +21,7 @@ Nút **↻ Tải lại** bên phải thanh tab chỉ tải dữ liệu của tab
 | Thành viên | Như Tổng quan, cộng danh sách thành viên hoặc nhật ký vào/rời đang xem |
 | Bài viết | Hàng chờ duyệt bài và bài mới đăng (không đọc yêu cầu tham gia) |
 | Báo cáo | Mục đang xem (người dùng báo cáo / gắn cờ tự động / đã ẩn) của group đang chọn, rồi cập nhật số đếm trên tab và icon |
-| Đăng bài | Bài đã hẹn giờ |
+| Đăng bài | Bài đã hẹn giờ (cả Article) |
 | Thống kê | Tính lại số liệu |
 
 Tab Quy tắc & cài đặt và Nhật ký chỉ dùng dữ liệu trong máy nên không có nút.
@@ -102,7 +102,7 @@ Tab Quy tắc & cài đặt và Nhật ký chỉ dùng dữ liệu trong máy n�
     - Một file lỗi thì dừng, không đăng; bấm Đăng lần nữa để thử lại (file đã tải xong không tải lại).
     - Có thể đăng bài chỉ có ảnh / video / tệp, không cần chữ.
   - Tuỳ chọn cho bình luận, cho thả cảm xúc, đánh dấu **Quan trọng** với hạn như trên Beincom: không hết hạn, 1 ngày, 3 ngày, 1 tuần, 2 tuần, 1 tháng, 3 tháng, 6 tháng, 1 năm, hoặc tự chọn ngày giờ. Hạn tính từ lúc bài được đăng (giờ hẹn nếu hẹn giờ).
-  - Đăng ngay hoặc **hẹn giờ** (ít nhất 5 phút sau). Hẹn giờ dùng chức năng có sẵn của Beincom, nên không cần mở trình duyệt lúc tới giờ.
+  - Đăng ngay hoặc **hẹn giờ** (ít nhất 5 phút sau). Khi hẹn giờ, nút **⏱ Giờ tốt nhất** gợi ý 3 thời điểm sắp tới theo bài 30 ngày của community đang chọn; bấm là điền vào ô giờ đăng. Hẹn giờ dùng chức năng có sẵn của Beincom, nên không cần mở trình duyệt lúc tới giờ.
   - **Chào thành viên mới**: chọn group và 7 / 14 / 30 ngày, bấm **Tìm người mới** (group gốc: danh sách thành viên mới vào trước, bỏ admin; group con: nhật ký vào / rời, bỏ người đã rời). Tick chọn người (người có hồ sơ vi phạm bỏ chọn sẵn), bấm **Soạn bài chào**: addon điền bài chào có @tên từng người (tối đa 50 người được nhắc) vào ô soạn bài, bạn xem lại rồi Đăng hoặc Hẹn giờ.
     - **Mẫu bài chào** sửa được, dùng `{so_nguoi}`, `{danh_sach}`, `{group}`.
     - Sáng thứ Hai (sau 8 giờ) có thông báo nhắc; bấm vào thì mở thẳng công cụ này và tìm người mới (tắt ở Cài đặt → Nhắc chào thành viên mới).
@@ -122,10 +122,27 @@ Tab Quy tắc & cài đặt và Nhật ký chỉ dùng dữ liệu trong máy n�
     - Nội dung đã định dạng (thu gọn, bấm để xem hết), ảnh thu nhỏ, thẻ xem trước link, video / tệp, tag, series, người được nhắc tên.
     - Cài đặt khác mặc định: Quan trọng đến lúc nào, tắt bình luận, tắt cảm xúc.
     - Đổi giờ, huỷ (xoá bài; chỉ bài của chính bạn).
+    - Có cả **Article** hẹn giờ: hiện tiêu đề, tóm tắt, ảnh bìa; huỷ thì xoá đúng Article.
+    - **Lịch nội dung**: đổi cách xem **Danh sách | Tuần | Tháng** (giờ Việt Nam, tuần bắt đầu Thứ Hai), ◀ ▶ và **Hôm nay** để chuyển.
+      - Mỗi ngày hiện các bài hẹn giờ (🔁 là bài định kỳ, viền đỏ là bài hẹn giờ lỗi); ô tháng hiện 3 bài, bấm "+N bài nữa" để xem tuần đó.
+      - Bấm một bài: về dạng danh sách, cuộn tới bài đó để đổi giờ hoặc huỷ.
+      - **+** ở một ngày: khung Soạn bài chuyển sang Hẹn giờ vào ngày đó, lúc giờ nên đăng của ngày (nếu đã tính) hoặc 20:00.
+      - **⏱ giờ nên đăng mỗi ngày** theo bài 30 ngày của community đang chọn ở khung Soạn bài (như nút Giờ tốt nhất).
+  - **Nhập nhiều bài từ CSV**: soạn lịch đăng trong Excel / Google Sheets rồi hẹn giờ một lần (tối đa 100 bài mỗi tệp).
+    - Cột bắt buộc: `noi_dung`, `group` (tên group, "Community > Group" hoặc id; nhiều group cách nhau `;` hoặc `|`), `gio_dang` (giờ Việt Nam: `15/10/2026 20:00`, `2026-10-15 20:00`…). Cột tuỳ chọn: `quan_trong`, `tat_binh_luan` (có / không). Tên cột có dấu hay không đều được.
+    - Đọc được dấu phẩy hoặc chấm phẩy, ô có xuống dòng, tệp UTF-8 hoặc bảng mã Windows của Excel. **Tải tệp mẫu** có sẵn tên group của bạn. Kéo thả tệp vào thẻ cũng được.
+    - Bản xem trước báo lỗi từng dòng (thiếu nội dung, group không có hoặc tên trùng, giờ không đọc được, đã qua…) và cảnh báo (dính quy tắc bài viết, trùng giờ cùng group). Dòng lỗi bị bỏ qua.
+    - Hẹn lần lượt từng bài (nghỉ theo cài đặt giữa hai thao tác, ít nhất 1 giây); lỗi đăng nhập hoặc 3 bài lỗi liên tiếp thì dừng, bấm lại để hẹn tiếp các bài còn lại.
+  - **Article & Series**:
+    - **Soạn Article** giống web Beincom: tiêu đề (≤ 64 ký tự), tóm tắt (≤ 255), **ảnh bìa** (bắt buộc), **chuyên mục** (ít nhất một), nội dung (≤ 100.000 ký tự), thêm vào series, gắn tag, đăng ngay hoặc **hẹn giờ**, đăng dưới tên group.
+    - Nội dung viết bằng Markdown: `#`/`##`/`###` tiêu đề, `**đậm**`, `*nghiêng*`, `~~gạch~~`, `++gạch chân++`, `` `mã` ``, `- danh sách`, `1. đánh số`, `> trích dẫn`, `---`, `[chữ](link)`; một dòng chỉ có link YouTube / Vimeo thành video nhúng. Addon tự chuyển sang định dạng trình soạn thảo Article của Beincom. Có **Xem trước** và đếm từ / ký tự.
+    - **Tạo Series**: tên (≤ 64), mô tả (≤ 255), ảnh bìa, đánh dấu Quan trọng, tạo dưới tên group.
+    - Nháp chữ tự lưu; ảnh bìa thì không (chọn lại sau khi mở lại Dashboard).
 - **Thống kê** (chọn community hoặc group, 7 / 30 / 90 ngày)
   - Ô số liệu: thành viên hiện tại, số người vào / rời, bài mới, lượt cảm xúc và bình luận.
   - Biểu đồ số thành viên, vào / rời mỗi ngày, bài mới mỗi ngày. Rê chuột xem số liệu từng ngày; có bảng số liệu và xuất CSV.
   - **Bài nổi bật** (theo cảm xúc + bình luận) và **Người đăng tích cực**.
+  - **Giờ đăng tốt nhất**: bảng nhiệt 7 ngày × 24 giờ (giờ Việt Nam) theo tương tác trung bình mỗi bài (cảm xúc + 2 × bình luận) và 3 khung giờ nên đăng (mỗi ngày một khung). Ô ít bài được kéo về mức trung bình chung để một bài may mắn không lấn át.
   - Nguồn số liệu:
     - **Chủ / admin community**: số liệu chính thức của Beincom (thành viên và số bài theo ngày).
     - **Admin group**: addon tự tính từ nhật ký hoạt động, bài trên các group bạn quản trị, và số thành viên addon ghi lại sau mỗi lần quét. Biểu đồ số thành viên chỉ có từ ngày cài addon.
@@ -135,6 +152,10 @@ Tab Quy tắc & cài đặt và Nhật ký chỉ dùng dữ liệu trong máy n�
     - Quy tắc riêng của community (group gốc) dùng luôn cho các group con chưa có quy tắc riêng.
     - Group chưa có quy tắc riêng thì xem được quy tắc đang dùng (chỉ đọc). **Bỏ quy tắc riêng** để quay về quy tắc của community hoặc quy tắc chung.
     - Chấm yêu cầu tham gia, bài chờ duyệt, bài mới, tự xử lý và số trên icon đều theo quy tắc của group. Bài đăng vào nhiều group lấy kết quả nặng nhất.
+  - **Gửi thông báo về Telegram** (mặc định tắt): thông báo của addon gửi thêm vào Telegram qua bot của chính bạn, mỗi tin có link mở trên Beincom; vẫn gửi khi đã tắt thông báo trên máy tính.
+    - Tạo bot với @BotFather, dán token, bấm **Lấy chat ID** (sau khi đã bấm Start với bot), **Gửi thử**, rồi **Lưu**. Addon xin quyền kết nối `api.telegram.org` lúc bấm (quyền tuỳ chọn, không có khi cài).
+    - Chọn loại tin: đợt spam / tự ẩn, báo cáo / gắn cờ, bài / bình luận vi phạm, yêu cầu tham gia / bài chờ duyệt (mặc định tắt), từ khoá / bài bỏ ngỏ, tóm tắt tuần, cần đăng nhập lại. Tuỳ chọn không gửi 23:00 – 7:00 (trừ đợt spam và cần đăng nhập).
+    - Token chỉ lưu trong trình duyệt này: không có trong tệp sao lưu, không đồng bộ. Addon chỉ gọi `sendMessage` và `getUpdates` (khi bấm Lấy chat ID).
   - **Đồng bộ giữa các máy** (mặc định tắt): cài đặt, quy tắc chung và riêng, mẫu bài chào / vinh danh đi theo tài khoản Chrome / Edge sang máy khác có cài BeinGroup (chrome.storage.sync). Bật lần đầu mà tài khoản đã có bản đồng bộ từ máy khác thì addon hỏi lấy bản nào.
     - Không đồng bộ: công tắc bật addon, công tắc đồng bộ (thuộc từng máy), mẫu bài đăng, hồ sơ vi phạm. Mục nào quá 8 KB (giới hạn của trình duyệt, vd quy tắc riêng của rất nhiều group) thì bỏ qua và ghi rõ — dùng Sao lưu.
   - **Sao lưu cài đặt**: **Tải bản sao lưu** tạo tệp JSON gồm cài đặt, quy tắc (chung và riêng), mẫu bài; tuỳ chọn kèm hồ sơ vi phạm. Không chứa mật khẩu hay phiên đăng nhập.
@@ -227,7 +248,9 @@ Chi tiết từng API nằm trong [API.md](API.md). Tóm tắt:
 - **Bình luận**: `GET content/comments?postId=…&limit=25` (bình luận gốc, mới nhất trước); trả lời: thêm `parentId={id bình luận}`; ẩn: `POST content/comments/{id}/hide` với `{ reasonType }`; viết: `POST content/comments` hoặc `POST content/comments/{id}/reply` với `{ postId, content, media, mentions }`.
 - **Người mới**: group gốc `GET group/manage/communities/{communityId}/members?sort=joined_at:desc` (dừng khi gặp người vào trước khoảng ngày); group con `GET group/groups/{id}/activity-logs` (sự kiện vào / rời).
 - **Đăng dưới tên group**: bản nháp tạo bằng `POST content/manage/groups/{groupId}/posts` thay cho `POST content/posts`, các bước sau như bài thường.
-- **Bài đã hẹn giờ**: `GET content/manage/groups/{groupId gốc}/contents/scheduled`; đổi giờ: `PUT content/contents/{id}/reschedule`; huỷ: `DELETE content/posts/{id}`.
+- **Bài đã hẹn giờ**: `GET content/manage/groups/{groupId gốc}/contents/scheduled?type=POST` và `type=ARTICLE`; đổi giờ: `PUT content/contents/{id}/reschedule`; huỷ: `DELETE content/posts/{id}` (Article: `DELETE content/articles/{id}`).
+- **Article**: chuyên mục `GET content/category?name=`; ảnh bìa tải như ảnh bài viết với `resource: 'article:cover'`; `POST content/articles` (hoặc `content/manage/groups/{groupId}/articles` khi đăng dưới tên group) tạo nháp → `PUT content/articles/{id}/publish` hoặc `/schedule` với `{ audience: { groupIds, userIds }, categories, series, tags, title, summary, coverMedia: { id }, content, mentions, wordCount, scheduledAt? }`. `content` là chuỗi JSON các khối của trình soạn thảo (`p`, `h1`–`h3`, `ul`/`ol` > `li` > `lic`, `blockquote`, `hr`, `a { url }`, `media_embed { url }`; chữ đậm / nghiêng… là thuộc tính của đoạn chữ; mỗi khối có `id` 21 ký tự). Bước sau lỗi thì xoá nháp.
+- **Series**: ảnh bìa với `resource: 'series:cover'`; `POST content/series` (hoặc `content/manage/groups/{groupId}/series`) với `{ title, summary, setting: { isImportant, importantExpiredAt, canComment, canReact, canShare }, coverMedia: { id }, audience: { groupIds } }`.
 - **Cài đặt group**: đọc `GET group/groups/{id}/settings`; đổi `PUT group/groups/{id}/settings` với một khoá snake_case (vd `{ id, is_join_approval: false }`); Duyệt bài: `PUT group/communities/{communityId}/content-settings` với `{ group_id, content_approval: { value }, is_update_all: false }`. Quyền lấy từ `group/me/permissions` (`edit_join_setting`, `edit_privacy`).
 - **Ghim**: `GET content/contents/pinned-content/groups/{groupId}`; ghim / bỏ ghim: `PUT content/contents/pinned-content/{contentId}` với `{ pinGroupIds, unpinGroupIds }` (kiểm tra giới hạn 5 bài trước).
 - **Cài đặt bài**: `PUT content/contents/{id}/setting` với `{ canComment, canReact, isImportant, importantExpiredAt }`.
@@ -251,16 +274,21 @@ Chi tiết từng API nằm trong [API.md](API.md). Tóm tắt:
 - `upload.js`: tải ảnh / video / tệp từ trang Dashboard. `charts.js`: biểu đồ SVG của tab Thống kê.
 - `dashboard.html` + `dashboard.css` + script theo tab trong `dash/`, nạp theo thứ tự cuối `dashboard.html` (script thường, dùng chung phạm vi toàn cục):
   - `core.js` (dữ liệu, tiện ích, hộp xác nhận, gửi thao tác, chuyển tab), `ui.js` (ô người dùng / bài dùng ở nhiều tab)
-  - `todo.js` (hộp Việc cần làm), `overview.js`, `members.js`, `content.js`, `reports.js`, `compose.js` + `attach.js` (đính kèm, nhắc tên, link, tag) + `welcome.js` (chào thành viên mới) + `shoutout.js` (vinh danh), `stats.js`, `settings.js`, `log.js`
+  - `todo.js` (hộp Việc cần làm), `overview.js`, `members.js`, `content.js`, `reports.js`, `compose.js` + `attach.js` (đính kèm, nhắc tên, link, tag) + `calendar.js` (lịch nội dung, nhập CSV) + `article.js` (Article & Series) + `welcome.js` (chào thành viên mới) + `shoutout.js` (vinh danh), `stats.js`, `settings.js`, `log.js`
   - `dashboard.js` nạp cuối: sự kiện chung, vẽ lại toàn trang, nạp dữ liệu.
-- `background.js` (service worker) chỉ lo lịch chạy, sự kiện và nhận lệnh; phần còn lại trong `bg/` nạp bằng `importScripts`: `core.js` (gọi API, thao tác ghi, thông báo, hồ sơ vi phạm, hàng đợi), `scan.js` (quét, tự ẩn, đợt spam), `actions.js` (thao tác thành viên / bài / bình luận), `compose.js` (đăng bài, file, ghim, sửa bài), `manage.js` (cài đặt group, sao lưu, thống kê, báo cáo), `sync.js` (đồng bộ cài đặt giữa các máy).
+- `background.js` (service worker) chỉ lo lịch chạy, sự kiện và nhận lệnh; phần còn lại trong `bg/` nạp bằng `importScripts`: `core.js` (gọi API, thao tác ghi, thông báo, hồ sơ vi phạm, hàng đợi), `scan.js` (quét, tự ẩn, đợt spam), `actions.js` (thao tác thành viên / bài / bình luận), `compose.js` (đăng bài, file, ghim, sửa bài), `article.js` (Article, Series, chuyên mục), `manage.js` (cài đặt group, sao lưu, thống kê, báo cáo), `sync.js` (đồng bộ cài đặt giữa các máy), `telegram.js` (gửi thông báo về Telegram).
 - `popup.html` / `popup.js`: cửa sổ nhỏ khi bấm icon.
 
 ## Kiểm thử
 ```
 node --test "test/*.test.js"
 ```
-- `test/common.test.js`: quy tắc thành viên và bài viết (chung / riêng từng group), nhận link, quyền, đường dẫn, xuất CSV, xem trước markdown (an toàn với HTML), ghép số liệu thống kê, lịch bài định kỳ, đọc / làm sạch tệp sao lưu, bình luận (thu gọn, chọn bài cần đọc, gộp), tóm tắt tuần, phát hiện đợt spam, nhắc tên trong bình luận, bài chưa ai trả lời, bài chào thành viên mới.
+Kiểm thử trên addon thật (cần Google Chrome; đặt `CHROME_PATH` nếu cài chỗ khác):
+```
+node test/e2e/addon.e2e.mjs
+```
+- Nạp addon vào Chrome headless bằng CDP (`Extensions.loadUnpacked`), kiểm tra service worker có đủ hàm, nạp dữ liệu mẫu (qua hàng đợi của service worker), mở **Dashboard thật** đi qua cả 8 tab và **popup thật**, báo lỗi JavaScript ở mọi trang. Không đăng nhập Beincom, không thao tác gì lên tài khoản.
+- `test/common.test.js`: quy tắc thành viên và bài viết (chung / riêng từng group), nhận link, quyền, đường dẫn, xuất CSV, xem trước markdown (an toàn với HTML), ghép số liệu thống kê, lịch bài định kỳ, đọc / làm sạch tệp sao lưu, bình luận (thu gọn, chọn bài cần đọc, gộp), tóm tắt tuần, phát hiện đợt spam, nhắc tên trong bình luận, bài chưa ai trả lời, bài chào thành viên mới, giờ đăng tốt nhất, lưới lịch tháng, đọc CSV (dấu phẩy / chấm phẩy, ngoặc kép, xuống dòng trong ô, giờ Việt Nam, bỏ ngày không có thật, tên group trùng, tệp mẫu đọc lại được), Markdown → nội dung Article (các khối, định dạng chữ, link có chữ hai bên, xem trước an toàn), kiểm tra và body Article / Series.
 - `test/upload.test.js`: luồng tải ảnh / video / tệp với kho lưu trữ giả lập (thứ tự trường, lỗi S3, không đọc được phản hồi, tệp kèm cookie, hết phiên).
 - `test/background.test.js`: chạy `background.js` thật với `chrome.*` và API Beincom giả lập. Kiểm tra:
   - Quét, thông báo, chạy thử, hết phiên đăng nhập, phân trang
@@ -288,6 +316,7 @@ node --test "test/*.test.js"
   - Tag / series: tải theo group gốc (kể cả bản cũ chưa lưu group gốc), đủ các trang, kiểm tra hợp lệ trước khi tạo nháp, báo tên mục không hợp lệ
   - Nhắc tên và xem trước link: đúng API / header, chỉ gửi người còn trong bài, không gửi xem trước khi có ảnh
   - Tải file: xin chỗ tải lên đúng API / body / header, chờ xử lý (lỗi, chưa xong, quá lâu), đăng bài kèm ảnh, chạy thử không tải
+  - Article: đọc chuyên mục, tạo nháp rồi publish / schedule đúng body (nội dung dạng trình soạn thảo), series / tag kiểm tra trước, dưới tên group, lỗi thì xoá nháp, thiếu dữ liệu thì không gọi API; Series đúng API / body; ảnh bìa đúng resource; bài hẹn giờ gồm Article, huỷ Article xoá đúng chỗ; chạy thử chỉ ghi nhật ký
   - Hồ sơ vi phạm: ghi từ lần quét (nhật ký Beincom, báo cáo, gắn cờ, vi phạm quy tắc) và từ thao tác qua addon, không ghi trùng, gộp cùng một lần xoá từ hai nguồn, bỏ báo cáo bị bỏ qua, không tự duyệt người có hồ sơ (kể cả người vừa bị cấm trong chính lần quét), tắt thì không đọc / ghi, dựng lần đầu từ nhật ký cũ, xoá hồ sơ
   - Quét báo cáo: đếm đúng, lần sau báo cái mới (bài gắn cờ ở nhiều group báo một lần), API treo không làm hỏng lần quét, tắt thì không gọi API, xử lý xong thì trừ số đếm, mở tab thì cập nhật số đếm và không báo lại
 
@@ -312,6 +341,8 @@ node --test "test/*.test.js"
 - Tải tệp cần gọi API Beincom trực tiếp (kèm cookie); nếu trình duyệt chặn cookie thì tệp không tải lên được.
 - **Quét bình luận** chỉ thấy 25 bình luận gốc mới nhất và 25 trả lời mới nhất của mỗi bình luận, ở bài nằm trong danh sách bài mới; bình luận trong bài cũ hơn thì không đọc. API đọc đã gọi thật; nút Ẩn bình luận chưa.
 - **Đăng dưới tên group** cần Beincom bật cờ tính năng cho tài khoản (web ẩn nút khi chưa bật); chưa gọi thật lần nào.
+- **Article**: nội dung viết bằng Markdown nên chưa có ảnh trong thân bài, bảng, nhắc tên, căn lề (muốn dùng thì sửa tiếp trên web). Cấu trúc nội dung đã đối chiếu với Article có sẵn trên Beincom (chỉ đọc); đăng / hẹn giờ Article và tạo Series chưa gọi thật lần nào.
+- **Nhập CSV** chỉ cho bài chữ (không ảnh / video / tệp, không tag / series), không đăng dưới tên group; cần giữ Dashboard mở tới khi hẹn xong.
 - **Bài định kỳ** là các bài hẹn giờ đặt trước (tối đa 30 bài mỗi lần), không phải lặp mãi; hết chuỗi thì tạo chuỗi mới. Danh sách chuỗi chỉ lưu trong trình duyệt này; bài đăng trên máy khác vẫn hiện ở Bài đã hẹn giờ nhưng không có nhãn 🔁.
 - Chưa kiểm chứng với dữ liệu thật: cách nhận ra ảnh đại diện mặc định, dạng dữ liệu câu trả lời câu hỏi gia nhập.
 - Mỗi lần quét tải tối đa 500 yêu cầu mỗi group và 200 bài chờ duyệt mỗi community. Xử lý bớt rồi quét lại để tải tiếp.

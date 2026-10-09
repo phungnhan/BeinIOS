@@ -57,6 +57,66 @@ function asGroupTarget() {
   return picked[0];
 }
 
+// ---------- Giờ tốt nhất khi hẹn giờ ----------
+// Dùng bài 30 ngày của community đầu tiên được chọn (như tab Thống kê); có số liệu ở tab Thống kê cùng group thì dùng luôn.
+const bestTime = { key: '', cache: {}, loading: false };
+
+function bestTimeGroup() {
+  const g = groups().find((x) => compose.groupIds.has(x.id));
+  if (!g) return null;
+  return g.isCommunity ? g : groups().find((x) => x.isCommunity && x.communityId === g.communityId) || g;
+}
+
+// Bài 30 ngày của community (lưu tạm trong trang); có số liệu ở tab Thống kê cùng group thì dùng luôn
+async function bestPostsFor(g) {
+  if (bestTime.cache[g.id]) return { posts: bestTime.cache[g.id] };
+  if (stats.raw?.posts && stats.groupId === g.id) return { posts: stats.raw.posts };
+  const r = await chrome.runtime.sendMessage({ type: 'stats', groupId: g.id, days: 30 });
+  if (r?.status !== 'ok') return { error: r?.message || 'Không đọc được bài' };
+  return { posts: (bestTime.cache[g.id] = r.posts || []) };
+}
+
+async function suggestBestTime() {
+  const g = bestTimeGroup();
+  if (!g) return toast('Chọn group trước', 'err');
+  const box = $('best-times');
+  box.hidden = false;
+  bestTime.key = g.id;
+  if (bestTime.loading) return;
+  bestTime.loading = true;
+  if (!bestTime.cache[g.id]) box.replaceChildren(el('span', { class: 'muted', text: `Đang đọc bài 30 ngày ở ${g.name}…` }));
+  let r;
+  try {
+    r = await bestPostsFor(g);
+  } finally {
+    bestTime.loading = false;
+  }
+  if (r.error) return box.replaceChildren(el('span', { class: 'err-text', text: r.error }));
+  const posts = r.posts;
+  if (cal.view !== 'list') renderCalendar(); // lịch hiện luôn giờ gợi ý
+  const b = BG.bestTimes(posts);
+  if (!b.top.length) return box.replaceChildren(el('span', { class: 'muted', text: `Chưa có bài nào ở ${g.name} để gợi ý.` }));
+  box.replaceChildren(
+    el('b', { text: 'Gợi ý:' }),
+    ...b.top.map((c) => {
+      const iso = BG.nextSlot(c.day, c.hour);
+      const when = new Date(iso);
+      return el('button', {
+        type: 'button',
+        class: 'best-chip',
+        title: `${c.posts} bài, trung bình ${Math.round(c.avg)} tương tác`,
+        text: `${BG.WEEKDAYS[c.day]} ${c.hour}:00 · ${pad(when.getDate())}/${pad(when.getMonth() + 1)}`,
+        onclick: () => {
+          $('compose-at').value = toLocalInput(when);
+          updateCompose();
+          saveDraft();
+        },
+      });
+    }),
+    el('span', { class: 'muted', text: `theo ${b.total} bài 30 ngày ở ${g.name}${b.total < 20 ? ' (ít bài, chỉ để tham khảo)' : ''}` }),
+  );
+}
+
 function repeatCount() {
   return Math.max(BG.RECUR_MIN, Math.min(BG.RECUR_MAX, Math.floor(Number($('compose-repeat-n').value)) || BG.RECUR_MIN));
 }
@@ -115,6 +175,15 @@ function updateCompose() {
   const later = composeWhen() === 'later';
   $('compose-at').disabled = !later;
   if (later && !$('compose-at').value) $('compose-at').value = toLocalInput(nextQuarter());
+  // Giờ tốt nhất: chỉ khi hẹn giờ; đổi group thì bỏ gợi ý cũ
+  $('btn-best-time').hidden = !later || !!compose.edit;
+  if (!later || compose.edit || (bestTime.key && bestTime.key !== bestTimeGroup()?.id)) $('best-times').hidden = true;
+  // Lịch (dash/calendar.js): giờ gợi ý theo community đang chọn — vẽ lại khi community đổi
+  const hintKey = bestTimeGroup()?.id || '';
+  if (cal.hintKey !== hintKey) {
+    cal.hintKey = hintKey;
+    if (cal.view !== 'list') renderCalendar();
+  }
   // Lặp lại: chỉ khi hẹn giờ
   $('compose-repeat').disabled = !later;
   const rep = c.repeat;
@@ -657,7 +726,7 @@ function renderScheduled() {
     body.append(
       el(
         'tr',
-        {},
+        { 'data-id': p.id },
         el(
           'td',
           { class: 'nowrap' },
@@ -688,6 +757,7 @@ function renderScheduled() {
       ),
     );
   }
+  renderCalendar(); // dash/calendar.js
 }
 
 async function reschedulePost(p) {
@@ -716,7 +786,7 @@ async function cancelPost(p) {
     danger: true,
   });
   if (!ok) return;
-  const r = await send({ type: 'scheduleAct', action: 'cancel', contentId: p.id, snippet: snippet(p), groupName: p.groups.map((g) => g.name).join(', ') }, () => 'Đã huỷ bài hẹn giờ.');
+  const r = await send({ type: 'scheduleAct', action: 'cancel', contentId: p.id, contentType: p.type, snippet: snippet(p), groupName: p.groups.map((g) => g.name).join(', ') }, () => 'Đã huỷ bài hẹn giờ.');
   if (r?.status === 'ok' && !r.dryRun) loadScheduled();
 }
 
@@ -765,6 +835,7 @@ for (const r of document.querySelectorAll('input[name="compose-when"]')) {
   });
 }
 $('btn-compose').addEventListener('click', submitCompose);
+$('btn-best-time').addEventListener('click', suggestBestTime);
 // Trình soạn thảo
 $('editor').querySelector('.editor-toolbar').addEventListener('click', (e) => {
   const b = e.target.closest('button[data-md]');

@@ -275,8 +275,8 @@ function flaggedPosts(recent, ctx) {
 function applyGroups(state, next, groups, notifyAllowed, now) {
   const fresh = BG.newRequestIds(groups, state.knownRequestIds);
   if (state.knownRequestIds && fresh.length && notifyAllowed) {
-    const names = groups.filter((g) => g.requests.some((r) => fresh.includes(r.id))).map((g) => g.name);
-    notify('bg-requests', `BeinGroup: ${fresh.length} yêu cầu tham gia mới`, names.join(', '));
+    const withNew = groups.filter((g) => g.requests.some((r) => fresh.includes(r.id)));
+    notify('bg-requests', `BeinGroup: ${fresh.length} yêu cầu tham gia mới`, withNew.map((g) => g.name).join(', '), withNew[0] ? BG.memberRequestsUrl(withNew[0]) : '');
   }
   next.knownRequestIds = [...fresh, ...(state.knownRequestIds || [])].slice(0, KNOWN_MAX);
 
@@ -288,7 +288,7 @@ function applyGroups(state, next, groups, notifyAllowed, now) {
     approvalCounts[g.communityId] = g.approvalCount;
     const before = prevPosts[g.communityId];
     if (before != null && g.approvalCount > before && notifyAllowed) {
-      notify(`bg-posts-${g.communityId}`, `BeinGroup: ${g.approvalCount} bài chờ duyệt`, g.communityName || g.name);
+      notify(`bg-posts-${g.communityId}`, `BeinGroup: ${g.approvalCount} bài chờ duyệt`, g.communityName || g.name, BG.contentApprovalUrl(g.communityId));
     }
   }
   next.approvalCounts = approvalCounts;
@@ -304,7 +304,7 @@ function applyPosts(state, next, posts, ctx, notifyAllowed, now) {
   const badNew = list.filter((p) => freshSet.has(p.id) && !p.isHidden && BG.evaluatePostIn(p, ctx).verdict === 'bad');
   noteViolations(BG.violationsFromPosts(badNew, 'rule', (p) => BG.evaluatePostIn(p, ctx).reasons.filter((x) => x.level !== 'ok').map((x) => x.text).join('; ')));
   if (state.recentPosts && badNew.length && notifyAllowed) {
-    notify('bg-flagged', `BeinGroup: ${badNew.length} bài mới vi phạm quy tắc`, badNew.map((p) => p.actor.fullname || p.actor.username).join(', '));
+    notify('bg-flagged', `BeinGroup: ${badNew.length} bài mới vi phạm quy tắc`, badNew.map((p) => p.actor.fullname || p.actor.username).join(', '), BG.postUrl(badNew[0]));
   }
   next.recentPosts = list;
   // Lần quét bài đầu tiên chỉ ghi nhận: không coi là mới (để tự ẩn, theo dõi từ khoá)
@@ -321,7 +321,7 @@ function applyComments(state, next, scan, ctx, notifyAllowed, now) {
   const badNew = list.filter((c) => freshSet.has(c.id) && !c.isHidden && BG.evaluatePostIn(c, ctx).verdict === 'bad');
   noteViolations(BG.violationsFromComments(badNew, reasons));
   if (state.recentComments && badNew.length && notifyAllowed) {
-    notify('bg-comments', `BeinGroup: ${badNew.length} bình luận mới vi phạm quy tắc`, badNew.map((c) => c.actor.fullname || c.actor.username).join(', '));
+    notify('bg-comments', `BeinGroup: ${badNew.length} bình luận mới vi phạm quy tắc`, badNew.map((c) => c.actor.fullname || c.actor.username).join(', '), BG.commentUrl(badNew[0]));
   }
   next.recentComments = list;
   // Chỉ nhớ số bình luận đã đọc của các bài còn trong danh sách bài mới
@@ -349,6 +349,7 @@ function notifyWatch(state, next, settings, items, notifyAllowed) {
       .slice(0, 3)
       .map((h) => `${h.x.actor.fullname || h.x.actor.username}: ${String(h.x.title || h.x.text || '').replace(/\s+/g, ' ').slice(0, 60)}`)
       .join(' · '),
+    hits[0].x.postId ? BG.commentUrl(hits[0].x) : BG.postUrl(hits[0].x),
   );
 }
 
@@ -366,6 +367,7 @@ function remindUnanswered(state, next, settings, notifyAllowed) {
       .slice(0, 3)
       .map((p) => `${p.actor.fullname || p.actor.username}: ${String(p.title || p.text || '').replace(/\s+/g, ' ').slice(0, 60)}`)
       .join(' · '),
+    BG.postUrl(due[0]),
   );
   next.remindedIds = [...due.map((p) => p.id), ...(state.remindedIds || [])].slice(0, 500);
 }
@@ -454,7 +456,10 @@ function notifyWaves(state, next, settings, postRules, notifyAllowed, now) {
   const fresh = waves.filter((w) => !known.has(w.key) && !(state.dismissedWaves || []).includes(w.key));
   if (fresh.length && notifyAllowed && state.recentPosts) {
     const w = fresh[0];
-    notify('bg-wave', `BeinGroup: phát hiện ${fresh.length > 1 ? fresh.length + ' đợt' : 'đợt'} spam`, `${w.type === 'link' ? w.label : '"' + w.label + '"'}: ${w.accounts.length} tài khoản, ${w.items.length} bài / bình luận`);
+    const first = w.items[0];
+    const item = first.kind === 'comment' ? (next.recentComments || []).find((c) => c.id === first.id) : (next.recentPosts || []).find((p) => p.id === first.id);
+    const url = item ? (first.kind === 'comment' ? BG.commentUrl(item) : BG.postUrl(item)) : '';
+    notify('bg-wave', `BeinGroup: phát hiện ${fresh.length > 1 ? fresh.length + ' đợt' : 'đợt'} spam`, `${w.type === 'link' ? w.label : '"' + w.label + '"'}: ${w.accounts.length} tài khoản, ${w.items.length} bài / bình luận`, url);
   }
   next.knownWaves = [...new Set([...waves.map((w) => w.key), ...(state.knownWaves || [])])].slice(0, 200);
 }
@@ -469,13 +474,15 @@ function applyReports(state, next, groups, notifyAllowed) {
     const known = new Set(state[k.known] || []);
     const fresh = new Set();
     const names = [];
+    let firstGroup = null;
     for (const g of groups) {
       const ids = (g[k.field] || []).filter((id) => !known.has(id) && !fresh.has(id));
       if (!ids.length) continue;
       ids.forEach((id) => fresh.add(id));
       names.push(k.name(g));
+      firstGroup = firstGroup || g;
     }
-    if (state[k.known] && fresh.size && notifyAllowed) notify(k.id, k.title(fresh.size), names.join(', '));
+    if (state[k.known] && fresh.size && notifyAllowed) notify(k.id, k.title(fresh.size), names.join(', '), firstGroup ? BG.groupUrl(firstGroup) : '');
     next[k.known] = [...fresh, ...(state[k.known] || [])].slice(0, KNOWN_MAX);
   }
 }
@@ -546,7 +553,9 @@ async function doScan({ source = 'alarm' } = {}) {
   );
   const now = Date.now();
   const next = { ...state, lastScan: now, lastResult: { status: result.status, message: result.message || '', mode: result.mode || '' } };
-  const notifyAllowed = settings.active && settings.notify && source !== 'popup' && source !== 'dashboard';
+  const tg = await loadTelegram();
+  notifyDesktop = !!settings.notify;
+  const notifyAllowed = settings.active && (settings.notify || telegramOn(tg)) && source !== 'popup' && source !== 'dashboard';
 
   if (result.status === 'ok') {
     let groups = result.groups;
@@ -580,7 +589,7 @@ async function doScan({ source = 'alarm' } = {}) {
     }
   } else if (result.status === 'need_login' && notifyAllowed && state.lastLoginNotifyDay !== BG.vnDay()) {
     next.lastLoginNotifyDay = BG.vnDay();
-    notify('bg-login', 'BeinGroup: cần đăng nhập', 'Bấm để mở Beincom và đăng nhập lại.');
+    notify('bg-login', 'BeinGroup: cần đăng nhập', 'Bấm để mở Beincom và đăng nhập lại.', BG.SITE + '/login');
   }
 
   // Sáng thứ Hai: nhắc chào thành viên mới và vinh danh thành viên tích cực (mở thẳng hai công cụ ở tab Đăng bài)

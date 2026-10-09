@@ -532,6 +532,7 @@
             <label class="check"><input type="radio" name="compose-when" value="now" checked /> Đăng ngay</label>
             <label class="check"><input type="radio" name="compose-when" value="later" /> Hẹn giờ lúc</label>
             <input type="datetime-local" id="compose-at" disabled aria-label="Giờ đăng" />
+            <button type="button" class="ghost sm" id="btn-best-time" hidden>⏱ Giờ tốt nhất</button>
             <span class="repeat" id="compose-repeat-wrap">
               <select id="compose-repeat" aria-label="Lặp lại" disabled></select>
               <span class="inline" id="compose-repeat-n-wrap" hidden>× <input type="number" id="compose-repeat-n" min="2" max="30" value="4" aria-label="Số bài" /> bài</span>
@@ -541,8 +542,84 @@
               <button id="btn-compose" class="primary">Đăng ngay</button>
             </span>
           </div>
+          <div class="best-times" id="best-times" hidden></div>
           <div class="muted small" id="compose-repeat-hint" hidden></div>
           <div class="muted small">Hẹn giờ dùng chức năng có sẵn của Beincom: tới giờ Beincom tự đăng, không cần mở trình duyệt. <b>Lặp lại</b> đặt trước từng bài hẹn giờ (tối đa 30) ngay lúc bấm. Ảnh, video, tệp được tải lên Beincom lúc bấm Đăng — mỗi bài định kỳ tải một lần (Chạy thử thì không tải).</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card span-3" id="article" data-tab="compose">
+      <div class="card-head">
+        <h2>Article &amp; Series</h2>
+        <div class="review-tools">
+          <div class="seg" id="article-mode" aria-label="Loại nội dung">
+            <button data-f="article" class="active">Soạn Article</button>
+            <button data-f="series">Tạo Series</button>
+          </div>
+        </div>
+      </div>
+      <div class="compose-grid">
+        <div class="compose-groups">
+          <div class="group-title">Đăng vào</div>
+          <div id="art-groups" class="check-list"></div>
+        </div>
+        <div class="compose-main art-main">
+          <label class="art-field">
+            <span class="art-label"><b id="art-title-label">Tiêu đề</b><span class="muted small" id="art-title-n"></span></span>
+            <input type="text" id="art-title" maxlength="64" />
+          </label>
+          <label class="art-field">
+            <span class="art-label"><b id="art-summary-label">Tóm tắt</b><span class="muted small" id="art-summary-n"></span></span>
+            <textarea id="art-summary" rows="2" maxlength="255"></textarea>
+          </label>
+          <div class="art-row">
+            <div class="art-cover-wrap">
+              <span class="art-label"><b>Ảnh bìa</b></span>
+              <div class="art-cover" id="art-cover"></div>
+              <div class="art-cover-actions">
+                <button type="button" class="ghost sm" id="btn-art-cover">Chọn ảnh…</button>
+                <button type="button" class="ghost sm" id="btn-art-cover-clear" hidden>Bỏ ảnh</button>
+                <input type="file" id="art-cover-file" accept="image/jpeg,image/png,image/webp,image/gif" hidden />
+              </div>
+            </div>
+            <div class="art-cats-wrap article-only">
+              <span class="art-label"><b>Chuyên mục</b><span class="muted small" id="art-cats-note"></span></span>
+              <div class="art-chips" id="art-cats"></div>
+            </div>
+          </div>
+          <div class="article-only">
+            <div class="art-label">
+              <b>Nội dung</b>
+              <span class="muted small" id="art-count"></span>
+              <div class="seg" id="art-view" aria-label="Chế độ xem">
+                <button data-f="write" class="active">Viết</button>
+                <button data-f="preview">Xem trước</button>
+              </div>
+            </div>
+            <textarea id="art-content" rows="14" placeholder="Viết bằng Markdown, addon tự chuyển sang trình soạn thảo Article của Beincom."></textarea>
+            <div class="md-preview art-preview" id="art-preview" hidden></div>
+            <div class="muted small art-help"><code># Tiêu đề lớn</code> <code>## Tiêu đề mục</code> <code>**đậm**</code> <code>*nghiêng*</code> <code>~~gạch~~</code> <code>++gạch chân++</code> <code>- danh sách</code> <code>1. đánh số</code> <code>&gt; trích dẫn</code> <code>---</code> <code>[chữ](https://…)</code> · một dòng chỉ có link YouTube → video. Mỗi dòng là một đoạn.</div>
+          </div>
+          <div class="article-only art-picks" id="art-picks"></div>
+          <div class="compose-options">
+            <label class="check"><input type="checkbox" id="art-as-group" /> <span id="art-as-group-label">Đăng dưới tên group</span></label>
+            <label class="check series-only"><input type="checkbox" id="art-important" /> Đánh dấu Quan trọng</label>
+            <span class="muted small" id="art-as-group-hint"></span>
+          </div>
+          <div class="compose-when">
+            <span class="article-only art-when">
+              <label class="check"><input type="radio" name="art-when" value="now" checked /> Đăng ngay</label>
+              <label class="check"><input type="radio" name="art-when" value="later" /> Hẹn giờ lúc</label>
+              <input type="datetime-local" id="art-at" disabled aria-label="Giờ đăng Article" />
+            </span>
+            <span class="compose-actions">
+              <button id="btn-art-clear" class="ghost">Xoá nội dung</button>
+              <button id="btn-art-submit" class="primary">Đăng Article</button>
+            </span>
+          </div>
+          <div class="muted small" id="art-hint"></div>
+          <div class="muted small"><span class="article-only">Article giống web Beincom: cần tiêu đề, ảnh bìa và ít nhất một chuyên mục; hẹn giờ thì tới giờ Beincom tự đăng. </span><span class="series-only">Series là nơi gom các Article theo chủ đề; tạo xong thì chọn series khi soạn Article. </span>Nháp chữ được lưu tự động (ảnh bìa thì không).</div>
         </div>
       </div>
     </section>
@@ -625,15 +702,57 @@
         <h2>Bài đã hẹn giờ</h2>
         <div class="review-tools">
           <span class="muted small" id="scheduled-note"></span>
+          <span class="cal-nav" id="cal-nav" hidden>
+            <button type="button" class="ghost sm" id="cal-prev" aria-label="Trước">◀</button>
+            <b id="cal-label"></b>
+            <button type="button" class="ghost sm" id="cal-next" aria-label="Sau">▶</button>
+            <button type="button" class="ghost sm" id="cal-today">Hôm nay</button>
+          </span>
+          <div class="seg" id="sched-view" aria-label="Cách xem">
+            <button data-f="list" class="active">Danh sách</button>
+            <button data-f="week">Tuần</button>
+            <button data-f="month">Tháng</button>
+          </div>
         </div>
       </div>
-      <div class="table-wrap">
+      <div class="table-wrap cal-wrap"><div class="cal" id="sched-cal" hidden></div></div>
+      <div class="cal-foot muted small" id="cal-foot" hidden></div>
+      <div class="table-wrap" id="sched-list">
         <table class="requests posts">
           <thead>
             <tr><th>Giờ đăng</th><th>Người đăng</th><th>Nội dung</th><th>Đăng vào</th><th>Cài đặt</th><th class="act">Thao tác</th></tr>
           </thead>
           <tbody id="scheduled-body"></tbody>
         </table>
+      </div>
+    </section>
+
+    <section class="card span-3" id="csv-import" data-tab="compose">
+      <div class="card-head">
+        <h2>Nhập nhiều bài từ CSV</h2>
+        <div class="review-tools">
+          <button type="button" class="ghost sm" id="btn-csv-template">Tải tệp mẫu</button>
+          <button type="button" class="ghost sm" id="btn-csv-pick">Chọn tệp CSV…</button>
+          <input type="file" id="csv-file" accept=".csv,text/csv" hidden />
+        </div>
+      </div>
+      <div class="muted small">Soạn lịch đăng cả tháng trong Excel / Google Sheets rồi hẹn giờ một lần. Cột bắt buộc: <b>noi_dung</b>, <b>group</b> (tên group, "Community &gt; Group" hoặc id; nhiều group cách nhau dấu ;), <b>gio_dang</b> (giờ Việt Nam, vd 15/10/2026 20:00). Cột tuỳ chọn: <b>quan_trong</b>, <b>tat_binh_luan</b> (có / không). Tối đa 100 bài mỗi lần; có thể kéo thả tệp vào đây. Bài chỉ có chữ (không ảnh / video / tệp).</div>
+      <div id="csv-preview" class="csv-preview" hidden>
+        <div class="csv-bar">
+          <span id="csv-note"></span>
+          <span class="compose-actions">
+            <button type="button" class="ghost" id="btn-csv-clear">Bỏ</button>
+            <button type="button" class="primary" id="btn-csv-submit">Hẹn giờ</button>
+          </span>
+        </div>
+        <div class="table-wrap">
+          <table class="requests posts">
+            <thead>
+              <tr><th>Dòng</th><th>Giờ đăng</th><th>Đăng vào</th><th>Nội dung</th><th>Cài đặt</th><th>Kiểm tra</th></tr>
+            </thead>
+            <tbody id="csv-body"></tbody>
+          </table>
+        </div>
       </div>
     </section>
 
@@ -705,6 +824,16 @@
           <tbody id="top-authors-body"></tbody>
         </table>
       </div>
+    </section>
+
+    <section class="card span-3" id="stats-best" data-tab="stats">
+      <div class="card-head">
+        <h2>Giờ đăng tốt nhất</h2>
+        <span class="muted small" id="best-note"></span>
+      </div>
+      <div class="best-top" id="best-top"></div>
+      <div class="table-wrap heat-wrap"><div class="heatmap" id="heatmap"></div></div>
+      <div class="heat-legend muted small"><span>Ít tương tác</span><i style="--lv: 15%"></i><i style="--lv: 40%"></i><i style="--lv: 65%"></i><i style="--lv: 90%"></i><span>Nhiều</span><span>· ô trống: chưa có bài · viền tím: khung giờ gợi ý</span></div>
     </section>
 
     <div class="span-2 rules-col" data-tab="settings">
@@ -854,6 +983,32 @@
           </select>
         </label>
       </div>
+      <div class="group tg-group">
+        <div class="group-title">📱 Gửi thông báo về Telegram</div>
+        <label class="switch-row"><input type="checkbox" id="tg-enabled" /><span><b>Gửi về Telegram</b><br /><span class="muted small">Thông báo của addon gửi thêm vào Telegram qua bot của chính bạn (kể cả khi đã tắt thông báo trên máy tính). Token chỉ lưu trong trình duyệt này, không có trong sao lưu / đồng bộ.</span></span></label>
+        <details class="tg-help">
+          <summary>Cách tạo bot (2 phút)</summary>
+          <ol>
+            <li>Trong Telegram, nhắn <b>@BotFather</b> lệnh <code>/newbot</code>, đặt tên → nhận <b>token</b> dạng <code>123456789:AA…</code>.</li>
+            <li>Mở bot vừa tạo, bấm <b>Start</b> (hoặc nhắn <code>/start</code>).</li>
+            <li>Dán token vào ô dưới, bấm <b>Lấy chat ID</b>, rồi <b>Gửi thử</b>. Muốn nhận trong một nhóm Telegram: thêm bot vào nhóm, nhắn một tin trong nhóm rồi bấm Lấy chat ID.</li>
+          </ol>
+        </details>
+        <label class="text-row">
+          <span><b>Token bot</b></span>
+          <span class="tg-line"><input type="password" id="tg-token" autocomplete="off" spellcheck="false" placeholder="123456789:AA…" /><button type="button" class="ghost sm" id="btn-tg-show">Hiện</button></span>
+        </label>
+        <label class="text-row">
+          <span><b>Chat ID</b> <span class="muted small" id="tg-chat-name"></span></span>
+          <span class="tg-line"><input type="text" id="tg-chat" autocomplete="off" placeholder="vd 123456789" /><button type="button" class="ghost sm" id="btn-tg-chat">Lấy chat ID</button></span>
+        </label>
+        <div class="tg-kinds" id="tg-kinds"></div>
+        <label class="check small"><input type="checkbox" id="tg-quiet" /> Không gửi từ 23:00 đến 7:00 (trừ đợt spam và cần đăng nhập)</label>
+        <div class="sync-row">
+          <span class="muted small" id="tg-status"></span>
+          <span class="tg-actions"><button type="button" class="ghost sm" id="btn-tg-test">Gửi thử</button><button type="button" class="primary sm" id="btn-tg-save">Lưu</button></span>
+        </div>
+      </div>
       <div class="group sync-group">
         <div class="group-title">☁ Đồng bộ giữa các máy</div>
         <label class="switch-row"><input type="checkbox" id="syncSettings" /><span><b>Đồng bộ qua tài khoản Chrome / Edge</b><br /><span class="muted small">Cài đặt, quy tắc (chung và riêng từng group), mẫu bài chào / vinh danh đi theo tài khoản trình duyệt sang máy khác có cài BeinGroup. Không đồng bộ: công tắc bật addon, mẫu bài đăng, hồ sơ vi phạm (dùng Sao lưu).</span></span></label>
@@ -932,6 +1087,8 @@
   <script src="dash/reports.js"></script>
   <script src="dash/compose.js"></script>
   <script src="dash/attach.js"></script>
+  <script src="dash/calendar.js"></script>
+  <script src="dash/article.js"></script>
   <script src="dash/welcome.js"></script>
   <script src="dash/shoutout.js"></script>
   <script src="dash/stats.js"></script>

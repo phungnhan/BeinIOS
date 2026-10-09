@@ -198,6 +198,28 @@ Web tạo bản nháp ngay khi bấm "Next" ở bước chọn group và **tự 
 | Kiểm tra | `POST content/contents/validate-series-tags` `{ groups: [id], series: [id], tags: [id] }`. Không hợp lệ: code `tag_series_invalid`, `meta.errors { seriesIds, tagIds }`. Đăng / hẹn giờ cũng trả lỗi này. Body bài: `tags: [id]`, `series: [id]` |
 | Khác | Chọn emoji |
 
+## 7b. Article và Series
+Đọc từ mã web (Plate editor, `ArticlePublishButton`, `ArticleEditSchedule`, `series-composer-dialog`) và đối chiếu với Article có sẵn qua `GET content/contents/{id}` ✅ (chỉ đọc). Ghi chưa gọi thật.
+
+| Method | Đường dẫn | Body / tham số | Thử |
+|---|---|---|---|
+| GET | `content/category?name=` | `name` rỗng = tất cả → `list` (`id`, `name`, `slug`, `level`, `parentId`, `active`); hiện có 17 chuyên mục (Business & Finance, Technology, Others…) | ✅ |
+| POST | `upload/images/` | `{ properties: { mime_type }, resource: "article:cover" }` (ảnh bìa Article) hoặc `"series:cover"`; các bước sau như ảnh bài viết | — |
+| POST | `content/articles` | `{ audience: { groupIds }, isEnableDonation: false }` → `data.id` (nháp). Dưới tên group: `content/manage/groups/{groupId}/articles` | — |
+| PUT | `content/articles/{id}/publish` | `{ audience: { groupIds, userIds: [] }, categories: [id], series: [id], tags: [id], title, summary, coverMedia: { id }, content, mentions: {}, wordCount }` | — |
+| PUT | `content/articles/{id}/schedule` | Như publish, thêm `scheduledAt` (ISO) | — |
+| DELETE | `content/articles/{id}` | Xoá Article / nháp | — |
+| POST | `content/series` | `{ title, summary, setting: { isImportant, importantExpiredAt, canComment: true, canReact: true, canShare: true }, coverMedia: { id }, audience: { groupIds } }` — đăng luôn, không có nháp. Dưới tên group: `content/manage/groups/{groupId}/series` | — |
+
+- Bắt buộc (web kiểm tra trước khi cho đăng): tiêu đề, nội dung, ít nhất một chuyên mục, ảnh bìa. Giới hạn: tiêu đề **64**, tóm tắt **255**, nội dung **100.000** ký tự chữ (Article thật chạm đúng 64 / 255). Series: tên 64, mô tả 255, bắt buộc ảnh bìa.
+- `content` là **chuỗi JSON** các khối Plate (không phải markdown):
+  - Khối: `p`, `h1`, `h2`, `h3`, `blockquote` (chữ nằm thẳng trong khối), `ul` / `ol` > `li` > `lic` (`lic` có `indent: 0, listStyleType: ""`), `hr`, `media_embed` (`url`, `caption: [{ text }]`, video YouTube), `a` (`url`, chữ bên trong), `img` (ảnh trong bài, tải với `resource: "article:content"`).
+  - Đoạn chữ: `{ text, bold?, italic?, underline?, strikethrough?, code? }`. Khối có thể có `align` (vd `"justify"`).
+  - Mỗi khối có `id` ngẫu nhiên 21 ký tự (nanoid). Khối rỗng: `{ type: "p", children: [{ text: "" }] }`.
+- `wordCount`: tổng số từ của từng khối (tách theo khoảng trắng). `mentions`: `{ [username]: user }` lấy từ các khối `mention` (`value` = username).
+- Article đọc về có thêm: `coverMedia` (`id`, `url`, `width`, `height`, `mimeType`, `resource: "article:cover"`), `categories[]`, `series[]`, `tags[]`, `wordCount`, `summary`, `slugSeo`.
+- Bài hẹn giờ: `GET content/manage/groups/{groupId gốc}/contents/scheduled?type=ARTICLE` ✅ (cùng API với bài thường, khác `type`).
+
 ## 8. Thống kê và nhật ký
 Thống kê chính thức chỉ dành cho **chủ / admin community**. Admin group nhận `403 forbidden` hoặc `400 community.not_admin`.
 

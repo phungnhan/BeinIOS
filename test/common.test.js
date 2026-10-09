@@ -807,3 +807,255 @@ test('vinh danh và theo dõi: xếp hạng thành viên, bài vinh danh, từ k
   assert.deepEqual(BG.watchHits('bình thường', ['lừa đảo']), []);
   assert.equal(BG.readBackup({ app: 'BeinGroup', data: { settings: { unansweredHours: 500, watchKeywords: ['a', 1] } } }).data.settings.unansweredHours, 72);
 });
+
+test('Telegram: loại tin, nội dung HTML an toàn, giờ yên lặng, khi nào gửi', () => {
+  assert.deepEqual(['bg-wave', 'bg-autohide', 'bg-reports', 'bg-autoflag', 'bg-flagged', 'bg-comments', 'bg-requests', 'bg-posts-c1', 'bg-auto', 'bg-watch', 'bg-unanswered', 'bg-weekly', 'bg-welcome', 'bg-login', 'khac'].map(BG.telegramKind),
+    ['spam', 'spam', 'reports', 'reports', 'violations', 'violations', 'queue', 'queue', 'queue', 'watch', 'watch', 'weekly', 'weekly', 'login', '']);
+  assert.equal(BG.telegramText('A <b>', 'x & y', 'javascript:alert(1)'), '<b>A &lt;b&gt;</b>\nx &amp; y');
+  assert.equal(BG.telegramText('T', '', 'https://group.beincom.com/posts/1?a=1&b=2'), '<b>T</b>\n<a href="https://group.beincom.com/posts/1?a=1&amp;b=2">Mở trên Beincom</a>');
+  const at = (h) => Date.parse(`2026-10-09T${String((h + 24 - 7) % 24).padStart(2, '0')}:30:00Z`); // h giờ VN
+  assert.deepEqual([22, 23, 2, 6, 7, 12].map((h) => BG.isQuietHour(at(h))), [false, true, true, true, false, false]);
+  const cfg = { ...BG.DEFAULT_TELEGRAM, enabled: true, token: 't', chatId: '1', quietNight: true };
+  assert.deepEqual([BG.telegramShouldSend(cfg, 'bg-flagged', at(12)), BG.telegramShouldSend(cfg, 'bg-flagged', at(1)), BG.telegramShouldSend(cfg, 'bg-wave', at(1)), BG.telegramShouldSend(cfg, 'bg-login', at(1))], [true, false, true, true]);
+  assert.equal(BG.telegramShouldSend(cfg, 'bg-requests', at(12)), false); // mặc định tắt loại hàng chờ
+  assert.equal(BG.telegramShouldSend({ ...cfg, chatId: '' }, 'bg-wave', at(12)), false);
+  assert.equal(BG.telegramShouldSend({ ...cfg, enabled: false }, 'bg-wave', at(12)), false);
+  assert.equal(BG.validTelegramToken(' 123456789:' + 'a'.repeat(35) + ' '), true);
+  assert.equal(BG.validTelegramToken('123:abc'), false);
+});
+
+test('giờ đăng tốt nhất: gom theo thứ × giờ (giờ VN), kéo ô ít bài về trung bình, mỗi ngày một gợi ý, lần tới', () => {
+  const vn = (s) => new Date(s + '+07:00').toISOString();
+  const P = (t, reactions, commentsCount = 0) => ({ publishedAt: vn(t), reactions, commentsCount });
+  const posts = [
+    P('2026-10-06T20:10:00', 30, 5), P('2026-10-06T20:50:00', 20, 3), P('2026-09-29T20:05:00', 25, 4), // T3 20h: 3 bài tốt
+    P('2026-10-06T21:00:00', 2), // T3 21h
+    P('2026-10-08T09:00:00', 100, 10), // T5 9h: 1 bài rất cao
+    P('2026-10-04T23:30:00', 1), // CN 23h
+    { publishedAt: 'x', reactions: 999 },
+  ];
+  const b = BG.bestTimes(posts);
+  assert.equal(b.total, 6);
+  const e = [40, 26, 33, 2, 120, 1];
+  assert.equal(b.mean, e.reduce((s, x) => s + x, 0) / 6);
+  assert.deepEqual([b.grid[2][20].posts, b.grid[2][20].avg], [3, 33]);
+  // T5 9h: (120 + 2×37) / 3 ≈ 64.7; T3 20h: (99 + 2×37) / 5 ≈ 34.6 -> T5 9h lên đầu nhưng không tới 120
+  assert.deepEqual(b.top.map((c) => [BG.WEEKDAYS[c.day], c.hour]), [['T5', 9], ['T3', 20], ['CN', 23]]);
+  assert.ok(b.top[0].score < 120 && b.top[0].score > b.top[1].score);
+  assert.equal(b.top.filter((c) => c.day === 2).length, 1); // mỗi ngày một khung
+  assert.equal(b.byHour[20], 33);
+  assert.deepEqual(BG.bestTimes([]).top, []);
+  // Lần tới: thứ Ba 20:00 sau thứ Sáu 9/10 22:00 -> 13/10; cùng ngày nhưng sát giờ thì sang tuần sau
+  assert.equal(BG.nextSlot(2, 20, Date.parse(vn('2026-10-09T22:00:00'))), vn('2026-10-13T20:00:00'));
+  assert.equal(BG.nextSlot(5, 23, Date.parse(vn('2026-10-09T22:00:00'))), vn('2026-10-09T23:00:00'));
+  assert.equal(BG.nextSlot(5, 22, Date.parse(vn('2026-10-09T21:55:00'))), vn('2026-10-16T22:00:00'));
+});
+
+test('lịch nội dung: lưới tháng bắt đầu Thứ Hai, giờ tốt nhất từng ngày', () => {
+  const g = BG.monthGrid(2026, 9); // tháng 10/2026: ngày 1 là Thứ Năm
+  assert.equal(g.length, 5);
+  assert.deepEqual(g[0].map((c) => c.day), [28, 29, 30, 1, 2, 3, 4]);
+  assert.deepEqual([g[0][0].key, g[0][0].inMonth, g[0][3].key, g[0][3].inMonth], ['2026-09-28', false, '2026-10-01', true]);
+  assert.equal(g[4][6].key, '2026-11-01');
+  assert.equal(BG.monthGrid(2027, 1).length, 4); // 02/2027: bắt đầu Thứ Hai, 28 ngày
+  assert.equal(BG.monthGrid(2026, 7).length, 6); // 08/2026: bắt đầu Thứ Bảy, 31 ngày
+  const vn = (s) => new Date(s + '+07:00').toISOString();
+  const P = (t, reactions, commentsCount = 0) => ({ publishedAt: vn(t), reactions, commentsCount });
+  const h = BG.dayBestHours(BG.bestTimes([P('2026-10-06T20:10:00', 30, 5), P('2026-10-06T21:00:00', 2), P('2026-10-08T09:00:00', 10)]));
+  assert.deepEqual(h, [null, null, 20, null, 9, null, null]);
+  assert.deepEqual(BG.dayBestHours(BG.bestTimes([])), [null, null, null, null, null, null, null]);
+});
+
+test('CSV: dấu phẩy / chấm phẩy, ngoặc kép, xuống dòng trong ô, BOM, dòng trống', () => {
+  assert.deepEqual(BG.parseCsv('﻿a,b,c\r\n1,"x, y","say ""hi"""\r\n\r\n2,"dòng 1\ndòng 2",\n'), [
+    ['a', 'b', 'c'],
+    ['1', 'x, y', 'say "hi"'],
+    ['2', 'dòng 1\ndòng 2', ''],
+  ]);
+  assert.deepEqual(BG.parseCsv('noi_dung;group;gio\n"a; b";G;1/1/2027 7:00'), [
+    ['noi_dung', 'group', 'gio'],
+    ['a; b', 'G', '1/1/2027 7:00'],
+  ]);
+  assert.deepEqual(BG.parseCsv('a,b\n1,2'), [['a', 'b'], ['1', '2']]); // không có xuống dòng cuối
+  assert.deepEqual(BG.parseCsv(''), []);
+});
+
+test('CSV: giờ đăng theo giờ Việt Nam, bỏ ngày không có thật', () => {
+  const iso = (s) => new Date(BG.parseVnTime(s)).toISOString();
+  assert.equal(iso('15/10/2026 20:00'), '2026-10-15T13:00:00.000Z');
+  assert.equal(iso('5/1/2027 7:05:00'), '2027-01-05T00:05:00.000Z');
+  assert.equal(iso('1.1.2027 7h05'), '2027-01-01T00:05:00.000Z');
+  assert.equal(iso('2026-10-15 20:00'), '2026-10-15T13:00:00.000Z');
+  assert.equal(iso('2026-10-15T20:00'), '2026-10-15T13:00:00.000Z');
+  assert.equal(iso('2026-10-15T20:00:00Z'), '2026-10-15T20:00:00.000Z');
+  assert.equal(iso('2026-10-15T20:00+07:00'), '2026-10-15T13:00:00.000Z');
+  for (const bad of ['31/02/2026 10:00', '1/1/2027 24:00', '1/1/2027 10:60', '15/10/2026', 'mai 8h', '']) assert.ok(Number.isNaN(BG.parseVnTime(bad)), bad);
+});
+
+test('CSV: dòng -> bài hẹn giờ, tìm group theo tên / đường dẫn / id, lỗi từng dòng', () => {
+  const now = Date.parse('2026-10-09T05:00:00Z'); // 12:00 giờ VN
+  const groups = [
+    { id: 'gCL', name: 'Crypto Life', path: 'Crypto Life' },
+    { id: 'gG1', name: 'General', path: 'Crypto Life › General' },
+    { id: 'gG2', name: 'General', path: 'Food › General' },
+  ];
+  const rows = BG.parseCsv(
+    [
+      'Nội dung;Group;Giờ đăng;Quan trọng;Tắt bình luận',
+      '"Chào; cả nhà";crypto life;10/10/2026 20:00;x;',
+      'hi;General;10/10/2026 20:00;;',
+      'hi;Food > General | gCL;2026-10-10 21:30;không;có',
+      ';nope;hôm qua;;',
+      'hi;gCL;09/10/2026 12:05;;',
+      `${'a'.repeat(BG.POST_MAX + 1)};gCL;10/10/2026 20:00;;`,
+      'hi;;10/10/2026 20:00;;',
+    ].join('\n'),
+  );
+  const r = BG.csvPosts(rows, { groups, now });
+  assert.equal(r.error, '');
+  const [a, b, c, d, e, f, g] = r.posts;
+  assert.deepEqual(
+    { line: a.line, groupIds: a.groupIds, scheduledAt: a.scheduledAt, content: a.content, important: a.setting.isImportant, canComment: a.setting.canComment, errors: a.errors },
+    { line: 2, groupIds: ['gCL'], scheduledAt: '2026-10-10T13:00:00.000Z', content: 'Chào; cả nhà', important: true, canComment: true, errors: [] },
+  );
+  assert.match(b.errors[0], /trùng 2 group/);
+  assert.deepEqual([c.groupIds, c.groupNames, c.setting.isImportant, c.setting.canComment, c.errors], [['gG2', 'gCL'], ['Food › General', 'Crypto Life'], false, false, []]);
+  assert.deepEqual(d.errors.length, 3);
+  assert.match(e.errors[0], /quá gần/);
+  assert.match(f.errors[0], /tối đa/);
+  assert.deepEqual(g.errors, ['Thiếu group']);
+  assert.equal(r.truncated, 0);
+  // Thiếu cột / tệp trống / quá 100 dòng
+  assert.match(BG.csvPosts(BG.parseCsv('text,time\nx,y'), { groups }).error, /Thiếu cột/);
+  assert.equal(BG.csvPosts([], { groups }).error, 'Tệp trống');
+  const many = [['noi_dung', 'group', 'gio_dang'], ...Array.from({ length: BG.CSV_MAX_ROWS + 5 }, () => ['x', 'gCL', '10/10/2026 20:00'])];
+  const m = BG.csvPosts(many, { groups, now });
+  assert.deepEqual([m.posts.length, m.truncated], [BG.CSV_MAX_ROWS, 5]);
+});
+
+test('CSV: tệp mẫu đọc lại được và hợp lệ', () => {
+  const now = Date.parse('2026-10-09T05:00:00Z');
+  const tpl = BG.csvTemplate(['Crypto Life', 'Crypto Life › General'], now);
+  assert.ok(tpl.startsWith('﻿noi_dung,group,gio_dang'));
+  const groups = [
+    { id: 'gCL', name: 'Crypto Life', path: 'Crypto Life' },
+    { id: 'gG1', name: 'General', path: 'Crypto Life › General' },
+  ];
+  const r = BG.csvPosts(BG.parseCsv(tpl), { groups, now });
+  assert.deepEqual(
+    r.posts.map((p) => [p.groupIds, p.scheduledAt, p.setting.isImportant, p.errors]),
+    [
+      [['gCL'], '2026-10-10T13:00:00.000Z', false, []],
+      [['gCL', 'gG1'], '2026-10-11T02:00:00.000Z', true, []],
+    ],
+  );
+  assert.match(r.posts[1].content, /\n/);
+});
+
+test('Article: Markdown -> khối của trình soạn thảo (tiêu đề, đoạn, danh sách, trích dẫn, kẻ ngang, video, link, định dạng chữ)', () => {
+  let n = 0;
+  const id = () => 'n' + ++n;
+  const nodes = BG.mdToPlate(
+    [
+      '# Lớn',
+      '#### Sâu quá -> h3',
+      'Có **đậm**, *nghiêng*, ~~gạch~~, ++chân++, `mã`, [link](https://beincom.com/a) và https://vd.vn/b.',
+      '',
+      '- một',
+      '* hai **đậm**',
+      '1. bước',
+      '2) bước hai',
+      '> trích',
+      '> dòng 2',
+      '---',
+      'https://www.youtube.com/watch?v=abc',
+      '```',
+      'x = 1',
+      '```',
+      'snake_case và _nghiêng_',
+      '***đậm nghiêng***',
+    ].join('\n'),
+    { id },
+  );
+  assert.deepEqual(
+    nodes.map((x) => x.type),
+    ['h1', 'h3', 'p', 'ul', 'ol', 'blockquote', 'hr', 'media_embed', 'p', 'p', 'p'],
+  );
+  assert.deepEqual(nodes[2].children, [
+    { text: 'Có ' },
+    { text: 'đậm', bold: true },
+    { text: ', ' },
+    { text: 'nghiêng', italic: true },
+    { text: ', ' },
+    { text: 'gạch', strikethrough: true },
+    { text: ', ' },
+    { text: 'chân', underline: true },
+    { text: ', ' },
+    { text: 'mã', code: true },
+    { text: ', ' },
+    { type: 'a', url: 'https://beincom.com/a', children: [{ text: 'link' }] },
+    { text: ' và ' },
+    { type: 'a', url: 'https://vd.vn/b', children: [{ text: 'https://vd.vn/b' }] },
+    { text: '.' },
+  ]);
+  assert.deepEqual(nodes[3], {
+    type: 'ul',
+    id: 'n4',
+    children: [
+      { type: 'li', id: 'n5', children: [{ type: 'lic', id: 'n6', indent: 0, listStyleType: '', children: [{ text: 'một' }] }] },
+      { type: 'li', id: 'n7', children: [{ type: 'lic', id: 'n8', indent: 0, listStyleType: '', children: [{ text: 'hai ' }, { text: 'đậm', bold: true }] }] },
+    ],
+  });
+  assert.equal(nodes[4].children.length, 2);
+  assert.deepEqual(nodes[5].children, [{ text: 'trích\ndòng 2' }]);
+  assert.deepEqual(nodes[6].children, [{ text: '' }]);
+  assert.deepEqual([nodes[7].url, nodes[7].caption, nodes[7].children], ['https://www.youtube.com/watch?v=abc', [{ text: '' }], [{ text: '' }]]);
+  assert.deepEqual(nodes[8].children, [{ text: 'x = 1', code: true }]);
+  assert.deepEqual(nodes[9].children, [{ text: 'snake_case và ' }, { text: 'nghiêng', italic: true }]);
+  assert.deepEqual(nodes[10].children, [{ text: 'đậm nghiêng', bold: true, italic: true }]);
+  // Link đứng đầu / cuối dòng: có đoạn chữ rỗng hai bên (quy ước Slate)
+  assert.deepEqual(BG.mdToPlate('[a](https://x.vn)', { id })[0].children, [{ text: '' }, { type: 'a', url: 'https://x.vn', children: [{ text: 'a' }] }, { text: '' }]);
+  // Trống: một đoạn rỗng; id mặc định 21 ký tự
+  assert.deepEqual(BG.mdToPlate('').map((x) => [x.type, x.id.length, x.children]), [['p', 21, [{ text: '' }]]]);
+  assert.match(BG.nodeId(), /^[\w-]{21}$/);
+});
+
+test('Article: đếm chữ / từ như web, xem trước an toàn', () => {
+  const nodes = BG.mdToPlate('## Tiêu đề\nHai  từ\n- một mục', { id: () => '' });
+  assert.equal(BG.plateText(nodes), 'Tiêu đề Hai  từ một mục');
+  assert.equal(BG.plateWords(nodes), 6);
+  const html = BG.plateHtml(BG.mdToPlate('<script>alert(1)</script> **b** [x](javascript:alert(1)) [y](https://ok.vn/"q)', { id: () => '' }));
+  assert.ok(!html.includes('<script>'));
+  assert.ok(html.includes('&lt;script&gt;'));
+  assert.ok(!/href="javascript/.test(html));
+  assert.ok(html.includes('<strong>b</strong>'));
+  assert.ok(html.includes('href="https://ok.vn/&quot;q"'));
+});
+
+test('Article / Series: kiểm tra dữ liệu và body gửi Beincom', () => {
+  const now = Date.parse('2026-10-09T05:00:00Z');
+  const ok = { groupIds: ['g1'], title: 'Tiêu đề', summary: '', content: 'Nội dung', categoryIds: ['c1'], hasCover: true };
+  assert.equal(BG.validateArticle(ok, now), '');
+  assert.match(BG.validateArticle({ ...ok, content: 'x'.repeat(BG.ARTICLE_MAX + 1) }, now), /tối đa 100\.000/);
+  assert.match(BG.validateArticle({ ...ok, tags: [1, 2, 3, 4, 5, 6] }, now), /Tối đa 5 tag/);
+  assert.match(BG.validateArticle({ ...ok, scheduledAt: 'x' }, now), /không hợp lệ/);
+  const b = BG.articleBody({ groupIds: ['g1'], title: ' T ', summary: ' S ', content: 'a b c', categoryIds: ['c1'], coverId: 'cv', tags: [{ id: 't1', name: 'x' }], series: ['s1'], scheduledAt: '2026-10-10T13:00:00.000Z' }, { id: () => 'i' });
+  assert.deepEqual(b, {
+    audience: { groupIds: ['g1'], userIds: [] },
+    categories: ['c1'],
+    series: ['s1'],
+    content: '[{"type":"p","id":"i","children":[{"text":"a b c"}]}]',
+    title: 'T',
+    mentions: {},
+    summary: 'S',
+    coverMedia: { id: 'cv' },
+    tags: ['t1'],
+    wordCount: 3,
+    scheduledAt: '2026-10-10T13:00:00.000Z',
+  });
+  assert.equal('scheduledAt' in BG.articleBody({ groupIds: ['g1'], title: 'T', content: 'a', categoryIds: [], coverId: 'c' }), false);
+  assert.equal(BG.validateSeries({ groupIds: ['g1'], title: 'S', hasCover: true }), '');
+  assert.match(BG.validateSeries({ groupIds: ['g1'], title: '', hasCover: true }), /cần tên/);
+  assert.match(BG.validateSeries({ groupIds: ['g1'], title: 'S', summary: 'x'.repeat(256), hasCover: true }), /255/);
+  assert.match(BG.validateSeries({ groupIds: [], title: 'S', hasCover: true }), /Chưa chọn group/);
+});
