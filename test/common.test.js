@@ -993,9 +993,9 @@ test('Article: Markdown -> khối của trình soạn thảo (tiêu đề, đo�
     { text: ', ' },
     { text: 'mã', code: true },
     { text: ', ' },
-    { type: 'a', url: 'https://beincom.com/a', children: [{ text: 'link' }] },
+    { type: 'a', url: 'https://beincom.com/a', children: [{ text: 'link' }], id: 'n20' },
     { text: ' và ' },
-    { type: 'a', url: 'https://vd.vn/b', children: [{ text: 'https://vd.vn/b' }] },
+    { type: 'a', url: 'https://vd.vn/b', children: [{ text: 'https://vd.vn/b' }], id: 'n21' },
     { text: '.' },
   ]);
   assert.deepEqual(nodes[3], {
@@ -1014,7 +1014,7 @@ test('Article: Markdown -> khối của trình soạn thảo (tiêu đề, đo�
   assert.deepEqual(nodes[9].children, [{ text: 'snake_case và ' }, { text: 'nghiêng', italic: true }]);
   assert.deepEqual(nodes[10].children, [{ text: 'đậm nghiêng', bold: true, italic: true }]);
   // Link đứng đầu / cuối dòng: có đoạn chữ rỗng hai bên (quy ước Slate)
-  assert.deepEqual(BG.mdToPlate('[a](https://x.vn)', { id })[0].children, [{ text: '' }, { type: 'a', url: 'https://x.vn', children: [{ text: 'a' }] }, { text: '' }]);
+  assert.deepEqual(BG.mdToPlate('[a](https://x.vn)', { id })[0].children, [{ text: '' }, { type: 'a', url: 'https://x.vn', children: [{ text: 'a' }], id: 'n23' }, { text: '' }]);
   // Trống: một đoạn rỗng; id mặc định 21 ký tự
   assert.deepEqual(BG.mdToPlate('').map((x) => [x.type, x.id.length, x.children]), [['p', 21, [{ text: '' }]]]);
   assert.match(BG.nodeId(), /^[\w-]{21}$/);
@@ -1058,4 +1058,90 @@ test('Article / Series: kiểm tra dữ liệu và body gửi Beincom', () => {
   assert.match(BG.validateSeries({ groupIds: ['g1'], title: '', hasCover: true }), /cần tên/);
   assert.match(BG.validateSeries({ groupIds: ['g1'], title: 'S', summary: 'x'.repeat(256), hasCover: true }), /255/);
   assert.match(BG.validateSeries({ groupIds: [], title: 'S', hasCover: true }), /Chưa chọn group/);
+});
+
+test('Telegram có nút: bàn phím, mã nút, nội dung tin, kết quả, dọn việc cũ, nhãn nguồn', () => {
+  assert.deepEqual(BG.tgKeyboard('request', 'abcdefghij', 'https://group.beincom.com/x'), {
+    inline_keyboard: [
+      [
+        { text: '✅ Duyệt', callback_data: 'abcdefghij:a' },
+        { text: '❌ Từ chối', callback_data: 'abcdefghij:d' },
+      ],
+      [{ text: 'Mở trên Beincom', url: 'https://group.beincom.com/x' }],
+    ],
+  });
+  assert.deepEqual(BG.tgKeyboard('post', 'abcdefghij', 'javascript:x', []), { inline_keyboard: [] });
+  for (const k of Object.keys(BG.TG_ACTIONS)) for (const b of BG.TG_ACTIONS[k]) assert.ok(Buffer.byteLength(`abcdefghij:${b.act}`) <= 64);
+  assert.deepEqual(BG.parseTgCallback('abcdefghij:h'), { token: 'abcdefghij', act: 'h' });
+  for (const bad of ['', 'abc:a', 'ABCDEFGHIJ:a', 'abcdefghij:', 'abcdefghij:ab']) assert.equal(BG.parseTgCallback(bad), null);
+  assert.match(BG.tgToken(), /^[a-z0-9]{10}$/);
+  assert.equal(BG.tgActAllowed('request', 'a'), true);
+  assert.equal(BG.tgActAllowed('approval', 'd'), false);
+  assert.equal(BG.tgActAllowed('request', 'a', []), false);
+  assert.equal(BG.telegramItemText({ head: 'A <b>', who: 'x & y', text: 'z'.repeat(700), note: 'n' }), '<b>A &lt;b&gt;</b>\nx &amp; y\n' + 'z'.repeat(600) + '…\n<i>n</i>');
+  assert.deepEqual(BG.tgResult('request', 'a', { status: 'ok', ok: 1, failed: 0 }), { done: true, line: '✅ Đã duyệt' });
+  assert.equal(BG.tgResult('post', 'h', { status: 'ok', dryRun: true }).done, false);
+  assert.equal(BG.tgResult('post', 'h', { status: 'need_login' }).done, false);
+  assert.equal(BG.tgResult('request', 'a', { status: 'error', message: 'Không còn yêu cầu nào để xử lý — hãy quét lại' }).done, true);
+  assert.deepEqual(BG.tgResult('post', 'h', { status: 'ok', ok: 0, failed: 1, errors: ['HTTP 500'] }), { done: false, line: '⚠️ HTTP 500' });
+  const now = Date.parse('2026-10-10T00:00:00Z');
+  const map = { old: { at: now - 8 * 864e5 }, ...Object.fromEntries(Array.from({ length: 305 }, (_, i) => ['k' + i, { at: now - i * 1000 }])) };
+  const kept = BG.pruneTgActions(map, now);
+  assert.equal(Object.keys(kept).length, 300);
+  assert.ok(!('old' in kept) && 'k0' in kept && !('k304' in kept));
+  assert.equal(BG.telegramItemNotify('bg-requests'), true);
+  assert.equal(BG.telegramItemNotify('bg-posts-cCL'), true);
+  assert.equal(BG.telegramItemNotify('bg-reports'), false);
+  assert.equal(BG.telegramActionsOn({ enabled: true, token: 't', chatId: '1', actions: true }), true);
+  assert.equal(BG.telegramActionsOn({ enabled: true, token: 't', chatId: '1' }), false);
+  assert.equal(BG.tgHideReason([{ code: 'blocked' }]), 'SPAM');
+  assert.equal(BG.tgHideReason([{ code: 'keyword' }]), 'OTHERS');
+  assert.deepEqual(['auto', 'telegram', 'manual', undefined].map(BG.sourceLabel), ['Tự động', 'Telegram', 'Bấm tay', 'Bấm tay']);
+});
+
+test('thành viên tin cậy: danh sách / số bài được duyệt, bị từ chối hoặc có hồ sơ vi phạm thì không; đếm từ nhật ký', () => {
+  const s = { trustedMembers: ['@Kai'], trustAfterApproved: 3 };
+  assert.equal(BG.trustReason({ id: 'u1', username: 'kai' }, s, {}), 'Thành viên tin cậy');
+  assert.equal(BG.trustReason({ id: 'u2', username: 'lan' }, s, { u2: { approved: 3, rejected: 0 } }), 'Đã được duyệt 3 bài');
+  assert.equal(BG.trustReason({ id: 'u2', username: 'lan' }, s, { u2: { approved: 9, rejected: 1 } }), '');
+  assert.equal(BG.trustReason({ id: 'u2', username: 'lan' }, { ...s, trustAfterApproved: 0 }, { u2: { approved: 9, rejected: 0 } }), '');
+  assert.equal(BG.trustReason({ id: 'u1', username: 'kai' }, s, {}, { events: [{ type: 'hidden' }] }), '');
+  assert.equal(BG.trustReason({}, s, {}), '');
+  const t = BG.tallyPostTrust({ u1: { approved: 1, rejected: 0, username: 'kai', at: 1 } }, [
+    { kind: 'post', action: 'approve', status: 'ok', userId: 'u1', username: 'kai' },
+    { kind: 'post', action: 'reject', status: 'ok', userId: 'u2', username: 'lan' },
+    { kind: 'post', action: 'approve', status: 'dry', userId: 'u2' },
+    { kind: 'post', action: 'hide', status: 'ok', userId: 'u2' },
+    { kind: 'member', action: 'approve', status: 'ok', userId: 'u3' },
+  ], 100);
+  assert.deepEqual(t, { u1: { approved: 2, rejected: 0, username: 'kai', at: 100 }, u2: { approved: 0, rejected: 1, username: 'lan', at: 100 } });
+  assert.equal(BG.readBackup({ app: 'BeinGroup', format: 1, data: { settings: { trustAfterApproved: 500 } } }).data.settings.trustAfterApproved, 100);
+});
+
+test('Article: bảng, ảnh, nhắc tên (chỉ người đã chọn), xem trước an toàn; kiểm tra ảnh chưa tải', () => {
+  let n = 0;
+  const id = () => 'n' + ++n;
+  const kai = { id: 'u1', username: 'kai' };
+  const nodes = BG.mdToPlate(['@kai, @lan (@kai).', '| A | B |', '|---|:-:|', '| **1** | 2 |', '| 3 |', '![x](https://media.beincom.com/a)', '![x](javascript:alert(1))', 'text'].join('\n'), { id, mentions: { kai } });
+  assert.deepEqual(nodes.map((x) => x.type), ['p', 'table', 'img', 'p', 'p']);
+  assert.deepEqual(nodes[0].children.map((x) => (x.type === 'mention' ? '@' + x.value : x.text)), ['', '@kai', ', @lan (', '@kai', ').']);
+  assert.ok(nodes[0].children.filter((x) => x.type === 'mention').every((x) => x.id && x.data.id === 'u1' && x.children[0].text === ''));
+  const t = nodes[1];
+  assert.deepEqual(t.children.map((tr) => tr.children.map((c) => c.type + ':' + c.children[0].children.map((x) => x.text).join(''))), [['th:A', 'th:B'], ['td:1', 'td:2'], ['td:3', 'td:']]);
+  assert.equal(t.children[1].children[0].children[0].children[0].bold, true);
+  assert.equal(nodes[3].children[0].text, '![x](javascript:alert(1))'); // ảnh không https: để nguyên chữ
+  assert.deepEqual(BG.plateMentions(nodes), { kai });
+  const html = BG.plateHtml(nodes);
+  assert.ok(html.includes('<img src="https://media.beincom.com/a"'));
+  assert.ok(html.includes('<span class="mention">@kai</span>'));
+  assert.ok(html.includes('<th>A</th>') && html.includes('<td><strong>1</strong></td>'));
+  assert.ok(!html.includes('javascript:alert(1)"'));
+  // Không truyền mentions: @kai chỉ là chữ
+  assert.deepEqual(BG.mdToPlate('@kai', { id })[0].children, [{ text: '@kai' }]);
+  const ok = { groupIds: ['g'], title: 'T', categoryIds: ['c'], hasCover: true };
+  assert.match(BG.validateArticle({ ...ok, content: 'Chữ\n![](local:1)' }), /chưa tải lên/);
+  assert.equal(BG.validateArticle({ ...ok, content: '![](https://media.beincom.com/a)' }), ''); // chỉ có ảnh cũng được
+  assert.match(BG.validateArticle({ ...ok, content: Array.from({ length: 31 }, () => '![](https://media.beincom.com/a)').join('\n') }), /Tối đa 30 ảnh/);
+  assert.deepEqual(BG.articleMentionEntry({ id: 'u9', username: 'lan', fullname: 'Lan', avatar: 'x', isVerified: true }), { id: 'u9', avatar: 'x', name: 'lan', fullname: 'Lan', username: 'lan' });
+  assert.equal(BG.editState({ id: 's', scheduledAt: '2026-10-11T02:00:00Z' }).scheduledAt, '2026-10-11T02:00:00Z');
 });

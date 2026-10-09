@@ -304,6 +304,22 @@ function autoItems(groups, settings, ctx, skipIds, profiles = null) {
   return items;
 }
 
+// Bài chờ duyệt được tự duyệt: đạt mọi quy tắc bài viết (không "Cần xem") và người đăng tin cậy (BG.trustReason).
+// Tối đa 20 bài mỗi lần quét; chạy thử thì mỗi bài chỉ ghi nhật ký một lần (skipIds).
+function postAutoItems(groups, settings, ctx, trust, profiles, skipIds) {
+  const skip = new Set(skipIds || []);
+  const items = [];
+  for (const g of groups) {
+    for (const p of g.approvals || []) {
+      if (skip.has(p.id) || BG.evaluatePostIn(p, ctx).verdict !== 'ok') continue;
+      const why = BG.trustReason(p.actor, settings, trust, profiles?.users?.[p.actor?.id]);
+      if (!why) continue;
+      items.push({ log: { ...postLog('auto', 'approve', p, g), autoReason: why }, call: (c) => c.call('PUT', `content/contents/approval-contents/${p.id}`, { status: 'APPROVED' }), gone: true });
+    }
+  }
+  return items.slice(0, 20);
+}
+
 // ---------- Thông báo & huy hiệu ----------
 
 // Thông báo trên máy tính (theo cài đặt "Thông báo") và gửi thêm về Telegram nếu bật (bg/telegram.js).

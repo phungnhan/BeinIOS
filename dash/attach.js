@@ -155,8 +155,25 @@ async function uploadMedia() {
 // Gõ @ rồi vài chữ: tìm người trong các group đã chọn (giống web), chọn để chèn @username.
 // compose.mentions: username -> dạng web lưu trong mentions của bài
 compose.mentions = {};
-const mention = { open: false, start: 0, query: '', items: [], active: 0, note: '', seq: 0, timer: 0, cache: new Map() };
+const mention = { open: false, start: 0, query: '', items: [], active: 0, note: '', seq: 0, timer: 0, cache: new Map(), target: 'compose' };
 const MENTION_SHOW = 8;
+
+// Các ô soạn có nhắc tên: ô chữ, khung chứa (để đặt ô gợi ý), ô gợi ý, group để tìm người, ghi người được chọn.
+// dash/article.js thêm ô nội dung Article.
+const MENTION_TARGETS = {
+  compose: {
+    ta: () => $('compose-text'),
+    box: () => $('editor-body'),
+    pop: () => $('mention-pop'),
+    groupIds: () => readCompose().groupIds,
+    pick: (u) => {
+      compose.mentions[u.username] = BG.mentionEntry(u);
+      updateCompose();
+      saveDraft();
+    },
+  },
+};
+const mentionTarget = () => MENTION_TARGETS[mention.target];
 
 // Toạ độ con trỏ trong ô soạn (so với .editor-body), đo bằng một bản sao ẩn của ô chữ
 function caretXY(ta, pos) {
@@ -189,15 +206,20 @@ function showMention(items, note = '') {
   renderMention();
 }
 
-// Gọi khi gõ / bấm chuột / di con trỏ trong ô soạn
-function checkMention() {
-  const ta = $('compose-text');
+// Gọi khi gõ / bấm chuột / di con trỏ trong ô soạn (target: 'compose' | 'article')
+function checkMention(target = 'compose') {
+  if (typeof target !== 'string') target = 'compose'; // gọi thẳng từ sự kiện
+  if (mention.target !== target) {
+    if (mention.open) closeMention();
+    mention.target = target;
+  }
+  const ta = mentionTarget().ta();
   const q = ta.selectionStart === ta.selectionEnd ? BG.mentionQuery(ta.value.slice(0, ta.selectionStart)) : null;
   if (!q) return mention.open && closeMention();
   if (q.start !== mention.start || q.query !== mention.query) mention.active = 0;
   mention.start = q.start;
   mention.query = q.query;
-  const ids = readCompose().groupIds;
+  const ids = mentionTarget().groupIds();
   if (!ids.length) return showMention([], 'Chọn group để đăng trước, rồi mới tìm được người để nhắc tên');
   const key = ids.join(',') + '|' + q.query.toLowerCase();
   const seq = ++mention.seq;
@@ -214,7 +236,7 @@ function checkMention() {
 }
 
 function renderMention() {
-  const pop = $('mention-pop');
+  const pop = mentionTarget().pop();
   pop.hidden = !mention.open;
   if (!mention.open) return;
   const list = mention.note === 'Đang tìm…' ? [] : mention.items.slice(0, MENTION_SHOW);
@@ -232,23 +254,22 @@ function renderMention() {
         )
       : [el('div', { class: 'mention-note muted small', text: mention.note || (mention.query ? `Không có ai tên "${mention.query}" trong các group đã chọn` : 'Gõ tên để tìm người') })]),
   );
-  const ta = $('compose-text');
+  const ta = mentionTarget().ta();
   const c = caretXY(ta, mention.start);
-  const box = $('editor-body');
+  const box = mentionTarget().box();
   pop.style.left = Math.max(4, Math.min(c.x, box.clientWidth - pop.offsetWidth - 4)) + 'px';
   pop.style.top = c.y + c.line + 4 + 'px';
 }
 
 function pickMention(u) {
   if (!u) return;
-  const ta = $('compose-text');
+  const t = mentionTarget();
+  const ta = t.ta();
   const text = '@' + u.username + ' ';
-  compose.mentions[u.username] = BG.mentionEntry(u);
   const end = ta.selectionStart;
   closeMention();
   editReplace(ta, mention.start, end, text, mention.start + text.length, mention.start + text.length);
-  updateCompose();
-  saveDraft();
+  t.pick(u);
 }
 
 // ---------- Xem trước link ----------
@@ -433,8 +454,8 @@ function linkToSend() {
 
 // ---------- Sự kiện ----------
 
-// Nhắc tên: ↑ ↓ chọn, Enter / Tab chèn, Esc đóng
-$('compose-text').addEventListener('keydown', (e) => {
+// Nhắc tên: ↑ ↓ chọn, Enter / Tab chèn, Esc đóng (dùng cho mọi ô soạn có nhắc tên)
+function mentionKeys(e) {
   if (!mention.open) return;
   const n = Math.min(MENTION_SHOW, mention.items.length);
   if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && n && mention.note !== 'Đang tìm…') {
@@ -448,12 +469,13 @@ $('compose-text').addEventListener('keydown', (e) => {
     e.preventDefault();
     closeMention();
   }
-});
+}
+$('compose-text').addEventListener('keydown', mentionKeys);
 $('compose-text').addEventListener('input', () => {
   checkMention();
   checkLink();
 });
-$('compose-text').addEventListener('click', checkMention);
+$('compose-text').addEventListener('click', () => checkMention());
 $('compose-text').addEventListener('keyup', (e) => ['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key) && checkMention());
 $('compose-text').addEventListener('blur', () => mention.open && closeMention());
 $('compose-text').addEventListener('scroll', () => mention.open && renderMention());

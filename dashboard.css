@@ -433,7 +433,13 @@ tr.csv-bad td { background: color-mix(in srgb, var(--err-soft) 50%, transparent)
 .art-label { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 4px; }
 .art-label .seg { margin-left: auto; }
 #art-title { font-size: 16px; font-weight: 600; }
-#art-content { width: 100%; min-height: 260px; resize: vertical; line-height: 1.55; }
+#art-content { width: 100%; resize: vertical; line-height: 1.6; }
+.art-editor-box .editor-body textarea, .art-editor-box .md-preview { min-height: 320px; }
+.art-editor-box .editor-toolbar > button { min-width: 30px; }
+.art-preview .art-img img { max-width: 100%; border-radius: 6px; }
+.art-preview table { border-collapse: collapse; margin: 8px 0; }
+.art-preview th, .art-preview td { border: 1px solid var(--border); padding: 4px 8px; text-align: left; }
+.art-preview .mention { color: var(--accent); font-weight: 600; }
 .compose-main #art-summary { min-height: 58px; }
 .art-preview.md-preview { max-height: 640px; }
 #art-count.over { color: var(--err); font-weight: 600; }
@@ -447,7 +453,11 @@ tr.csv-bad td { background: color-mix(in srgb, var(--err-soft) 50%, transparent)
 .art-chip.on { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); font-weight: 600; }
 .art-when { display: inline-flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .art-help code { font-size: 11px; }
-.art-preview { border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px; min-height: 260px; }
+.art-preview { padding: 12px 16px; }
+.art-preview h1 { font-size: 24px; margin: 14px 0 8px; }
+.art-preview h2 { font-size: 20px; margin: 14px 0 6px; }
+.art-preview h3 { font-size: 17px; margin: 12px 0 6px; }
+.art-preview .art-preview-title { font-size: 26px; margin: 10px 0 4px; }
 .art-preview-cover { width: 100%; max-height: 260px; object-fit: cover; border-radius: 8px; }
 .art-preview-title { font-size: 22px; margin: 10px 0 4px; }
 .art-preview blockquote { border-left: 3px solid var(--accent); margin: 8px 0; padding: 4px 12px; color: var(--muted); }
@@ -697,6 +707,8 @@ table.requests td.act-wrap button + button { margin-left: 0; }
 .setting-form select { width: auto; }
 .locked-groups { display: flex; flex-direction: column; gap: 4px; }
 .compose-when.editing > label.check, .compose-when.editing #compose-at, .compose-when.editing .repeat { display: none; }
+.compose-when.editing.sched #compose-at { display: inline-block; }
+.compose-when.editing.sched::before { content: "Giờ đăng"; font-weight: 600; font-size: 13px; }
 .compose-when .repeat { display: inline-flex; gap: 8px; align-items: center; }
 .compose-when .repeat select { width: auto; }
 #compose-repeat-n { width: 64px; }

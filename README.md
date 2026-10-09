@@ -122,6 +122,7 @@ Tab Quy tắc & cài đặt và Nhật ký chỉ dùng dữ liệu trong máy n�
     - Nội dung đã định dạng (thu gọn, bấm để xem hết), ảnh thu nhỏ, thẻ xem trước link, video / tệp, tag, series, người được nhắc tên.
     - Cài đặt khác mặc định: Quan trọng đến lúc nào, tắt bình luận, tắt cảm xúc.
     - Đổi giờ, huỷ (xoá bài; chỉ bài của chính bạn).
+    - **Sửa** (bài thường hẹn giờ của chính bạn): mở bài trong khung soạn, đổi nội dung, ảnh / video / tệp, tag, series, cài đặt và giờ đăng rồi **Lưu bài hẹn giờ**; Beincom vẫn tự đăng tới giờ.
     - Có cả **Article** hẹn giờ: hiện tiêu đề, tóm tắt, ảnh bìa; huỷ thì xoá đúng Article.
     - **Lịch nội dung**: đổi cách xem **Danh sách | Tuần | Tháng** (giờ Việt Nam, tuần bắt đầu Thứ Hai), ◀ ▶ và **Hôm nay** để chuyển.
       - Mỗi ngày hiện các bài hẹn giờ (🔁 là bài định kỳ, viền đỏ là bài hẹn giờ lỗi); ô tháng hiện 3 bài, bấm "+N bài nữa" để xem tuần đó.
@@ -135,7 +136,10 @@ Tab Quy tắc & cài đặt và Nhật ký chỉ dùng dữ liệu trong máy n�
     - Hẹn lần lượt từng bài (nghỉ theo cài đặt giữa hai thao tác, ít nhất 1 giây); lỗi đăng nhập hoặc 3 bài lỗi liên tiếp thì dừng, bấm lại để hẹn tiếp các bài còn lại.
   - **Article & Series**:
     - **Soạn Article** giống web Beincom: tiêu đề (≤ 64 ký tự), tóm tắt (≤ 255), **ảnh bìa** (bắt buộc), **chuyên mục** (ít nhất một), nội dung (≤ 100.000 ký tự), thêm vào series, gắn tag, đăng ngay hoặc **hẹn giờ**, đăng dưới tên group.
-    - Nội dung viết bằng Markdown: `#`/`##`/`###` tiêu đề, `**đậm**`, `*nghiêng*`, `~~gạch~~`, `++gạch chân++`, `` `mã` ``, `- danh sách`, `1. đánh số`, `> trích dẫn`, `---`, `[chữ](link)`; một dòng chỉ có link YouTube / Vimeo thành video nhúng. Addon tự chuyển sang định dạng trình soạn thảo Article của Beincom. Có **Xem trước** và đếm từ / ký tự.
+    - **Trình soạn thảo** có thanh công cụ: đậm, nghiêng, gạch chân, gạch ngang, mã, tiêu đề H1 / H2 / H3, danh sách, trích dẫn, kẻ ngang, link, 🖼 ảnh, 🎬 video, ▦ bảng, @ nhắc tên; phím tắt Ctrl+B / I / U / K; chế độ **Soạn / Soạn + xem trước / Xem trước** (xem trước cập nhật khi gõ).
+    - Bên dưới là Markdown, ai quen có thể gõ thẳng: `#`/`##`/`###` tiêu đề, `**đậm**`, `*nghiêng*`, `~~gạch~~`, `++gạch chân++`, `` `mã` ``, `- danh sách`, `1. đánh số`, `> trích dẫn`, `---`, `[chữ](link)`, bảng `| a | b |` (dòng thứ hai `|---|---|`); một dòng chỉ có link YouTube / Vimeo thành video nhúng. Addon tự chuyển sang định dạng trình soạn thảo Article của Beincom. Có **Xem trước** và đếm từ / ký tự.
+    - **🖼 Ảnh** trong thân bài: chèn vào chỗ con trỏ (tối đa 30 ảnh, mỗi ảnh ≤ 25 MB), tải lên Beincom lúc bấm Đăng (Chạy thử thì không tải). Ảnh không lưu trong nháp: mở lại Dashboard thì phải chọn lại.
+    - **@nhắc tên**: gõ @ để chọn người trong các group đã chọn (giống khung soạn bài); chỉ người được chọn từ ô gợi ý mới thành nhắc tên.
     - **Tạo Series**: tên (≤ 64), mô tả (≤ 255), ảnh bìa, đánh dấu Quan trọng, tạo dưới tên group.
     - Nháp chữ tự lưu; ảnh bìa thì không (chọn lại sau khi mở lại Dashboard).
 - **Thống kê** (chọn community hoặc group, 7 / 30 / 90 ngày)
@@ -155,7 +159,12 @@ Tab Quy tắc & cài đặt và Nhật ký chỉ dùng dữ liệu trong máy n�
   - **Gửi thông báo về Telegram** (mặc định tắt): thông báo của addon gửi thêm vào Telegram qua bot của chính bạn, mỗi tin có link mở trên Beincom; vẫn gửi khi đã tắt thông báo trên máy tính.
     - Tạo bot với @BotFather, dán token, bấm **Lấy chat ID** (sau khi đã bấm Start với bot), **Gửi thử**, rồi **Lưu**. Addon xin quyền kết nối `api.telegram.org` lúc bấm (quyền tuỳ chọn, không có khi cài).
     - Chọn loại tin: đợt spam / tự ẩn, báo cáo / gắn cờ, bài / bình luận vi phạm, yêu cầu tham gia / bài chờ duyệt (mặc định tắt), từ khoá / bài bỏ ngỏ, tóm tắt tuần, cần đăng nhập lại. Tuỳ chọn không gửi 23:00 – 7:00 (trừ đợt spam và cần đăng nhập).
-    - Token chỉ lưu trong trình duyệt này: không có trong tệp sao lưu, không đồng bộ. Addon chỉ gọi `sendMessage` và `getUpdates` (khi bấm Lấy chat ID).
+    - Token chỉ lưu trong trình duyệt này: không có trong tệp sao lưu, không đồng bộ.
+    - **Kèm nút xử lý ngay trong tin** (mặc định tắt): mỗi việc mới là một tin riêng có nút, thay cho tin gộp — tối đa 10 tin mỗi lần quét, còn lại gom thành một tin "còn N việc".
+      - Yêu cầu tham gia: **✅ Duyệt / ❌ Từ chối** (kèm câu trả lời câu hỏi gia nhập và gợi ý theo quy tắc). Bài chờ duyệt: **✅ Duyệt bài**. Bài / bình luận vi phạm: **🙈 Ẩn / Bỏ qua** (link cấm / link ngoài ẩn với lý do Spam). Đợt spam: **🙈 Ẩn cả đợt / Bỏ qua đợt**. Tin nào cũng có nút **Mở trên Beincom**.
+      - Addon đọc nút bấm mỗi 30 giây khi trình duyệt đang mở, rồi chạy đúng thao tác như bấm trong Dashboard (cùng hàng đợi với lần quét). Đang **Chạy thử** thì chỉ ghi nhật ký và giữ nút để bấm lại. Nhật ký ghi nguồn **Telegram**.
+      - Xong thì tin được sửa: thêm dòng kết quả và giờ, bỏ các nút xử lý. Bấm lại, việc đã xử lý trên Dashboard / web, hoặc việc quá 7 ngày đều không làm gì thêm.
+      - Chỉ nhận nút bấm trong đúng chat đã cài; nếu chat là nhóm Telegram thì mọi thành viên nhóm đều bấm được.
   - **Đồng bộ giữa các máy** (mặc định tắt): cài đặt, quy tắc chung và riêng, mẫu bài chào / vinh danh đi theo tài khoản Chrome / Edge sang máy khác có cài BeinGroup (chrome.storage.sync). Bật lần đầu mà tài khoản đã có bản đồng bộ từ máy khác thì addon hỏi lấy bản nào.
     - Không đồng bộ: công tắc bật addon, công tắc đồng bộ (thuộc từng máy), mẫu bài đăng, hồ sơ vi phạm. Mục nào quá 8 KB (giới hạn của trình duyệt, vd quy tắc riêng của rất nhiều group) thì bỏ qua và ghi rõ — dùng Sao lưu.
   - **Sao lưu cài đặt**: **Tải bản sao lưu** tạo tệp JSON gồm cài đặt, quy tắc (chung và riêng), mẫu bài; tuỳ chọn kèm hồ sơ vi phạm. Không chứa mật khẩu hay phiên đăng nhập.
@@ -197,6 +206,7 @@ Addon nhận ra link dạng `https://…`, `www.…` và tên miền trần có 
 Dashboard → Cài đặt có ba tuỳ chọn, chạy sau mỗi lần quét khi addon đang bật:
 - **Tự duyệt "Gợi ý duyệt"** (yêu cầu tham gia)
 - **Tự từ chối "Gợi ý từ chối"** (yêu cầu tham gia)
+- **Tự duyệt bài của thành viên tin cậy**: bài chờ duyệt **đạt mọi quy tắc bài viết** của người trong danh sách **Thành viên tin cậy**, hoặc (tuỳ chọn) người đã được duyệt ít nhất 3 / 5 / 10 bài qua addon (Dashboard, Telegram, tự duyệt) và chưa bị từ chối bài nào. Người có hồ sơ vi phạm không bao giờ được tự duyệt. Tối đa 20 bài mỗi lần quét. Ở hàng chờ duyệt bài: nhãn **⭐ Tin cậy**, nút **⭐** để thêm người đăng vào danh sách.
 - **Tự ẩn spam có link cấm**: bài và bình luận **mới** (chưa thấy ở lần quét trước) có link tới **Tên miền cấm** của quy tắc bài viết (chung hoặc riêng của group) bị ẩn với lý do Spam.
   - Chỉ xét tên miền cấm; dính từ khoá cấm hay link ngoài thì vẫn chờ bạn xử lý.
   - Không ẩn bài / bình luận của chính bạn; tối đa 20 mục mỗi lần quét; lần đầu quét (hoặc lần đầu đọc bình luận) chỉ ghi nhận.
@@ -254,6 +264,8 @@ Chi tiết từng API nằm trong [API.md](API.md). Tóm tắt:
 - **Cài đặt group**: đọc `GET group/groups/{id}/settings`; đổi `PUT group/groups/{id}/settings` với một khoá snake_case (vd `{ id, is_join_approval: false }`); Duyệt bài: `PUT group/communities/{communityId}/content-settings` với `{ group_id, content_approval: { value }, is_update_all: false }`. Quyền lấy từ `group/me/permissions` (`edit_join_setting`, `edit_privacy`).
 - **Ghim**: `GET content/contents/pinned-content/groups/{groupId}`; ghim / bỏ ghim: `PUT content/contents/pinned-content/{contentId}` với `{ pinGroupIds, unpinGroupIds }` (kiểm tra giới hạn 5 bài trước).
 - **Cài đặt bài**: `PUT content/contents/{id}/setting` với `{ canComment, canReact, isImportant, importantExpiredAt }`.
+- **Sửa bài hẹn giờ**: đọc `GET content/contents/{id}` (bài của mình, trạng thái `WAITING_SCHEDULE` / `SCHEDULE_FAILED`); lưu bằng `PUT content/posts/{id}/schedule` với đủ body như lúc hẹn giờ (nội dung, file, cài đặt, `scheduledAt` mới) — web cũng sửa bài hẹn giờ như vậy.
+- **Article: ảnh, bảng, nhắc tên**: ảnh tải với `resource: 'article:content'`, khối `{ type: 'img', url }`; bảng `table > tr > th/td > p`; nhắc tên `{ type: 'mention', value: username, data: { id, avatar, name, fullname, username } }` và `mentions: { username: data }` trong body (cấu trúc ảnh và bảng đối chiếu với Article có sẵn; nhắc tên đọc từ mã web).
 - **Sửa bài đã đăng**: đọc `GET content/contents/{id}`; lưu `PUT content/posts/{id}` với `{ audience, content, media, mentions, linkPreview, tags, series }` (như web, không kèm setting; không còn link thì gửi `{ domain: '', url: '' }` để xoá thẻ cũ); cài đặt đổi thì gọi thêm API cài đặt.
 - **Xoá bài của mình**: `DELETE content/posts/{id}`. Addon biết bài nào của bạn nhờ `GET user/me/profile`, gọi không kèm header phiên bản.
 - **Thống kê** (đọc khi mở tab):
@@ -266,6 +278,7 @@ Chi tiết từng API nằm trong [API.md](API.md). Tóm tắt:
 - Lệnh đọc gặp lỗi tạm thời ở máy chủ Beincom (HTTP 502 / 503 / 504) được thử lại tối đa 2 lần (cách 1,5 rồi 3 giây); vẫn lỗi thì báo "Máy chủ Beincom không phản hồi kịp", lần quét sau tự đọc lại. Lệnh ghi không tự thử lại để tránh làm hai lần.
 - API nội dung (`content/…`) của Beincom chỉ nhận tối đa 25 mục mỗi trang; addon đọc nhiều trang khi cần. API nhóm (`group/…`) nhận 50–100.
 - Xoá / ẩn / duyệt / huỷ hẹn giờ một bài mà Beincom báo "Content not found" (bài đã bị xoá trên web): addon tính là xong, bỏ bài khỏi danh sách và ghi "Bài không còn trên Beincom" vào nhật ký.
+- **Telegram**: `sendMessage` (tin, kèm `reply_markup.inline_keyboard` khi bật nút xử lý; nút mang mã `token:act` ≤ 64 byte, việc tương ứng lưu ở khoá `tgActions` 7 ngày), `getUpdates` (Lấy chat ID; đọc nút bấm với `allowed_updates: ["callback_query"]` và `offset` lưu ở `telegramPoll`, alarm 30 giây chỉ khi bật), `answerCallbackQuery`, `editMessageText`.
 - **Xác thực**: header `x-application: BIC_GROUP`, `x-platform: WEB`, cookie của beincom.com. Gọi trực tiếp bị chặn thì addon mở tạm một tab Beincom ở nền rồi gọi trong tab đó, giống addon Beincom Check-in.
 
 ## Cấu trúc mã
@@ -276,7 +289,7 @@ Chi tiết từng API nằm trong [API.md](API.md). Tóm tắt:
   - `core.js` (dữ liệu, tiện ích, hộp xác nhận, gửi thao tác, chuyển tab), `ui.js` (ô người dùng / bài dùng ở nhiều tab)
   - `todo.js` (hộp Việc cần làm), `overview.js`, `members.js`, `content.js`, `reports.js`, `compose.js` + `attach.js` (đính kèm, nhắc tên, link, tag) + `calendar.js` (lịch nội dung, nhập CSV) + `article.js` (Article & Series) + `welcome.js` (chào thành viên mới) + `shoutout.js` (vinh danh), `stats.js`, `settings.js`, `log.js`
   - `dashboard.js` nạp cuối: sự kiện chung, vẽ lại toàn trang, nạp dữ liệu.
-- `background.js` (service worker) chỉ lo lịch chạy, sự kiện và nhận lệnh; phần còn lại trong `bg/` nạp bằng `importScripts`: `core.js` (gọi API, thao tác ghi, thông báo, hồ sơ vi phạm, hàng đợi), `scan.js` (quét, tự ẩn, đợt spam), `actions.js` (thao tác thành viên / bài / bình luận), `compose.js` (đăng bài, file, ghim, sửa bài), `article.js` (Article, Series, chuyên mục), `manage.js` (cài đặt group, sao lưu, thống kê, báo cáo), `sync.js` (đồng bộ cài đặt giữa các máy), `telegram.js` (gửi thông báo về Telegram).
+- `background.js` (service worker) chỉ lo lịch chạy, sự kiện và nhận lệnh; phần còn lại trong `bg/` nạp bằng `importScripts`: `core.js` (gọi API, thao tác ghi, thông báo, hồ sơ vi phạm, hàng đợi), `scan.js` (quét, tự ẩn, đợt spam), `actions.js` (thao tác thành viên / bài / bình luận), `compose.js` (đăng bài, file, ghim, sửa bài), `article.js` (Article, Series, chuyên mục), `manage.js` (cài đặt group, sao lưu, thống kê, báo cáo), `sync.js` (đồng bộ cài đặt giữa các máy), `telegram.js` (gửi thông báo về Telegram, nút xử lý trong tin).
 - `popup.html` / `popup.js`: cửa sổ nhỏ khi bấm icon.
 
 ## Kiểm thử
@@ -288,7 +301,7 @@ Kiểm thử trên addon thật (cần Google Chrome; đặt `CHROME_PATH` nếu
 node test/e2e/addon.e2e.mjs
 ```
 - Nạp addon vào Chrome headless bằng CDP (`Extensions.loadUnpacked`), kiểm tra service worker có đủ hàm, nạp dữ liệu mẫu (qua hàng đợi của service worker), mở **Dashboard thật** đi qua cả 8 tab và **popup thật**, báo lỗi JavaScript ở mọi trang. Không đăng nhập Beincom, không thao tác gì lên tài khoản.
-- `test/common.test.js`: quy tắc thành viên và bài viết (chung / riêng từng group), nhận link, quyền, đường dẫn, xuất CSV, xem trước markdown (an toàn với HTML), ghép số liệu thống kê, lịch bài định kỳ, đọc / làm sạch tệp sao lưu, bình luận (thu gọn, chọn bài cần đọc, gộp), tóm tắt tuần, phát hiện đợt spam, nhắc tên trong bình luận, bài chưa ai trả lời, bài chào thành viên mới, giờ đăng tốt nhất, lưới lịch tháng, đọc CSV (dấu phẩy / chấm phẩy, ngoặc kép, xuống dòng trong ô, giờ Việt Nam, bỏ ngày không có thật, tên group trùng, tệp mẫu đọc lại được), Markdown → nội dung Article (các khối, định dạng chữ, link có chữ hai bên, xem trước an toàn), kiểm tra và body Article / Series.
+- `test/common.test.js`: quy tắc thành viên và bài viết (chung / riêng từng group), nhận link, quyền, đường dẫn, xuất CSV, xem trước markdown (an toàn với HTML), ghép số liệu thống kê, lịch bài định kỳ, đọc / làm sạch tệp sao lưu, bình luận (thu gọn, chọn bài cần đọc, gộp), tóm tắt tuần, phát hiện đợt spam, nhắc tên trong bình luận, bài chưa ai trả lời, bài chào thành viên mới, thành viên tin cậy (danh sách / số bài được duyệt, đếm từ nhật ký), giờ đăng tốt nhất, lưới lịch tháng, đọc CSV (dấu phẩy / chấm phẩy, ngoặc kép, xuống dòng trong ô, giờ Việt Nam, bỏ ngày không có thật, tên group trùng, tệp mẫu đọc lại được), Markdown → nội dung Article (các khối, định dạng chữ, link có chữ hai bên, bảng, ảnh, nhắc tên chỉ người đã chọn, xem trước an toàn), kiểm tra và body Article / Series, nút xử lý trong tin Telegram (bàn phím, mã nút ≤ 64 byte, nội dung tin an toàn, kết quả, dọn việc cũ).
 - `test/upload.test.js`: luồng tải ảnh / video / tệp với kho lưu trữ giả lập (thứ tự trường, lỗi S3, không đọc được phản hồi, tệp kèm cookie, hết phiên).
 - `test/background.test.js`: chạy `background.js` thật với `chrome.*` và API Beincom giả lập. Kiểm tra:
   - Quét, thông báo, chạy thử, hết phiên đăng nhập, phân trang
@@ -316,6 +329,10 @@ node test/e2e/addon.e2e.mjs
   - Tag / series: tải theo group gốc (kể cả bản cũ chưa lưu group gốc), đủ các trang, kiểm tra hợp lệ trước khi tạo nháp, báo tên mục không hợp lệ
   - Nhắc tên và xem trước link: đúng API / header, chỉ gửi người còn trong bài, không gửi xem trước khi có ảnh
   - Tải file: xin chỗ tải lên đúng API / body / header, chờ xử lý (lỗi, chưa xong, quá lâu), đăng bài kèm ảnh, chạy thử không tải
+  - Telegram có nút: việc mới gửi tin riêng có nút (không gửi tin gộp), tối đa 10 tin + tin "còn N việc", loại tin tắt thì không gửi; bấm Duyệt / Từ chối / Ẩn / Ẩn cả đợt / Duyệt bài gọi đúng API, nhật ký ghi Telegram, tin được sửa; bấm lại, sai chat, mã lạ thì không làm; Chạy thử giữ nút; tắt nút thì như cũ và không đọc nút bấm
+  - Tự duyệt bài tin cậy: chỉ bài đạt quy tắc của người trong danh sách hoặc đã được duyệt đủ N bài (chưa bị từ chối), có hồ sơ vi phạm / bài vi phạm thì không, nhật ký ghi lý do, chạy thử ghi một lần, tắt thì không làm; duyệt / từ chối trong Dashboard cũng được đếm
+  - Sửa bài hẹn giờ: chỉ bài của mình đang hẹn giờ, lưu bằng PUT …/schedule với đủ body và giờ mới, giờ quá gần / thiếu giờ / bài người khác thì không gửi
+  - Article có nhắc tên và ảnh: body gửi mentions và khối mention / img, ảnh chưa tải lên thì không gửi, ảnh trong bài tải đúng resource
   - Article: đọc chuyên mục, tạo nháp rồi publish / schedule đúng body (nội dung dạng trình soạn thảo), series / tag kiểm tra trước, dưới tên group, lỗi thì xoá nháp, thiếu dữ liệu thì không gọi API; Series đúng API / body; ảnh bìa đúng resource; bài hẹn giờ gồm Article, huỷ Article xoá đúng chỗ; chạy thử chỉ ghi nhật ký
   - Hồ sơ vi phạm: ghi từ lần quét (nhật ký Beincom, báo cáo, gắn cờ, vi phạm quy tắc) và từ thao tác qua addon, không ghi trùng, gộp cùng một lần xoá từ hai nguồn, bỏ báo cáo bị bỏ qua, không tự duyệt người có hồ sơ (kể cả người vừa bị cấm trong chính lần quét), tắt thì không đọc / ghi, dựng lần đầu từ nhật ký cũ, xoá hồ sơ
   - Quét báo cáo: đếm đúng, lần sau báo cái mới (bài gắn cờ ở nhiều group báo một lần), API treo không làm hỏng lần quét, tắt thì không gọi API, xử lý xong thì trừ số đếm, mở tab thì cập nhật số đếm và không báo lại
@@ -341,7 +358,9 @@ node test/e2e/addon.e2e.mjs
 - Tải tệp cần gọi API Beincom trực tiếp (kèm cookie); nếu trình duyệt chặn cookie thì tệp không tải lên được.
 - **Quét bình luận** chỉ thấy 25 bình luận gốc mới nhất và 25 trả lời mới nhất của mỗi bình luận, ở bài nằm trong danh sách bài mới; bình luận trong bài cũ hơn thì không đọc. API đọc đã gọi thật; nút Ẩn bình luận chưa.
 - **Đăng dưới tên group** cần Beincom bật cờ tính năng cho tài khoản (web ẩn nút khi chưa bật); chưa gọi thật lần nào.
-- **Article**: nội dung viết bằng Markdown nên chưa có ảnh trong thân bài, bảng, nhắc tên, căn lề (muốn dùng thì sửa tiếp trên web). Cấu trúc nội dung đã đối chiếu với Article có sẵn trên Beincom (chỉ đọc); đăng / hẹn giờ Article và tạo Series chưa gọi thật lần nào.
+- **Article**: nội dung viết bằng Markdown nên chưa có căn lề, chú thích ảnh, gộp ô bảng (muốn dùng thì sửa tiếp trên web). Cấu trúc nội dung đã đối chiếu với Article có sẵn trên Beincom (chỉ đọc); đăng / hẹn giờ Article, tạo Series, nhắc tên trong Article chưa gọi thật lần nào.
+- **Tự duyệt bài tin cậy** chỉ đếm bài duyệt qua addon (bài duyệt trên web không được đếm). **Sửa bài hẹn giờ** chưa gọi thật; Article hẹn giờ thì sửa trên web.
+- **Nút xử lý trong Telegram** chỉ chạy khi máy đang mở trình duyệt (addon đọc nút bấm mỗi 30 giây); máy tắt thì bấm nút sẽ được xử lý khi mở lại (Telegram giữ nút bấm 24 giờ). Từ chối bài chờ duyệt cần lý do nên chỉ làm trong Dashboard.
 - **Nhập CSV** chỉ cho bài chữ (không ảnh / video / tệp, không tag / series), không đăng dưới tên group; cần giữ Dashboard mở tới khi hẹn xong.
 - **Bài định kỳ** là các bài hẹn giờ đặt trước (tối đa 30 bài mỗi lần), không phải lặp mãi; hết chuỗi thì tạo chuỗi mới. Danh sách chuỗi chỉ lưu trong trình duyệt này; bài đăng trên máy khác vẫn hiện ở Bài đã hẹn giờ nhưng không có nhãn 🔁.
 - Chưa kiểm chứng với dữ liệu thật: cách nhận ra ảnh đại diện mặc định, dạng dữ liệu câu trả lời câu hỏi gia nhập.

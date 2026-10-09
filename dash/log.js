@@ -50,7 +50,7 @@ function renderLog() {
         'tr',
         {},
         el('td', { text: fmtTime(e.time) }),
-        el('td', { text: e.source === 'auto' ? 'Tự động' : 'Bấm tay' }),
+        el('td', { text: BG.sourceLabel(e.source) }),
         el('td', { text: actionLabel(e) }),
         el('td', {}, el('span', { class: 'tag ' + cls, text: label })),
         el('td', { text: e.communityName && e.communityName !== e.groupName ? `${e.communityName} › ${e.groupName}` : e.groupName }),
@@ -64,7 +64,7 @@ function renderLog() {
 
 const LOG_COLUMNS = [
   { label: 'Thời gian', get: (e) => new Date(e.time).toISOString() },
-  { label: 'Nguồn', get: (e) => (e.source === 'auto' ? 'Tự động' : 'Bấm tay') },
+  { label: 'Nguồn', get: (e) => BG.sourceLabel(e.source) },
   { label: 'Thao tác', get: actionLabel },
   { label: 'Kết quả', get: (e) => STATUS_TAGS[e.status]?.[1] || e.status },
   { label: 'Community', key: 'communityName' },

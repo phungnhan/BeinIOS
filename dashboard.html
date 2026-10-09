@@ -592,14 +592,43 @@
             <div class="art-label">
               <b>Nội dung</b>
               <span class="muted small" id="art-count"></span>
-              <div class="seg" id="art-view" aria-label="Chế độ xem">
-                <button data-f="write" class="active">Viết</button>
-                <button data-f="preview">Xem trước</button>
+            </div>
+            <div class="editor art-editor-box">
+              <div class="editor-toolbar" id="art-toolbar" role="toolbar" aria-label="Định dạng Article">
+                <button type="button" data-md="bold" title="Chữ đậm (Ctrl+B)" aria-label="Chữ đậm"><b>B</b></button>
+                <button type="button" data-md="italic" title="Chữ nghiêng (Ctrl+I)" aria-label="Chữ nghiêng"><i>I</i></button>
+                <button type="button" data-md="underline" title="Gạch chân (Ctrl+U)" aria-label="Gạch chân"><u>U</u></button>
+                <button type="button" data-md="strike" title="Gạch ngang" aria-label="Gạch ngang"><s>S</s></button>
+                <button type="button" data-md="code" title="Chữ dạng mã" aria-label="Chữ dạng mã">&lt;/&gt;</button>
+                <span class="sep" aria-hidden="true"></span>
+                <button type="button" data-md="h1" title="Tiêu đề lớn" aria-label="Tiêu đề lớn">H1</button>
+                <button type="button" data-md="h2" title="Tiêu đề mục" aria-label="Tiêu đề mục">H2</button>
+                <button type="button" data-md="h3" title="Tiêu đề nhỏ" aria-label="Tiêu đề nhỏ">H3</button>
+                <button type="button" data-md="ul" title="Danh sách gạch đầu dòng" aria-label="Danh sách gạch đầu dòng">• ≡</button>
+                <button type="button" data-md="ol" title="Danh sách đánh số" aria-label="Danh sách đánh số">1. ≡</button>
+                <button type="button" data-md="quote" title="Trích dẫn" aria-label="Trích dẫn">❝</button>
+                <button type="button" data-md="hr" title="Đường kẻ ngang" aria-label="Đường kẻ ngang">―</button>
+                <span class="sep" aria-hidden="true"></span>
+                <button type="button" data-md="link" title="Chèn link (Ctrl+K)" aria-label="Chèn link">🔗 Link</button>
+                <button type="button" data-md="image" title="Chèn ảnh vào chỗ con trỏ (tải lên khi bấm Đăng)" aria-label="Chèn ảnh">🖼 Ảnh</button>
+                <button type="button" data-md="video" title="Chèn video YouTube / Vimeo" aria-label="Chèn video">🎬 Video</button>
+                <button type="button" data-md="table" title="Chèn bảng" aria-label="Chèn bảng">▦ Bảng</button>
+                <button type="button" data-md="mention" title="Nhắc tên một người (hoặc gõ @)" aria-label="Nhắc tên">@ Nhắc tên</button>
+                <input type="file" id="art-img-file" accept="image/jpeg,image/png,image/webp,image/gif" multiple hidden />
+                <span class="spacer"></span>
+                <div class="seg" id="art-view" aria-label="Chế độ xem">
+                  <button type="button" data-f="write" class="active">Soạn</button>
+                  <button type="button" data-f="split">Soạn + xem trước</button>
+                  <button type="button" data-f="preview">Xem trước</button>
+                </div>
+              </div>
+              <div class="editor-body" id="art-editor">
+                <textarea id="art-content" rows="16" placeholder="Viết nội dung Article… Bôi đen chữ rồi bấm nút trên thanh công cụ để định dạng; mỗi dòng là một đoạn. Gõ @ để nhắc tên." aria-label="Nội dung Article"></textarea>
+                <div class="md-preview art-preview" id="art-preview" aria-label="Xem trước Article" hidden></div>
+                <div id="art-mention-pop" class="mention-pop" role="listbox" aria-label="Chọn người để nhắc tên" hidden></div>
               </div>
             </div>
-            <textarea id="art-content" rows="14" placeholder="Viết bằng Markdown, addon tự chuyển sang trình soạn thảo Article của Beincom."></textarea>
-            <div class="md-preview art-preview" id="art-preview" hidden></div>
-            <div class="muted small art-help"><code># Tiêu đề lớn</code> <code>## Tiêu đề mục</code> <code>**đậm**</code> <code>*nghiêng*</code> <code>~~gạch~~</code> <code>++gạch chân++</code> <code>- danh sách</code> <code>1. đánh số</code> <code>&gt; trích dẫn</code> <code>---</code> <code>[chữ](https://…)</code> · một dòng chỉ có link YouTube → video. Mỗi dòng là một đoạn.</div>
+            <div class="muted small art-help">Bôi đen chữ rồi bấm nút để định dạng; Ctrl+B / I / U / K. Ảnh tải lên Beincom lúc bấm Đăng. Một dòng chỉ có link YouTube / Vimeo là video nhúng. Ai quen Markdown có thể gõ thẳng: <code>## tiêu đề</code> <code>**đậm**</code> <code>- danh sách</code> <code>| bảng |</code>.</div>
           </div>
           <div class="article-only art-picks" id="art-picks"></div>
           <div class="compose-options">
@@ -964,6 +993,20 @@
         <label class="switch-row"><input type="checkbox" id="autoApprove" /><span><b>Tự duyệt "Gợi ý duyệt"</b></span></label>
         <label class="switch-row"><input type="checkbox" id="autoDecline" /><span><b>Tự từ chối "Gợi ý từ chối"</b></span></label>
         <label class="switch-row"><input type="checkbox" id="autoHideSpam" /><span><b>Tự ẩn spam có link cấm</b><br /><span class="muted small">Bài và bình luận <b>mới</b> có link tới <b>Tên miền cấm</b> (quy tắc bài viết) bị ẩn ngay sau lần quét, lý do Spam. Chỉ xét tên miền cấm, không xét từ khoá; không ẩn bài của chính bạn; tối đa 20 mục mỗi lần quét.</span></span></label>
+        <label class="switch-row"><input type="checkbox" id="autoApprovePosts" /><span><b>Tự duyệt bài của thành viên tin cậy</b><br /><span class="muted small">Bài chờ duyệt <b>đạt mọi quy tắc bài viết</b> của người trong danh sách dưới đây, hoặc người đã được duyệt đủ số bài qua addon (Dashboard, Telegram, tự duyệt) và chưa bị từ chối bài nào. Người có hồ sơ vi phạm không bao giờ được tự duyệt. Tối đa 20 bài mỗi lần quét.</span></span></label>
+        <label class="text-row" data-requires="autoApprovePosts">
+          <span><b>Thành viên tin cậy</b><br /><span class="muted small">Username, cách nhau dấu phẩy (vd @kai, lan). Thêm nhanh bằng nút ⭐ ở hàng chờ duyệt bài.</span></span>
+          <textarea id="trustedMembers" rows="2" placeholder="vd: @kai, @lananh"></textarea>
+        </label>
+        <label class="select-row" data-requires="autoApprovePosts">
+          <span><b>Hoặc tin cậy người đã được duyệt</b><br /><span class="muted small">Chỉ đếm bài duyệt qua addon; bị từ chối một bài thì thôi</span></span>
+          <select id="trustAfterApproved">
+            <option value="0">Không dùng</option>
+            <option value="3">3 bài</option>
+            <option value="5">5 bài</option>
+            <option value="10">10 bài</option>
+          </select>
+        </label>
         <div class="muted small">"Cần xem" không bao giờ tự xử lý.</div>
       </div>
       <div class="group watch-group">
@@ -1004,6 +1047,8 @@
         </label>
         <div class="tg-kinds" id="tg-kinds"></div>
         <label class="check small"><input type="checkbox" id="tg-quiet" /> Không gửi từ 23:00 đến 7:00 (trừ đợt spam và cần đăng nhập)</label>
+        <label class="check small"><input type="checkbox" id="tg-actions" /> <span><b>Kèm nút xử lý ngay trong tin</b>: Duyệt / Từ chối yêu cầu tham gia, Duyệt bài chờ duyệt, Ẩn / Bỏ qua bài và bình luận vi phạm, đợt spam</span></label>
+        <div class="muted small tg-act-hint">Mỗi việc mới là một tin riêng có nút (tối đa 10 tin mỗi lần quét) thay cho tin gộp; nhớ bật loại tin tương ứng ở trên (vd "Yêu cầu tham gia, bài chờ duyệt"). Addon đọc nút bấm mỗi 30 giây khi trình duyệt đang mở; bấm nút có tác dụng như bấm trong Dashboard (đang Chạy thử thì chỉ ghi nhật ký, nguồn ghi "Telegram"). Chỉ nhận nút bấm trong đúng chat ở trên — nếu là nhóm Telegram thì mọi thành viên nhóm đều bấm được.</div>
         <div class="sync-row">
           <span class="muted small" id="tg-status"></span>
           <span class="tg-actions"><button type="button" class="ghost sm" id="btn-tg-test">Gửi thử</button><button type="button" class="primary sm" id="btn-tg-save">Lưu</button></span>

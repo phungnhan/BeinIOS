@@ -295,6 +295,7 @@ function applyGroups(state, next, groups, notifyAllowed, now) {
   next.snapshot = { at: now, groups };
   // Số thành viên mỗi ngày (giá trị cuối ngày theo giờ VN) để vẽ thống kê khi không có số liệu chính thức
   next.memberHistory = BG.recordMemberHistory(state.memberHistory, groups, now);
+  return state.knownRequestIds ? fresh : []; // yêu cầu mới (lần đầu chỉ ghi nhận)
 }
 
 // Ghi bài mới đăng: báo bài mới vi phạm (lần quét bài đầu tiên chỉ ghi nhận)
@@ -446,7 +447,7 @@ async function autoHideSpam({ settings, state, next, log, ctx, posts = [], comme
 
 // Báo đợt spam mới (mỗi đợt một lần)
 function notifyWaves(state, next, settings, postRules, notifyAllowed, now) {
-  if (!settings.spamWaves) return;
+  if (!settings.spamWaves) return [];
   const waves = BG.spamWaves(BG.waveItems(next.recentPosts, settings.scanComments ? next.recentComments : []), {
     now,
     allowed: ['beincom.com', ...(postRules.allowedDomains || [])],
@@ -462,6 +463,7 @@ function notifyWaves(state, next, settings, postRules, notifyAllowed, now) {
     notify('bg-wave', `BeinGroup: phát hiện ${fresh.length > 1 ? fresh.length + ' đợt' : 'đợt'} spam`, `${w.type === 'link' ? w.label : '"' + w.label + '"'}: ${w.accounts.length} tài khoản, ${w.items.length} bài / bình luận`, url);
   }
   next.knownWaves = [...new Set([...waves.map((w) => w.key), ...(state.knownWaves || [])])].slice(0, 200);
+  return state.recentPosts ? fresh : []; // đợt mới (để gửi tin có nút về Telegram)
 }
 
 // Báo cáo chờ xử lý mới và bài mới bị Beincom gắn cờ (lần quét đầu chỉ ghi nhận)
@@ -554,6 +556,7 @@ async function doScan({ source = 'alarm' } = {}) {
   const now = Date.now();
   const next = { ...state, lastScan: now, lastResult: { status: result.status, message: result.message || '', mode: result.mode || '' } };
   const tg = await loadTelegram();
+  resetTelegramItems();
   notifyDesktop = !!settings.notify;
   const notifyAllowed = settings.active && (settings.notify || telegramOn(tg)) && source !== 'popup' && source !== 'dashboard';
 
@@ -561,6 +564,8 @@ async function doScan({ source = 'alarm' } = {}) {
     let groups = result.groups;
 
     // Tự xử lý theo quy tắc (chỉ khi addon đang bật). Chạy thử: mỗi yêu cầu chỉ ghi nhật ký một lần.
+    let autoMembers = 0;
+    let autoPosts = 0;
     if (settings.active && (settings.autoApprove || settings.autoDecline)) {
       await flushViolations(); // hồ sơ vừa ghi trong lần quét này (vd người bị cấm trên web) phải có trước khi tự duyệt
       const { profiles } = await chrome.storage.local.get('profiles');
@@ -570,22 +575,45 @@ async function doScan({ source = 'alarm' } = {}) {
         pushLog(log, r.entries);
         groups = removeHandled(groups, r.entries);
         if (settings.dryRun) next.autoDryIds = [...items.map((x) => x.log.requestId), ...(state.autoDryIds || [])].slice(0, KNOWN_MAX);
-        const okCount = r.entries.filter((e) => e.status === 'ok').length;
-        if (okCount && notifyAllowed) notify('bg-auto', 'BeinGroup: đã tự xử lý', `${okCount} yêu cầu tham gia theo quy tắc`);
+        autoMembers = r.entries.filter((e) => e.status === 'ok').length;
       }
     }
+    // Tự duyệt bài chờ duyệt của thành viên tin cậy (bài đạt mọi quy tắc, người đăng không có hồ sơ vi phạm)
+    if (settings.active && settings.autoApprovePosts) {
+      await flushViolations();
+      const { profiles } = settings.trackViolations ? await chrome.storage.local.get('profiles') : {};
+      const items = postAutoItems(groups, settings, rulesCtx(loaded, groups), state.postTrust, profiles, settings.dryRun ? state.autoPostDryIds : []);
+      if (items.length) {
+        const r = await performActions(items, settings);
+        pushLog(log, r.entries);
+        groups = removeHandledPosts(groups, r.entries);
+        next.postTrust = BG.tallyPostTrust(state.postTrust, r.entries, now);
+        if (settings.dryRun) next.autoPostDryIds = [...items.map((x) => x.log.contentId), ...(state.autoPostDryIds || [])].slice(0, KNOWN_MAX);
+        autoPosts = r.entries.filter((e) => e.status === 'ok').length;
+      }
+    }
+    if ((autoMembers || autoPosts) && notifyAllowed) {
+      notify('bg-auto', 'BeinGroup: đã tự xử lý', [autoMembers && `${autoMembers} yêu cầu tham gia theo quy tắc`, autoPosts && `duyệt ${autoPosts} bài của thành viên tin cậy`].filter(Boolean).join(', '));
+    }
 
-    applyGroups(state, next, groups, notifyAllowed, now);
+    const freshRequestIds = applyGroups(state, next, groups, notifyAllowed, now);
     if (settings.scanReports) applyReports(state, next, groups, notifyAllowed);
     if (result.me) next.me = result.me;
+    const fresh = { posts: [], comments: [], waves: [] };
     if (settings.scanPosts) {
       const ctx = rulesCtx(loaded, next.snapshot.groups);
       const p = applyPosts(state, next, result.posts, ctx, notifyAllowed, now);
       const c = applyComments(state, next, result.comments, ctx, notifyAllowed, now);
       await autoHideSpam({ settings, state, next, log, ctx, posts: p.bad, comments: c.bad, notifyAllowed });
-      notifyWaves(state, next, settings, loaded.postRules, notifyAllowed, now);
+      const waves = notifyWaves(state, next, settings, loaded.postRules, notifyAllowed, now);
       notifyWatch(state, next, settings, [...p.fresh, ...c.fresh], notifyAllowed);
       remindUnanswered(state, next, settings, notifyAllowed);
+      Object.assign(fresh, { posts: p.bad, comments: c.bad, waves });
+    }
+    // Telegram có nút xử lý: mỗi việc mới một tin (gửi cuối lần quét)
+    if (notifyAllowed && BG.telegramActionsOn(tg)) {
+      const { profiles } = settings.trackViolations ? await chrome.storage.local.get('profiles') : {};
+      queueScanItems({ state, next, ctx: rulesCtx(loaded, next.snapshot.groups), profiles, freshRequestIds, ...fresh });
     }
   } else if (result.status === 'need_login' && notifyAllowed && state.lastLoginNotifyDay !== BG.vnDay()) {
     next.lastLoginNotifyDay = BG.vnDay();
@@ -615,6 +643,7 @@ async function doScan({ source = 'alarm' } = {}) {
     notify('bg-weekly', 'BeinGroup: tóm tắt tuần qua', parts.length ? parts.join(' · ') : 'Tuần qua yên ả, không có việc gì cần xử lý. Bấm để xem chi tiết.');
   }
 
+  await flushTelegramItems().catch(() => {});
   await chrome.storage.local.set({ state: next, log });
   await updateBadge();
   return next;

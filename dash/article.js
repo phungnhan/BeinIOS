@@ -14,6 +14,9 @@ const art = {
   picks: { key: '', tags: [], series: [], loading: false, error: '' },
   draftLoaded: false,
   running: false,
+  mentions: {}, // username -> dữ liệu nhắc tên (BG.articleMentionEntry)
+  images: {}, // N -> { file, preview, item } ảnh trong thân bài, nội dung ghi ![tên](local:N) cho tới khi tải lên
+  imgSeq: 0,
 };
 let artDraftTimer = 0;
 let artPickTimer = 0;
@@ -41,7 +44,49 @@ function readArticle() {
     asGroup: $('art-as-group').checked && !!artAsGroupTarget(),
     isImportant: $('art-important').checked,
     hasCover: !!art.cover,
+    mentions: BG.usedMentions($('art-content').value, art.mentions),
   };
+}
+
+// ---------- Ảnh trong thân bài ----------
+// Chọn ảnh -> chèn ![tên](local:N) vào chỗ con trỏ; bấm Đăng mới tải lên (resource 'article:content') và thay bằng link thật.
+const localRefs = (md) => [...new Set([...String(md || '').matchAll(BG.LOCAL_IMAGE)].map((m) => m[1]))];
+const missingImages = (md) => localRefs(md).filter((n) => !art.images[n]);
+// Nội dung để kiểm tra / xem trước: ảnh chưa tải thay bằng link tạm (kiểm tra) hoặc ảnh trong máy (xem trước)
+const withImages = (md, preview = false) => String(md || '').replace(BG.LOCAL_IMAGE, (m, n) => (art.images[n] ? '](' + (preview ? art.images[n].preview : 'https://media.beincom.com/local-' + n) + ')' : m));
+
+function insertImages(files) {
+  const ta = $('art-content');
+  const imgs = [...files].filter((f) => /^image\/(jpeg|png|webp|gif)$/.test(f.type));
+  if (imgs.length < files.length) toast('Chỉ chèn được ảnh JPG, PNG, WEBP, GIF', 'warn');
+  const room = BG.ARTICLE_IMAGES_MAX - localRefs(ta.value).length - BG.mdToPlate(withImages(ta.value), { id: () => '' }).filter((x) => x.type === 'img' && !/local-/.test(x.url)).length;
+  const take = imgs.filter((f) => f.size <= 25 * 1024 * 1024).slice(0, Math.max(0, room));
+  if (take.length < imgs.length) toast(`Mỗi ảnh tối đa 25 MB, tối đa ${BG.ARTICLE_IMAGES_MAX} ảnh mỗi bài`, 'warn');
+  if (!take.length) return;
+  const lines = take.map((f) => {
+    const n = String(++art.imgSeq);
+    art.images[n] = { file: f, preview: URL.createObjectURL(f), item: null };
+    return `![${f.name.replace(/[\[\]\n]/g, ' ')}](local:${n})`;
+  });
+  const pos = ta.selectionEnd;
+  const before = ta.value.slice(0, pos);
+  const text = (before && !before.endsWith('\n') ? '\n' : '') + lines.join('\n') + '\n';
+  editReplace(ta, pos, pos, text, pos + text.length, pos + text.length);
+  updateArticle();
+  saveArticleDraft();
+}
+
+// Tải các ảnh còn local:N trong nội dung (theo thứ tự), trả về nội dung đã thay link; lỗi thì ném
+async function uploadArticleImages(md) {
+  let out = md;
+  const refs = localRefs(md);
+  for (const [i, n] of refs.entries()) {
+    const im = art.images[n];
+    if (!im) throw new Error('Ảnh trong bài cần chọn lại (ảnh không được lưu trong nháp)');
+    if (!im.item) im.item = await uploader.upload('image', im.file, (p) => ($('btn-art-submit').textContent = `Đang tải ảnh ${i + 1}/${refs.length} · ${Math.round(p * 100)}%`), { resource: 'article:content' });
+    out = out.split(`](local:${n})`).join(`](${im.item.url})`);
+  }
+  return out;
 }
 
 // ---------- Nháp ----------
@@ -64,6 +109,7 @@ function saveArticleDraft() {
         at: $('art-at').value,
         asGroup: $('art-as-group').checked,
         isImportant: a.isImportant,
+        mentions: a.mentions,
       },
     });
   }, 600);
@@ -87,6 +133,7 @@ async function loadArticleDraftOnce() {
   $('art-at').value = d.at || '';
   $('art-as-group').checked = !!d.asGroup;
   $('art-important').checked = !!d.isImportant;
+  art.mentions = { ...d.mentions };
   renderArticle();
 }
 
@@ -192,22 +239,28 @@ function renderArtCover() {
   $('btn-art-cover-clear').hidden = !art.cover;
 }
 
+// Chế độ xem: write (chỉ soạn) | split (soạn + xem trước cạnh nhau) | preview (chỉ xem trước)
 function renderArtPreview() {
-  const preview = art.view === 'preview';
-  $('art-content').hidden = preview;
-  $('art-preview').hidden = !preview;
-  for (const b of $('art-view').querySelectorAll('button')) b.classList.toggle('active', b.dataset.f === art.view);
-  if (!preview) return;
+  const v = art.view;
+  $('art-editor').classList.toggle('split', v === 'split');
+  $('art-content').hidden = v === 'preview';
+  $('art-preview').hidden = v === 'write';
+  for (const b of $('art-view').querySelectorAll('button')) b.classList.toggle('active', b.dataset.f === v);
+  for (const b of $('art-toolbar').querySelectorAll(':scope > button')) b.disabled = v === 'preview';
+  if (v === 'write') return;
   const title = $('art-title').value.trim();
   const summary = $('art-summary').value.trim();
   // plateHtml đã escape HTML; tiêu đề / tóm tắt gắn bằng textContent
   const body = el('div');
-  body.innerHTML = BG.plateHtml(BG.mdToPlate($('art-content').value, { id: () => '' }));
+  body.innerHTML = BG.plateHtml(BG.mdToPlate(withImages($('art-content').value, true), { id: () => '', mentions: art.mentions }));
+  // replaceChildren biến null thành chữ "null": chỉ đưa vào phần có thật
   $('art-preview').replaceChildren(
-    art.cover ? el('img', { class: 'art-preview-cover', src: art.cover.preview, alt: '' }) : null,
-    el('h1', { class: 'art-preview-title', text: title || '(chưa có tiêu đề)' }),
-    summary ? el('p', { class: 'muted', text: summary }) : null,
-    body,
+    ...[
+      art.cover ? el('img', { class: 'art-preview-cover', src: art.cover.preview, alt: '' }) : null,
+      el('h1', { class: 'art-preview-title', text: title || '(chưa có tiêu đề)' }),
+      summary ? el('p', { class: 'muted', text: summary }) : null,
+      body,
+    ].filter(Boolean),
   );
 }
 
@@ -232,7 +285,7 @@ function updateArticle() {
   $('art-title-n').textContent = `${a.title.trim().length}/${titleMax}`;
   $('art-summary-n').textContent = `${a.summary.trim().length}/${sumMax}`;
   if (isArticle) {
-    const nodes = BG.mdToPlate(a.content, { id: () => '' });
+    const nodes = BG.mdToPlate(withImages(a.content), { id: () => '' });
     const len = BG.plateText(nodes).length;
     $('art-count').textContent = `${BG.plateWords(nodes).toLocaleString('vi-VN')} từ · ${len.toLocaleString('vi-VN')}/${BG.ARTICLE_MAX.toLocaleString('vi-VN')} ký tự`;
     $('art-count').classList.toggle('over', len > BG.ARTICLE_MAX);
@@ -243,13 +296,14 @@ function updateArticle() {
   $('art-as-group-label').textContent = isArticle ? 'Đăng dưới tên group' : 'Tạo dưới tên group';
   $('art-as-group-hint').textContent = target ? ($('art-as-group').checked ? `Hiện với tên và ảnh của ${target.name}.` : '') : art.groupIds.size > 1 ? 'Chỉ dùng được khi chọn một group.' : '';
   // Kiểm tra và nút
-  const err = isArticle ? BG.validateArticle({ ...a, scheduledAt: a.scheduledAt === 'invalid' ? null : a.scheduledAt }) : BG.validateSeries(a);
+  const lost = isArticle ? missingImages(a.content) : [];
+  const err = lost.length ? `${lost.length} ảnh trong bài cần chọn lại (ảnh không được lưu trong nháp) — xoá dòng ![…](local:…) rồi chèn lại` : isArticle ? BG.validateArticle({ ...a, content: withImages(a.content), scheduledAt: a.scheduledAt === 'invalid' ? null : a.scheduledAt }) : BG.validateSeries(a);
   $('art-hint').textContent = err ? 'Còn thiếu: ' + err : '';
   const btn = $('btn-art-submit');
   btn.disabled = !!err || art.running || busy || a.scheduledAt === 'invalid';
   btn.textContent = art.running ? 'Đang gửi…' : isArticle ? (later ? 'Hẹn giờ Article' : 'Đăng Article') : 'Tạo series';
   $('btn-art-clear').disabled = art.running;
-  if (art.view === 'preview') renderArtPreview();
+  if (art.view !== 'write') renderArtPreview(); // xem trước cập nhật ngay khi gõ
 }
 
 function renderArticle() {
@@ -280,8 +334,11 @@ async function submitArticle() {
   const isArticle = art.mode === 'article';
   const a = readArticle();
   if (a.scheduledAt === 'invalid') return toast('Chưa chọn giờ hẹn', 'err');
-  const err = isArticle ? BG.validateArticle(a) : BG.validateSeries(a);
+  const lost = isArticle ? missingImages(a.content) : [];
+  if (lost.length) return toast(`${lost.length} ảnh trong bài cần chọn lại`, 'err');
+  const err = isArticle ? BG.validateArticle({ ...a, content: withImages(a.content) }) : BG.validateSeries(a);
   if (err) return toast(err, 'err');
+  const bodyImages = isArticle ? localRefs(a.content).length : 0;
   const targets = artGroups();
   const dry = data.settings.dryRun;
   const asName = a.asGroup ? ` dưới tên ${targets[0].name}` : '';
@@ -292,7 +349,7 @@ async function submitArticle() {
     text: [a.title.trim(), isArticle && catNames.length ? 'Chuyên mục: ' + catNames.join(', ') : '', seriesNames.length ? 'Series: ' + seriesNames.join(', ') : ''].filter(Boolean).join(' · '),
     names: targets.map((g) => groupPath(g)),
     okText: isArticle ? (a.scheduledAt ? 'Hẹn giờ' : 'Đăng') : 'Tạo series',
-    sendNote: dry ? 'Đang bật Chạy thử: chỉ ghi nhật ký, không tải ảnh và không gửi lên Beincom.' : `Tải ảnh bìa lên Beincom trước, rồi ${isArticle ? (a.scheduledAt ? 'hẹn giờ (tới giờ Beincom tự đăng)' : 'đăng ngay') : 'tạo series'}.`,
+    sendNote: dry ? 'Đang bật Chạy thử: chỉ ghi nhật ký, không tải ảnh và không gửi lên Beincom.' : `Tải ảnh bìa${bodyImages ? ` và ${bodyImages} ảnh trong bài` : ''} lên Beincom trước, rồi ${isArticle ? (a.scheduledAt ? 'hẹn giờ (tới giờ Beincom tự đăng)' : 'đăng ngay') : 'tạo series'}.`,
   });
   if (!ok) return;
   art.running = true;
@@ -300,15 +357,23 @@ async function submitArticle() {
   let r;
   try {
     let coverId = 'dry-run';
+    let content = a.content;
     if (!dry) {
       try {
         coverId = (await uploadCover()).id;
       } catch (e) {
         return toast('Ảnh bìa: ' + (e.message || e), 'err');
       }
-    }
+      if (isArticle) {
+        try {
+          content = await uploadArticleImages(content);
+        } catch (e) {
+          return toast('Ảnh trong bài: ' + (e.message || e), 'err');
+        }
+      }
+    } else content = withImages(content); // chạy thử: không tải, chỉ ghi nhật ký
     const msg = isArticle
-      ? { type: 'composeArticle', groupIds: a.groupIds, title: a.title, summary: a.summary, content: a.content, categoryIds: a.categoryIds, coverId, tags: a.tags, series: a.series, scheduledAt: a.scheduledAt, asGroup: a.asGroup }
+      ? { type: 'composeArticle', groupIds: a.groupIds, title: a.title, summary: a.summary, content, categoryIds: a.categoryIds, coverId, tags: a.tags, series: a.series, scheduledAt: a.scheduledAt, asGroup: a.asGroup, mentions: a.mentions }
       : { type: 'composeSeries', groupIds: a.groupIds, title: a.title, summary: a.summary, coverId, isImportant: a.isImportant, asGroup: a.asGroup };
     r = await send(msg, () => (isArticle ? (a.scheduledAt ? `Đã hẹn giờ Article lúc ${fmtTime(a.scheduledAt)}.` : 'Đã đăng Article.') : 'Đã tạo series.'));
   } finally {
@@ -327,6 +392,9 @@ function clearArticle(ask = true) {
   for (const id of ['art-title', 'art-summary', 'art-content']) $(id).value = '';
   if (art.cover?.preview) URL.revokeObjectURL(art.cover.preview);
   art.cover = null;
+  for (const im of Object.values(art.images)) URL.revokeObjectURL(im.preview);
+  art.images = {};
+  art.mentions = {};
   art.categoryIds.clear();
   art.seriesIds.clear();
   art.tagIds.clear();
@@ -380,4 +448,72 @@ $('btn-art-cover-clear').addEventListener('click', () => {
   updateArticle();
 });
 $('btn-art-submit').addEventListener('click', submitArticle);
+// Thanh công cụ Article: định dạng dùng chung với ô Đăng bài (dash/compose.js), thêm tiêu đề H1–H3, gạch chân, bảng, video, ảnh, nhắc tên
+const artTa = () => $('art-content');
+const ART_MD = {
+  bold: () => mdWrap('**', '**', 'chữ đậm', artTa()),
+  italic: () => mdWrap('*', '*', 'chữ nghiêng', artTa()),
+  underline: () => mdWrap('++', '++', 'chữ gạch chân', artTa()),
+  strike: () => mdWrap('~~', '~~', 'chữ gạch', artTa()),
+  code: () => mdWrap('`', '`', 'mã', artTa()),
+  h1: () => mdLines('h1', artTa()),
+  h2: () => mdLines('h2', artTa()),
+  h3: () => mdLines('h3', artTa()),
+  ul: () => mdLines('ul', artTa()),
+  ol: () => mdLines('ol', artTa()),
+  quote: () => mdLines('quote', artTa()),
+  hr: () => mdHr(artTa()),
+  link: () => mdLink(artTa()),
+  image: () => $('art-img-file').click(),
+  video: () => {
+    const url = prompt('Link video YouTube hoặc Vimeo:', 'https://youtu.be/');
+    if (!url) return;
+    if (!BG.mdToPlate(url.trim(), { id: () => '' }).some((n) => n.type === 'media_embed')) return toast('Chỉ nhúng được link YouTube hoặc Vimeo', 'err');
+    mdBlock(url.trim(), artTa());
+  },
+  table: () => {
+    const head = '| Cột 1 | Cột 2 | Cột 3 |\n|---|---|---|\n';
+    mdBlock(head + '|  |  |  |\n|  |  |  |', artTa(), [2, 7]); // chọn sẵn "Cột 1" để gõ đè
+  },
+  mention: () => {
+    const ta = artTa();
+    const { selectionStart: s, value: v } = ta;
+    const text = (s && !/\s/.test(v[s - 1]) ? ' ' : '') + '@';
+    editReplace(ta, s, ta.selectionEnd, text, s + text.length, s + text.length);
+    checkMention('article');
+  },
+};
+$('art-toolbar').addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-md]');
+  if (b && !b.disabled && ART_MD[b.dataset.md]) ART_MD[b.dataset.md]();
+});
+$('art-content').addEventListener('keydown', (e) => {
+  if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
+  const k = { b: 'bold', i: 'italic', u: 'underline', k: 'link' }[e.key.toLowerCase()];
+  if (!k) return;
+  e.preventDefault();
+  ART_MD[k]();
+});
+$('art-img-file').addEventListener('change', (e) => {
+  insertImages(e.target.files);
+  e.target.value = '';
+});
+// Nhắc tên trong nội dung Article: dùng chung ô gợi ý của khung soạn bài (dash/attach.js)
+MENTION_TARGETS.article = {
+  ta: () => $('art-content'),
+  box: () => $('art-editor'),
+  pop: () => $('art-mention-pop'),
+  groupIds: () => artGroups().map((g) => g.id),
+  pick: (u) => {
+    art.mentions[u.username] = BG.articleMentionEntry(u);
+    updateArticle();
+    saveArticleDraft();
+  },
+};
+$('art-content').addEventListener('keydown', mentionKeys);
+$('art-content').addEventListener('input', () => checkMention('article'));
+$('art-content').addEventListener('click', () => checkMention('article'));
+$('art-content').addEventListener('keyup', (e) => ['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key) && checkMention('article'));
+$('art-content').addEventListener('blur', () => mention.open && mention.target === 'article' && closeMention());
+$('art-content').addEventListener('scroll', () => mention.open && mention.target === 'article' && renderMention());
 $('btn-art-clear').addEventListener('click', () => clearArticle(true));

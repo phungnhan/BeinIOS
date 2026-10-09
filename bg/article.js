@@ -14,7 +14,7 @@ async function doCategories() {
   });
 }
 
-async function doComposeArticle({ groupIds, title, summary = '', content, categoryIds = [], coverId = '', tags = [], series = [], scheduledAt = null, asGroup = false, source = 'manual' }) {
+async function doComposeArticle({ groupIds, title, summary = '', content, categoryIds = [], coverId = '', tags = [], series = [], scheduledAt = null, mentions = null, asGroup = false, source = 'manual' }) {
   const err = BG.validateArticle({ groupIds, title, summary, content, categoryIds, hasCover: !!coverId, tags, series, scheduledAt, asGroup });
   if (err) return { status: 'error', message: err };
   const { settings, state, log } = await load();
@@ -24,7 +24,7 @@ async function doComposeArticle({ groupIds, title, summary = '', content, catego
   if (asGroup && targets[0].canPostAsGroup === false) return { status: 'error', message: `${targets[0].name}: không có quyền đăng dưới tên group` };
 
   const action = scheduledAt ? 'schedule' : 'publish';
-  const body = BG.articleBody({ groupIds, title, summary, content, categoryIds, coverId, tags, series, scheduledAt });
+  const body = BG.articleBody({ groupIds, title, summary, content, categoryIds, coverId, tags, series, scheduledAt, mentions });
   const base = {
     kind: 'compose',
     source,

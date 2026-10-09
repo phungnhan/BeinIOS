@@ -44,18 +44,21 @@ chrome.runtime.onInstalled.addListener(async () => {
     postRules: { ...BG.DEFAULT_POST_RULES, ...postRules },
   });
   await scheduleAlarm();
+  await scheduleTelegramPoll();
   await updateBadge();
   exclusive(() => doScan({ source: 'install' }));
 });
 
 chrome.runtime.onStartup.addListener(async () => {
   await scheduleAlarm();
+  await scheduleTelegramPoll();
   await updateBadge();
   exclusive(() => doScan({ source: 'startup' }));
 });
 
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === ALARM) exclusive(() => doScan({ source: 'alarm' }));
+  if (alarm.name === TG_POLL_ALARM) pollTelegram().catch(() => {}); // nút bấm trong tin Telegram (bg/telegram.js)
 });
 
 chrome.storage.onChanged.addListener((changes, area) => {
@@ -64,6 +67,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== 'local') return;
   queueSyncPush(changes);
   if (changes.postRules || changes.groupRules) updateBadge(); // đổi quy tắc bài viết -> đếm lại bài vi phạm
+  if (changes.telegram) scheduleTelegramPoll(); // bật / tắt nút xử lý trong tin Telegram
   if (!changes.settings) return;
   const { oldValue = {}, newValue = {} } = changes.settings;
   if (oldValue.intervalMin !== newValue.intervalMin) scheduleAlarm(true);
@@ -112,6 +116,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     syncStatus: () => doSyncStatus(),
     telegramTest: () => doTelegramTest(msg),
     telegramChatId: () => doTelegramChatId(msg),
+    telegramPoll: () => pollTelegram(),
     linkPreview: () => doLinkPreview(msg),
   };
   if (reads[msg?.type]) {
@@ -139,6 +144,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     reportAct: () => doReportAct(msg),
     profileAct: () => doProfileAct(msg),
     editPost: () => doEditPost(msg),
+    editScheduled: () => doEditScheduled(msg),
     postSetting: () => doPostSetting(msg),
     pinAct: () => doPinAct(msg),
     groupSettingAct: () => doGroupSettingAct(msg),

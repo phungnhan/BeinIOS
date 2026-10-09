@@ -32,8 +32,8 @@ function importantExpiry(later) {
 }
 
 function readCompose() {
-  // Đang sửa bài đã đăng: nơi đăng giữ nguyên, không hẹn giờ
-  const later = !compose.edit && composeWhen() === 'later';
+  // Đang sửa bài đã đăng: nơi đăng giữ nguyên, không hẹn giờ. Sửa bài hẹn giờ: giữ nơi đăng, luôn có giờ đăng (đổi được)
+  const later = !!compose.edit?.scheduled || (!compose.edit && composeWhen() === 'later');
   const important = $('compose-important').checked;
   return {
     groupIds: compose.edit ? compose.edit.groups.map((g) => g.id) : groups().map((g) => g.id).filter((id) => compose.groupIds.has(id)),
@@ -45,7 +45,7 @@ function readCompose() {
       importantExpiredAt: importantExpiry(later),
     },
     scheduledAt: later && $('compose-at').value ? new Date($('compose-at').value).toISOString() : later ? 'invalid' : null,
-    repeat: later && $('compose-repeat').value ? { every: $('compose-repeat').value, count: repeatCount() } : null,
+    repeat: !compose.edit && later && $('compose-repeat').value ? { every: $('compose-repeat').value, count: repeatCount() } : null,
     asGroup: !compose.edit && $('compose-as-group').checked && asGroupTarget() !== null,
   };
 }
@@ -172,7 +172,8 @@ function updateCompose() {
       : picked === 1
         ? 'Bạn không có quyền tạo bài của admin ở group này.'
         : '';
-  const later = composeWhen() === 'later';
+  const schedEdit = !!compose.edit?.scheduled;
+  const later = schedEdit || composeWhen() === 'later';
   $('compose-at').disabled = !later;
   if (later && !$('compose-at').value) $('compose-at').value = toLocalInput(nextQuarter());
   // Giờ tốt nhất: chỉ khi hẹn giờ; đổi group thì bỏ gợi ý cũ
@@ -199,8 +200,9 @@ function updateCompose() {
   const until = c.setting.importantExpiredAt;
   $('compose-important-hint').textContent = !important || custom ? '' : until ? '→ đến ' + fmtTime(until) : '→ không hết hạn';
   const btn = $('btn-compose');
-  btn.textContent = compose.edit ? 'Lưu thay đổi' : rep && later ? `Hẹn ${rep.count} bài định kỳ` : later ? 'Hẹn giờ đăng' : 'Đăng ngay';
+  btn.textContent = schedEdit ? 'Lưu bài hẹn giờ' : compose.edit ? 'Lưu thay đổi' : rep && later ? `Hẹn ${rep.count} bài định kỳ` : later ? 'Hẹn giờ đăng' : 'Đăng ngay';
   document.querySelector('.compose-when').classList.toggle('editing', !!compose.edit);
+  document.querySelector('.compose-when').classList.toggle('sched', schedEdit); // sửa bài hẹn giờ: hiện ô giờ đăng
   btn.disabled = busy || !c.groupIds.length || (!len && !compose.media.length);
   loadTagsSeries();
   renderPreview();
@@ -273,17 +275,22 @@ async function loadDraftOnce() {
 // ---------- Sửa bài đã đăng ----------
 // Mở bài (của mình) trong khung soạn; nháp đang viết được cất lại và trả về khi xong / huỷ.
 
-async function editPost(p) {
+// scheduled: bài đang hẹn giờ (sửa trước giờ đăng, đổi được cả giờ)
+async function editPost(p, { scheduled = false } = {}) {
   if (busy) return;
   if (compose.edit?.id === p.id) return showTab('compose');
-  const d = await chrome.runtime.sendMessage({ type: 'postDetail', id: p.id });
+  const d = await chrome.runtime.sendMessage({ type: 'postDetail', id: p.id, scheduled });
   if (d?.status !== 'ok') return toast(d?.status === 'need_login' ? 'Phiên đăng nhập Beincom đã hết hạn' : d?.message || 'Không đọc được bài', 'err');
   if (compose.edit) exitEdit(false);
-  enterEdit(d.post);
+  enterEdit(d.post, { scheduled });
 }
 
-function enterEdit(post) {
-  compose.edit = { id: post.id, groups: post.groups, setting: post.setting, before: draftValue() };
+function enterEdit(post, { scheduled = false } = {}) {
+  compose.edit = { id: post.id, groups: post.groups, setting: post.setting, before: draftValue(), scheduled, scheduledAt: post.scheduledAt || null };
+  if (scheduled) {
+    const at = post.scheduledAt ? new Date(post.scheduledAt) : null;
+    $('compose-at').value = toLocalInput(at && at > new Date(Date.now() + 10 * 60e3) ? at : nextQuarter());
+  }
   clearMedia();
   $('compose-text').value = post.content;
   compose.mentions = { ...post.mentions };
@@ -330,7 +337,9 @@ function renderEditBanner() {
   b.hidden = !compose.edit;
   if (!compose.edit) return b.replaceChildren();
   b.replaceChildren(
-    el('span', {}, '✎ Đang sửa bài đã đăng ở ', el('b', { text: compose.edit.groups.map((g) => g.name || g.id).join(', ') })),
+    compose.edit.scheduled
+      ? el('span', {}, '✎ Đang sửa bài hẹn giờ ở ', el('b', { text: compose.edit.groups.map((g) => g.name || g.id).join(', ') }), ` — giờ đăng hiện tại ${fmtTime(compose.edit.scheduledAt)}; đổi giờ ở ô dưới nếu cần`)
+      : el('span', {}, '✎ Đang sửa bài đã đăng ở ', el('b', { text: compose.edit.groups.map((g) => g.name || g.id).join(', ') })),
     el('span', { class: 'spacer' }),
     el('a', { href: BG.postUrl({ id: compose.edit.id, type: 'POST' }), target: '_blank', text: 'Mở bài ↗' }),
     el('button', { type: 'button', class: 'ghost sm', text: 'Huỷ sửa', onclick: () => exitEdit() }),
@@ -353,23 +362,33 @@ async function submitEdit() {
   if (badPicks.length) return toast(`${badPicks.join(', ')} không dùng được với các group của bài — bỏ ra rồi lưu lại`, 'err');
   const mentions = BG.usedMentions(c.content, compose.mentions);
   const lp = linkToSend();
+  if (ed.scheduled && (!c.scheduledAt || c.scheduledAt === 'invalid')) return toast('Chưa chọn giờ đăng', 'err');
   const settingChanged = !sameSetting(BG.settingBody(ed.setting), BG.settingBody(c.setting));
   const attached = BG.mediaSummary(current);
   const fresh = compose.media.filter((m) => m.status !== 'done').length;
   const text = c.content.trim();
   const extras = [attached && 'Kèm ' + attached, Object.keys(mentions).length && 'Nhắc ' + Object.keys(mentions).map((u) => '@' + u).join(', '), lp && 'Xem trước link ' + (lp.domain || lp.url), compose.tags.length && 'Tag ' + compose.tags.map((x) => '#' + x.name).join(' '), compose.series.length && 'Series ' + compose.series.map((x) => x.title).join(', '), settingChanged && 'Đổi cài đặt'].filter(Boolean);
+  const moved = ed.scheduled && new Date(c.scheduledAt).getTime() !== new Date(ed.scheduledAt).getTime();
   const ok = await confirmDialog({
-    title: 'Lưu thay đổi bài đã đăng?',
+    title: ed.scheduled ? `Lưu bài hẹn giờ${moved ? `, đổi giờ đăng sang ${fmtTime(c.scheduledAt)}` : ''}?` : 'Lưu thay đổi bài đã đăng?',
     text: (extras.length ? `[${extras.join(' · ')}] ` : '') + (text.length > 200 ? text.slice(0, 200) + '…' : text),
     names: ed.groups.map((g) => g.name || g.id),
-    okText: 'Lưu thay đổi',
-    sendNote: (fresh && !data.settings.dryRun ? `Tải ${fresh} file mới lên Beincom trước, rồi ` : '') + 'Bài trên Beincom sẽ được cập nhật ngay.',
+    okText: ed.scheduled ? 'Lưu bài hẹn giờ' : 'Lưu thay đổi',
+    sendNote: (fresh && !data.settings.dryRun ? `Tải ${fresh} file mới lên Beincom trước, rồi ` : '') + (ed.scheduled ? `Bài hẹn giờ trên Beincom sẽ được cập nhật ngay; tới ${fmtTime(c.scheduledAt)} Beincom tự đăng.` : 'Bài trên Beincom sẽ được cập nhật ngay.'),
   });
   if (!ok) return;
   let media = { images: [], videos: [], files: [] };
   if (compose.media.length) {
     media = data.settings.dryRun ? mediaByField(compose.media, (m) => m.item || { name: m.name }) : await uploadMedia();
     if (!media) return;
+  }
+  if (ed.scheduled) {
+    const r = await send({ type: 'editScheduled', id: ed.id, groupIds: c.groupIds, content: c.content, media, mentions, linkPreview: lp, tags: compose.tags, series: compose.series, setting: c.setting, scheduledAt: c.scheduledAt }, () => `Đã lưu bài hẹn giờ (đăng lúc ${fmtTime(c.scheduledAt)}).`);
+    if (r?.status === 'ok' && !r.dryRun) {
+      exitEdit();
+      loadScheduled();
+    }
+    return;
   }
   const r = await send({ type: 'editPost', id: ed.id, groupIds: c.groupIds, content: c.content, media, mentions, linkPreview: lp, tags: compose.tags, series: compose.series, setting: c.setting, settingChanged }, () => 'Đã lưu bài.');
   if (r?.status === 'ok' && r.message) toast(r.message, 'warn');
@@ -527,9 +546,8 @@ function editReplace(ta, from, to, text, selFrom, selTo) {
   ta.setSelectionRange(selFrom, selTo);
 }
 
-// Bọc vùng chọn; bấm lại khi đã bọc thì bỏ bọc
-function mdWrap(before, after, placeholder) {
-  const ta = $('compose-text');
+// Bọc vùng chọn; bấm lại khi đã bọc thì bỏ bọc. ta: ô chữ (mặc định ô Đăng bài; Article truyền ô của nó)
+function mdWrap(before, after, placeholder, ta = $('compose-text')) {
   const { selectionStart: s, selectionEnd: e, value: v } = ta;
   if (v.slice(s - before.length, s) === before && v.slice(e, e + after.length) === after && e > s) {
     editReplace(ta, s - before.length, e + after.length, v.slice(s, e), s - before.length, e - before.length);
@@ -539,27 +557,26 @@ function mdWrap(before, after, placeholder) {
   editReplace(ta, s, e, before + sel + after, s + before.length, s + before.length + sel.length);
 }
 
-// Thêm / bỏ tiền tố cho các dòng đang chọn (danh sách, trích dẫn, tiêu đề)
-function mdLines(kind) {
-  const ta = $('compose-text');
+// Thêm / bỏ tiền tố cho các dòng đang chọn (danh sách, trích dẫn, tiêu đề; h1–h3 dùng cho Article)
+const MD_PREFIX = { ul: '- ', quote: '> ', heading: '### ', h1: '# ', h2: '## ', h3: '### ' };
+function mdLines(kind, ta = $('compose-text')) {
   const { selectionStart: s, selectionEnd: e, value: v } = ta;
   const start = v.lastIndexOf('\n', s - 1) + 1;
   let end = v.indexOf('\n', e > s && v[e - 1] === '\n' ? e - 1 : e);
   if (end < 0) end = v.length;
   const lines = v.slice(start, end).split('\n');
-  const RE = { ul: /^- /, ol: /^\d+\. /, quote: /^> /, heading: /^### / }[kind];
+  const RE = kind === 'ol' ? /^\d+\. / : new RegExp('^' + MD_PREFIX[kind].replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
   const has = lines.every((l) => RE.test(l));
   const out = lines.map((l, i) => {
     if (has) return l.replace(RE, '');
     const bare = l.replace(/^(- |\d+\. |> |#{1,6} )/, '');
-    return (kind === 'ol' ? `${i + 1}. ` : { ul: '- ', quote: '> ', heading: '### ' }[kind]) + bare;
+    return (kind === 'ol' ? `${i + 1}. ` : MD_PREFIX[kind]) + bare;
   });
   const text = out.join('\n');
   editReplace(ta, start, end, text, start, start + text.length);
 }
 
-function mdLink() {
-  const ta = $('compose-text');
+function mdLink(ta = $('compose-text')) {
   const { selectionStart: s, selectionEnd: e, value: v } = ta;
   const url = prompt('Địa chỉ link (bắt đầu bằng https://):', 'https://');
   if (!url || !/^https?:\/\/\S+$/.test(url.trim())) return;
@@ -568,12 +585,17 @@ function mdLink() {
   editReplace(ta, s, e, text, s + 1, s + 1 + label.length);
 }
 
-function mdHr() {
-  const ta = $('compose-text');
+// Chèn một khối riêng dòng ở chỗ con trỏ (kẻ ngang, bảng, video…); sel: [đầu, cuối] trong khối để chọn sẵn
+function mdBlock(block, ta = $('compose-text'), sel = null) {
   const { selectionStart: s, value: v } = ta;
   const pre = s && v[s - 1] !== '\n' ? '\n' : '';
-  const text = pre + '---\n';
-  editReplace(ta, s, s, text, s + text.length, s + text.length);
+  const text = pre + block + '\n';
+  const at = s + pre.length;
+  editReplace(ta, s, s, text, sel ? at + sel[0] : s + text.length, sel ? at + sel[1] : s + text.length);
+}
+
+function mdHr(ta = $('compose-text')) {
+  mdBlock('---', ta);
 }
 
 const MD_ACTIONS = {
@@ -748,6 +770,7 @@ function renderScheduled() {
           el(
             'div',
             { class: 'act-stack' },
+            p.type !== 'ARTICLE' && p.actor?.id && p.actor.id === data.state.me?.id ? el('button', { class: 'ghost sm', disabled: busy, title: 'Mở bài trong khung soạn để sửa nội dung, file, cài đặt, giờ đăng', text: 'Sửa', onclick: () => editPost(p, { scheduled: true }) }) : null,
             el('button', { class: 'ghost sm', disabled: busy, text: 'Đổi giờ', onclick: () => reschedulePost(p) }),
             el('button', { class: 'danger sm', disabled: busy, text: 'Huỷ', onclick: () => cancelPost(p) }),
             recurIdx.has(p.id) ? el('button', { class: 'danger sm', disabled: busy, text: 'Huỷ cả chuỗi', onclick: () => cancelSeries(recurIdx.get(p.id).id) }) : null,

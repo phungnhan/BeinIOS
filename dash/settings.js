@@ -80,22 +80,34 @@ function renderRules() {
   }
 }
 
-async function saveTo(key, defaults, patch, hintId) {
-  const { [key]: cur } = await chrome.storage.local.get(key);
-  await chrome.storage.local.set({ [key]: { ...defaults, ...cur, ...patch } });
-  $(hintId).textContent = 'Đã lưu ✓';
-  setTimeout(() => ($(hintId).textContent = ''), 2000);
+// Các lần lưu chạy lần lượt: gõ ô danh sách rồi bấm ngay công tắc bên cạnh sinh hai lần lưu gần như cùng lúc,
+// chạy song song thì lần sau đọc bản cũ và ghi đè mất lần trước.
+let saveChain = Promise.resolve();
+function queueSave(fn) {
+  saveChain = saveChain.then(fn, fn);
+  return saveChain;
+}
+
+function saveTo(key, defaults, patch, hintId) {
+  return queueSave(async () => {
+    const { [key]: cur } = await chrome.storage.local.get(key);
+    await chrome.storage.local.set({ [key]: { ...defaults, ...cur, ...patch } });
+    $(hintId).textContent = 'Đã lưu ✓';
+    setTimeout(() => ($(hintId).textContent = ''), 2000);
+  });
 }
 
 // Lưu vào quy tắc riêng của group đang chọn (kind: 'rules' | 'postRules')
-async function saveScoped(kind, patch, hintId) {
+function saveScoped(kind, patch, hintId) {
   const id = rulesScope;
-  const { groupRules = {} } = await chrome.storage.local.get('groupRules');
-  if (!groupRules[id]) return toast('Group này chưa có quy tắc riêng', 'err');
-  groupRules[id] = { ...groupRules[id], [kind]: { ...groupRules[id][kind], ...patch }, updatedAt: Date.now() };
-  await chrome.storage.local.set({ groupRules });
-  $(hintId).textContent = 'Đã lưu ✓';
-  setTimeout(() => ($(hintId).textContent = ''), 2000);
+  return queueSave(async () => {
+    const { groupRules = {} } = await chrome.storage.local.get('groupRules');
+    if (!groupRules[id]) return toast('Group này chưa có quy tắc riêng', 'err');
+    groupRules[id] = { ...groupRules[id], [kind]: { ...groupRules[id][kind], ...patch }, updatedAt: Date.now() };
+    await chrome.storage.local.set({ groupRules });
+    $(hintId).textContent = 'Đã lưu ✓';
+    setTimeout(() => ($(hintId).textContent = ''), 2000);
+  });
 }
 
 const saveRules = (patch) => (rulesScope ? saveScoped('rules', patch, 'rules-saved') : saveTo('rules', BG.DEFAULT_RULES, patch, 'rules-saved'));
@@ -226,6 +238,8 @@ function renderSettings() {
   $('master-title').textContent = s.active ? 'Addon đang hoạt động' : 'Đã tắt tất cả chức năng';
   $('settings-group').classList.toggle('paused', !s.active);
   fillList('watchKeywords', s.watchKeywords);
+  fillList('trustedMembers', s.trustedMembers, '@');
+  for (const row of document.querySelectorAll('[data-requires="autoApprovePosts"]')) row.classList.toggle('is-disabled', !s.autoApprovePosts);
   renderSync();
   renderTelegramStatus();
   const watchHours = document.querySelector('[data-requires="remindUnanswered"]');
@@ -245,6 +259,13 @@ for (const k of SETTING_BOOLS) {
         return;
       }
     }
+    if (on && k === 'autoApprovePosts' && !data.settings.dryRun) {
+      const n = (data.settings.trustedMembers || []).length;
+      if (!confirm(`Bật tự duyệt bài? Sau mỗi lần quét, bài chờ duyệt đạt mọi quy tắc của ${n ? n + ' thành viên tin cậy' : 'thành viên tin cậy'}${data.settings.trustAfterApproved ? ` và người đã được duyệt ít nhất ${data.settings.trustAfterApproved} bài` : ''} sẽ được duyệt thật trên Beincom.`)) {
+        $(k).checked = false;
+        return;
+      }
+    }
     if (on && k === 'autoHideSpam' && !data.settings.dryRun) {
       const domains = data.postRules.blockedDomains || [];
       if (!confirm(`Bật tự ẩn spam? Sau mỗi lần quét, bài và bình luận mới có link tới tên miền cấm (${domains.length ? domains.join(', ') : 'chưa có tên miền nào'}${Object.keys(data.groupRules || {}).length ? ' và tên miền cấm trong quy tắc riêng của group' : ''}) sẽ bị ẩn thật trên Beincom.`)) {
@@ -252,7 +273,7 @@ for (const k of SETTING_BOOLS) {
         return;
       }
     }
-    if (!on && k === 'dryRun' && (data.settings.autoApprove || data.settings.autoDecline || data.settings.autoHideSpam)) {
+    if (!on && k === 'dryRun' && (data.settings.autoApprove || data.settings.autoDecline || data.settings.autoHideSpam || data.settings.autoApprovePosts)) {
       if (!confirm('Tắt Chạy thử khi đang bật tự xử lý: lần quét tới addon sẽ tự duyệt / từ chối / ẩn thật. Tiếp tục?')) {
         $(k).checked = true;
         return;
@@ -263,6 +284,7 @@ for (const k of SETTING_BOOLS) {
 }
 for (const k of SETTING_NUMS) $(k).addEventListener('change', () => saveSettings({ [k]: Number($(k).value) }));
 $('watchKeywords').addEventListener('change', () => saveSettings({ watchKeywords: BG.parseList($('watchKeywords').value) }));
+$('trustedMembers').addEventListener('change', () => saveSettings({ trustedMembers: BG.parseList($('trustedMembers').value, { username: true }) }));
 
 // ---------- Gửi thông báo về Telegram ----------
 // Form chỉ nạp một lần (không ghi đè khi đang gõ); lưu khi bấm Lưu. Quyền gửi tới api.telegram.org xin ngay khi bấm (cần thao tác của người dùng).
@@ -276,13 +298,16 @@ async function loadTelegramForm() {
   $('tg-token').value = cfg.token || '';
   $('tg-chat').value = cfg.chatId || '';
   $('tg-quiet').checked = !!cfg.quietNight;
+  $('tg-actions').checked = !!cfg.actions;
   $('tg-kinds').replaceChildren(...Object.entries(BG.TELEGRAM_KINDS).map(([k, label]) => el('label', { class: 'check small' }, el('input', { type: 'checkbox', 'data-kind': k, checked: !!cfg.kinds[k] }), ' ' + label)));
 }
 
 function renderTelegramStatus() {
   const st = data.telegramStatus;
-  $('tg-status').textContent = !st ? '' : st.ok ? `Gửi lần cuối ${fmtTime(st.at)} ✓` : `Lỗi lúc ${fmtTime(st.at)}: ${st.error}`;
-  $('tg-status').classList.toggle('err-text', !!st && !st.ok);
+  const poll = data.telegramPoll;
+  const pollErr = poll?.ok === false ? `Đọc nút bấm lỗi lúc ${fmtTime(poll.at)}: ${poll.error}` : '';
+  $('tg-status').textContent = [!st ? '' : st.ok ? `Gửi lần cuối ${fmtTime(st.at)} ✓` : `Lỗi lúc ${fmtTime(st.at)}: ${st.error}`, pollErr].filter(Boolean).join(' · ');
+  $('tg-status').classList.toggle('err-text', (!!st && !st.ok) || !!pollErr);
 }
 
 // Xin quyền gửi tới Telegram (hỏi một lần; đã cho phép thì trả về luôn)
@@ -327,8 +352,9 @@ $('btn-tg-save').addEventListener('click', async () => {
     if (!chatId) return toast('Chưa có chat ID — bấm Lấy chat ID', 'err');
   }
   const kinds = Object.fromEntries([...document.querySelectorAll('#tg-kinds input')].map((i) => [i.dataset.kind, i.checked]));
-  await chrome.storage.local.set({ telegram: { enabled, token, chatId, kinds, quietNight: $('tg-quiet').checked } });
-  toast(enabled ? 'Đã lưu. Addon sẽ gửi thông báo về Telegram ở các lần quét tự động.' : 'Đã lưu (đang tắt gửi Telegram).');
+  const actions = $('tg-actions').checked;
+  await chrome.storage.local.set({ telegram: { enabled, token, chatId, kinds, quietNight: $('tg-quiet').checked, actions } });
+  toast(!enabled ? 'Đã lưu (đang tắt gửi Telegram).' : actions ? 'Đã lưu. Việc mới sẽ gửi về Telegram kèm nút xử lý ở các lần quét tự động.' : 'Đã lưu. Addon sẽ gửi thông báo về Telegram ở các lần quét tự động.');
 });
 
 loadTelegramForm();

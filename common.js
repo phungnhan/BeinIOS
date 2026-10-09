@@ -28,6 +28,9 @@
     remindUnanswered: true, // nhắc bài chưa ai trả lời quá unansweredHours giờ
     unansweredHours: 6,
     syncSettings: false, // đồng bộ cài đặt, quy tắc qua tài khoản Chrome / Edge (chrome.storage.sync)
+    autoApprovePosts: false, // tự duyệt bài chờ duyệt đạt mọi quy tắc của thành viên tin cậy
+    trustedMembers: [], // username thành viên tin cậy
+    trustAfterApproved: 0, // hoặc người đã được duyệt ít nhất N bài qua addon (0 = không dùng)
   };
 
   // Quy tắc cho bài viết (bài chờ duyệt và bài mới đăng)
@@ -947,6 +950,7 @@
       if (s.intervalMin !== undefined) s.intervalMin = clampNum(Math.round(s.intervalMin), 5, 1440);
       if (s.actionDelaySec !== undefined) s.actionDelaySec = clampNum(s.actionDelaySec, 0, 60);
       if (s.unansweredHours !== undefined) s.unansweredHours = clampNum(Math.round(s.unansweredHours), 1, 72);
+      if (s.trustAfterApproved !== undefined) s.trustAfterApproved = clampNum(Math.round(s.trustAfterApproved), 0, 100);
       data.settings = s;
     }
     if (isObj(d.rules)) data.rules = cleanRules(d.rules);
@@ -1468,6 +1472,20 @@
 
   // Một dòng chỉ có link YouTube / Vimeo -> khối video nhúng (web cũng nhúng như vậy)
   const VIDEO_URL = /^https?:\/\/(?:www\.|m\.)?(?:youtube\.com\/(?:watch\?|shorts\/|embed\/|live\/)|youtu\.be\/|vimeo\.com\/\d)\S*$/i;
+  // Một dòng chỉ có ảnh: ![mô tả](https://media.beincom.com/…) — ảnh tải lên với resource 'article:content'.
+  // Dashboard ghi ảnh chưa tải là local:N, thay bằng link thật trước khi gửi.
+  const IMAGE_LINE = /^!\[([^\]\n]*)\]\(((?:https:\/\/|blob:|local:)\S+)\)$/;
+  const LOCAL_IMAGE = /\]\(local:(\d+)\)/g;
+  const ARTICLE_IMAGES_MAX = 30;
+  // Bảng: dòng tiêu đề | a | b |, dòng | --- | --- |, rồi các dòng dữ liệu
+  const TABLE_SEP = /^\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?$/;
+  const tableCells = (line) =>
+    line
+      .trim()
+      .replace(/^\|/, '')
+      .replace(/\|$/, '')
+      .split('|')
+      .map((c) => c.trim());
 
   const INLINE_RULES = [
     { re: /\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/, kind: 'link' },
@@ -1479,18 +1497,20 @@
     { re: /\*(?![\s*])([^*\n]+?)\*/, marks: { italic: true } },
     { re: /(?<![\w\p{L}])_(?![\s_])([^_\n]+?)_(?![\w\p{L}])/u, marks: { italic: true } },
     { re: /https?:\/\/[^\s<>()[\]]*[^\s<>()[\].,!?;:'"]/, kind: 'url' },
+    { re: new RegExp(`(?<![^\\s(])@(${MENTION_CHAR}+)`, 'u'), kind: 'mention' },
   ];
   const MARKS = ['bold', 'italic', 'underline', 'strikethrough', 'code'];
   const sameMarks = (a, b) => MARKS.every((k) => !!a[k] === !!b[k]);
 
-  // Chữ một dòng Markdown -> các đoạn chữ / link
-  function inlineRaw(text, marks, inLink) {
+  // Chữ một dòng Markdown -> các đoạn chữ / link / nhắc tên. mentions: người đã chọn khi soạn (username -> dữ liệu)
+  function inlineRaw(text, marks, inLink, mentions = null) {
     const out = [];
     let rest = text;
     while (rest) {
       let best = null;
       for (const r of INLINE_RULES) {
         if (inLink && (r.kind === 'link' || r.kind === 'url')) continue;
+        if (r.kind === 'mention' && !mentions) continue;
         const m = r.re.exec(rest);
         if (m && (!best || m.index < best.m.index)) best = { r, m };
       }
@@ -1500,40 +1520,48 @@
       }
       const { r, m } = best;
       if (m.index) out.push({ text: rest.slice(0, m.index), ...marks });
-      if (r.kind === 'link') out.push({ type: 'a', url: m[2], children: inlineRaw(m[1], marks, true) });
+      let used = m[0].length;
+      if (r.kind === 'link') out.push({ type: 'a', url: m[2], children: inlineRaw(m[1], marks, true, mentions) });
       else if (r.kind === 'url') out.push({ type: 'a', url: m[0], children: [{ text: m[0], ...marks }] });
       else if (r.kind === 'code') out.push({ text: m[1], ...marks, code: true });
-      else out.push(...inlineRaw(m[1], { ...marks, ...r.marks }, inLink));
-      rest = rest.slice(m.index + m[0].length);
+      else if (r.kind === 'mention') {
+        // Chỉ người đã chọn trong ô nhắc tên mới thành nhắc tên (dấu câu dính sau tên bỏ ra, như bài thường)
+        const name = m[1].replace(MENTION_TAIL, '');
+        if (mentions[name]) {
+          used = 1 + name.length;
+          out.push({ type: 'mention', value: name, data: { ...mentions[name] }, children: [{ text: '' }] });
+        } else out.push({ text: m[0], ...marks });
+      } else out.push(...inlineRaw(m[1], { ...marks, ...r.marks }, inLink, mentions));
+      rest = rest.slice(m.index + used);
     }
     return out;
   }
 
-  // Gộp đoạn chữ cùng định dạng, bỏ đoạn rỗng; link luôn có chữ hai bên (quy ước của Slate)
+  // Gộp đoạn chữ cùng định dạng, bỏ đoạn rỗng; link / nhắc tên luôn có chữ hai bên (quy ước của Slate)
   function tidyInline(list) {
     const out = [];
     for (const n of list) {
-      if (n.type === 'a') {
-        n.children = tidyInline(n.children);
-        if (!out.length || out[out.length - 1].type === 'a') out.push({ text: '' });
+      if (n.type) {
+        if (n.type === 'a') n.children = tidyInline(n.children);
+        if (!out.length || out[out.length - 1].type) out.push({ text: '' });
         out.push(n);
         continue;
       }
       const prev = out[out.length - 1];
       if (prev && !prev.type && sameMarks(prev, n)) prev.text += n.text;
-      else if (n.text || !prev || prev.type === 'a') out.push(n);
+      else if (n.text || !prev || prev.type) out.push(n);
     }
-    if (!out.length || out[out.length - 1].type === 'a') out.push({ text: '' });
-    return out.filter((n, i) => n.type || n.text || i === 0 || out[i - 1]?.type === 'a' || out.length === 1);
+    if (!out.length || out[out.length - 1].type) out.push({ text: '' });
+    return out.filter((n, i) => n.type || n.text || i === 0 || out[i - 1]?.type || out.length === 1);
   }
 
-  const inlineNodes = (text) => tidyInline(inlineRaw(String(text || ''), {}, false));
-
   // Markdown -> nội dung Article. Mỗi dòng có chữ là một đoạn; dòng trống chỉ để tách khối.
-  function mdToPlate(md, { id = () => nodeId() } = {}) {
+  // mentions: { username: dữ liệu } người đã chọn khi soạn — "@username" của họ thành khối nhắc tên.
+  function mdToPlate(md, { id = () => nodeId(), mentions = null } = {}) {
     const lines = String(md || '').replace(/\r\n?/g, '\n').split('\n');
     const nodes = [];
-    const block = (type, text, extra = {}) => ({ type, id: id(), ...extra, children: inlineNodes(text) });
+    const inline = (text) => tidyInline(inlineRaw(String(text || ''), {}, false, mentions));
+    const block = (type, text, extra = {}) => ({ type, id: id(), ...extra, children: inline(text) });
     let list = null;
     let quote = null;
     for (let i = 0; i < lines.length; i++) {
@@ -1549,6 +1577,17 @@
         list = quote = null;
         continue;
       }
+      if (line.startsWith('|') && TABLE_SEP.test((lines[i + 1] || '').trim())) {
+        // Bảng: hàng đầu là tiêu đề (th), các hàng sau là dữ liệu (td); mỗi ô một đoạn
+        list = quote = null;
+        const head = tableCells(line);
+        const rows = [head];
+        for (i += 2; i < lines.length && lines[i].trim().startsWith('|'); i++) rows.push(tableCells(lines[i]));
+        i--;
+        const cell = (type, text) => ({ type, id: id(), children: [{ type: 'p', id: id(), children: inline(text) }] });
+        nodes.push({ type: 'table', id: id(), children: rows.map((r, k) => ({ type: 'tr', id: id(), children: head.map((_, c) => cell(k ? 'td' : 'th', r[c] || '')) })) });
+        continue;
+      }
       if ((m = /^(#{1,6})\s+(.*)$/.exec(line))) {
         list = quote = null;
         nodes.push(block('h' + Math.min(3, m[1].length), m[2]));
@@ -1557,13 +1596,16 @@
         nodes.push({ type: 'hr', id: id(), children: [{ text: '' }] });
       } else if ((m = /^>\s?(.*)$/.exec(line))) {
         list = null;
-        if (quote) quote.children = tidyInline([...quote.children, { text: '\n' }, ...inlineRaw(m[1], {}, false)]);
+        if (quote) quote.children = tidyInline([...quote.children, { text: '\n' }, ...inlineRaw(m[1], {}, false, mentions)]);
         else nodes.push((quote = block('blockquote', m[1])));
       } else if ((m = /^(?:[-*+]|(\d{1,3})[.)])\s+(.*)$/.exec(line))) {
         quote = null;
         const type = m[1] ? 'ol' : 'ul';
         if (!list || list.type !== type) nodes.push((list = { type, id: id(), children: [] }));
-        list.children.push({ type: 'li', id: id(), children: [{ type: 'lic', id: id(), indent: 0, listStyleType: '', children: inlineNodes(m[2]) }] });
+        list.children.push({ type: 'li', id: id(), children: [{ type: 'lic', id: id(), indent: 0, listStyleType: '', children: inline(m[2]) }] });
+      } else if ((m = IMAGE_LINE.exec(line))) {
+        list = quote = null;
+        nodes.push({ type: 'img', id: id(), url: m[2], children: [{ text: '' }] });
       } else if (VIDEO_URL.test(line)) {
         list = quote = null;
         nodes.push({ type: 'media_embed', id: id(), url: line, caption: [{ text: '' }], children: [{ text: '' }] });
@@ -1572,7 +1614,29 @@
         nodes.push(block('p', line));
       }
     }
+    // Link và nhắc tên cũng có id như web
+    const ids = (n) => {
+      if (n.type && n.id === undefined) n.id = id();
+      (n.children || []).forEach(ids);
+    };
+    nodes.forEach(ids);
     return nodes.length ? nodes : [{ type: 'p', id: id(), children: [{ text: '' }] }];
+  }
+
+  // Người được nhắc trong nội dung (để gửi kèm mentions như web: { username: dữ liệu })
+  function plateMentions(nodes) {
+    const out = {};
+    const walk = (n) => {
+      if (n?.type === 'mention' && n.value) out[n.value] = { ...n.data };
+      (n?.children || []).forEach(walk);
+    };
+    (nodes || []).forEach(walk);
+    return out;
+  }
+
+  // Dữ liệu một người nhắc tên trong Article (giống ô chọn người của trình soạn thảo Article trên web)
+  function articleMentionEntry(u) {
+    return { id: u.id, avatar: u.avatar || '', name: u.username, fullname: u.fullname || '', username: u.username };
   }
 
   const nodeText = (n) => (typeof n?.text === 'string' ? n.text : (n?.children || []).map(nodeText).join(''));
@@ -1591,10 +1655,11 @@
     }, 0);
   }
 
-  // Xem trước nội dung Article (HTML đã escape; link chỉ http/https)
+  // Xem trước nội dung Article (HTML đã escape; link chỉ http/https, ảnh chỉ https / blob)
   function plateHtml(nodes) {
     const leaf = (n) => {
       if (n.type === 'a') return `<a href="${escapeHtml(n.url)}" target="_blank" rel="noreferrer">${(n.children || []).map(leaf).join('')}</a>`;
+      if (n.type === 'mention') return `<span class="mention">@${escapeHtml(n.value)}</span>`;
       let h = escapeHtml(n.text || '').replace(/\n/g, '<br>');
       if (n.code) h = `<code>${h}</code>`;
       if (n.bold) h = `<strong>${h}</strong>`;
@@ -1616,6 +1681,10 @@
           return `<${n.type}>${(n.children || []).map((li) => `<li>${(li.children || []).map(inner).join('')}</li>`).join('')}</${n.type}>`;
         case 'hr':
           return '<hr>';
+        case 'img':
+          return /^(https:|blob:)/.test(n.url) ? `<p class="art-img"><img src="${escapeHtml(n.url)}" alt=""></p>` : '<p class="muted">[ảnh]</p>';
+        case 'table':
+          return `<table>${(n.children || []).map((tr) => `<tr>${(tr.children || []).map((c) => `<${c.type === 'th' ? 'th' : 'td'}>${(c.children || []).map(inner).join('')}</${c.type === 'th' ? 'th' : 'td'}>`).join('')}</tr>`).join('')}</table>`;
         case 'media_embed':
           return `<p class="embed">🎬 <a href="${escapeHtml(n.url)}" target="_blank" rel="noreferrer">${escapeHtml(n.url)}</a></p>`;
         default:
@@ -1632,9 +1701,13 @@
     if (!t) return 'Article cần tiêu đề';
     if (t.length > ARTICLE_TITLE_MAX) return `Tiêu đề dài ${t.length} ký tự, tối đa ${ARTICLE_TITLE_MAX}`;
     if (String(summary || '').trim().length > ARTICLE_SUMMARY_MAX) return `Tóm tắt tối đa ${ARTICLE_SUMMARY_MAX} ký tự`;
-    const len = plateText(mdToPlate(content, { id: () => '' })).length;
-    if (!len) return 'Article chưa có nội dung';
+    if (/\]\((local|blob):/.test(String(content || ''))) return 'Ảnh trong bài chưa tải lên';
+    const nodes = mdToPlate(content, { id: () => '' });
+    const len = plateText(nodes).length;
+    const images = nodes.filter((n) => n.type === 'img').length;
+    if (!len && !images) return 'Article chưa có nội dung';
     if (len > ARTICLE_MAX) return `Nội dung dài ${len.toLocaleString('vi-VN')} ký tự, tối đa ${ARTICLE_MAX.toLocaleString('vi-VN')}`;
+    if (images > ARTICLE_IMAGES_MAX) return `Tối đa ${ARTICLE_IMAGES_MAX} ảnh trong bài`;
     if (!categoryIds?.length) return 'Chọn ít nhất một chuyên mục';
     if (!hasCover) return 'Article cần ảnh bìa';
     if ((tags?.length || 0) > TAG_MAX) return `Tối đa ${TAG_MAX} tag mỗi bài`;
@@ -1648,8 +1721,8 @@
   }
 
   // Body cho PUT content/articles/{id}/publish | schedule (giống web gửi)
-  function articleBody({ groupIds, title, summary = '', content, categoryIds, coverId, tags = [], series = [], scheduledAt = null }, { id } = {}) {
-    const nodes = mdToPlate(content, id ? { id } : {});
+  function articleBody({ groupIds, title, summary = '', content, categoryIds, coverId, tags = [], series = [], scheduledAt = null, mentions = null }, { id } = {}) {
+    const nodes = mdToPlate(content, { ...(id ? { id } : {}), mentions });
     const ids = (list) => (list || []).map((x) => (typeof x === 'string' ? x : x.id));
     return {
       audience: { groupIds: [...groupIds], userIds: [] },
@@ -1657,7 +1730,7 @@
       series: ids(series),
       content: JSON.stringify(nodes),
       title: String(title).trim(),
-      mentions: {},
+      mentions: plateMentions(nodes),
       summary: String(summary || '').trim(),
       coverMedia: { id: coverId },
       tags: ids(tags),
@@ -1690,6 +1763,36 @@
 
   // Chuyên mục Article (GET content/category)
   const slimCategory = (c) => ({ id: c.id, name: c.name || '', slug: c.slug || '' });
+
+  // ---------- Tự duyệt bài của thành viên tin cậy ----------
+  // Tin cậy: có trong danh sách (username), hoặc đã được duyệt ít nhất N bài qua addon và chưa bị từ chối bài nào.
+  // Người có hồ sơ vi phạm không bao giờ được tự duyệt. Bài phải đạt mọi quy tắc bài viết (không "Cần xem").
+  function trustReason(actor, { trustedMembers = [], trustAfterApproved = 0 } = {}, trust = {}, profile = null) {
+    if (!actor?.id) return '';
+    if (profile?.events?.length) return '';
+    const name = String(actor.username || '').toLowerCase();
+    if (name && (trustedMembers || []).some((x) => String(x).toLowerCase().replace(/^@/, '') === name)) return 'Thành viên tin cậy';
+    const t = trust?.[actor.id];
+    if (trustAfterApproved > 0 && t && !t.rejected && t.approved >= trustAfterApproved) return `Đã được duyệt ${t.approved} bài`;
+    return '';
+  }
+
+  // Đếm bài được duyệt / bị từ chối của từng người từ các thao tác qua addon (Dashboard, Telegram, tự duyệt)
+  function tallyPostTrust(trust, entries, now = Date.now()) {
+    const out = { ...(trust || {}) };
+    for (const e of entries || []) {
+      if (e.kind !== 'post' || e.status !== 'ok' || !e.userId || (e.action !== 'approve' && e.action !== 'reject')) continue;
+      const t = { approved: 0, rejected: 0, ...out[e.userId] };
+      if (e.action === 'approve') t.approved++;
+      else t.rejected++;
+      out[e.userId] = { ...t, username: e.username || t.username || '', at: now };
+    }
+    return Object.fromEntries(
+      Object.entries(out)
+        .sort(([, a], [, b]) => (b.at || 0) - (a.at || 0))
+        .slice(0, 2000),
+    );
+  }
 
   // ---------- Lịch nội dung ----------
   // Lưới tháng (Thứ Hai đầu tuần) theo ngày Việt Nam: mảng tuần, mỗi tuần 7 ô { key: 'YYYY-MM-DD', day, inMonth }
@@ -1850,6 +1953,9 @@
 
   // ---------- Gửi thông báo về Telegram ----------
   // Bot của chính người dùng (token từ @BotFather). Cấu hình lưu ở khoá `telegram`, không có trong sao lưu / đồng bộ.
+  // Nguồn thao tác trong nhật ký: tự động, nút trong tin Telegram, còn lại là bấm tay trong addon
+  const sourceLabel = (source) => (source === 'auto' ? 'Tự động' : source === 'telegram' ? 'Telegram' : 'Bấm tay');
+
   const TELEGRAM_KINDS = {
     spam: 'Đợt spam, tự ẩn spam',
     reports: 'Báo cáo mới, bài Beincom gắn cờ',
@@ -1859,7 +1965,7 @@
     weekly: 'Tóm tắt tuần, việc đầu tuần',
     login: 'Cần đăng nhập Beincom lại',
   };
-  const DEFAULT_TELEGRAM = { enabled: false, token: '', chatId: '', kinds: { spam: true, reports: true, violations: true, queue: false, watch: true, weekly: true, login: true }, quietNight: false };
+  const DEFAULT_TELEGRAM = { enabled: false, token: '', chatId: '', kinds: { spam: true, reports: true, violations: true, queue: false, watch: true, weekly: true, login: true }, quietNight: false, actions: false };
 
   // Loại tin theo mã thông báo của addon
   function telegramKind(id) {
@@ -1900,6 +2006,88 @@
     if (!kind || !cfg.kinds?.[kind]) return false;
     return !(cfg.quietNight && kind !== 'spam' && kind !== 'login' && isQuietHour(now));
   }
+
+  // ---------- Nút xử lý trong tin Telegram ----------
+  // Bật "Kèm nút xử lý": mỗi việc mới gửi thành một tin riêng có nút. Nút mang mã ngắn "token:act" (callback_data ≤ 64 byte);
+  // việc tương ứng lưu ở khoá `tgActions`. Addon đọc nút bấm (getUpdates) mỗi 30 giây, chỉ nhận nút bấm trong đúng chat đã cài.
+  const TG_ACTIONS = {
+    request: [{ act: 'a', text: '✅ Duyệt' }, { act: 'd', text: '❌ Từ chối' }],
+    approval: [{ act: 'a', text: '✅ Duyệt bài' }],
+    post: [{ act: 'h', text: '🙈 Ẩn bài' }, { act: 's', text: 'Bỏ qua' }],
+    comment: [{ act: 'h', text: '🙈 Ẩn bình luận' }, { act: 's', text: 'Bỏ qua' }],
+    wave: [{ act: 'h', text: '🙈 Ẩn cả đợt' }, { act: 's', text: 'Bỏ qua đợt' }],
+  };
+  const TG_DONE = {
+    request: { a: 'Đã duyệt', d: 'Đã từ chối' },
+    approval: { a: 'Đã duyệt bài' },
+    post: { h: 'Đã ẩn bài', s: 'Đã bỏ qua' },
+    comment: { h: 'Đã ẩn bình luận', s: 'Đã bỏ qua' },
+    wave: { h: 'Đã ẩn cả đợt', s: 'Đã bỏ qua đợt' },
+  };
+  // Mã thông báo gộp tương ứng (để theo loại tin đã chọn và giờ yên lặng)
+  const TG_ITEM_NOTIFY = { request: 'bg-requests', approval: 'bg-posts-', post: 'bg-flagged', comment: 'bg-comments', wave: 'bg-wave' };
+  const TG_ITEMS_MAX = 10; // tin có nút mỗi lần quét
+  const TG_ACTIONS_KEEP = 300;
+  const TG_ACTIONS_DAYS = 7;
+
+  const telegramActionsOn = (cfg) => !!(cfg?.actions && cfg.enabled && cfg.token && cfg.chatId);
+  // Thông báo gộp này đã có tin riêng từng việc (bật nút xử lý) thì không gửi bản gộp về Telegram nữa
+  const telegramItemNotify = (id) => Object.values(TG_ITEM_NOTIFY).some((x) => (x.endsWith('-') ? String(id).startsWith(x) : id === x));
+
+  function tgToken(rand = Math.random) {
+    let s = '';
+    for (let i = 0; i < 10; i++) s += '0123456789abcdefghijklmnopqrstuvwxyz'[Math.floor(rand() * 36) % 36];
+    return s;
+  }
+
+  function parseTgCallback(data) {
+    const m = /^([a-z0-9]{10}):([a-z])$/.exec(String(data || ''));
+    return m ? { token: m[1], act: m[2] } : null;
+  }
+
+  const tgActAllowed = (kind, act, acts = null) => (acts || (TG_ACTIONS[kind] || []).map((b) => b.act)).includes(act);
+
+  // Bàn phím dưới tin: các nút xử lý (acts: chỉ một số nút, vd không có quyền duyệt thì []), thêm nút mở trang Beincom
+  function tgKeyboard(kind, token, url = '', acts = null) {
+    const row = (TG_ACTIONS[kind] || []).filter((b) => !acts || acts.includes(b.act)).map((b) => ({ text: b.text, callback_data: `${token}:${b.act}` }));
+    const rows = [];
+    if (row.length) rows.push(row);
+    if (/^https:\/\//.test(url)) rows.push([{ text: 'Mở trên Beincom', url }]);
+    return { inline_keyboard: rows };
+  }
+
+  // Nội dung tin một việc (HTML): tiêu đề đậm, người, nội dung, ghi chú nghiêng
+  function telegramItemText({ head, who = '', text = '', note = '' }) {
+    const lines = [`<b>${escHtml(head)}</b>`];
+    if (who) lines.push(escHtml(who));
+    if (text) lines.push(escHtml(String(text).replace(/\s+\n/g, '\n').slice(0, 600)) + (String(text).length > 600 ? '…' : ''));
+    if (note) lines.push(`<i>${escHtml(String(note).slice(0, 300))}</i>`);
+    return lines.join('\n');
+  }
+
+  // Kết quả sau khi bấm nút: done = xong (thay nút bằng dòng kết quả), không thì giữ nút để bấm lại
+  function tgResult(kind, act, r) {
+    if (r?.status === 'need_login') return { done: false, line: '⚠️ Phiên đăng nhập Beincom đã hết hạn — đăng nhập lại rồi bấm lại' };
+    if (r?.dryRun) return { done: false, line: '🧪 Đang Chạy thử: đã ghi nhật ký, chưa gửi lên Beincom' };
+    if (r?.status === 'ok' && !r.failed) return { done: true, line: '✅ ' + (TG_DONE[kind]?.[act] || 'Đã xử lý') };
+    const msg = r?.errors?.[0] || r?.message || 'Có lỗi';
+    // Việc không còn (đã xử lý trên web / Dashboard, bài đã xoá): coi như xong
+    if (/không còn|không tìm thấy|not found|đã ẩn/i.test(msg)) return { done: true, line: '☑️ Đã xử lý trước đó hoặc không còn trên Beincom' };
+    return { done: false, line: '⚠️ ' + msg };
+  }
+
+  // Giữ việc trong 7 ngày, tối đa 300 việc mới nhất
+  function pruneTgActions(map, now = Date.now()) {
+    return Object.fromEntries(
+      Object.entries(map || {})
+        .filter(([, a]) => a && now - (a.at || 0) < TG_ACTIONS_DAYS * 864e5)
+        .sort(([, a], [, b]) => (b.at || 0) - (a.at || 0))
+        .slice(0, TG_ACTIONS_KEEP),
+    );
+  }
+
+  // Lý do ẩn qua Telegram: link cấm / link ngoài, đợt spam -> Spam; còn lại -> Lý do khác
+  const tgHideReason = (reasons = []) => (reasons.some((x) => x.code === 'blocked' || x.code === 'external') ? 'SPAM' : 'OTHERS');
 
   const CONTENT_STATUS = {
     DRAFT: 'Bản nháp',
@@ -2043,6 +2231,7 @@
       tags: (d.tags || []).map((t) => ({ id: t.id, name: t.name || '' })),
       series: (d.series || []).map((x) => ({ id: x.id, title: x.title || '' })),
       setting: { canComment: s.canComment !== false, canReact: s.canReact !== false, isImportant: !!s.isImportant, importantExpiredAt: s.importantExpiredAt || null },
+      scheduledAt: d.scheduledAt || null,
     };
   }
 
@@ -2410,6 +2599,12 @@
     SERIES_SUMMARY_MAX,
     nodeId,
     mdToPlate,
+    plateMentions,
+    articleMentionEntry,
+    ARTICLE_IMAGES_MAX,
+    LOCAL_IMAGE,
+    trustReason,
+    tallyPostTrust,
     plateText,
     plateWords,
     plateHtml,
@@ -2429,8 +2624,23 @@
     bestTimes,
     dayBestHours,
     nextSlot,
+    sourceLabel,
     TELEGRAM_KINDS,
     DEFAULT_TELEGRAM,
+    TG_ACTIONS,
+    TG_DONE,
+    TG_ITEM_NOTIFY,
+    TG_ITEMS_MAX,
+    telegramActionsOn,
+    telegramItemNotify,
+    tgToken,
+    parseTgCallback,
+    tgActAllowed,
+    tgKeyboard,
+    telegramItemText,
+    tgResult,
+    pruneTgActions,
+    tgHideReason,
     telegramKind,
     telegramText,
     isQuietHour,

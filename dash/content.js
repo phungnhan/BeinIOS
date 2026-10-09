@@ -48,7 +48,7 @@ function renderApproval() {
         'tr',
         {},
         el('td', { class: 'cb' }, rowCheckbox(selectedPosts, p.id, 'bài của ' + (p.actor.fullname || p.actor.username), bulk)),
-        el('td', {}, postAuthor(p.actor)),
+        el('td', {}, postAuthor(p.actor), trustTag(p.actor)),
         el('td', {}, postContent(p)),
         el('td', {}, postGroups(p)),
         el('td', { title: fmtTime(p.submittedAt), text: ago(p.submittedAt) }),
@@ -58,11 +58,27 @@ function renderApproval() {
           { class: 'act' },
           el('button', { class: 'ok-btn sm', disabled: busy, text: 'Duyệt', onclick: () => actApproval('approve', g, [p]) }),
           el('button', { class: 'danger sm', disabled: busy, text: 'Từ chối', onclick: () => actApproval('reject', g, [p]) }),
+          isTrustedListed(p.actor) || !p.actor.username ? null : el('button', { class: 'ghost sm', title: 'Thêm vào thành viên tin cậy (tự duyệt bài đạt quy tắc)', text: '⭐', onclick: () => addTrusted(p.actor) }),
         ),
       ),
     );
   }
   bulk();
+}
+
+// Thành viên tin cậy (tự duyệt bài): nhãn ⭐ khi người đăng đang được tin cậy, nút ⭐ để thêm vào danh sách
+const isTrustedListed = (actor) => (data.settings.trustedMembers || []).some((x) => String(x).toLowerCase() === String(actor?.username || '').toLowerCase());
+
+function trustTag(actor) {
+  const why = BG.trustReason(actor, data.settings, data.state.postTrust, profileOf(actor?.id));
+  if (!why) return null;
+  return el('div', {}, el('span', { class: 'tag ok', title: why + (data.settings.autoApprovePosts ? ' — bài đạt quy tắc sẽ được tự duyệt' : ' — bật Tự duyệt bài ở Cài đặt để tự duyệt'), text: '⭐ Tin cậy' }));
+}
+
+async function addTrusted(actor) {
+  const list = [...new Set([...(data.settings.trustedMembers || []), String(actor.username).toLowerCase()])];
+  await saveSettings({ trustedMembers: list });
+  toast(`Đã thêm @${actor.username} vào thành viên tin cậy.${data.settings.autoApprovePosts ? '' : ' Bật "Tự duyệt bài của thành viên tin cậy" ở Cài đặt để addon tự duyệt.'}`);
 }
 
 function snippet(p) {

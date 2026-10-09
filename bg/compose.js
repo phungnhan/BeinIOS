@@ -87,7 +87,7 @@ async function finishCompose(r, { base, contentType, state, log }) {
 const UPLOAD_PATH = { image: 'upload/images/', video: 'upload/videos/', file: 'upload/files/' };
 const UPLOAD_WAIT_MS = { image: 120e3, video: 600e3 };
 
-const IMAGE_RESOURCES = ['post:content', 'article:cover', 'series:cover'];
+const IMAGE_RESOURCES = ['post:content', 'article:cover', 'article:content', 'series:cover'];
 
 async function doUploadInit({ kind, mimeType = '', resource = 'post:content' }) {
   if (!UPLOAD_PATH[kind]) return { status: 'error', message: 'Loại file không hợp lệ' };
@@ -197,8 +197,9 @@ function postActLog(source, action, { contentId, snippet = '', groupName = '', a
   return { kind: 'post', source, action, contentId, contentType: 'POST', snippet: String(snippet).replace(/\s+/g, ' ').slice(0, 120), groupName, communityName: '', userId: actor?.id || '', username: actor?.username || '', fullname: actor?.fullname || '' };
 }
 
-// Chi tiết bài: mở lại trong khung soạn (sửa bài của mình); any = chỉ xem (vd đọc cài đặt hiện tại)
-async function doPostDetail({ id, any = false }) {
+// Chi tiết bài: mở lại trong khung soạn (sửa bài của mình); any = chỉ xem (vd đọc cài đặt hiện tại);
+// scheduled = bài đang hẹn giờ của mình (sửa trước giờ đăng)
+async function doPostDetail({ id, any = false, scheduled = false }) {
   if (!id) return { status: 'error', message: 'Thiếu bài' };
   const { state } = await load();
   return withClient(async (client) => {
@@ -209,6 +210,10 @@ async function doPostDetail({ id, any = false }) {
     const post = BG.editState(r.body.data);
     if (any) return { status: 'ok', post };
     if (!state.me?.id || post.actorId !== state.me.id) return { status: 'error', message: 'Chỉ sửa được bài của chính bạn (Beincom không cho admin sửa bài người khác)' };
+    if (scheduled) {
+      if (!SCHEDULED_EDITABLE.includes(post.status)) return { status: 'error', message: 'Bài này không còn ở trạng thái hẹn giờ (có thể đã đăng)' };
+      return { status: 'ok', post };
+    }
     if (post.status && post.status !== 'PUBLISHED') return { status: 'error', message: 'Chỉ sửa được bài đã đăng' };
     return { status: 'ok', post };
   });
@@ -261,6 +266,49 @@ async function doEditPost({ id, groupIds = [], content, media = null, mentions =
   await chrome.storage.local.set({ state: next, log });
   if (r.status === 'need_login') await updateBadge();
   return { status: r.status, message: r.message || r.warning || '', dryRun: !!r.dry, ok: status === 'ok' ? 1 : 0, dry: status === 'dry' ? 1 : 0, failed: status === 'error' ? 1 : 0, errors: status === 'error' ? [r.message] : [] };
+}
+
+// Sửa bài đang hẹn giờ của mình (nội dung, file, cài đặt, giờ đăng): gửi lại PUT content/posts/{id}/schedule với đủ body
+// như web làm khi sửa bài hẹn giờ.
+const SCHEDULED_EDITABLE = ['WAITING_SCHEDULE', 'SCHEDULE_FAILED'];
+
+async function doEditScheduled({ id, groupIds = [], content, setting, scheduledAt = null, media = null, mentions = null, linkPreview = null, tags = [], series = [], source = 'manual' }) {
+  if (!id) return { status: 'error', message: 'Thiếu bài' };
+  if (!scheduledAt) return { status: 'error', message: 'Chưa chọn giờ đăng' };
+  const err = BG.validateCompose({ groupIds, content, setting, scheduledAt, media, tags, series });
+  if (err) return { status: 'error', message: err };
+  const { settings, state, log } = await load();
+  const body = BG.composeBody({ groupIds, content, setting, scheduledAt, media, mentions, linkPreview, tags, series });
+  const attached = BG.mediaSummary(body.media);
+  const logBase = { ...postActLog(source, 'edit', { contentId: id, snippet: (attached ? `[${attached}] ` : '') + body.content, groupName: '', actor: state.me }), scheduledAt: body.scheduledAt };
+  let r;
+  if (settings.dryRun) r = { status: 'ok', dry: true };
+  else {
+    r = await withClient(async (client) => {
+      const cur = await client.call('GET', `content/contents/${id}`);
+      if (cur.status === 401) return { ...NEED_LOGIN };
+      if (BG.isContentGone(cur)) return { status: 'error', message: 'Bài không còn trên Beincom (đã bị xoá)' };
+      if (!BG.isOk(cur)) return { status: 'error', message: 'Đọc bài lỗi: ' + BG.errMsg(cur) };
+      if (cur.body.data?.actor?.id !== state.me?.id) return { status: 'error', message: 'Chỉ sửa được bài của chính bạn' };
+      if (!SCHEDULED_EDITABLE.includes(cur.body.data?.status)) return { status: 'error', message: 'Bài đã đăng hoặc không còn hẹn giờ — sửa như bài đã đăng' };
+      if (body.tags.length || body.series.length) {
+        const v = await client.call('POST', 'content/contents/validate-series-tags', { groups: body.audience.groupIds, series: body.series, tags: body.tags });
+        if (v.status === 401) return { ...NEED_LOGIN };
+        if (v.body?.code === 'tag_series_invalid') return { status: 'error', message: BG.tagSeriesError(v.body, tags, series) };
+      }
+      const p = await client.call('PUT', `content/posts/${id}/schedule`, body);
+      if (p.status === 401) return { ...NEED_LOGIN };
+      if (p.body?.code === 'tag_series_invalid') return { status: 'error', message: BG.tagSeriesError(p.body, tags, series) };
+      if (!BG.isOk(p)) return { status: 'error', message: 'Lưu bài hẹn giờ lỗi: ' + BG.errMsg(p) };
+      return { status: 'ok' };
+    });
+  }
+  const status = r.dry ? 'dry' : r.status === 'ok' ? 'ok' : 'error';
+  pushLog(log, [{ time: Date.now(), ...logBase, status, message: r.dry ? DRY_MSG : r.message || '' }]);
+  const next = r.status === 'need_login' ? { ...state, lastResult: { status: 'need_login', message: NEED_LOGIN.message, mode: r.mode || '' } } : state;
+  await chrome.storage.local.set({ state: next, log });
+  if (r.status === 'need_login') await updateBadge();
+  return { status: r.status, message: r.message || '', dryRun: !!r.dry, ok: status === 'ok' ? 1 : 0, dry: status === 'dry' ? 1 : 0, failed: status === 'error' ? 1 : 0, errors: status === 'error' ? [r.message] : [] };
 }
 
 // Đổi cài đặt một bài (bình luận, cảm xúc, Quan trọng) — admin đổi được cả bài người khác

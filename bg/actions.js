@@ -42,7 +42,8 @@ async function doApprovalAct({ action, groupId, contentIds, reason = '', source 
 
   const r = await performActions(items, settings);
   pushLog(log, r.entries);
-  const next = { ...state, snapshot: { ...state.snapshot, groups: removeHandledPosts(groups, r.entries) } };
+  // Đếm bài được duyệt / bị từ chối của từng người (để tự duyệt người đã được duyệt đủ N bài)
+  const next = { ...state, snapshot: { ...state.snapshot, groups: removeHandledPosts(groups, r.entries) }, postTrust: BG.tallyPostTrust(state.postTrust, r.entries) };
   if (r.status === 'need_login') next.lastResult = { status: 'need_login', message: NEED_LOGIN.message, mode: r.mode || '' };
   await chrome.storage.local.set({ state: next, log });
   await updateBadge();
