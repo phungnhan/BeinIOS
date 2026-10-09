@@ -106,13 +106,36 @@ API nhóm `content/` nhận tên trường **camelCase** (client của web khôn
 | GET | `content/timeline/{groupId}` | `limit`, `after`, `type?`, `order?` → bài mới nhất trước; mỗi bài có `content`, `actor`, `audience`, `media`, `linkPreview`, `isHidden`, `commentsCount`, `latestComment` | ✅ |
 | GET | `content/manage/groups/{groupId}/contents/published` · `hidden` · `flagged` | `type=POST`, `limit`, `after` (`published` chậm ~5 giây) | ✅ |
 | POST | `content/contents/{contentId}/hide` | `{ reasonType, groupIds: [...] }`: ẩn bài khỏi các group đã chọn | — |
-| GET | `content/contents/pinned-content/groups/{groupId}` | Bài đang ghim | ✅ |
-| PUT | `content/contents/pinned-content/{contentId}` | `{ pinGroupIds, unpinGroupIds }` | — |
+| GET | `content/contents/pinned-content/groups/{groupId}` | Bài đang ghim (mảng bài, đủ trường như bài thường). Mỗi group **tối đa 5 bài** ("Bạn đã đạt giới hạn 5 ghim") | ✅ |
+| PUT | `content/contents/pinned-content/{contentId}` | `{ pinGroupIds, unpinGroupIds }`: ghim / bỏ ghim ở nhiều group một lần | — |
+| POST | `content/contents/pinned-content/groups/{groupId}/order` | Mảng id bài theo thứ tự mới (kéo thả trên web, kèm header `x-lang`). Addon chưa dùng | — |
+| GET | `content/contents/{id}` | **Chi tiết một bài** (đủ `content`, `media`, `mentions`, `linkPreview`, `tags`, `series`, `setting`, `audience`). `content/posts/{id}` không có (404) | ✅ |
+| PUT | `content/contents/{id}/setting` | `{ canComment, canReact, isImportant, importantExpiredAt }`: đổi cài đặt bài | — |
+| PUT | `content/posts/{id}` | Sửa bài đã đăng: `{ audience, content, media, mentions, linkPreview, tags, series }` (web không gửi setting ở đây; khi bài nháp thì web dùng `PATCH`) | — |
+
+- `GET content/contents/{id}/menu-settings` cho admin group xem bài người khác: `canPinContent: true`, `canEditSetting: true`, `canEdit: false` → admin ghim và đổi cài đặt được, chỉ sửa nội dung được bài của mình.
 
 - `reasonType`: `SPAM`, `BULLYING_THREATENING_OR_HARASSING`, `VIOLENT_OR_PORN`, `PRETENDING_SOMEONE`, `ILLEGAL`, `CHILD_ABUSE_EXPLOITATION`, `OTHERS`.
 - Không tìm thấy API hiện lại bài đã ẩn trong mã web.
 - Link bài trên web: `/posts/{id}` (bài thường), `/article/{id}` (article).
-- Bình luận: base `content/comments` (thêm, sửa, xoá, trả lời). Chưa tìm ra API đọc danh sách bình luận của một bài.
+- Bình luận: xem mục 5b.
+
+## 5b. Bình luận
+Bộ gọi API `content/comments` của web (header `x-version-id: 2.0.0`). Đọc từ mã web; hai lệnh đọc danh sách đã gọi thật (09/10/2026), ẩn bình luận chưa.
+
+| Method | Đường dẫn | Body / tham số | Thử |
+|---|---|---|---|
+| GET | `content/comments` | `postId`, `parentId?`, `limit`, `after` / `before` → `{ list, meta: { startCursor, endCursor, hasNextPage, hasPreviousPage } }`. Không có `parentId`: bình luận gốc, **mới nhất trước**, không kèm trả lời; có `parentId`: trả lời của bình luận đó (mới nhất trước) | ✅ |
+| GET | `content/comments/{id}` | `limit`, `target_child_limit`: một bình luận kèm vài trả lời (trang mở từ thông báo) | — |
+| POST | `content/comments/{id}/hide` | `{ reasonType }` (lý do như ẩn bài): admin ẩn bình luận | — |
+| POST | `content/comments/{id}/reply` | `{ postId, content, media: { images }, giphy, mentions }` | — |
+| PUT / DELETE | `content/comments/{id}` | Sửa / xoá bình luận (của mình) | — |
+| POST | `content/comments/{id}/reports` | Báo cáo bình luận | — |
+
+- Mỗi bình luận (gọi thật): `id`, `postId`, `parentId` (bình luận gốc: `00000000-0000-0000-0000-000000000000`), `actor` (`id`, `username`, `fullname`, `avatar`, `isVerified`, `isDeactivated`, …), `content` (markdown), `mentions`, `media`, `giphyId` / `giphyUrl`, `totalReply`, `edited`, `createdBy`, `createdAt`, `updatedAt`, `ownerReactions`, `reactionsCount`. Danh sách không có `child` kể cả khi `totalReply > 0` (web chỉ có `child` ở API chi tiết một bình luận).
+- Bài trên timeline có `commentsCount` và `latestComment`: addon chỉ đọc bình luận của bài có `commentsCount` tăng so với lần đọc trước.
+- Link mở bài và cuộn tới bình luận (giống thông báo của web): `/posts/{postId}?comment_id={id}`, trả lời thêm `&parent_id={parentId}`.
+- Lỗi khi bình luận không còn: mã kiểu `comment.not_found` (bản dịch có `error.comment.not_found`).
 
 ## 6. Báo cáo vi phạm
 Báo cáo của người dùng (bài viết, article, bình luận). `{groupId}` là **ID group gốc** của community.
@@ -153,7 +176,7 @@ Luồng của web: tạo bản nháp (lấy `id`), rồi đăng ngay hoặc hẹ
 - Một bài đăng được vào nhiều group cùng lúc qua `audience.groupIds`.
 - Trạng thái bài: `DRAFT`, `PROCESSING`, `PUBLISHED`, `WAITING_SCHEDULE`, `SCHEDULE_FAILED`, `WAITING_SCAN`, `SCAN_REJECTED`.
 - Beincom giới hạn số bản nháp (lỗi `DraftLimitExceededException`).
-- Web còn có "đăng dưới danh nghĩa group": `POST …/{groupId}/posts`, sau cờ tính năng `create-content-by-group`. Addon chưa dùng.
+- **Đăng dưới tên group** (web: nút "Tạo nội dung bằng danh tính nhóm"): bản nháp tạo bằng `POST content/manage/groups/{groupId}/posts` với `{ audience: { groupIds: [groupId] }, isEnableDonation }` (thay cho `POST content/posts`), sau đó đăng / hẹn giờ như bài thường. Web chỉ hiện nút khi tài khoản có quyền `crud_post_article` ở group (admin group, admin community, chủ) **và** cờ tính năng `create-content-by-group` bật (cờ lấy từ cấu hình từ xa, addon không đọc được). Addon làm theo, chưa gọi thật.
 - Ảnh/video phải tải lên qua API upload riêng trước khi đăng. Addon chưa làm.
 
 ### Khung soạn bài của web (đọc từ mã, addon đã làm theo nhưng chưa thử thật)
@@ -199,10 +222,15 @@ Khi không có số liệu chính thức, addon tự tính:
 ## 9. Cài đặt
 | Method | Đường dẫn | Body | Thử |
 |---|---|---|---|
-| GET | `group/groups/{groupId}/settings` | `settings` + `changeableSettings` | ✅ |
-| PUT | `group/groups/{groupId}/settings` | `isJoinApproval`, `isActiveMembershipQuestions`, `isInvitedOnly`, `isHiddenMembers`, … | — |
-| GET | `group/communities/{communityId}/content-settings` | | ✅ |
-| PUT | `group/communities/{communityId}/content-settings` | `{ groupId, contentApproval: { value }, isUpdateAll }` | — |
+| GET | `group/groups/{groupId}/settings` | `settings` (`isJoinApproval`, `isActiveMembershipQuestions`, `isInvitedOnly`, `isHiddenMembers`, `isActiveGroupTerms`, `isActiveReferralCode`, `contentApproval { value, updatedAt }`) + `changeableSettings` (cùng khoá; chuỗi rỗng = đổi được, có chữ = lý do bị khoá) | ✅ |
+| PUT | `group/groups/{groupId}/settings` | Mỗi lần một khoá. Web viết `{ id, isJoinApproval }`, bộ gọi API nhóm đổi sang snake_case khi gửi: `{ id, is_join_approval }` | — |
+| GET | `group/communities/{communityId}/content-settings` | `enabledSetting.contentApproval.count`, `groupsCount` (chủ / admin community) | ✅ |
+| PUT | `group/communities/{communityId}/content-settings` | Web: `{ groupId, contentApproval: { value }, isUpdateAll }` → gửi `{ group_id, content_approval: { value }, is_update_all }` | — |
+| GET | `group/communities/{communityId}/banned-members` | `limit`, `offset` → mảng `{ user { id, username, fullname, avatar, isVerified, … }, reason }`, `meta { total, hasNextPage }`. Chỉ chủ / admin community (admin group: 403) | ✅ |
+| POST | `group/communities/{communityId}/users/{userId}/unban` | Web gửi `{ communityId, userId }` → `{ community_id, user_id }`: gỡ cấm | — |
+
+- Quyền (từ `group/me/permissions`): `edit_join_setting` (duyệt thành viên, câu hỏi, chỉ người được mời), `edit_privacy` (ẩn danh sách thành viên); admin group có cả hai.
+- ⚠ Web cảnh báo khi **tắt duyệt thành viên**: "Tất cả các yêu cầu đang chờ xử lý sẽ được phê duyệt tự động".
 
 ## 10. Trang admin trên web (để addon mở thẳng)
 Trang quản trị chính là `https://group.beincom.com/admin-panel/{communityId}/…`:

@@ -54,8 +54,8 @@ function fixture() {
     perms: {
       communities: { cFood: ['manage', 'role_OWNER', 'ban_member'], cCL: ['send_message'] },
       groups: {
-        gFood: ['approve_reject_jr', 'remove_member', 'assign_unassign_role', 'role_OWNER', 'role_COMMUNITY_ADMIN'],
-        gCL: ['approve_reject_jr', 'remove_member', 'assign_unassign_role', 'role_GROUP_ADMIN'],
+        gFood: ['approve_reject_jr', 'remove_member', 'assign_unassign_role', 'edit_join_setting', 'edit_privacy', 'crud_post_article', 'role_OWNER', 'role_COMMUNITY_ADMIN'],
+        gCL: ['approve_reject_jr', 'remove_member', 'assign_unassign_role', 'edit_join_setting', 'edit_privacy', 'role_GROUP_ADMIN'],
         gCLsub: ['approve_reject_jr', 'role_GROUP_ADMIN'],
         gOther: ['send_message', 'comment_on_thread'],
       },
@@ -104,6 +104,8 @@ function fixture() {
       ],
     },
     postSeq: 0,
+    // Bài đang ghim: Crypto Life đã đủ 5
+    pinned: { gCL: ['k1', 'k2', 'k3', 'k4', 'k5'].map((id) => post(id, 'Ghim ' + id)), gFood: [], gCLsub: [] },
     // Tag theo group gốc (Crypto Life có 30 tag: 2 trang), series theo group
     tags: { gFood: [{ id: 'tF1', name: 'AMA', totalUsed: 3 }], gCL: Array.from({ length: 30 }, (_, i) => ({ id: 'tC' + i, name: 'TAG ' + i, totalUsed: i })) },
     series: { gFood: [{ id: 'sF1', title: 'Lịch sự kiện', coverMedia: { url: 'https://media.beincom.com/c1' }, summary: 'Các sự kiện' }], gCLsub: [{ id: 'sC1', title: 'Nhập môn crypto', coverMedia: null }] },
@@ -134,7 +136,7 @@ function fixture() {
   };
 }
 
-function makeEnv({ data = fixture(), settings = {}, rules = {}, postRules = {}, loggedIn = true } = {}) {
+function makeEnv({ data = fixture(), settings = {}, rules = {}, postRules = {}, groupRules = null, loggedIn = true } = {}) {
   const calls = [];
   const bodies = [];
   const headers = {};
@@ -193,6 +195,15 @@ function makeEnv({ data = fixture(), settings = {}, rules = {}, postRules = {}, 
       const more = start + list.length < all.length;
       return reply(200, ok({ list, meta: { hasNextPage: more, endCursor: more ? String(start + list.length) : null } }));
     }
+    // Bình luận của một bài (trang đầu = mới nhất), ẩn bình luận
+    if (path === 'content/comments' && method === 'GET') {
+      const src = q.parentId ? data.replies?.[q.parentId] : data.comments?.[q.postId];
+      return reply(200, ok({ list: (src || []).slice(0, Number(q.limit) || 10), meta: { hasNextPage: false } }));
+    }
+    if ((m = path.match(/^content\/comments\/([\w-]+)\/hide$/)) && method === 'POST') {
+      if ((data.goneComments || []).includes(m[1])) return reply(404, { code: 'comment.not_found', meta: { message: 'Comment not found' } });
+      return reply(200, ok(true));
+    }
     if (path === 'user/me/profile') {
       data.meHeaders = opts.headers;
       return reply(200, ok({ id: 'me1', username: 'kai', fullname: 'Kai Crypto' }));
@@ -235,6 +246,31 @@ function makeEnv({ data = fixture(), settings = {}, rules = {}, postRules = {}, 
     }
     if (path.match(/^content\/manage\/communities\/\w+\/content-reports\/\w+\/status$/) && method === 'PUT') return reply(200, ok(true));
     if ((m = path.match(/^content\/manage\/groups\/(\w+)\/contents\/(flagged|hidden)$/))) return reply(200, ok({ list: data[m[2]][m[1]] || [], meta: { hasNextPage: false } }));
+    // Thành viên bị cấm
+    if ((m = path.match(/^group\/communities\/(\w+)\/banned-members$/))) {
+      if (!data.perms.communities[m[1]]?.includes('manage')) return reply(403, { code: 'forbidden', meta: { message: "You don't have permission" } });
+      const all = data.banned?.[m[1]] || [];
+      const [limit, offset] = [Number(q.limit), Number(q.offset)];
+      return reply(200, ok(all.slice(offset, offset + limit), { total: all.length, limit, offset, hasNextPage: offset + limit < all.length }));
+    }
+    if (path.match(/^group\/communities\/\w+\/users\/\w+\/unban$/) && method === 'POST') return reply(201, ok(true));
+    // Cài đặt group
+    if ((m = path.match(/^group\/groups\/(\w+)\/settings$/)) && method === 'GET') {
+      const v = data.groupSettings?.[m[1]] || {};
+      return reply(200, ok({ settings: { isJoinApproval: !!v.isJoinApproval, isActiveMembershipQuestions: false, isInvitedOnly: false, isHiddenMembers: true, contentApproval: { value: !!v.contentApproval } }, changeableSettings: { isJoinApproval: '' } }));
+    }
+    if (path.match(/^group\/groups\/\w+\/settings$/) && method === 'PUT') return reply(200, ok(true));
+    if (path.match(/^group\/communities\/\w+\/content-settings$/) && method === 'PUT') return reply(200, ok(true));
+    // Ghim, chi tiết bài, sửa bài, cài đặt
+    if ((m = path.match(/^content\/contents\/pinned-content\/groups\/(\w+)$/))) return reply(200, ok(data.pinned[m[1]] || []));
+    if (path.match(/^content\/contents\/pinned-content\/\w+$/) && method === 'PUT') return reply(200, ok(true));
+    if ((m = path.match(/^content\/contents\/(\w+)$/)) && method === 'GET') {
+      if (m[1].startsWith('gone')) return reply(404, { code: 'content.not_found', meta: { message: 'Content not found' } });
+      const found = Object.values(data.timeline).flat().find((x) => x.id === m[1]);
+      return found ? reply(200, ok({ status: 'PUBLISHED', mentions: {}, tags: [], series: [], setting: { canComment: true, canReact: true, isImportant: false, importantExpiredAt: null }, ...found })) : reply(404, { code: 'api.not_found' });
+    }
+    if (path.match(/^content\/contents\/\w+\/setting$/) && method === 'PUT') return reply(200, ok(true));
+    if (path.match(/^content\/posts\/\w+$/) && method === 'PUT') return reply(200, ok({ status: 'PUBLISHED' }));
     // Tag và series
     const all = new URLSearchParams(query);
     if (path === 'content/tags' || path === 'content/series') {
@@ -270,6 +306,10 @@ function makeEnv({ data = fixture(), settings = {}, rules = {}, postRules = {}, 
     }
     // Đăng bài
     if (path === 'content/posts' && method === 'POST') return reply(201, ok({ id: `new${++data.postSeq}`, status: 'DRAFT' }));
+    if (path.match(/^content\/manage\/groups\/\w+\/posts$/) && method === 'POST') {
+      if (data.groupPostOff) return reply(403, { code: 'feature.not_enabled', meta: { message: 'Feature is not enabled' } });
+      return reply(201, ok({ id: `grp${++data.postSeq}`, status: 'DRAFT' }));
+    }
     if ((m = path.match(/^content\/posts\/(\w+)\/(publish|schedule)$/)) && method === 'PUT') {
       if (data.failPublish) return reply(400, { code: 'api.validation_error', meta: { message: 'Content is invalid' } });
       return reply(200, ok({ id: m[1], status: m[2] === 'publish' ? 'PUBLISHED' : 'WAITING_SCHEDULE' }));
@@ -299,6 +339,7 @@ function makeEnv({ data = fixture(), settings = {}, rules = {}, postRules = {}, 
   };
 
   const storage = { settings: { ...BG.DEFAULT_SETTINGS, ...settings }, rules: { ...BG.DEFAULT_RULES, ...rules }, postRules: { ...BG.DEFAULT_POST_RULES, ...postRules } };
+  if (groupRules) storage.groupRules = groupRules;
   const listeners = {};
   const ev = (name) => ({ addListener: (fn) => (listeners[name] = fn), removeListener: () => {} });
   const notifications = [];
@@ -541,6 +582,28 @@ test('quét bài mới: gộp bài đăng nhiều group, mới nhất trước, 
   assert.match(env.notifications[0].title, /1 bài mới vi phạm/);
 });
 
+test('quy tắc riêng từng group: tự xử lý và đếm bài vi phạm theo quy tắc của group', async () => {
+  // Quy tắc chung không có từ khoá cấm; Food Research có quy tắc riêng cấm "kiếm tiền"
+  const env = makeEnv({
+    settings: { dryRun: false, autoApprove: true, autoDecline: true },
+    groupRules: { gFood: { name: 'Food Research', rules: { ...BG.DEFAULT_RULES, bannedKeywords: ['kiếm tiền'] }, postRules: { ...BG.DEFAULT_POST_RULES } } },
+  });
+  await scan(env);
+  assert.deepEqual(
+    env.calls.filter((c) => c.startsWith('PUT')),
+    ['PUT group/groups/gFood/joining-requests/jr1/approve', 'PUT group/groups/gFood/joining-requests/jr3/decline'],
+  );
+  // Quy tắc bài riêng của community Crypto Life áp dụng cho cả group con: t2 (bit.ly) vi phạm
+  const env2 = makeEnv({ groupRules: { gCL: { name: 'Crypto Life', rules: { ...BG.DEFAULT_RULES }, postRules: { ...BG.DEFAULT_POST_RULES, ...RULES_LINK } } } });
+  await scan(env2);
+  assert.equal(env2.badge.text, '9');
+  // Bỏ quy tắc riêng -> không còn bài vi phạm, huy hiệu tự đếm lại
+  env2.storage.groupRules = {};
+  env2.listeners.storage({ groupRules: { newValue: {} } }, 'local');
+  await new Promise((r) => setTimeout(r, 20));
+  assert.equal(env2.badge.text, '8');
+});
+
 test('tắt quét bài mới thì không gọi timeline', async () => {
   const env = makeEnv({ settings: { scanPosts: false } });
   const state = await scan(env);
@@ -779,6 +842,24 @@ test('bài đã hẹn giờ: liệt kê theo giờ, đổi giờ và huỷ', asy
   assert.deepEqual(env.storage.log.map((e) => [e.kind, e.action, e.status]), [['compose', 'cancel', 'ok'], ['compose', 'reschedule', 'ok']]);
   const bad = await env.send({ type: 'scheduleAct', action: 'reschedule', contentId: 's1', scheduledAt: new Date().toISOString() });
   assert.match(bad.message, /ít nhất 5 phút/);
+});
+
+test('bài định kỳ: mỗi bài một lần hẹn giờ (nhật ký ghi thứ tự), huỷ cả chuỗi một lần', async () => {
+  const env = makeEnv({ settings: { dryRun: false } });
+  await scan(env);
+  const times = BG.recurTimes(new Date(Date.now() + 3 * 3600e3).toISOString(), 'week', 3);
+  for (const [i, at] of times.entries()) {
+    const r = await env.send({ type: 'compose', groupIds: ['gFood'], content: 'Lịch họp tuần', scheduledAt: at, recur: `${i + 1}/3` });
+    assert.equal(r.ok, 1);
+  }
+  assert.deepEqual(env.bodies.filter(([c]) => c.endsWith('/schedule')).map(([, b]) => b.scheduledAt), times);
+  assert.deepEqual(env.storage.log.map((e) => e.snippet).reverse(), ['[🔁 1/3] Lịch họp tuần', '[🔁 2/3] Lịch họp tuần', '[🔁 3/3] Lịch họp tuần']);
+  const r = await env.send({ type: 'scheduleAct', action: 'cancel', contentIds: ['new1', 'new2', 'new3', 'new2'], snippet: '🔁 Lịch họp tuần' });
+  assert.deepEqual([r.ok, r.failed], [3, 0]);
+  assert.deepEqual(writes(env).filter((c) => c.startsWith('DELETE')), ['DELETE content/posts/new1', 'DELETE content/posts/new2', 'DELETE content/posts/new3']);
+  // Đổi giờ vẫn chỉ một bài
+  const bad = await env.send({ type: 'scheduleAct', action: 'reschedule', contentIds: ['new1', 'new2'] });
+  assert.match(bad.message, /Thiếu bài/);
 });
 
 // ---------- Tải lại từng phần ----------
@@ -1277,6 +1358,125 @@ test('đọc song song: kết quả quét giống đọc lần lượt (thứ t�
   assert.deepEqual(state.snapshot.groups.find((g) => g.id === 'gCL').approvals.map((p) => [p.id, p.full]), [['p1', true], ['p2', true]]);
 });
 
+// ---------- Gỡ cấm ----------
+
+test('bị cấm: chủ community xem được danh sách (phân trang), gỡ cấm đúng API; admin group thì không', async () => {
+  const data = fixture();
+  data.banned = { cFood: Array.from({ length: 60 }, (_, i) => ({ user: user(200 + i), reason: i % 2 ? 'SPAM' : 'VIOLATE_RULE', createdAt: '2026-10-01T00:00:00Z' })) };
+  const env = makeEnv({ data, settings: { dryRun: false } });
+  await scan(env);
+  const p1 = await env.send({ type: 'banned', groupId: 'gFood' });
+  assert.deepEqual([p1.items.length, p1.total, p1.hasNext, p1.nextOffset], [50, 60, true, 50]);
+  assert.deepEqual([p1.items[0].username, p1.items[0].reason, p1.items[1].reason], ['user200', 'Vi phạm nội quy community', 'Spam']);
+  const p2 = await env.send({ type: 'banned', groupId: 'gFood', offset: 50 });
+  assert.deepEqual([p2.items.length, p2.hasNext], [10, false]);
+  assert.match((await env.send({ type: 'banned', groupId: 'gCL' })).message, /chủ \/ admin community/);
+  const r = await env.send({ type: 'memberAct', action: 'unban', groupId: 'gFood', users: [user(200), user(201)] });
+  assert.deepEqual([r.ok, r.done], [2, ['u200', 'u201']]);
+  assert.deepEqual(env.bodies.filter(([c]) => c.endsWith('/unban')), [
+    ['POST group/communities/cFood/users/u200/unban', { community_id: 'cFood', user_id: 'u200' }],
+    ['POST group/communities/cFood/users/u201/unban', { community_id: 'cFood', user_id: 'u201' }],
+  ]);
+  assert.deepEqual([env.storage.log[0].kind, env.storage.log[0].action], ['manage', 'unban']);
+  assert.match((await env.send({ type: 'memberAct', action: 'unban', groupId: 'gCL', users: [user(1)] })).message, /gỡ cấm/);
+});
+
+// ---------- Cài đặt group ----------
+
+test('cài đặt group: quét ghi quyền; đọc cài đặt nhiều group; bật / tắt hàng loạt đúng API và body; không đủ quyền thì từ chối', async () => {
+  const data = fixture();
+  data.groupSettings = { gFood: { isJoinApproval: true }, gCL: { contentApproval: true } };
+  const env = makeEnv({ data, settings: { dryRun: false } });
+  await scan(env);
+  const gs = Object.fromEntries(env.storage.state.snapshot.groups.map((g) => [g.id, g]));
+  assert.deepEqual([gs.gFood.canEditJoin, gs.gCLsub.canEditJoin, gs.gCLsub.canEditPrivacy], [true, false, false]);
+  const r = await env.send({ type: 'groupSettings', groupIds: ['gFood', 'gCL'] });
+  assert.deepEqual([r.settings.gFood.values.isJoinApproval, r.settings.gCL.values.contentApproval, r.settings.gCL.values.isHiddenMembers], [true, true, true]);
+  // Bật câu hỏi gia nhập cho 2 group
+  const a = await env.send({ type: 'groupSettingAct', key: 'isActiveMembershipQuestions', value: true, groupIds: ['gFood', 'gCL'] });
+  assert.deepEqual([a.ok, a.done], [2, ['gFood', 'gCL']]);
+  assert.deepEqual(env.bodies.filter(([c]) => c.endsWith('/settings')), [
+    ['PUT group/groups/gFood/settings', { id: 'gFood', is_active_membership_questions: true }],
+    ['PUT group/groups/gCL/settings', { id: 'gCL', is_active_membership_questions: true }],
+  ]);
+  // Duyệt bài: qua API community, chỉ chủ / admin community
+  await env.send({ type: 'groupSettingAct', key: 'contentApproval', value: true, groupIds: ['gFood'] });
+  assert.deepEqual(env.bodies.at(-1), ['PUT group/communities/cFood/content-settings', { group_id: 'gFood', content_approval: { value: true }, is_update_all: false }]);
+  assert.match((await env.send({ type: 'groupSettingAct', key: 'contentApproval', value: true, groupIds: ['gCL'] })).message, /Crypto Life: Cần quyền chủ \/ admin community/);
+  assert.match((await env.send({ type: 'groupSettingAct', key: 'isJoinApproval', value: false, groupIds: ['gCLsub'] })).message, /Không có quyền/);
+  // Tắt duyệt thành viên: cột ở Tổng quan cập nhật ngay; nhật ký ghi
+  await env.send({ type: 'groupSettingAct', key: 'isJoinApproval', value: false, groupIds: ['gFood'] });
+  assert.equal(env.storage.state.snapshot.groups.find((g) => g.id === 'gFood').settings.isJoinApproval, false);
+  assert.deepEqual([env.storage.log[0].kind, env.storage.log[0].action, env.storage.log[0].setting], ['groupSetting', 'off', 'isJoinApproval']);
+  // Chạy thử: không gửi
+  const dry = makeEnv({ data });
+  await scan(dry);
+  const d = await dry.send({ type: 'groupSettingAct', key: 'isHiddenMembers', value: false, groupIds: ['gFood'] });
+  assert.deepEqual([d.dry, dry.calls.some((c) => c.startsWith('PUT'))], [1, false]);
+});
+
+// ---------- Ghim, cài đặt, sửa bài đã đăng ----------
+
+const KAI = { id: 'me1', username: 'kai', fullname: 'Kai Crypto' };
+
+test('sửa bài: chỉ bài của mình đã đăng; mở lại đủ dữ liệu; lưu bằng PUT content/posts/{id}, cài đặt đổi thì PUT riêng', async () => {
+  const data = fixture();
+  data.timeline.gFood = [post('m1', 'Bài của Kai @kai', { actor: KAI, audience: { groups: [{ id: 'gFood', name: 'Food Research' }] }, tags: [{ id: 'tF1', name: 'AMA' }] })];
+  const env = makeEnv({ data, settings: { dryRun: false } });
+  await scan(env);
+  const other = await env.send({ type: 'postDetail', id: 't1' });
+  assert.match(other.message, /Chỉ sửa được bài của chính bạn/);
+  assert.equal((await env.send({ type: 'postDetail', id: 't1', any: true })).status, 'ok'); // chỉ xem cài đặt
+  const d = await env.send({ type: 'postDetail', id: 'm1' });
+  assert.deepEqual([d.post.groups, d.post.tags, d.post.content], [[{ id: 'gFood', name: 'Food Research' }], [{ id: 'tF1', name: 'AMA' }], 'Bài của Kai @kai']);
+  env.bodies.length = 0;
+  const r = await env.send({ type: 'editPost', id: 'm1', groupIds: ['gFood'], content: 'Đã sửa', media: d.post.media, tags: d.post.tags, series: [], setting: { canComment: false, canReact: true, isImportant: false }, settingChanged: true });
+  assert.equal(r.ok, 1);
+  const put = env.bodies.find(([c]) => c === 'PUT content/posts/m1')[1];
+  assert.deepEqual([put.content, put.tags, put.setting, put.linkPreview, put.audience.groupIds], ['Đã sửa', ['tF1'], undefined, { domain: '', url: '' }, ['gFood']]);
+  assert.deepEqual(env.bodies.find(([c]) => c === 'PUT content/contents/m1/setting')[1], { canComment: false, canReact: true, isImportant: false, importantExpiredAt: null });
+  assert.ok(env.calls.includes('POST content/contents/validate-series-tags'));
+  assert.equal(env.storage.state.recentPosts.find((p) => p.id === 'm1').text, 'Đã sửa');
+  assert.deepEqual([env.storage.log[0].kind, env.storage.log[0].action], ['post', 'edit']);
+  // Không đổi cài đặt: không gọi …/setting; sửa bài người khác: từ chối
+  env.calls.length = 0;
+  await env.send({ type: 'editPost', id: 'm1', groupIds: ['gFood'], content: 'Lần 2', media: null, settingChanged: false });
+  assert.ok(!env.calls.some((c) => c.endsWith('/setting')));
+  assert.match((await env.send({ type: 'editPost', id: 't1', groupIds: ['gCL'], content: 'x' })).message, /chính bạn/);
+  // Chạy thử: không gửi
+  const dry = makeEnv({ data: { ...fixture(), timeline: data.timeline } });
+  await scan(dry);
+  const dr = await dry.send({ type: 'editPost', id: 'm1', groupIds: ['gFood'], content: 'x' });
+  assert.deepEqual([dr.dry, dry.calls.some((c) => c.startsWith('PUT'))], [1, false]);
+});
+
+test('cài đặt bài: admin đổi được cả bài người khác (bình luận, cảm xúc, Quan trọng); ghi nhật ký', async () => {
+  const env = makeEnv({ settings: { dryRun: false } });
+  await scan(env);
+  const r = await env.send({ type: 'postSetting', id: 't1', setting: { canComment: false, canReact: false, isImportant: true, importantExpiredAt: null }, snippet: 'Tin tức', actor: { id: 'at1', username: 'tacgiat1' } });
+  assert.equal(r.ok, 1);
+  assert.deepEqual(env.bodies.at(-1), ['PUT content/contents/t1/setting', { canComment: false, canReact: false, isImportant: true, importantExpiredAt: null }]);
+  assert.deepEqual([env.storage.log[0].action, env.storage.log[0].reason], ['setting', 'tắt bình luận, tắt cảm xúc, Quan trọng']);
+  assert.match((await env.send({ type: 'postSetting', id: 't1', setting: { isImportant: true, importantExpiredAt: '2020-01-01T00:00:00Z' } })).message, /tương lai/);
+});
+
+test('ghim: đọc bài đang ghim từng group; ghim / bỏ ghim đúng body; group đã đủ 5 bài thì báo; chỉ group mình quản trị', async () => {
+  const env = makeEnv({ settings: { dryRun: false } });
+  await scan(env);
+  const list = await env.send({ type: 'pinned', groupIds: ['gCL', 'gFood'] });
+  assert.deepEqual([list.pinned.gCL.length, list.pinned.gFood.length], [5, 0]);
+  const full = await env.send({ type: 'pinAct', contentId: 't2', pin: ['gCL', 'gCLsub'] });
+  assert.match(full.message, /Crypto Life đã ghim đủ 5 bài/);
+  assert.ok(!env.calls.some((c) => c.startsWith('PUT content/contents/pinned-content')));
+  const ok1 = await env.send({ type: 'pinAct', contentId: 't2', pin: ['gCLsub'], unpin: [], snippet: 'airdrop' });
+  assert.equal(ok1.ok, 1);
+  assert.deepEqual(env.bodies.at(-1), ['PUT content/contents/pinned-content/t2', { pinGroupIds: ['gCLsub'], unpinGroupIds: [] }]);
+  await env.send({ type: 'pinAct', contentId: 'k1', unpin: ['gCL'] }); // bỏ ghim không cần kiểm tra giới hạn
+  assert.deepEqual(env.bodies.at(-1), ['PUT content/contents/pinned-content/k1', { pinGroupIds: [], unpinGroupIds: ['gCL'] }]);
+  assert.deepEqual(env.storage.log.slice(0, 2).map((e) => [e.action, e.reason]), [['unpin', 'Bỏ ghim ở Crypto Life'], ['pin', 'Ghim ở Crypto Life - General']]);
+  assert.match((await env.send({ type: 'pinAct', contentId: 't2', pin: ['gOther'] })).message, /group bạn quản trị/);
+});
+
 // ---------- Xoá bài của mình ----------
 
 test('nhận ra tài khoản đang đăng nhập (gọi không kèm header phiên bản) và chỉ xoá bài của mình', async () => {
@@ -1343,4 +1543,136 @@ test('thống kê admin group: tự tính từ nhật ký và timeline (gộp gr
   assert.deepEqual([s.totals.posts, s.totals.joined, s.totals.left, s.totals.reactions, s.totals.comments], [2, 1, 1, 3, 2]);
   assert.deepEqual(s.sources, { members: 'history', joinLeave: 'activity', posts: 'timeline' });
   assert.equal(s.topPosts[0].id, 't1');
+});
+
+// ---------- Sao lưu & khôi phục ----------
+
+test('khôi phục sao lưu: ghi cài đặt / quy tắc / mẫu bài, giữ Chạy thử khi chọn, gộp hồ sơ, ghi nhật ký', async () => {
+  const env = makeEnv();
+  const u = { id: 'u9', username: 'chi', fullname: 'Chi' };
+  const data = {
+    settings: { dryRun: false, autoApprove: true, intervalMin: 60 },
+    rules: { bannedKeywords: ['casino'] },
+    groupRules: { gFood: { name: 'Food Research', rules: { requireAvatar: false }, postRules: {} } },
+    templates: [{ id: 't1', name: 'Chào mừng', text: 'Chào bạn' }],
+    profiles: { users: { u9: { user: u, events: [{ type: 'banned', key: 'ban:u9', time: '2026-10-01T00:00:00Z', group: 'Food Research' }] } } },
+  };
+  const r = await env.send({ type: 'restoreBackup', data, keepDry: true });
+  assert.equal(r.status, 'ok');
+  assert.deepEqual([env.storage.settings.dryRun, env.storage.settings.autoApprove, env.storage.settings.intervalMin, env.storage.settings.notify], [true, true, 60, true]);
+  assert.deepEqual(env.storage.rules.bannedKeywords, ['casino']);
+  assert.equal(env.storage.groupRules.gFood.rules.requireAvatar, false);
+  assert.equal(env.storage.templates[0].name, 'Chào mừng');
+  assert.equal(env.storage.profiles.users.u9.events.length, 1);
+  assert.deepEqual([env.storage.log[0].kind, env.storage.log[0].action], ['backup', 'restore']);
+  assert.match(env.storage.log[0].message, /Chạy thử: bật/);
+  // Không giữ Chạy thử: lấy đúng theo bản sao lưu; khôi phục lần nữa không nhân đôi hồ sơ
+  await env.send({ type: 'restoreBackup', data });
+  assert.equal(env.storage.settings.dryRun, false);
+  assert.equal(env.storage.profiles.users.u9.events.length, 1);
+  assert.equal(env.calls.length, 0); // không gọi Beincom
+  const bad = await env.send({ type: 'restoreBackup', data: { foo: 1 } });
+  assert.match(bad.message, /không có dữ liệu/);
+});
+
+// ---------- Bình luận ----------
+
+const cmt = (id, text, extra = {}) => ({ id, postId: 't1', parentId: '00000000-0000-0000-0000-000000000000', content: text, actor: { id: 'u' + id, username: 'nguoi' + id, fullname: 'Người ' + id, avatar: '' }, createdAt: '2026-10-07T11:00:00Z', totalReply: 0, media: { images: [] }, ...extra });
+
+test('quét bình luận: chỉ đọc bài có bình luận mới, chấm theo quy tắc, lần sau báo bình luận mới vi phạm', async () => {
+  const data = fixture();
+  data.timeline.gCL[0].commentsCount = 2; // t1
+  // Danh sách bình luận không kèm trả lời; trả lời đọc riêng (parentId)
+  data.comments = { t1: [cmt('c1', 'Bài hay quá'), cmt('c2', 'Vào nhóm t.me/kiemtien nhận quà', { totalReply: 1 })] };
+  data.replies = { c2: [cmt('c3', 'Cảm ơn', { parentId: 'c2', createdAt: '2026-10-07T11:05:00Z' })] };
+  const env = makeEnv({ data, postRules: { blockedDomains: ['t.me'] } });
+  const commentCalls = () => env.calls.filter((c) => c.startsWith('GET content/comments'));
+  await scan(env);
+  // t2, t3 không có bình luận; c1 không có trả lời
+  assert.deepEqual(commentCalls(), ['GET content/comments?postId=t1&limit=25', 'GET content/comments?postId=t1&parentId=c2&limit=25']);
+  const list = env.storage.state.recentComments;
+  assert.deepEqual(list.map((c) => [c.id, c.parentId, c.postId]), [['c3', 'c2', 't1'], ['c1', '', 't1'], ['c2', '', 't1']]);
+  assert.deepEqual(list.find((c) => c.id === 'c2').seenIn, ['gCL']);
+  assert.equal(env.storage.state.commentSeen.t1, 2);
+  const withComments = Number(env.badge.text); // đã gồm 1 bình luận vi phạm (c2)
+  assert.equal(env.notifications.length, 0); // lần đầu chỉ ghi nhận
+  // Lần sau: số bình luận không đổi -> không đọc lại
+  env.listeners.alarm({ name: 'beingroup-scan' });
+  await scan(env, 'popup');
+  assert.equal(commentCalls().length, 2);
+  // Có bình luận mới vi phạm -> đọc lại bài đó (trả lời của c2 không tăng -> không đọc lại) và thông báo
+  env.data.timeline.gCL[0].commentsCount = 3;
+  env.data.comments.t1.unshift(cmt('c4', 'Kèo x100 tại t.me/keo', { createdAt: '2026-10-07T12:00:00Z' }));
+  env.listeners.alarm({ name: 'beingroup-scan' });
+  await scan(env, 'popup');
+  assert.equal(commentCalls().length, 3);
+  assert.deepEqual(env.notifications.map((n) => n.id), ['bg-comments']);
+  assert.match(env.notifications[0].title, /1 bình luận mới vi phạm/);
+  assert.equal(Number(env.badge.text), withComments + 1);
+  // Hồ sơ vi phạm ghi người viết bình luận vi phạm
+  assert.ok(env.storage.profiles.users.uc4.events.some((e) => e.key === 'rule:c:c4'));
+  // Tắt quét bình luận: không đọc, không đếm
+  env.storage.settings.scanComments = false;
+  env.data.timeline.gCL[0].commentsCount = 9;
+  await scan(env);
+  assert.equal(commentCalls().length, 3);
+  assert.equal(Number(env.badge.text), withComments - 1);
+});
+
+test('bình luận: ẩn đúng API và body, chạy thử không gửi, bỏ qua chỉ trong addon, bình luận đã xoá tính là xong', async () => {
+  const data = fixture();
+  data.timeline.gCL[0].commentsCount = 3;
+  data.comments = { t1: [cmt('c1', 'Spam t.me/x'), cmt('c2', 'Spam 2'), cmt('c9', 'Đã bị xoá trên web')] };
+  data.goneComments = ['c9'];
+  const dry = makeEnv({ data });
+  await scan(dry);
+  const d = await dry.send({ type: 'commentAct', action: 'hide', commentIds: ['c1'], reasonType: 'SPAM' });
+  assert.deepEqual([d.dryRun, d.dry, dry.calls.some((c) => c.includes('/hide'))], [true, 1, false]);
+
+  const env = makeEnv({ data, settings: { dryRun: false } });
+  await scan(env);
+  const r = await env.send({ type: 'commentAct', action: 'hide', commentIds: ['c1', 'c9'], reasonType: 'SPAM' });
+  assert.deepEqual([r.ok, r.failed, r.gone], [2, 0, 1]);
+  assert.deepEqual(env.bodies.filter(([c]) => c.endsWith('/hide')), [['POST content/comments/c1/hide', { reasonType: 'SPAM' }], ['POST content/comments/c9/hide', { reasonType: 'SPAM' }]]);
+  const st = env.storage.state.recentComments;
+  assert.equal(st.find((c) => c.id === 'c1').isHidden, true);
+  assert.ok(!st.some((c) => c.id === 'c9'));
+  const e = env.storage.log.find((x) => x.contentId === 'c1');
+  assert.deepEqual([e.kind, e.action, e.reason, e.postId, e.groupName], ['comment', 'hide', 'Spam / quảng cáo', 't1', 'Crypto Life']);
+  assert.ok(env.storage.profiles.users.uc1.events.some((x) => x.key === 'hidden:c:c1'));
+  // Bỏ qua / hiện lại: không gọi API
+  const before = env.calls.length;
+  await env.send({ type: 'commentAct', action: 'dismiss', commentIds: ['c2'] });
+  assert.equal(env.storage.state.recentComments.find((c) => c.id === 'c2').dismissed, true);
+  await env.send({ type: 'commentAct', action: 'undismiss', commentIds: ['c2'] });
+  assert.equal(env.storage.state.recentComments.find((c) => c.id === 'c2').dismissed, false);
+  assert.equal(env.calls.length, before);
+  assert.match((await env.send({ type: 'commentAct', action: 'xoa', commentIds: ['c2'] })).message, /không hợp lệ/);
+});
+
+// ---------- Đăng dưới tên group ----------
+
+test('đăng dưới tên group: nháp qua API quản trị group rồi đăng như thường; chỉ một group, cần quyền; Beincom chưa bật thì báo rõ', async () => {
+  const data = fixture();
+  const env = makeEnv({ data, settings: { dryRun: false } });
+  await scan(env);
+  const gs = Object.fromEntries(env.storage.state.snapshot.groups.map((g) => [g.id, g]));
+  assert.deepEqual([gs.gFood.canPostAsGroup, gs.gCL.canPostAsGroup], [true, false]);
+  const r = await env.send({ type: 'compose', groupIds: ['gFood'], content: 'Thông báo từ ban quản trị', asGroup: true });
+  assert.equal(r.ok, 1);
+  assert.deepEqual(writes(env), ['POST content/manage/groups/gFood/posts', 'PUT content/posts/grp1/publish']);
+  assert.deepEqual(env.bodies[0], ['POST content/manage/groups/gFood/posts', { audience: { groupIds: ['gFood'] }, isEnableDonation: false }]);
+  assert.deepEqual([env.storage.log[0].asGroup, env.storage.log[0].snippet], [true, '[Tên group] Thông báo từ ban quản trị']);
+  // Hai group / không có quyền: không gọi API
+  const before = writes(env).length;
+  assert.match((await env.send({ type: 'compose', groupIds: ['gFood', 'gCL'], content: 'x', asGroup: true })).message, /chỉ chọn một group/);
+  assert.match((await env.send({ type: 'compose', groupIds: ['gCL'], content: 'x', asGroup: true })).message, /không có quyền đăng dưới tên group/);
+  assert.equal(writes(env).length, before);
+  // Bài thường vẫn tạo nháp như cũ
+  await env.send({ type: 'compose', groupIds: ['gCL'], content: 'Bài thường' });
+  assert.equal(writes(env).at(-2), 'POST content/posts');
+  // Beincom chưa bật tính năng: báo lỗi, không có nháp thừa
+  env.data.groupPostOff = true;
+  const off = await env.send({ type: 'compose', groupIds: ['gFood'], content: 'y', asGroup: true });
+  assert.match(off.errors[0], /có thể Beincom chưa bật tính năng này/);
 });

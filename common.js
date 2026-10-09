@@ -18,7 +18,9 @@
     autoDecline: false, // tự từ chối yêu cầu được gợi ý "Từ chối"
     scanPosts: true, // quét bài mới đăng trong các group đang quản trị
     scanReports: true, // quét báo cáo chờ xử lý và bài bị Beincom gắn cờ tự động
+    scanComments: true, // đọc bình luận mới của các bài vừa quét (cần bật quét bài mới), chấm theo quy tắc bài viết
     trackViolations: true, // ghi hồ sơ vi phạm của thành viên (đọc thêm nhật ký hoạt động mỗi lần quét)
+    weeklyReport: true, // sáng thứ Hai thông báo tóm tắt tuần trước
   };
 
   // Quy tắc cho bài viết (bài chờ duyệt và bài mới đăng)
@@ -35,6 +37,20 @@
     BULLYING: 'Bắt nạt, đe doạ, quấy rối',
     VIOLATE_RULE: 'Vi phạm nội quy community',
   };
+
+  // Một dòng của GET group/communities/{communityId}/banned-members
+  function slimBanned(b) {
+    const u = b?.user || b || {};
+    return {
+      id: u.id,
+      username: u.username || '',
+      fullname: u.fullname || '',
+      avatar: u.avatar || '',
+      isVerified: !!(u.isVerified ?? u.is_verified),
+      reason: BAN_REASONS[b?.reason] || b?.reason || '',
+      bannedAt: b?.createdAt || b?.created_at || b?.updatedAt || null,
+    };
+  }
 
   // Loại sự kiện trong nhật ký hoạt động của group: [nhãn, nhóm]
   // nhóm: in = có người vào, out = có người rời / bị xoá / bị cấm, role = đổi vai trò
@@ -125,7 +141,7 @@
 
   // Beincom báo bài không còn (đã bị xoá trên web): code content.not_found / "Content not found"
   function isContentGone(r) {
-    return /content[._ ]?not[._ ]?found/i.test(`${r?.body?.code || ''} ${r?.body?.meta?.message || ''}`);
+    return /(content|comment)[._ ]?not[._ ]?found/i.test(`${r?.body?.code || ''} ${r?.body?.meta?.message || ''}`);
   }
 
   function errMsg(r) {
@@ -223,6 +239,12 @@
 
   function postUrl(p) {
     return p.type === 'ARTICLE' ? `${SITE}/article/${p.id}` : `${SITE}/posts/${p.id}`;
+  }
+
+  // Mở bài và cuộn tới bình luận (giống link trong thông báo của web)
+  function commentUrl(c) {
+    const base = postUrl({ id: c.postId, type: c.postType });
+    return `${base}?comment_id=${c.id}` + (c.parentId ? `&parent_id=${c.parentId}` : '');
   }
 
   // ---------- Yêu cầu tham gia ----------
@@ -411,6 +433,7 @@
       if (kind === 'member' && action === 'decline') out.push({ ...base, type: 'declined', key: 'declined:' + e.requestId });
       else if (kind === 'manage' && (action === 'remove' || action === 'ban')) out.push({ ...base, type: action === 'ban' ? 'banned' : 'removed', key: `${action}:${e.groupId}:${e.userId}:${e.time}` });
       else if (kind === 'post' && action === 'hide') out.push({ ...base, type: 'hidden', key: 'hidden:' + e.contentId });
+      else if (kind === 'comment' && action === 'hide') out.push({ ...base, type: 'hidden', key: 'hidden:c:' + e.contentId });
       else if (kind === 'post' && action === 'reject') out.push({ ...base, type: 'rejected', key: 'rejected:' + e.contentId });
       else if (kind === 'report' && (action === 'hide' || action === 'hidePost')) out.push({ ...base, type: 'hidden', key: 'hidden:' + e.contentId });
       else if (kind === 'report' && action === 'ignore' && e.reportId) out.push({ user, clear: 'report:' + e.reportId }); // báo cáo sai: bỏ khỏi hồ sơ
@@ -819,6 +842,343 @@
     return d.toISOString();
   }
 
+  // ---------- Bài đăng định kỳ ----------
+  // Đặt trước nhiều bài hẹn giờ cách đều nhau (tới giờ Beincom tự đăng, không cần mở máy)
+  const RECUR_EVERY = { day: 'Hằng ngày', week: 'Hằng tuần', '2w': '2 tuần một lần', month: 'Hằng tháng' };
+  const RECUR_MIN = 2;
+  const RECUR_MAX = 30;
+
+  // Giờ đăng của từng bài trong chuỗi (giữ nguyên giờ trong ngày; 31/01 hằng tháng -> 28 hoặc 29/02, 31/03…)
+  function recurTimes(start, every, count) {
+    const t0 = new Date(start);
+    if (!Number.isFinite(t0.getTime()) || !RECUR_EVERY[every]) return [];
+    const n = Math.max(1, Math.min(RECUR_MAX, Math.floor(Number(count)) || 1));
+    const out = [];
+    for (let k = 0; k < n; k++) {
+      const d = new Date(t0);
+      if (every === 'month') {
+        d.setDate(1);
+        d.setMonth(t0.getMonth() + k);
+        d.setDate(Math.min(t0.getDate(), new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate()));
+      } else d.setDate(t0.getDate() + k * { day: 1, week: 7, '2w': 14 }[every]);
+      out.push(d.toISOString());
+    }
+    return out;
+  }
+
+  // Cài đặt của từng bài: hạn "Quan trọng" tính lại theo giờ đăng của bài đó
+  // (chọn sẵn "1 tuần"… thì tính từ giờ đăng; tự chọn ngày giờ thì dời theo khoảng cách tới bài đầu)
+  function recurSetting(setting, preset, firstAt, at) {
+    if (!setting?.isImportant || !setting.importantExpiredAt) return { ...setting };
+    const expiredAt = preset && preset !== 'custom' ? importantUntil(preset, at) : new Date(new Date(setting.importantExpiredAt).getTime() + (new Date(at) - new Date(firstAt))).toISOString();
+    return { ...setting, importantExpiredAt: expiredAt };
+  }
+
+  // Bài thuộc chuỗi nào: contentId -> { id, k (thứ tự, từ 1), n, every }
+  function recurIndex(recurring) {
+    const map = new Map();
+    for (const r of recurring || []) (r.items || []).forEach((it, i) => map.set(it.contentId, { id: r.id, k: i + 1, n: r.count || r.items.length, every: r.every }));
+    return map;
+  }
+
+  // Bỏ chuỗi đã đăng hết từ hơn 7 ngày trước; giữ tối đa 50 chuỗi
+  function pruneRecurring(recurring, now = Date.now()) {
+    return (recurring || [])
+      .filter((r) => (r.items || []).some((it) => new Date(it.scheduledAt).getTime() > now - 7 * 864e5))
+      .slice(0, 50);
+  }
+
+  // ---------- Sao lưu & khôi phục cài đặt ----------
+  const BACKUP_FORMAT = 1;
+  const BACKUP_KEYS = ['settings', 'rules', 'postRules', 'groupRules', 'templates'];
+
+  function makeBackup(store, { profiles = false, version = '', now = Date.now() } = {}) {
+    const data = {};
+    for (const k of BACKUP_KEYS) if (store?.[k] !== undefined) data[k] = store[k];
+    if (profiles && store?.profiles) data.profiles = store.profiles;
+    return { app: 'BeinGroup', format: BACKUP_FORMAT, version, exportedAt: new Date(now).toISOString(), data };
+  }
+
+  const isObj = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
+  const strList = (v, max = 500) => (Array.isArray(v) ? v.filter((x) => typeof x === 'string').map((x) => x.trim()).filter(Boolean).slice(0, max) : []);
+  const clampNum = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+
+  // Chỉ giữ khoá có trong bản mặc định, đúng kiểu
+  function cleanLike(defaults, obj) {
+    const out = {};
+    if (!isObj(obj)) return out;
+    for (const [k, def] of Object.entries(defaults)) {
+      const v = obj[k];
+      if (v === undefined) continue;
+      if (Array.isArray(def)) {
+        if (Array.isArray(v)) out[k] = strList(v);
+      } else if (typeof def === 'number') {
+        if (Number.isFinite(Number(v)) && v !== null && v !== '') out[k] = Number(v);
+      } else if (typeof v === typeof def) out[k] = v;
+    }
+    return out;
+  }
+
+  function cleanRules(v) {
+    const r = cleanLike(DEFAULT_RULES, v);
+    if (r.minAnswerLength !== undefined) r.minAnswerLength = clampNum(Math.round(r.minAnswerLength), 0, 200);
+    return r;
+  }
+
+  const cleanRefs = (v, label) => (Array.isArray(v) ? v.filter((x) => isObj(x) && typeof x.id === 'string' && typeof x[label] === 'string').map((x) => ({ ...x })).slice(0, 10) : []);
+
+  // Đọc và làm sạch tệp sao lưu (ném lỗi có câu tiếng Việt khi tệp không dùng được)
+  function readBackup(obj) {
+    if (!isObj(obj) || obj.app !== 'BeinGroup' || !isObj(obj.data)) throw new Error('Không phải tệp sao lưu của BeinGroup');
+    if (Number(obj.format) > BACKUP_FORMAT) throw new Error('Tệp sao lưu từ phiên bản BeinGroup mới hơn — hãy cập nhật addon trước');
+    const d = obj.data;
+    const data = {};
+    if (isObj(d.settings)) {
+      const s = cleanLike(DEFAULT_SETTINGS, d.settings);
+      if (s.intervalMin !== undefined) s.intervalMin = clampNum(Math.round(s.intervalMin), 5, 1440);
+      if (s.actionDelaySec !== undefined) s.actionDelaySec = clampNum(s.actionDelaySec, 0, 60);
+      data.settings = s;
+    }
+    if (isObj(d.rules)) data.rules = cleanRules(d.rules);
+    if (isObj(d.postRules)) data.postRules = cleanLike(DEFAULT_POST_RULES, d.postRules);
+    if (isObj(d.groupRules)) {
+      data.groupRules = Object.fromEntries(
+        Object.entries(d.groupRules)
+          .filter(([id, v]) => /^[\w-]{1,64}$/.test(id) && isObj(v))
+          .slice(0, 500)
+          .map(([id, v]) => [id, { name: String(v.name || '').slice(0, 200), rules: { ...DEFAULT_RULES, ...cleanRules(v.rules) }, postRules: { ...DEFAULT_POST_RULES, ...cleanLike(DEFAULT_POST_RULES, v.postRules) } }]),
+      );
+    }
+    if (Array.isArray(d.templates)) {
+      data.templates = d.templates
+        .filter((t) => isObj(t) && typeof t.name === 'string' && typeof t.text === 'string')
+        .slice(0, 200)
+        .map((t, i) => ({
+          id: typeof t.id === 'string' && t.id ? t.id.slice(0, 64) : 'tpl' + i,
+          name: t.name.slice(0, 100),
+          text: t.text.slice(0, 20000),
+          groupIds: strList(t.groupIds, 200),
+          canComment: t.canComment !== false,
+          canReact: t.canReact !== false,
+          mentions: isObj(t.mentions) ? Object.fromEntries(Object.entries(t.mentions).filter(([, m]) => isObj(m) && typeof m.id === 'string')) : {},
+          tags: cleanRefs(t.tags, 'name'),
+          series: cleanRefs(t.series, 'title'),
+        }));
+    }
+    if (isObj(d.profiles) && isObj(d.profiles.users)) {
+      const users = {};
+      for (const [id, p] of Object.entries(d.profiles.users)) {
+        if (!isObj(p) || !isObj(p.user) || typeof p.user.id !== 'string' || !Array.isArray(p.events)) continue;
+        users[id] = { ...p, events: p.events.filter((e) => isObj(e) && typeof e.key === 'string' && VIOLATION_TYPES[e.type]) };
+      }
+      data.profiles = { users };
+    }
+    if (!Object.keys(data).length) throw new Error('Tệp sao lưu không có dữ liệu');
+    return { data, exportedAt: typeof obj.exportedAt === 'string' ? obj.exportedAt : null, version: typeof obj.version === 'string' ? obj.version : '' };
+  }
+
+  // Các mục có trong bản sao lưu (để hỏi lại trước khi khôi phục)
+  function backupSummary(d) {
+    const out = [];
+    if (d.settings) out.push('Cài đặt chung' + (d.settings.dryRun === false ? ' (Chạy thử: TẮT)' : d.settings.dryRun ? ' (Chạy thử: bật)' : ''));
+    if (d.rules) out.push('Quy tắc lọc thành viên');
+    if (d.postRules) out.push('Quy tắc bài viết');
+    if (d.groupRules) out.push(`Quy tắc riêng: ${Object.keys(d.groupRules).length} group`);
+    if (d.templates) out.push(`Mẫu bài: ${d.templates.length}`);
+    if (d.profiles) out.push(`Hồ sơ vi phạm: ${Object.keys(d.profiles.users).length} người (gộp với hồ sơ đang có)`);
+    return out;
+  }
+
+  // Gộp hồ sơ vi phạm từ bản sao lưu vào hồ sơ đang có (bỏ trùng như khi quét)
+  function mergeProfiles(cur, incoming) {
+    const events = [];
+    for (const p of Object.values(incoming?.users || {})) for (const e of p.events || []) events.push({ ...e, user: p.user });
+    return addViolations(cur, events).store;
+  }
+
+  // ---------- Bình luận ----------
+  // GET content/comments?postId=…&limit=… -> { list, meta }: bình luận gốc (parentId = COMMENT_ROOT), mới nhất trước.
+  // Danh sách không kèm trả lời (gọi thật 09/10/2026); trả lời đọc riêng bằng thêm parentId. `child.list` vẫn đọc nếu có.
+  const COMMENT_ROOT = '00000000-0000-0000-0000-000000000000';
+  const COMMENT_MAX = 300; // số bình luận giữ lại để xem / chấm
+
+  // post: bài chứa bình luận (đã thu gọn, có seenIn) để biết bình luận thuộc group nào
+  function slimComment(c, post = {}) {
+    const a = c.actor || {};
+    return {
+      id: c.id,
+      postId: c.postId || post.id || '',
+      postType: post.type || 'POST',
+      postSnippet: String(post.title || post.text || '').replace(/\s+/g, ' ').trim().slice(0, 80),
+      parentId: c.parentId && c.parentId !== COMMENT_ROOT ? c.parentId : '',
+      title: '',
+      text: String(c.content ?? '').slice(0, TEXT_MAX),
+      link: '',
+      actor: { id: a.id || '', username: a.username || '', fullname: a.fullname || '', avatar: a.avatar || '' },
+      createdAt: c.createdAt || null,
+      images: c.media?.images?.length || 0,
+      giphy: !!(c.giphyUrl || c.giphyId),
+      totalReply: c.totalReply || 0,
+      groups: (post.groups || []).map((g) => ({ id: g.id, name: g.name || '', communityId: g.communityId || '', rootGroupId: g.rootGroupId || '', isCommunity: !!g.isCommunity })),
+      seenIn: post.seenIn || [],
+      isHidden: !!c.isHidden,
+    };
+  }
+
+  // Bình luận gốc và các trả lời đi kèm trong một trang
+  function flattenComments(list, post) {
+    const out = [];
+    for (const c of list || []) {
+      if (!c?.id) continue;
+      out.push(slimComment(c, post));
+      for (const r of c.child?.list || []) if (r?.id) out.push(slimComment({ ...r, parentId: r.parentId && r.parentId !== COMMENT_ROOT ? r.parentId : c.id }, post));
+    }
+    return out;
+  }
+
+  // Bài cần đọc bình luận: số bình luận lớn hơn lúc đọc lần trước (seen: { postId: số đã đọc }), bài mới đăng trước
+  function commentTargets(seen, posts, max) {
+    return (posts || [])
+      .filter((p) => !p.isHidden && (p.commentsCount || 0) > (seen?.[p.id] || 0))
+      .sort((a, b) => String(b.publishedAt || '').localeCompare(String(a.publishedAt || '')))
+      .slice(0, max);
+  }
+
+  // Bình luận gốc cần đọc trả lời: số trả lời lớn hơn lần trước (prev: danh sách bình luận đã lưu), mới nhất trước
+  function replyTargets(comments, prev, max) {
+    const old = new Map((prev || []).map((c) => [c.id, c.totalReply || 0]));
+    return (comments || [])
+      .filter((c) => !c.parentId && !c.isHidden && (c.totalReply || 0) > (old.get(c.id) || 0))
+      .sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')))
+      .slice(0, max);
+  }
+
+  // Gộp bình luận vừa đọc: giữ đánh dấu bỏ qua / đã ẩn, mới nhất trước. fresh = id chưa từng thấy
+  function mergeComments(prev, comments, now = Date.now()) {
+    const map = new Map((prev || []).map((c) => [c.id, c]));
+    const fresh = [];
+    for (const c of comments || []) {
+      const old = map.get(c.id);
+      if (!old) fresh.push(c.id);
+      map.set(c.id, { ...c, firstSeen: old?.firstSeen ?? now, dismissed: !!old?.dismissed, isHidden: c.isHidden || !!old?.isHidden });
+    }
+    const list = [...map.values()].sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || ''))).slice(0, COMMENT_MAX);
+    return { list, fresh };
+  }
+
+  // Bình luận vi phạm quy tắc -> sự kiện cho hồ sơ vi phạm
+  function violationsFromComments(comments, reasonOf = () => '') {
+    return (comments || [])
+      .filter((c) => c.actor?.id)
+      .map((c) => ({ user: c.actor, type: 'rule', key: 'rule:c:' + c.id, time: c.createdAt, group: c.groups?.[0]?.name || '', snippet: c.text, reason: reasonOf(c) }));
+  }
+
+  // ---------- Báo cáo tuần ----------
+  // Tổng hợp những gì đã xảy ra trong `days` ngày gần nhất từ dữ liệu addon đang giữ:
+  // nhật ký thao tác (log), số thành viên mỗi ngày (memberHistory), hồ sơ vi phạm, bài / bình luận vi phạm đã phát hiện.
+  function weeklyReport({ log = [], profiles = null, recentPosts = [], recentComments = [], memberHistory = {}, groups = [], ctx = {} } = {}, { days = 7, now = Date.now() } = {}) {
+    const from = now - days * 864e5;
+    const inRange = (t) => {
+      const v = typeof t === 'number' ? t : Date.parse(t);
+      return Number.isFinite(v) && v >= from && v <= now;
+    };
+    const fromDay = vnDay(from);
+    const toDay = vnDay(now);
+
+    // Thành viên: số đầu kỳ (ngày gần nhất trước hoặc bằng đầu kỳ, không có thì ngày đầu tiên trong kỳ) và số mới nhất
+    const members = [];
+    for (const g of groups) {
+      const hist = (memberHistory[g.id] || []).filter((x) => x.day <= toDay).sort((a, b) => a.day.localeCompare(b.day));
+      if (!hist.length) continue;
+      const before = hist.filter((x) => x.day <= fromDay).at(-1) || hist.find((x) => x.day > fromDay);
+      const last = hist.at(-1);
+      const end = g.userCount ?? last.count;
+      members.push({ id: g.id, name: g.name, start: before.count, end, change: end - before.count, since: before.day });
+    }
+
+    const a = { approved: 0, autoApproved: 0, declined: 0, autoDeclined: 0, removed: 0, banned: 0, unbanned: 0, postsApproved: 0, postsRejected: 0, postsHidden: 0, postsDeleted: 0, commentsHidden: 0, reportsHandled: 0, published: 0, scheduled: 0, groupSettings: 0, errors: 0 };
+    for (const e of log || []) {
+      if (!inRange(e.time)) continue;
+      if (e.status === 'error') {
+        a.errors++;
+        continue;
+      }
+      if (e.status !== 'ok') continue;
+      const auto = e.source === 'auto';
+      const k = e.kind || 'member';
+      if (k === 'member' && e.action === 'approve') auto ? a.autoApproved++ : a.approved++;
+      else if (k === 'member' && e.action === 'decline') auto ? a.autoDeclined++ : a.declined++;
+      else if (k === 'manage' && e.action === 'remove') a.removed++;
+      else if (k === 'manage' && e.action === 'ban') a.banned++;
+      else if (k === 'manage' && e.action === 'unban') a.unbanned++;
+      else if (k === 'post' && e.action === 'approve') a.postsApproved++;
+      else if (k === 'post' && e.action === 'reject') a.postsRejected++;
+      else if (k === 'post' && e.action === 'hide') a.postsHidden++;
+      else if (k === 'post' && e.action === 'delete') a.postsDeleted++;
+      else if (k === 'comment' && e.action === 'hide') a.commentsHidden++;
+      else if (k === 'report') a.reportsHandled++;
+      else if (k === 'compose' && e.action === 'publish') a.published++;
+      else if (k === 'compose' && e.action === 'schedule') a.scheduled++;
+      else if (k === 'groupSetting') a.groupSettings++;
+    }
+
+    const isBad = (x) => inRange(x.firstSeen ?? x.publishedAt ?? x.createdAt) && evaluatePostIn(x, ctx).verdict === 'bad';
+    const detected = { posts: (recentPosts || []).filter(isBad).length, comments: (recentComments || []).filter(isBad).length };
+
+    // Người có nhiều sự kiện vi phạm nhất trong kỳ
+    const violators = Object.values(profiles?.users || {})
+      .map((p) => {
+        const evs = (p.events || []).filter((e) => inRange(e.time));
+        return { user: p.user, count: evs.length, types: [...new Set(evs.map((e) => VIOLATION_TYPES[e.type]?.label || e.type))] };
+      })
+      .filter((x) => x.count)
+      .sort((x, y) => y.count - x.count)
+      .slice(0, 5);
+
+    return { from, to: now, days, fromDay, toDay, members, actions: a, detected, violators };
+  }
+
+  const viNum = (n) => Number(n || 0).toLocaleString('vi-VN');
+  const signed = (n) => (n > 0 ? '+' : n < 0 ? '−' : '±') + viNum(Math.abs(n));
+  const dm = (day) => day.slice(8, 10) + '/' + day.slice(5, 7);
+
+  // Bản chữ để sao chép / gửi cho các admin khác. Dòng nào toàn số 0 thì bỏ.
+  function reportText(r) {
+    const a = r.actions;
+    const lines = [`BeinGroup: tóm tắt ${r.days} ngày (${dm(r.fromDay)} → ${dm(r.toDay)}/${r.toDay.slice(0, 4)})`];
+    const add = (label, parts) => {
+      const shown = parts.filter(([n]) => n);
+      if (shown.length) lines.push(`• ${label}: ${shown.map(([n, t]) => `${viNum(n)} ${t}`).join(' · ')}`);
+    };
+    if (r.members.length) {
+      const changed = r.members.filter((m) => m.change).sort((x, y) => Math.abs(y.change) - Math.abs(x.change));
+      const same = r.members.length - changed.length;
+      const parts = changed.map((m) => `${m.name} ${signed(m.change)} (${viNum(m.end)})`);
+      if (same) parts.push(changed.length ? `${same} group không đổi` : 'không group nào thay đổi');
+      lines.push('• Thành viên: ' + parts.join(' · '));
+    }
+    add('Duyệt thành viên', [[a.approved + a.autoApproved, 'duyệt' + (a.autoApproved ? ` (${viNum(a.autoApproved)} tự động)` : '')], [a.declined + a.autoDeclined, 'từ chối' + (a.autoDeclined ? ` (${viNum(a.autoDeclined)} tự động)` : '')]]);
+    add('Quản lý thành viên', [[a.removed, 'xoá'], [a.banned, 'cấm'], [a.unbanned, 'gỡ cấm']]);
+    add('Kiểm duyệt bài', [[a.postsApproved, 'duyệt'], [a.postsRejected, 'từ chối'], [a.postsHidden, 'ẩn'], [a.postsDeleted, 'xoá']]);
+    add('Bình luận', [[a.commentsHidden, 'ẩn']]);
+    add('Báo cáo vi phạm', [[a.reportsHandled, 'đã xử lý']]);
+    add('Phát hiện vi phạm quy tắc', [[r.detected.posts, 'bài'], [r.detected.comments, 'bình luận']]);
+    add('Đăng bài qua addon', [[a.published, 'đăng'], [a.scheduled, 'hẹn giờ']]);
+    add('Cài đặt group', [[a.groupSettings, 'lần đổi']]);
+    if (r.violators.length) lines.push('• Vi phạm nhiều nhất: ' + r.violators.map((v) => `${v.user.fullname || v.user.username || '?'}${v.user.username ? ' (@' + v.user.username + ')' : ''} ${v.count} lần`).join(', '));
+    add('Thao tác lỗi', [[a.errors, 'lần']]);
+    if (lines.length === 1) lines.push('• Không có hoạt động nào được ghi lại.');
+    return lines.join('\n');
+  }
+
+  // Có cần thông báo tóm tắt tuần không: sáng thứ Hai (giờ VN, từ 8 giờ), mỗi tuần một lần. lastKey = ngày thứ Hai đã báo
+  function weeklyDue(lastKey, now = Date.now()) {
+    const vn = new Date(now + 7 * 3600e3);
+    if (vn.getUTCDay() !== 1 || vn.getUTCHours() < 8) return null;
+    const key = vnDay(now);
+    return key === lastKey ? null : key;
+  }
+
   const CONTENT_STATUS = {
     DRAFT: 'Bản nháp',
     PROCESSING: 'Đang xử lý',
@@ -830,8 +1190,9 @@
   };
 
   // Kiểm tra trước khi đăng; trả về câu báo lỗi hoặc '' nếu được
-  function validateCompose({ groupIds, content, scheduledAt, setting, media, tags, series }, now = Date.now()) {
+  function validateCompose({ groupIds, content, scheduledAt, setting, media, tags, series, asGroup = false }, now = Date.now()) {
     if (!groupIds?.length) return 'Chưa chọn group để đăng';
+    if (asGroup && groupIds.length !== 1) return 'Đăng dưới tên group: chỉ chọn một group';
     const text = String(content || '').trim();
     const kinds = Object.keys(MEDIA).filter((k) => media?.[MEDIA_FIELD[k]]?.length);
     if (!text && !kinds.length) return 'Bài chưa có nội dung';
@@ -872,6 +1233,137 @@
     if (lp && !hasMedia) body.linkPreview = lp;
     if (scheduledAt) body.scheduledAt = new Date(scheduledAt).toISOString();
     return body;
+  }
+
+  // ---------- Cài đặt group (bật / tắt nhiều group một lần) ----------
+  // perm: 'join' = quyền edit_join_setting, 'privacy' = edit_privacy, 'community' = admin community
+  // snake: tên khoá gửi lên (API nhóm nhận snake_case; web viết camelCase rồi đổi khi gửi)
+  const GROUP_SETTINGS = {
+    isJoinApproval: { label: 'Duyệt thành viên', snake: 'is_join_approval', perm: 'join', hint: 'Người xin vào phải được admin duyệt' },
+    isActiveMembershipQuestions: { label: 'Câu hỏi gia nhập', snake: 'is_active_membership_questions', perm: 'join', hint: 'Người xin vào phải trả lời câu hỏi (group cần có câu hỏi)' },
+    isInvitedOnly: { label: 'Chỉ người được mời', snake: 'is_invited_only', perm: 'join', hint: 'Chỉ người nhận lời mời mới vào được' },
+    isHiddenMembers: { label: 'Ẩn danh sách thành viên', snake: 'is_hidden_members', perm: 'privacy', hint: 'Người ngoài group không xem được danh sách thành viên' },
+    contentApproval: { label: 'Duyệt bài', perm: 'community', hint: 'Bài phải được admin duyệt trước khi hiện' },
+  };
+
+  function hasGroupPerm(permData, groupId, name) {
+    return !!permData?.groups?.[groupId]?.includes(name);
+  }
+
+  // GET group/groups/{id}/settings -> { values: { khoá: true/false }, locked: { khoá: lý do Beincom không cho đổi } }
+  function slimGroupSettings(d) {
+    const s = d?.settings || {};
+    const values = {};
+    const locked = {};
+    for (const k of Object.keys(GROUP_SETTINGS)) {
+      values[k] = k === 'contentApproval' ? !!s.contentApproval?.value : !!s[k];
+      const why = d?.changeableSettings?.[k];
+      if (typeof why === 'string' && why.trim()) locked[k] = why.trim();
+    }
+    return { values, locked };
+  }
+
+  // Lý do không đổi được cài đặt này ở group (theo quyền đã quét); '' = đổi được
+  function settingDenied(g, key) {
+    const perm = GROUP_SETTINGS[key]?.perm;
+    if (!perm) return 'Cài đặt không hợp lệ';
+    if (perm === 'community') return g.isCommunityAdmin ? '' : 'Cần quyền chủ / admin community';
+    if (perm === 'join') return g.canEditJoin === false ? 'Không có quyền đổi cài đặt tham gia' : '';
+    return g.canEditPrivacy === false ? 'Không có quyền đổi quyền riêng tư' : '';
+  }
+
+  // Body gửi lên: cài đặt thành viên -> PUT group/groups/{id}/settings; duyệt bài -> PUT group/communities/{communityId}/content-settings
+  function groupSettingBody(key, value, groupId) {
+    if (key === 'contentApproval') return { group_id: groupId, content_approval: { value: !!value }, is_update_all: false };
+    return { id: groupId, [GROUP_SETTINGS[key].snake]: !!value };
+  }
+
+  // ---------- Ghim, cài đặt bài, sửa bài đã đăng ----------
+  const PIN_MAX = 5; // Beincom: tối đa 5 bài ghim mỗi group
+
+  // Body PUT content/contents/{id}/setting
+  function settingBody(setting) {
+    const s = { ...DEFAULT_POST_SETTING, ...setting };
+    return { canComment: !!s.canComment, canReact: !!s.canReact, isImportant: !!s.isImportant, importantExpiredAt: s.isImportant && s.importantExpiredAt ? new Date(s.importantExpiredAt).toISOString() : null };
+  }
+
+  // Body PUT content/posts/{id} khi sửa bài đã đăng: như khi đăng nhưng không có setting / scheduledAt (web đổi cài đặt bằng API riêng)
+  function editBody(input) {
+    const { setting, scheduledAt, ...body } = composeBody({ ...input, scheduledAt: null });
+    // Không còn xem trước link: web gửi giá trị rỗng này để xoá thẻ cũ của bài
+    if (!body.linkPreview) body.linkPreview = { domain: '', url: '' };
+    return body;
+  }
+
+  // mentions của bài (theo username) -> dạng web giữ khi soạn
+  function mentionEntries(mentions) {
+    const out = {};
+    for (const [key, u] of Object.entries(mentions || {})) {
+      if (!u?.id) continue;
+      const name = u.username || u.name || key;
+      out[name] = { id: u.id, avatar: u.avatar || '', name, fullname: u.fullname || '', isVerified: !!(u.isVerified ?? u.is_verified) };
+    }
+    return out;
+  }
+
+  // Bài từ GET content/contents/{id} -> dữ liệu để mở lại trong khung soạn
+  function editState(d) {
+    const s = d.setting || {};
+    return {
+      id: d.id,
+      status: d.status || '',
+      actorId: d.actor?.id || '',
+      groups: (d.audience?.groups || []).map((g) => ({ id: g.id, name: g.name || '' })),
+      content: String(d.content || ''),
+      media: { images: d.media?.images || [], videos: d.media?.videos || [], files: d.media?.files || [] },
+      mentions: mentionEntries(d.mentions),
+      linkPreview: slimLinkPreview(d.linkPreview),
+      tags: (d.tags || []).map((t) => ({ id: t.id, name: t.name || '' })),
+      series: (d.series || []).map((x) => ({ id: x.id, title: x.title || '' })),
+      setting: { canComment: s.canComment !== false, canReact: s.canReact !== false, isImportant: !!s.isImportant, importantExpiredAt: s.importantExpiredAt || null },
+    };
+  }
+
+  // ---------- Quy tắc riêng cho từng group ----------
+  // groupRules: { [groupId]: { rules: {...}, postRules: {...} } } (bản đầy đủ, chép từ quy tắc đang dùng lúc tạo)
+  // Thứ tự: riêng của group -> riêng của group gốc (community) -> quy tắc chung
+  function ruleSource(g, groupRules, groups = []) {
+    if (!g?.id) return null;
+    if (groupRules?.[g.id]) return g.id;
+    const root = g.rootGroupId || (g.isCommunity ? g.id : (groups || []).find((x) => x.isCommunity && x.communityId === g.communityId)?.id);
+    return root && groupRules?.[root] ? root : null;
+  }
+
+  // ctx: { rules, postRules, groupRules, groups } -> { source, rules, postRules }
+  function effectiveRules(g, ctx = {}) {
+    const source = ruleSource(g, ctx.groupRules, ctx.groups);
+    const own = source ? ctx.groupRules[source] : null;
+    return {
+      source,
+      rules: { ...DEFAULT_RULES, ...ctx.rules, ...(own?.rules || {}) },
+      postRules: { ...DEFAULT_POST_RULES, ...ctx.postRules, ...(own?.postRules || {}) },
+    };
+  }
+
+  const VERDICT_RANK = { ok: 0, review: 1, bad: 2 };
+
+  // Chấm bài theo quy tắc của các group bài được đăng vào (bài đăng nhiều group: lấy kết quả nặng nhất)
+  function evaluatePostIn(post, ctx = {}, fallback = null) {
+    const known = new Map((ctx.groups || []).map((g) => [g.id, g]));
+    const ids = [...new Set([...(post.seenIn || []), ...(post.groups || []).map((x) => x.id)])];
+    const sources = new Map();
+    for (const id of ids) {
+      const g = known.get(id) || (post.groups || []).find((x) => x.id === id);
+      const src = ruleSource(g, ctx.groupRules, ctx.groups) || '';
+      if (!sources.has(src)) sources.set(src, g);
+    }
+    if (!sources.size) sources.set('', fallback);
+    let worst = null;
+    for (const g of sources.values()) {
+      const ev = evaluatePost(post, effectiveRules(g, ctx).postRules);
+      if (!worst || VERDICT_RANK[ev.verdict] > VERDICT_RANK[worst.verdict]) worst = ev;
+    }
+    return worst;
   }
 
   const POST_VERDICT_LABELS = {
@@ -1119,12 +1611,26 @@
     DEFAULT_POST_RULES,
     HIDE_REASONS,
     BAN_REASONS,
+    slimBanned,
     ACTIVITY_TYPES,
     POST_MAX,
     MIN_SCHEDULE_MIN,
     DEFAULT_POST_SETTING,
     CONTENT_STATUS,
     validateCompose,
+    ruleSource,
+    effectiveRules,
+    evaluatePostIn,
+    GROUP_SETTINGS,
+    hasGroupPerm,
+    slimGroupSettings,
+    settingDenied,
+    groupSettingBody,
+    PIN_MAX,
+    settingBody,
+    editBody,
+    mentionEntries,
+    editState,
     TAG_MAX,
     SERIES_MAX,
     slimTag,
@@ -1145,12 +1651,27 @@
     slimScheduled,
     IMPORTANT_FOR,
     importantUntil,
+    BACKUP_FORMAT,
+    makeBackup,
+    readBackup,
+    backupSummary,
+    mergeProfiles,
+    RECUR_EVERY,
+    RECUR_MIN,
+    RECUR_MAX,
+    recurTimes,
+    recurSetting,
+    recurIndex,
+    pruneRecurring,
     composeBody,
     VERDICT_LABELS,
     POST_VERDICT_LABELS,
     norm,
     parseList,
     vnDay,
+    weeklyReport,
+    reportText,
+    weeklyDue,
     isOk,
     errMsg,
     isContentGone,
@@ -1172,7 +1693,16 @@
     contentApprovalUrl,
     userUrl,
     postUrl,
+    commentUrl,
     slimPost,
+    COMMENT_ROOT,
+    COMMENT_MAX,
+    slimComment,
+    flattenComments,
+    commentTargets,
+    replyTargets,
+    mergeComments,
+    violationsFromComments,
     linkDomains,
     evaluatePost,
     slimRequest,

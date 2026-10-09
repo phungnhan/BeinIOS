@@ -40,13 +40,14 @@ function todoLine(ul, text, hash, count) {
   ul.append(li);
 }
 
-function renderTodo(groups, flagged, reports) {
+function renderTodo(groups, flagged, reports, comments = 0) {
   const ul = $('todo');
   ul.replaceChildren();
   const todo = groups.filter((g) => g.pendingTotal || g.approvalCount);
   if (flagged) todoLine(ul, 'Bài mới vi phạm quy tắc', '#tab=content', `${flagged} bài`);
+  if (comments) todoLine(ul, 'Bình luận vi phạm quy tắc', '#tab=content', `${comments} bình luận`);
   if (reports) todoLine(ul, 'Báo cáo vi phạm', '#tab=reports', String(reports));
-  if (!todo.length && !flagged && !reports) {
+  if (!todo.length && !flagged && !comments && !reports) {
     const li = document.createElement('li');
     li.className = 'empty';
     li.textContent = 'Không có';
@@ -64,9 +65,8 @@ function renderTodo(groups, flagged, reports) {
 }
 
 async function refresh() {
-  const { settings, postRules, state } = await chrome.storage.local.get(['settings', 'postRules', 'state']);
+  const { settings, rules, postRules, groupRules, state } = await chrome.storage.local.get(['settings', 'rules', 'postRules', 'groupRules', 'state']);
   const s = { ...BG.DEFAULT_SETTINGS, ...settings };
-  const pr = { ...BG.DEFAULT_POST_RULES, ...postRules };
   const st = state || {};
   for (const key of POPUP_SETTINGS) $(key).checked = !!s[key];
   $('master').classList.toggle('off', !s.active);
@@ -77,7 +77,11 @@ async function refresh() {
 
   const groups = st.snapshot?.groups || [];
   const t = BG.totals(groups);
-  const flagged = (st.recentPosts || []).filter((p) => !p.dismissed && !p.isHidden && BG.evaluatePost(p, pr).verdict === 'bad').length;
+  const ctx = { rules, postRules, groupRules: groupRules || {}, groups };
+  const bad = (list) => (list || []).filter((p) => !p.dismissed && !p.isHidden && BG.evaluatePostIn(p, ctx).verdict === 'bad').length;
+  const flaggedPosts = bad(st.recentPosts);
+  const flaggedComments = s.scanComments ? bad(st.recentComments) : 0;
+  const flagged = flaggedPosts + flaggedComments;
   $('requests').textContent = st.snapshot ? t.requests : '–';
   $('posts').textContent = st.snapshot ? t.posts : '–';
   $('flagged').textContent = st.recentPosts && s.scanPosts ? flagged : '–';
@@ -88,7 +92,7 @@ async function refresh() {
   $('posts').classList.toggle('hot', t.posts > 0);
   $('flagged').classList.toggle('hot', flagged > 0);
   renderStatus(st, flagged, reports);
-  renderTodo(groups, flagged, reports);
+  renderTodo(groups, flaggedPosts, reports, flaggedComments);
 }
 
 for (const key of POPUP_SETTINGS) {

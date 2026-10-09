@@ -34,6 +34,9 @@ const MAX_APPROVALS = 200; // bài chờ duyệt mỗi community
 const DETAIL_PER_SCAN = 30; // số bài chờ duyệt tải nội dung đầy đủ mỗi lần quét
 const TIMELINE_LIMIT = 20; // bài mới mỗi group mỗi lần quét
 const RECENT_MAX = 300; // số bài mới giữ lại để xem
+const COMMENT_POSTS_PER_SCAN = 8; // mỗi lần quét đọc bình luận của tối đa ngần này bài (bài có bình luận mới)
+const COMMENT_PAGE = 25; // bình luận mới nhất đọc mỗi bài (API content/ nhận tối đa 25)
+const REPLY_FETCH_PER_SCAN = 10; // mỗi lần quét đọc trả lời của tối đa ngần này bình luận (có trả lời mới)
 const REPORT_SCAN_TIMEOUT = 15000; // quét định kỳ chờ API báo cáo ngắn hơn khi mở tab Báo cáo
 
 // Phải tự chứa (không dùng biến ngoài) vì còn được inject vào tab group.beincom.com.
@@ -88,14 +91,20 @@ async function mapLimit(list, limit, fn) {
 }
 
 async function load() {
-  const { settings, rules, postRules, state, log } = await chrome.storage.local.get(['settings', 'rules', 'postRules', 'state', 'log']);
+  const { settings, rules, postRules, groupRules, state, log } = await chrome.storage.local.get(['settings', 'rules', 'postRules', 'groupRules', 'state', 'log']);
   return {
     settings: { ...BG.DEFAULT_SETTINGS, ...settings },
     rules: { ...BG.DEFAULT_RULES, ...rules },
     postRules: { ...BG.DEFAULT_POST_RULES, ...postRules },
+    groupRules: groupRules || {},
     state: state || {},
     log: log || [],
   };
+}
+
+// Ngữ cảnh chấm theo quy tắc (chung + riêng từng group)
+function rulesCtx({ rules, postRules, groupRules }, groups) {
+  return { rules, postRules, groupRules, groups: groups || [] };
 }
 
 // ---------- Client: gọi trực tiếp, nếu bị chặn cookie thì chạy qua tab Beincom ----------
@@ -311,6 +320,9 @@ async function scanGroupsPart(client, { approvalCounts = true } = {}) {
   for (const g of groups) {
     g.canBan = BG.canBan(p.body.data, g.communityId);
     g.isCommunityAdmin = BG.isCommunityAdmin(p.body.data, g.communityId);
+    g.canEditJoin = BG.hasGroupPerm(p.body.data, g.id, 'edit_join_setting');
+    g.canEditPrivacy = BG.hasGroupPerm(p.body.data, g.id, 'edit_privacy');
+    g.canPostAsGroup = BG.hasGroupPerm(p.body.data, g.id, 'crud_post_article'); // tạo bài dưới tên group (web còn cần Beincom bật tính năng)
   }
   if (approvalCounts) await mapLimit(groups, PARALLEL, (g) => readApprovalCount(client, g));
   // Community có việc lên trước; trong community, group gốc trước rồi tới group con
@@ -342,6 +354,28 @@ async function scanContentPart(client, groups, prevGroups, scanPosts) {
     }
   }
   return [...posts.values()];
+}
+
+// Bình luận mới của các bài vừa quét: chỉ đọc bài có số bình luận tăng so với lần đọc trước (seen: { postId: số đã đọc }),
+// rồi đọc trả lời của các bình luận gốc có số trả lời tăng (prevComments: bình luận đã lưu).
+// Trả về { comments, read: { postId: số bình luận lúc đọc } }; bài đọc lỗi thì để lần quét sau.
+async function scanCommentsPart(client, posts, seen, prevComments = []) {
+  const targets = BG.commentTargets(seen, posts, COMMENT_POSTS_PER_SCAN);
+  const read = {};
+  const pages = await mapLimit(targets, PARALLEL, async (p) => {
+    const r = await client.call('GET', `content/comments?${qs({ postId: p.id, limit: COMMENT_PAGE })}`);
+    if (!BG.isOk(r)) return [];
+    read[p.id] = p.commentsCount || 0;
+    return BG.flattenComments(r.body.data?.list || [], p);
+  });
+  const comments = pages.flat();
+  const byPost = new Map(targets.map((p) => [p.id, p]));
+  const parents = BG.replyTargets(comments, prevComments, REPLY_FETCH_PER_SCAN);
+  const replies = await mapLimit(parents, PARALLEL, async (c) => {
+    const r = await client.call('GET', `content/comments?${qs({ postId: c.postId, parentId: c.id, limit: COMMENT_PAGE })}`);
+    return BG.isOk(r) ? BG.flattenComments((r.body.data?.list || []).map((x) => ({ ...x, parentId: c.id })), byPost.get(c.postId)) : [];
+  });
+  return { comments: [...comments, ...replies.flat()], read };
 }
 
 // Số báo cáo chờ xử lý (API trang quản trị Beincom dùng, trả nhanh). null = không đọc được -> đọc danh sách như cũ
@@ -394,12 +428,16 @@ async function scanActivityPart(client, groups) {
   );
 }
 
-async function scanGroups(client, { prevGroups = [], scanPosts = true, scanReports = true, trackViolations = true } = {}) {
+async function scanGroups(client, { prevGroups = [], scanPosts = true, scanReports = true, trackViolations = true, scanComments = false, commentSeen = {}, prevComments = [] } = {}) {
   const r = await scanGroupsPart(client, { approvalCounts: false });
   if (r.status !== 'ok') return r;
-  // Các phần sửa các trường khác nhau của group nên chạy song song được
+  // Các phần sửa các trường khác nhau của group nên chạy song song được; bình luận đọc ngay sau khi có bài mới
+  let comments = null;
   const [posts] = await Promise.all([
-    scanContentPart(client, r.groups, prevGroups, scanPosts),
+    scanContentPart(client, r.groups, prevGroups, scanPosts).then(async (list) => {
+      if (scanPosts && scanComments) comments = await scanCommentsPart(client, list, commentSeen, prevComments);
+      return list;
+    }),
     scanReports ? scanReportsPart(client, r.groups, prevGroups) : null,
     trackViolations ? scanActivityPart(client, r.groups) : null,
   ]);
@@ -408,7 +446,7 @@ async function scanGroups(client, { prevGroups = [], scanPosts = true, scanRepor
   const meRes = await client.call('GET', 'user/me/profile', null, '');
   const me = BG.isOk(meRes) && meRes.body.data?.id ? { id: meRes.body.data.id, username: meRes.body.data.username || '', fullname: meRes.body.data.fullname || '' } : null;
 
-  return { status: 'ok', groups: r.groups, posts, me };
+  return { status: 'ok', groups: r.groups, posts, comments, me };
 }
 
 // Gộp bài mới vào danh sách đã lưu: giữ đánh dấu "bỏ qua"/"đã ẩn", mới nhất lên trước
@@ -431,8 +469,12 @@ function mergeRecent(prev, posts, now) {
 }
 
 // Bài vi phạm chưa xử lý (để hiện trên huy hiệu)
-function flaggedPosts(recent, postRules) {
-  return (recent || []).filter((p) => !p.dismissed && !p.isHidden && BG.evaluatePost(p, postRules).verdict === 'bad');
+function flaggedComments(recent, ctx) {
+  return (recent || []).filter((c) => !c.dismissed && !c.isHidden && BG.evaluatePostIn(c, ctx).verdict === 'bad');
+}
+
+function flaggedPosts(recent, ctx) {
+  return (recent || []).filter((p) => !p.dismissed && !p.isHidden && BG.evaluatePostIn(p, ctx).verdict === 'bad');
 }
 
 // ---------- Thao tác ghi ----------
@@ -535,14 +577,14 @@ function dropFromSnapshot(snapshot, field, done) {
   return { ...snapshot, groups: snapshot.groups.map((x) => (x[field]?.some((id) => done.has(id)) ? { ...x, [field]: x[field].filter((id) => !done.has(id)) } : x)) };
 }
 
-function autoItems(groups, settings, rules, skipIds, profiles = null) {
+function autoItems(groups, settings, ctx, skipIds, profiles = null) {
   const items = [];
   const skip = new Set(skipIds || []);
   for (const g of groups) {
     if (!g.canApprove) continue;
     for (const req of g.requests) {
       if (skip.has(req.id)) continue;
-      const { verdict } = BG.evaluateRequest(req, rules, g.questions, profiles?.users?.[req.user?.id || req.userId]);
+      const { verdict } = BG.evaluateRequest(req, BG.effectiveRules(g, ctx).rules, g.questions, profiles?.users?.[req.user?.id || req.userId]);
       if (verdict === 'approve' && settings.autoApprove) items.push(memberItem('auto', 'approve', g, req));
       if (verdict === 'decline' && settings.autoDecline) items.push(memberItem('auto', 'decline', g, req));
     }
@@ -557,7 +599,8 @@ function notify(id, title, message) {
 }
 
 async function updateBadge() {
-  const { settings, postRules, state } = await load();
+  const loaded = await load();
+  const { settings, state } = loaded;
   let text = '';
   let color = '#6c3cf0';
   if (!settings.active) {
@@ -570,8 +613,9 @@ async function updateBadge() {
     const groups = state.snapshot?.groups;
     const t = BG.totals(groups);
     // Bài vi phạm quy tắc và bài Beincom gắn cờ có thể trùng nhau: đếm một lần
-    const flagged = new Set([...flaggedPosts(state.recentPosts, postRules).map((p) => p.id), ...BG.autoFlaggedIds(groups)]);
-    const n = t.requests + t.posts + t.reports + flagged.size;
+    const flagged = new Set([...flaggedPosts(state.recentPosts, rulesCtx(loaded, groups)).map((p) => p.id), ...BG.autoFlaggedIds(groups)]);
+    const badComments = settings.scanComments ? flaggedComments(state.recentComments, rulesCtx(loaded, groups)).length : 0;
+    const n = t.requests + t.posts + t.reports + flagged.size + badComments;
     text = n > 999 ? '999+' : n ? String(n) : '';
   }
   await chrome.action.setBadgeText({ text });
@@ -664,15 +708,32 @@ function applyGroups(state, next, groups, notifyAllowed, now) {
 }
 
 // Ghi bài mới đăng: báo bài mới vi phạm (lần quét bài đầu tiên chỉ ghi nhận)
-function applyPosts(state, next, posts, postRules, notifyAllowed, now) {
+function applyPosts(state, next, posts, ctx, notifyAllowed, now) {
   const { list, fresh } = mergeRecent(state.recentPosts, posts, now);
   const freshSet = new Set(fresh);
-  const badNew = list.filter((p) => freshSet.has(p.id) && !p.isHidden && BG.evaluatePost(p, postRules).verdict === 'bad');
-  noteViolations(BG.violationsFromPosts(badNew, 'rule', (p) => BG.evaluatePost(p, postRules).reasons.filter((x) => x.level !== 'ok').map((x) => x.text).join('; ')));
+  const badNew = list.filter((p) => freshSet.has(p.id) && !p.isHidden && BG.evaluatePostIn(p, ctx).verdict === 'bad');
+  noteViolations(BG.violationsFromPosts(badNew, 'rule', (p) => BG.evaluatePostIn(p, ctx).reasons.filter((x) => x.level !== 'ok').map((x) => x.text).join('; ')));
   if (state.recentPosts && badNew.length && notifyAllowed) {
     notify('bg-flagged', `BeinGroup: ${badNew.length} bài mới vi phạm quy tắc`, badNew.map((p) => p.actor.fullname || p.actor.username).join(', '));
   }
   next.recentPosts = list;
+}
+
+// Ghi bình luận vừa đọc: báo bình luận mới vi phạm (lần đầu đọc bình luận chỉ ghi nhận)
+function applyComments(state, next, scan, ctx, notifyAllowed, now) {
+  if (!scan) return;
+  const { list, fresh } = BG.mergeComments(state.recentComments, scan.comments, now);
+  const freshSet = new Set(fresh);
+  const reasons = (c) => BG.evaluatePostIn(c, ctx).reasons.filter((x) => x.level !== 'ok').map((x) => x.text).join('; ');
+  const badNew = list.filter((c) => freshSet.has(c.id) && !c.isHidden && BG.evaluatePostIn(c, ctx).verdict === 'bad');
+  noteViolations(BG.violationsFromComments(badNew, reasons));
+  if (state.recentComments && badNew.length && notifyAllowed) {
+    notify('bg-comments', `BeinGroup: ${badNew.length} bình luận mới vi phạm quy tắc`, badNew.map((c) => c.actor.fullname || c.actor.username).join(', '));
+  }
+  next.recentComments = list;
+  // Chỉ nhớ số bình luận đã đọc của các bài còn trong danh sách bài mới
+  const keep = new Set((next.recentPosts || state.recentPosts || []).map((p) => p.id));
+  next.commentSeen = Object.fromEntries(Object.entries({ ...(state.commentSeen || {}), ...scan.read }).filter(([id]) => keep.has(id)));
 }
 
 // Báo cáo chờ xử lý mới và bài mới bị Beincom gắn cờ (lần quét đầu chỉ ghi nhận)
@@ -702,7 +763,8 @@ function applyReports(state, next, groups, notifyAllowed) {
 // Không thông báo, không tự xử lý. Chưa quét lần nào thì quét toàn bộ.
 async function doRefresh({ part }) {
   if (part !== 'groups' && part !== 'content') return { status: 'error', message: 'Phần cần tải lại không hợp lệ' };
-  const { settings, postRules, state, log } = await load();
+  const loaded = await load();
+  const { settings, state, log } = loaded;
   const prevGroups = state.snapshot?.groups;
   if (!prevGroups?.length) return doScan({ source: 'dashboard' });
 
@@ -720,7 +782,8 @@ async function doRefresh({ part }) {
     }
     const groups = prevGroups.map((g) => ({ ...g, approvalError: undefined, timelineError: undefined }));
     const posts = await scanContentPart(client, groups, prevGroups, settings.scanPosts);
-    return { status: 'ok', groups, posts };
+    const comments = settings.scanPosts && settings.scanComments ? await scanCommentsPart(client, posts, state.commentSeen || {}, state.recentComments || []) : null;
+    return { status: 'ok', groups, posts, comments };
   });
 
   const now = Date.now();
@@ -728,7 +791,10 @@ async function doRefresh({ part }) {
   if (result.status === 'ok') {
     applyGroups(state, next, result.groups, false, now);
     next.snapshot.at = state.snapshot.at; // giờ quét toàn bộ gần nhất giữ nguyên
-    if (part === 'content' && settings.scanPosts) applyPosts(state, next, result.posts, postRules, false, now);
+    if (part === 'content' && settings.scanPosts) {
+      applyPosts(state, next, result.posts, rulesCtx(loaded, next.snapshot.groups), false, now);
+      applyComments(state, next, result.comments, rulesCtx(loaded, next.snapshot.groups), false, now);
+    }
   }
   await chrome.storage.local.set({ state: next, log });
   await updateBadge();
@@ -736,11 +802,22 @@ async function doRefresh({ part }) {
 }
 
 async function doScan({ source = 'alarm' } = {}) {
-  const { settings, rules, postRules, state, log } = await load();
+  const loaded = await load();
+  const { settings, state, log } = loaded;
   const auto = source === 'alarm' || source === 'startup' || source === 'install' || source === 'resume';
   if (auto && !settings.active) return state;
 
-  const result = await withClient((client) => scanGroups(client, { prevGroups: state.snapshot?.groups, scanPosts: settings.scanPosts, scanReports: settings.scanReports, trackViolations: settings.trackViolations }));
+  const result = await withClient((client) =>
+    scanGroups(client, {
+      prevGroups: state.snapshot?.groups,
+      scanPosts: settings.scanPosts,
+      scanReports: settings.scanReports,
+      trackViolations: settings.trackViolations,
+      scanComments: settings.scanComments,
+      commentSeen: state.commentSeen || {},
+      prevComments: state.recentComments || [],
+    }),
+  );
   const now = Date.now();
   const next = { ...state, lastScan: now, lastResult: { status: result.status, message: result.message || '', mode: result.mode || '' } };
   const notifyAllowed = settings.active && settings.notify && source !== 'popup' && source !== 'dashboard';
@@ -752,7 +829,7 @@ async function doScan({ source = 'alarm' } = {}) {
     if (settings.active && (settings.autoApprove || settings.autoDecline)) {
       await flushViolations(); // hồ sơ vừa ghi trong lần quét này (vd người bị cấm trên web) phải có trước khi tự duyệt
       const { profiles } = await chrome.storage.local.get('profiles');
-      const items = autoItems(groups, settings, rules, settings.dryRun ? state.autoDryIds : [], settings.trackViolations ? profiles : null);
+      const items = autoItems(groups, settings, rulesCtx(loaded, groups), settings.dryRun ? state.autoDryIds : [], settings.trackViolations ? profiles : null);
       if (items.length) {
         const r = await performActions(items, settings);
         pushLog(log, r.entries);
@@ -766,10 +843,29 @@ async function doScan({ source = 'alarm' } = {}) {
     applyGroups(state, next, groups, notifyAllowed, now);
     if (settings.scanReports) applyReports(state, next, groups, notifyAllowed);
     if (result.me) next.me = result.me;
-    if (settings.scanPosts) applyPosts(state, next, result.posts, postRules, notifyAllowed, now);
+    if (settings.scanPosts) {
+      applyPosts(state, next, result.posts, rulesCtx(loaded, next.snapshot.groups), notifyAllowed, now);
+      applyComments(state, next, result.comments, rulesCtx(loaded, next.snapshot.groups), notifyAllowed, now);
+    }
   } else if (result.status === 'need_login' && notifyAllowed && state.lastLoginNotifyDay !== BG.vnDay()) {
     next.lastLoginNotifyDay = BG.vnDay();
     notify('bg-login', 'BeinGroup: cần đăng nhập', 'Bấm để mở Beincom và đăng nhập lại.');
+  }
+
+  // Sáng thứ Hai: thông báo tóm tắt tuần trước (một lần mỗi tuần, chỉ khi quét tự động thành công)
+  const weekKey = settings.weeklyReport && notifyAllowed && result.status === 'ok' ? BG.weeklyDue(state.weeklyKey, now) : null;
+  if (weekKey) {
+    next.weeklyKey = weekKey;
+    const { profiles } = await chrome.storage.local.get('profiles');
+    const r = BG.weeklyReport({ log, profiles, recentPosts: next.recentPosts, recentComments: next.recentComments, memberHistory: next.memberHistory, groups: next.snapshot?.groups || [], ctx: rulesCtx(loaded, next.snapshot?.groups) }, { days: 7, now });
+    const a = r.actions;
+    const parts = [
+      a.approved + a.autoApproved && `${a.approved + a.autoApproved} thành viên được duyệt`,
+      r.detected.posts + r.detected.comments && `${r.detected.posts + r.detected.comments} bài / bình luận vi phạm`,
+      a.reportsHandled && `${a.reportsHandled} báo cáo đã xử lý`,
+      a.removed + a.banned && `${a.removed + a.banned} người bị xoá / cấm`,
+    ].filter(Boolean);
+    notify('bg-weekly', 'BeinGroup: tóm tắt tuần qua', parts.length ? parts.join(' · ') : 'Tuần qua yên ả, không có việc gì cần xử lý. Bấm để xem chi tiết.');
   }
 
   await chrome.storage.local.set({ state: next, log });
@@ -889,6 +985,57 @@ async function doPostAct({ action, contentIds, reasonType = 'OTHERS', source = '
   return summary(r, settings);
 }
 
+// Bình luận: bỏ qua / hiện lại (chỉ trong addon) hoặc ẩn trên Beincom (POST content/comments/{id}/hide { reasonType }, như web)
+async function doCommentAct({ action, commentIds, reasonType = 'OTHERS', source = 'manual' }) {
+  const { settings, state, log } = await load();
+  const recent = state.recentComments || [];
+  const ids = new Set(commentIds || []);
+  if (action === 'dismiss' || action === 'undismiss') {
+    const next = { ...state, recentComments: recent.map((c) => (ids.has(c.id) ? { ...c, dismissed: action === 'dismiss' } : c)) };
+    await chrome.storage.local.set({ state: next });
+    await updateBadge();
+    return { status: 'ok', ok: ids.size, dry: 0, failed: 0, errors: [], dryRun: false };
+  }
+  if (action !== 'hide') return { status: 'error', message: 'Thao tác không hợp lệ' };
+  if (!BG.HIDE_REASONS[reasonType]) return { status: 'error', message: 'Lý do ẩn không hợp lệ' };
+  const groups = state.snapshot?.groups || [];
+  const items = recent
+    .filter((c) => ids.has(c.id) && !c.isHidden)
+    .map((c) => {
+      const g = groups.find((x) => c.seenIn?.includes(x.id)) || c.groups?.[0];
+      return {
+        log: {
+          kind: 'comment',
+          source,
+          action: 'hide',
+          groupId: g?.id || '',
+          groupName: g?.name || '',
+          communityName: g?.communityName || '',
+          contentId: c.id,
+          postId: c.postId,
+          contentType: 'COMMENT',
+          snippet: String(c.text || '').replace(/\s+/g, ' ').slice(0, 120),
+          reason: BG.HIDE_REASONS[reasonType],
+          userId: c.actor?.id || '',
+          username: c.actor?.username || '',
+          fullname: c.actor?.fullname || '',
+        },
+        call: (cl) => cl.call('POST', `content/comments/${c.id}/hide`, { reasonType }),
+        gone: true,
+      };
+    });
+  if (!items.length) return { status: 'error', message: 'Không có bình luận nào ẩn được (đã ẩn hoặc không còn trong danh sách)' };
+  const r = await performActions(items, settings);
+  pushLog(log, r.entries);
+  const hidden = new Set(r.entries.filter((e) => e.status === 'ok').map((e) => e.contentId));
+  const gone = new Set(r.entries.filter((e) => e.gone).map((e) => e.contentId));
+  const next = { ...state, recentComments: recent.filter((c) => !gone.has(c.id)).map((c) => (hidden.has(c.id) ? { ...c, isHidden: true } : c)) };
+  if (r.status === 'need_login') next.lastResult = { status: 'need_login', message: NEED_LOGIN.message, mode: r.mode || '' };
+  await chrome.storage.local.set({ state: next, log });
+  await updateBadge();
+  return summary(r, settings);
+}
+
 // ---------- Thành viên (đọc khi Dashboard cần, không lưu vào storage) ----------
 
 function qs(params) {
@@ -950,13 +1097,30 @@ const MEMBER_ACTIONS = {
   assignAdmin: { perm: 'canAssign', denied: 'gán admin' },
   revokeAdmin: { perm: 'canAssign', denied: 'gỡ admin' },
   ban: { perm: 'canBan', denied: 'cấm thành viên (cần quyền admin community)' },
+  unban: { perm: 'canBan', denied: 'gỡ cấm (cần quyền admin community)' },
 };
 
 function memberActionCall(action, g, userId, reason) {
   if (action === 'remove') return (c) => c.call('PUT', `group/groups/${g.id}/users/remove`, { user_ids: [userId] });
   if (action === 'assignAdmin') return (c) => c.call('PUT', `group/groups/${g.id}/assign-admin`, { user_id: userId });
   if (action === 'revokeAdmin') return (c) => c.call('PUT', `group/groups/${g.id}/revoke-admin`, { user_id: userId });
+  // Web gửi { communityId, userId } (bộ gọi API nhóm đổi sang snake_case)
+  if (action === 'unban') return (c) => c.call('POST', `group/communities/${g.communityId}/users/${userId}/unban`, { community_id: g.communityId, user_id: userId });
   return (c) => c.call('POST', `group/communities/${g.communityId}/users/${userId}/ban`, { reason });
+}
+
+// Thành viên bị cấm của community (chỉ chủ / admin community: admin group bị 403)
+async function doBanned({ groupId, offset = 0, limit = PAGE }) {
+  const g = await findGroup(groupId);
+  if (!g) return { status: 'error', message: 'Không tìm thấy group — hãy quét lại' };
+  if (!g.canBan) return { status: 'error', code: 'not_admin', message: 'Chỉ chủ / admin community mới xem và gỡ được người bị cấm.' };
+  return withClient(async (client) => {
+    const r = await client.call('GET', `group/communities/${g.communityId}/banned-members?${qs({ limit, offset })}`);
+    if (r.status === 401) return { ...NEED_LOGIN };
+    if (!BG.isOk(r)) return { status: 'error', message: 'Đọc danh sách bị cấm lỗi: ' + BG.errMsg(r) };
+    const list = Array.isArray(r.body.data) ? r.body.data : r.body.data?.list || [];
+    return { status: 'ok', items: list.map(BG.slimBanned).filter((u) => u.id), total: r.body.meta?.total ?? null, hasNext: !!r.body.meta?.hasNextPage, nextOffset: offset + list.length };
+  });
 }
 
 // users: [{ id, username, fullname }] lấy từ danh sách đang xem trên Dashboard
@@ -999,13 +1163,14 @@ async function doMemberAct({ action, groupId, users, reason = 'VIOLATE_RULE', so
 // Giống web: POST content/posts (tạo nháp, nhận id) -> PUT content/posts/{id}/publish | schedule.
 // Bước 2 lỗi thì xoá bản nháp vừa tạo (Beincom giới hạn số bản nháp).
 
-async function doCompose({ groupIds, content, setting, scheduledAt = null, media = null, mentions = null, linkPreview = null, tags = [], series = [], source = 'manual' }) {
-  const err = BG.validateCompose({ groupIds, content, setting, scheduledAt, media, tags, series });
+async function doCompose({ groupIds, content, setting, scheduledAt = null, media = null, mentions = null, linkPreview = null, tags = [], series = [], recur = '', asGroup = false, source = 'manual' }) {
+  const err = BG.validateCompose({ groupIds, content, setting, scheduledAt, media, tags, series, asGroup });
   if (err) return { status: 'error', message: err };
   const { settings, state, log } = await load();
   const known = new Map((state.snapshot?.groups || []).map((g) => [g.id, g]));
   const targets = groupIds.map((id) => known.get(id)).filter(Boolean);
   if (targets.length !== groupIds.length) return { status: 'error', message: 'Có group không còn trong danh sách — hãy quét lại' };
+  if (asGroup && targets[0].canPostAsGroup === false) return { status: 'error', message: `${targets[0].name}: không có quyền đăng dưới tên group (cần quyền tạo bài của admin)` };
 
   const action = scheduledAt ? 'schedule' : 'publish';
   const body = BG.composeBody({ groupIds, content, setting, scheduledAt, media, mentions, linkPreview, tags, series });
@@ -1017,8 +1182,9 @@ async function doCompose({ groupIds, content, setting, scheduledAt = null, media
     groupId: targets[0].id,
     groupName: targets.map((g) => g.name).join(', '),
     communityName: [...new Set(targets.map((g) => g.communityName))].join(', '),
-    snippet: ((attached ? `[${attached}] ` : '') + body.content.replace(/\s+/g, ' ')).slice(0, 120),
+    snippet: ((recur ? `[🔁 ${recur}] ` : '') + (asGroup ? `[Tên group] ` : '') + (attached ? `[${attached}] ` : '') + body.content.replace(/\s+/g, ' ')).slice(0, 120),
     scheduledAt: body.scheduledAt || null,
+    ...(asGroup ? { asGroup: true } : {}),
   };
 
   let r;
@@ -1031,9 +1197,12 @@ async function doCompose({ groupIds, content, setting, scheduledAt = null, media
         if (v.status === 401) return { ...NEED_LOGIN };
         if (v.body?.code === 'tag_series_invalid') return { status: 'error', message: BG.tagSeriesError(v.body, tags, series) };
       }
-      const d = await client.call('POST', 'content/posts', { audience: { groupIds: body.audience.groupIds }, isEnableDonation: false });
+      // Đăng dưới tên group: bản nháp tạo qua API quản trị group (như web), các bước sau giống bài thường
+      const d = asGroup
+        ? await client.call('POST', `content/manage/groups/${targets[0].id}/posts`, { audience: { groupIds: body.audience.groupIds }, isEnableDonation: false })
+        : await client.call('POST', 'content/posts', { audience: { groupIds: body.audience.groupIds }, isEnableDonation: false });
       if (d.status === 401) return { ...NEED_LOGIN };
-      if (!BG.isOk(d) || !d.body.data?.id) return { status: 'error', message: 'Tạo bài nháp lỗi: ' + BG.errMsg(d) };
+      if (!BG.isOk(d) || !d.body.data?.id) return { status: 'error', message: (asGroup ? 'Tạo bài nháp dưới tên group lỗi (có thể Beincom chưa bật tính năng này cho tài khoản): ' : 'Tạo bài nháp lỗi: ') + BG.errMsg(d) };
       const id = d.body.data.id;
       const p = await client.call('PUT', `content/posts/${id}/${action}`, body);
       if (!BG.isOk(p)) {
@@ -1174,6 +1343,190 @@ async function doLinkPreview({ url = '' }) {
   });
 }
 
+// ---------- Cài đặt group ----------
+
+// Cài đặt hiện tại của các group (đọc khi mở Tổng quan / bấm Tải lại)
+async function doGroupSettings({ groupIds = [] }) {
+  if (!groupIds.length) return { status: 'ok', settings: {} };
+  return withClient(async (client) => {
+    const settings = {};
+    const errors = [];
+    let needLogin = false;
+    await mapLimit(groupIds, PARALLEL, async (id) => {
+      const r = await client.call('GET', `group/groups/${id}/settings`);
+      if (r.status === 401) return (needLogin = true);
+      if (!BG.isOk(r)) return errors.push(BG.errMsg(r));
+      settings[id] = BG.slimGroupSettings(r.body.data);
+    });
+    if (needLogin) return { ...NEED_LOGIN };
+    return { status: 'ok', settings, errors };
+  });
+}
+
+// Bật / tắt một cài đặt cho nhiều group, lần lượt từng group (có nghỉ giữa hai lần như các thao tác hàng loạt khác)
+async function doGroupSettingAct({ key, value, groupIds = [], source = 'manual' }) {
+  const spec = BG.GROUP_SETTINGS[key];
+  if (!spec) return { status: 'error', message: 'Cài đặt không hợp lệ' };
+  const { settings, state, log } = await load();
+  const groups = state.snapshot?.groups || [];
+  const targets = groupIds.map((id) => groups.find((g) => g.id === id)).filter(Boolean);
+  if (!targets.length) return { status: 'error', message: 'Chưa chọn group' };
+  const denied = targets.filter((g) => BG.settingDenied(g, key));
+  if (denied.length) return { status: 'error', message: `${denied.map((g) => g.name).join(', ')}: ${BG.settingDenied(denied[0], key)}` };
+  const items = targets.map((g) => ({
+    log: { kind: 'groupSetting', source, action: value ? 'on' : 'off', groupId: g.id, groupName: g.name, communityName: g.communityName || '', setting: key },
+    call: (c) => (key === 'contentApproval' ? c.call('PUT', `group/communities/${g.communityId}/content-settings`, BG.groupSettingBody(key, value, g.id)) : c.call('PUT', `group/groups/${g.id}/settings`, BG.groupSettingBody(key, value, g.id))),
+  }));
+  const r = await performActions(items, settings);
+  pushLog(log, r.entries);
+  // Cập nhật ngay cột Duyệt thành viên / Duyệt bài ở Tổng quan
+  const done = new Set(r.entries.filter((e) => e.status === 'ok').map((e) => e.groupId));
+  const next = { ...state };
+  if (done.size && state.snapshot && (key === 'isJoinApproval' || key === 'contentApproval' || key === 'isActiveMembershipQuestions')) {
+    next.snapshot = { ...state.snapshot, groups: groups.map((g) => (done.has(g.id) ? { ...g, settings: { ...g.settings, [key]: !!value } } : g)) };
+  }
+  if (r.status === 'need_login') next.lastResult = { status: 'need_login', message: NEED_LOGIN.message, mode: r.mode || '' };
+  await chrome.storage.local.set({ state: next, log });
+  if (r.status === 'need_login') await updateBadge();
+  return { ...summary(r, settings), done: [...done] };
+}
+
+// ---------- Ghim, cài đặt bài, sửa bài đã đăng ----------
+
+function postActLog(source, action, { contentId, snippet = '', groupName = '', actor = null }) {
+  return { kind: 'post', source, action, contentId, contentType: 'POST', snippet: String(snippet).replace(/\s+/g, ' ').slice(0, 120), groupName, communityName: '', userId: actor?.id || '', username: actor?.username || '', fullname: actor?.fullname || '' };
+}
+
+// Chi tiết bài: mở lại trong khung soạn (sửa bài của mình); any = chỉ xem (vd đọc cài đặt hiện tại)
+async function doPostDetail({ id, any = false }) {
+  if (!id) return { status: 'error', message: 'Thiếu bài' };
+  const { state } = await load();
+  return withClient(async (client) => {
+    const r = await client.call('GET', `content/contents/${id}`);
+    if (r.status === 401) return { ...NEED_LOGIN };
+    if (BG.isContentGone(r)) return { status: 'error', message: 'Bài không còn trên Beincom (đã bị xoá)' };
+    if (!BG.isOk(r) || !r.body.data) return { status: 'error', message: 'Đọc bài lỗi: ' + BG.errMsg(r) };
+    const post = BG.editState(r.body.data);
+    if (any) return { status: 'ok', post };
+    if (!state.me?.id || post.actorId !== state.me.id) return { status: 'error', message: 'Chỉ sửa được bài của chính bạn (Beincom không cho admin sửa bài người khác)' };
+    if (post.status && post.status !== 'PUBLISHED') return { status: 'error', message: 'Chỉ sửa được bài đã đăng' };
+    return { status: 'ok', post };
+  });
+}
+
+// Lưu bài đã sửa: PUT content/posts/{id} (như web, không kèm cài đặt); cài đặt đổi thì PUT …/setting riêng
+async function doEditPost({ id, groupIds = [], content, media = null, mentions = null, linkPreview = null, tags = [], series = [], setting = null, settingChanged = false, source = 'manual' }) {
+  if (!id) return { status: 'error', message: 'Thiếu bài' };
+  const err = BG.validateCompose({ groupIds, content, media, tags, series, setting: settingChanged ? setting : null });
+  if (err) return { status: 'error', message: err };
+  const { settings, state, log } = await load();
+  const body = BG.editBody({ groupIds, content, media, mentions, linkPreview, tags, series });
+  const attached = BG.mediaSummary(body.media);
+  const logBase = postActLog(source, 'edit', { contentId: id, snippet: (attached ? `[${attached}] ` : '') + body.content, groupName: '', actor: state.me });
+
+  let r;
+  if (settings.dryRun) r = { status: 'ok', dry: true };
+  else {
+    r = await withClient(async (client) => {
+      const cur = await client.call('GET', `content/contents/${id}`);
+      if (cur.status === 401) return { ...NEED_LOGIN };
+      if (BG.isContentGone(cur)) return { status: 'error', message: 'Bài không còn trên Beincom (đã bị xoá)' };
+      if (BG.isOk(cur) && cur.body.data?.actor?.id !== state.me?.id) return { status: 'error', message: 'Chỉ sửa được bài của chính bạn' };
+      if (body.tags.length || body.series.length) {
+        const v = await client.call('POST', 'content/contents/validate-series-tags', { groups: body.audience.groupIds, series: body.series, tags: body.tags });
+        if (v.status === 401) return { ...NEED_LOGIN };
+        if (v.body?.code === 'tag_series_invalid') return { status: 'error', message: BG.tagSeriesError(v.body, tags, series) };
+      }
+      const p = await client.call('PUT', `content/posts/${id}`, body);
+      if (p.status === 401) return { ...NEED_LOGIN };
+      if (p.body?.code === 'tag_series_invalid') return { status: 'error', message: BG.tagSeriesError(p.body, tags, series) };
+      if (!BG.isOk(p)) return { status: 'error', message: 'Lưu bài lỗi: ' + BG.errMsg(p) };
+      if (settingChanged) {
+        const s = await client.call('PUT', `content/contents/${id}/setting`, BG.settingBody(setting));
+        if (!BG.isOk(s)) return { status: 'ok', warning: 'Đã lưu nội dung nhưng đổi cài đặt lỗi: ' + BG.errMsg(s) };
+      }
+      return { status: 'ok' };
+    });
+  }
+  const status = r.dry ? 'dry' : r.status === 'ok' ? 'ok' : 'error';
+  pushLog(log, [{ time: Date.now(), ...logBase, status, message: r.dry ? DRY_MSG : r.warning || r.message || '' }]);
+  const next = { ...state };
+  if (r.status === 'need_login') next.lastResult = { status: 'need_login', message: NEED_LOGIN.message, mode: r.mode || '' };
+  // Cập nhật bài trong danh sách bài mới để khỏi phải quét lại
+  if (status === 'ok') {
+    next.recentPosts = (state.recentPosts || []).map((p) =>
+      p.id === id ? { ...p, text: body.content.slice(0, 4000), media: { images: body.media.images.length, videos: body.media.videos.length, files: body.media.files.length }, link: body.linkPreview?.url || '' } : p,
+    );
+  }
+  await chrome.storage.local.set({ state: next, log });
+  if (r.status === 'need_login') await updateBadge();
+  return { status: r.status, message: r.message || r.warning || '', dryRun: !!r.dry, ok: status === 'ok' ? 1 : 0, dry: status === 'dry' ? 1 : 0, failed: status === 'error' ? 1 : 0, errors: status === 'error' ? [r.message] : [] };
+}
+
+// Đổi cài đặt một bài (bình luận, cảm xúc, Quan trọng) — admin đổi được cả bài người khác
+async function doPostSetting({ id, setting, snippet = '', groupName = '', actor = null, source = 'manual' }) {
+  if (!id) return { status: 'error', message: 'Thiếu bài' };
+  const s = BG.settingBody(setting);
+  if (s.isImportant && s.importantExpiredAt && new Date(s.importantExpiredAt).getTime() <= Date.now()) return { status: 'error', message: 'Ngày hết "Quan trọng" phải ở tương lai' };
+  const { settings, state, log } = await load();
+  const item = { log: postActLog(source, 'setting', { contentId: id, snippet, groupName, actor }), call: (c) => c.call('PUT', `content/contents/${id}/setting`, s), gone: true };
+  item.log.reason = [s.canComment ? '' : 'tắt bình luận', s.canReact ? '' : 'tắt cảm xúc', s.isImportant ? 'Quan trọng' : ''].filter(Boolean).join(', ') || 'mặc định';
+  const r = await performActions([item], settings);
+  pushLog(log, r.entries);
+  const next = r.status === 'need_login' ? { ...state, lastResult: { status: 'need_login', message: NEED_LOGIN.message, mode: r.mode || '' } } : state;
+  await chrome.storage.local.set({ state: next, log });
+  if (r.status === 'need_login') await updateBadge();
+  return summary(r, settings);
+}
+
+// Bài đang ghim của các group (đọc, không cần chờ hàng đợi)
+async function doPinned({ groupIds = [] }) {
+  if (!groupIds.length) return { status: 'ok', pinned: {} };
+  return withClient(async (client) => {
+    const pinned = {};
+    const errors = [];
+    let needLogin = false;
+    await mapLimit(groupIds, PARALLEL, async (gid) => {
+      const r = await client.call('GET', `content/contents/pinned-content/groups/${gid}`);
+      if (r.status === 401) return (needLogin = true);
+      if (!BG.isOk(r)) return errors.push(BG.errMsg(r));
+      const list = Array.isArray(r.body.data) ? r.body.data : r.body.data?.list || [];
+      pinned[gid] = list.map(BG.slimPost);
+    });
+    if (needLogin) return { ...NEED_LOGIN };
+    return { status: 'ok', pinned, errors };
+  });
+}
+
+// Ghim / bỏ ghim một bài ở các group: PUT content/contents/pinned-content/{id} { pinGroupIds, unpinGroupIds }
+async function doPinAct({ contentId, pin = [], unpin = [], snippet = '', actor = null, source = 'manual' }) {
+  if (!contentId || (!pin.length && !unpin.length)) return { status: 'error', message: 'Chưa chọn group để ghim / bỏ ghim' };
+  const { settings, state, log } = await load();
+  const groups = state.snapshot?.groups || [];
+  const nameOf = (id) => groups.find((g) => g.id === id)?.name || id;
+  const admin = new Set(groups.map((g) => g.id));
+  if ([...pin, ...unpin].some((id) => !admin.has(id))) return { status: 'error', message: 'Chỉ ghim / bỏ ghim được ở group bạn quản trị' };
+  // Mỗi group tối đa 5 bài ghim: kiểm tra trước để báo rõ group nào đã đủ
+  if (pin.length && !settings.dryRun) {
+    const cur = await doPinned({ groupIds: pin });
+    if (cur.status === 'need_login') return cur;
+    const full = pin.filter((gid) => (cur.pinned?.[gid] || []).length >= BG.PIN_MAX && !(cur.pinned[gid] || []).some((p) => p.id === contentId));
+    if (full.length) return { status: 'error', message: `${full.map(nameOf).join(', ')} đã ghim đủ ${BG.PIN_MAX} bài — bỏ ghim bớt trước` };
+  }
+  const action = pin.length ? 'pin' : 'unpin';
+  const item = {
+    log: { ...postActLog(source, action, { contentId, snippet, groupName: [...pin, ...unpin].map(nameOf).join(', '), actor }), reason: [pin.length ? 'Ghim ở ' + pin.map(nameOf).join(', ') : '', unpin.length ? 'Bỏ ghim ở ' + unpin.map(nameOf).join(', ') : ''].filter(Boolean).join('; ') },
+    call: (c) => c.call('PUT', `content/contents/pinned-content/${contentId}`, { pinGroupIds: pin, unpinGroupIds: unpin }),
+    gone: true,
+  };
+  const r = await performActions([item], settings);
+  pushLog(log, r.entries);
+  const next = r.status === 'need_login' ? { ...state, lastResult: { status: 'need_login', message: NEED_LOGIN.message, mode: r.mode || '' } } : state;
+  await chrome.storage.local.set({ state: next, log });
+  if (r.status === 'need_login') await updateBadge();
+  return summary(r, settings);
+}
+
 // Bài đang chờ tới giờ đăng trong các community mình quản trị group gốc
 async function doScheduled() {
   const { state } = await load();
@@ -1200,26 +1553,52 @@ async function doScheduled() {
   });
 }
 
-async function doScheduleAct({ action, contentId, scheduledAt, snippet = '', groupName = '', source = 'manual' }) {
+async function doScheduleAct({ action, contentId, contentIds = null, scheduledAt, snippet = '', groupName = '', source = 'manual' }) {
   if (action !== 'reschedule' && action !== 'cancel') return { status: 'error', message: 'Thao tác không hợp lệ' };
-  if (!contentId) return { status: 'error', message: 'Thiếu bài cần xử lý' };
+  // Huỷ cả chuỗi bài định kỳ: nhiều bài một lần
+  const ids = action === 'cancel' && contentIds?.length ? [...new Set(contentIds)] : contentId ? [contentId] : [];
+  if (!ids.length) return { status: 'error', message: 'Thiếu bài cần xử lý' };
   if (action === 'reschedule') {
     const t = new Date(scheduledAt).getTime();
     if (!Number.isFinite(t) || t < Date.now() + BG.MIN_SCHEDULE_MIN * 60e3) return { status: 'error', message: `Giờ hẹn phải sau bây giờ ít nhất ${BG.MIN_SCHEDULE_MIN} phút` };
   }
   const { settings, state, log } = await load();
   const iso = action === 'reschedule' ? new Date(scheduledAt).toISOString() : null;
-  const item = {
-    log: { kind: 'compose', source, action, contentId, contentType: 'POST', snippet, groupName, communityName: '', ...(iso ? { scheduledAt: iso } : {}) },
-    call: (c) => (action === 'reschedule' ? c.call('PUT', `content/contents/${contentId}/reschedule`, { scheduledAt: iso }) : c.call('DELETE', `content/posts/${contentId}`)),
+  const items = ids.map((id) => ({
+    log: { kind: 'compose', source, action, contentId: id, contentType: 'POST', snippet, groupName, communityName: '', ...(iso ? { scheduledAt: iso } : {}) },
+    call: (c) => (action === 'reschedule' ? c.call('PUT', `content/contents/${id}/reschedule`, { scheduledAt: iso }) : c.call('DELETE', `content/posts/${id}`)),
     gone: true,
-  };
-  const r = await performActions([item], settings);
+  }));
+  const r = await performActions(items, settings);
   pushLog(log, r.entries);
   const next = r.status === 'need_login' ? { ...state, lastResult: { status: 'need_login', message: NEED_LOGIN.message, mode: r.mode || '' } } : state;
   await chrome.storage.local.set({ state: next, log });
   if (r.status === 'need_login') await updateBadge();
   return summary(r, settings);
+}
+
+// ---------- Khôi phục cài đặt từ bản sao lưu ----------
+// keepDry: giữ Chạy thử bật sau khi khôi phục (bản sao lưu có thể đang tắt Chạy thử)
+async function doRestore({ data, keepDry = false }) {
+  let parsed;
+  try {
+    parsed = BG.readBackup({ app: 'BeinGroup', format: BG.BACKUP_FORMAT, data });
+  } catch (e) {
+    return { status: 'error', message: e.message };
+  }
+  const d = parsed.data;
+  const { profiles, log = [] } = await chrome.storage.local.get(['profiles', 'log']);
+  const set = {};
+  if (d.settings) set.settings = { ...BG.DEFAULT_SETTINGS, ...d.settings, ...(keepDry ? { dryRun: true } : {}) };
+  if (d.rules) set.rules = { ...BG.DEFAULT_RULES, ...d.rules };
+  if (d.postRules) set.postRules = { ...BG.DEFAULT_POST_RULES, ...d.postRules };
+  if (d.groupRules) set.groupRules = d.groupRules;
+  if (d.templates) set.templates = d.templates;
+  if (d.profiles) set.profiles = BG.mergeProfiles(profiles, d.profiles);
+  const restored = BG.backupSummary({ ...d, ...(set.settings ? { settings: set.settings } : {}) });
+  pushLog(log, [{ time: Date.now(), kind: 'backup', source: 'manual', action: 'restore', status: 'ok', snippet: 'Bản sao lưu', message: restored.join(' · ') }]);
+  await chrome.storage.local.set({ ...set, log });
+  return { status: 'ok', restored };
 }
 
 // ---------- Thống kê ----------
@@ -1496,10 +1875,11 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== 'local') return;
-  if (changes.postRules) updateBadge(); // đổi quy tắc bài viết -> đếm lại bài vi phạm
+  if (changes.postRules || changes.groupRules) updateBadge(); // đổi quy tắc bài viết -> đếm lại bài vi phạm
   if (!changes.settings) return;
   const { oldValue = {}, newValue = {} } = changes.settings;
   if (oldValue.intervalMin !== newValue.intervalMin) scheduleAlarm(true);
+  if (oldValue.scanComments !== newValue.scanComments) updateBadge();
   if (oldValue.active !== newValue.active) {
     updateBadge();
     if (newValue.active !== false) exclusive(() => doScan({ source: 'resume' })); // bật lại -> quét ngay
@@ -1509,7 +1889,8 @@ chrome.storage.onChanged.addListener((changes, area) => {
 // Bấm thông báo: mở thẳng tab Dashboard liên quan
 function notificationTab(id) {
   if (id === 'bg-requests' || id === 'bg-auto') return 'members';
-  if (id === 'bg-flagged' || id.startsWith('bg-posts-')) return 'content';
+  if (id === 'bg-flagged' || id === 'bg-comments' || id.startsWith('bg-posts-')) return 'content';
+  if (id === 'bg-weekly') return 'overview';
   if (id === 'bg-reports' || id === 'bg-autoflag') return 'reports';
   return '';
 }
@@ -1533,6 +1914,10 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     uploadInit: () => doUploadInit(msg),
     uploadWait: () => doUploadWait(msg),
     mentionable: () => doMentionable(msg),
+    postDetail: () => doPostDetail(msg),
+    pinned: () => doPinned(msg),
+    groupSettings: () => doGroupSettings(msg),
+    banned: () => doBanned(msg),
     tagsSeries: () => doTagsSeries(msg),
     linkPreview: () => doLinkPreview(msg),
   };
@@ -1546,11 +1931,17 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     act: () => doAct(msg),
     approvalAct: () => doApprovalAct(msg),
     postAct: () => doPostAct(msg),
+    commentAct: () => doCommentAct(msg),
     memberAct: () => doMemberAct(msg),
     compose: () => doCompose(msg),
     scheduleAct: () => doScheduleAct(msg),
+    restoreBackup: () => doRestore(msg),
     reportAct: () => doReportAct(msg),
     profileAct: () => doProfileAct(msg),
+    editPost: () => doEditPost(msg),
+    postSetting: () => doPostSetting(msg),
+    pinAct: () => doPinAct(msg),
+    groupSettingAct: () => doGroupSettingAct(msg),
   };
   const h = handlers[msg?.type];
   if (!h) return;

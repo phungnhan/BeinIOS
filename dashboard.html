@@ -57,7 +57,7 @@
         <div class="kpi-sub" id="kpi-posts-sub"></div>
       </div>
       <div class="kpi">
-        <div class="kpi-label">Bài mới vi phạm</div>
+        <div class="kpi-label">Bài, bình luận vi phạm</div>
         <div class="kpi-value" id="kpi-flagged">–</div>
         <div class="kpi-sub" id="kpi-flagged-sub"></div>
       </div>
@@ -86,6 +86,44 @@
           <tbody id="groups-body"></tbody>
         </table>
       </div>
+    </section>
+
+    <section class="card span-3" id="weekly" data-tab="overview">
+      <div class="card-head">
+        <h2>Tóm tắt hoạt động</h2>
+        <div class="review-tools">
+          <div class="seg" id="weekly-range">
+            <button data-f="7" class="active">7 ngày</button>
+            <button data-f="30">30 ngày</button>
+          </div>
+          <button class="ghost sm" id="btn-weekly-copy">Sao chép</button>
+          <button class="ghost sm" id="btn-weekly-file">Tải tệp .txt</button>
+        </div>
+      </div>
+      <p class="muted small intro" id="weekly-note"></p>
+      <div class="weekly-grid" id="weekly-grid"></div>
+      <div class="weekly-violators" id="weekly-violators"></div>
+    </section>
+    <section class="card span-3" id="gsettings" data-tab="overview">
+      <div class="card-head">
+        <h2>Cài đặt group</h2>
+        <span class="muted small" id="gsettings-note"></span>
+      </div>
+      <div class="bulk-bar">
+        <label class="check"><input type="checkbox" id="gsettings-check-all" /> Chọn tất cả</label>
+        <span class="muted small" id="gsettings-selected">Đã chọn 0</span>
+        <span class="spacer"></span>
+        <select id="gsettings-key" aria-label="Cài đặt muốn đổi"></select>
+        <button id="btn-gsettings-on" class="ghost" disabled>Bật cho đã chọn</button>
+        <button id="btn-gsettings-off" class="ghost" disabled>Tắt cho đã chọn</button>
+      </div>
+      <div class="table-wrap">
+        <table class="requests">
+          <thead id="gsettings-head"></thead>
+          <tbody id="gsettings-body"></tbody>
+        </table>
+      </div>
+      <p class="muted small">Bấm một ô để đổi riêng group đó. ⚠ Tắt <b>Duyệt thành viên</b>: Beincom tự <b>duyệt</b> mọi yêu cầu đang chờ của group. <b>Duyệt bài</b> cần quyền chủ / admin community.</p>
     </section>
 
     <section class="card span-3" id="review" data-tab="members">
@@ -127,6 +165,7 @@
           <div class="seg" id="members-tab">
             <button data-f="list" class="active">Danh sách</button>
             <button data-f="activity">Vào / rời gần đây</button>
+            <button data-f="banned">Bị cấm</button>
             <button data-f="profiles">Hồ sơ vi phạm</button>
           </div>
         </div>
@@ -162,6 +201,26 @@
           </table>
         </div>
         <button id="btn-members-more" class="ghost more" hidden>Tải thêm</button>
+      </div>
+
+      <div id="members-banned-pane" hidden>
+        <div class="bulk-bar">
+          <label class="check"><input type="checkbox" id="banned-check-all" /> Chọn tất cả đang hiện</label>
+          <span class="muted small" id="banned-selected">Đã chọn 0</span>
+          <span class="muted small" id="banned-count"></span>
+          <span class="spacer"></span>
+          <button id="btn-unban" class="ghost" disabled>Gỡ cấm đã chọn</button>
+        </div>
+        <div id="banned-note" class="muted small review-note"></div>
+        <div class="table-wrap">
+          <table class="requests">
+            <thead>
+              <tr><th class="cb"></th><th>Thành viên</th><th>Lý do cấm</th><th>Bị cấm lúc</th><th class="act">Thao tác</th></tr>
+            </thead>
+            <tbody id="banned-body"></tbody>
+          </table>
+        </div>
+        <button id="btn-banned-more" class="ghost more" hidden>Tải thêm</button>
       </div>
 
       <div id="members-profiles-pane" hidden>
@@ -273,6 +332,56 @@
       <button id="btn-recent-more" class="ghost more" hidden>Xem thêm</button>
     </section>
 
+    <section class="card span-3" id="comments" data-tab="content">
+      <div class="card-head">
+        <h2>Bình luận mới</h2>
+        <div class="review-tools">
+          <div class="seg" id="comment-filter">
+            <button data-f="flagged" class="active">Cần xử lý <span id="ccnt-flagged"></span></button>
+            <button data-f="all">Tất cả <span id="ccnt-all"></span></button>
+            <button data-f="dismissed">Đã bỏ qua <span id="ccnt-dismissed"></span></button>
+            <button data-f="hidden">Đã ẩn <span id="ccnt-hidden"></span></button>
+          </div>
+        </div>
+      </div>
+      <div id="comments-note" class="muted small review-note"></div>
+      <div class="bulk-bar">
+        <label class="check"><input type="checkbox" id="comments-check-all" /> Chọn tất cả đang hiện</label>
+        <span class="muted small" id="comments-selected">Đã chọn 0</span>
+        <span class="spacer"></span>
+        <button id="btn-dismiss-comments" class="ghost" disabled>Bỏ qua đã chọn</button>
+        <button id="btn-hide-comments" class="danger" disabled>Ẩn đã chọn</button>
+      </div>
+      <div class="table-wrap">
+        <table class="requests posts">
+          <thead>
+            <tr><th class="cb"></th><th>Người viết</th><th>Bình luận</th><th>Trong bài</th><th>Lúc</th><th>Đánh giá theo quy tắc</th><th class="act">Thao tác</th></tr>
+          </thead>
+          <tbody id="comments-body"></tbody>
+        </table>
+      </div>
+      <button id="btn-comments-more" class="ghost more" hidden>Xem thêm</button>
+    </section>
+
+    <section class="card span-3" id="pinned" data-tab="content">
+      <div class="card-head">
+        <h2>Bài đang ghim</h2>
+        <div class="review-tools">
+          <select id="pinned-group" aria-label="Chọn group"></select>
+          <span class="muted small" id="pinned-count"></span>
+        </div>
+      </div>
+      <div id="pinned-note" class="muted small review-note"></div>
+      <div class="table-wrap">
+        <table class="requests posts">
+          <thead>
+            <tr><th>Người đăng</th><th>Nội dung</th><th>Đăng lúc</th><th class="act">Thao tác</th></tr>
+          </thead>
+          <tbody id="pinned-body"></tbody>
+        </table>
+      </div>
+    </section>
+
     <section class="card span-3" id="reports" data-tab="reports">
       <div class="card-head">
         <h2>Báo cáo vi phạm</h2>
@@ -315,6 +424,7 @@
           <button id="btn-tpl-delete" class="ghost sm danger">Xoá mẫu</button>
         </div>
       </div>
+      <div id="compose-edit-banner" class="edit-banner" hidden></div>
       <div class="compose-grid">
         <div class="compose-groups">
           <div class="group-title">Đăng vào</div>
@@ -381,6 +491,10 @@
             <span class="spacer"></span>
             <span id="compose-saved" class="muted small"></span>
           </div>
+          <div class="compose-options as-group-row" id="compose-as-group-row">
+            <label class="check"><input type="checkbox" id="compose-as-group" /> Đăng dưới tên group</label>
+            <span class="muted small" id="compose-as-group-hint"></span>
+          </div>
           <div class="compose-options">
             <label class="check"><input type="checkbox" id="compose-canComment" checked /> Cho bình luận</label>
             <label class="check"><input type="checkbox" id="compose-canReact" checked /> Cho thả cảm xúc</label>
@@ -393,11 +507,17 @@
             <label class="check"><input type="radio" name="compose-when" value="now" checked /> Đăng ngay</label>
             <label class="check"><input type="radio" name="compose-when" value="later" /> Hẹn giờ lúc</label>
             <input type="datetime-local" id="compose-at" disabled aria-label="Giờ đăng" />
-            <span class="spacer"></span>
-            <button id="btn-compose-clear" class="ghost">Xoá nội dung</button>
-            <button id="btn-compose" class="primary">Đăng ngay</button>
+            <span class="repeat" id="compose-repeat-wrap">
+              <select id="compose-repeat" aria-label="Lặp lại" disabled></select>
+              <span class="inline" id="compose-repeat-n-wrap" hidden>× <input type="number" id="compose-repeat-n" min="2" max="30" value="4" aria-label="Số bài" /> bài</span>
+            </span>
+            <span class="compose-actions">
+              <button id="btn-compose-clear" class="ghost">Xoá nội dung</button>
+              <button id="btn-compose" class="primary">Đăng ngay</button>
+            </span>
           </div>
-          <div class="muted small">Hẹn giờ dùng chức năng có sẵn của Beincom: tới giờ Beincom tự đăng, không cần mở trình duyệt. Ảnh, video, tệp được tải lên Beincom lúc bấm Đăng (Chạy thử thì không tải).</div>
+          <div class="muted small" id="compose-repeat-hint" hidden></div>
+          <div class="muted small">Hẹn giờ dùng chức năng có sẵn của Beincom: tới giờ Beincom tự đăng, không cần mở trình duyệt. <b>Lặp lại</b> đặt trước từng bài hẹn giờ (tối đa 30) ngay lúc bấm. Ảnh, video, tệp được tải lên Beincom lúc bấm Đăng — mỗi bài định kỳ tải một lần (Chạy thử thì không tải).</div>
         </div>
       </div>
     </section>
@@ -489,46 +609,92 @@
       </div>
     </section>
 
-    <section class="card span-2" id="rules" data-tab="settings">
-      <div class="card-head">
-        <h2>Quy tắc lọc thành viên</h2>
-        <span class="muted small" id="rules-saved"></span>
-      </div>
-      <p class="muted small intro">Addon chấm mỗi yêu cầu: vi phạm quy tắc từ chối → <b>Gợi ý từ chối</b>; thiếu điều kiện → <b>Cần xem</b>; đạt hết → <b>Gợi ý duyệt</b>. Chỉ là gợi ý, bạn vẫn bấm duyệt — trừ khi bật tự xử lý ở Cài đặt.</p>
-      <div class="rules-grid">
-        <div class="group">
-          <div class="group-title">⚠ Cần xem khi</div>
-          <label class="switch-row"><input type="checkbox" id="requireAvatar" /><span><b>Không có ảnh đại diện</b></span></label>
-          <label class="switch-row"><input type="checkbox" id="requireAnswers" /><span><b>Chưa trả lời câu hỏi bắt buộc</b><br /><span class="muted small">Hoặc trả lời quá ngắn</span></span></label>
-          <label class="select-row" data-requires="requireAnswers">
-            <span><b>Câu trả lời tối thiểu</b></span>
-            <span class="inline"><input type="number" id="minAnswerLength" min="0" max="200" /> ký tự</span>
-          </label>
-          <label class="switch-row"><input type="checkbox" id="requireVerified" /><span><b>Tài khoản chưa xác minh</b></span></label>
-          <label class="switch-row"><input type="checkbox" id="reviewViolators" /><span><b>Có hồ sơ vi phạm</b><br /><span class="muted small">Từng bị cấm, bị xoá, bị ẩn bài… (xem tab Thành viên → Hồ sơ vi phạm). Người có hồ sơ không bao giờ được tự duyệt.</span></span></label>
+    <div class="span-2 rules-col" data-tab="settings">
+      <section class="card" id="rules-scope">
+        <div class="card-head">
+          <h2>Áp dụng quy tắc cho</h2>
+          <span class="muted small" id="scope-saved"></span>
         </div>
-        <div class="group">
-          <div class="group-title">✕ Gợi ý từ chối khi</div>
-          <label class="switch-row"><input type="checkbox" id="declineDeactivated" /><span><b>Tài khoản đã bị vô hiệu hoá</b></span></label>
-          <label class="text-row">
-            <span><b>Từ khoá cấm</b><br /><span class="muted small">Trong tên, username hoặc câu trả lời. Cách nhau dấu phẩy, không phân biệt hoa thường và dấu.</span></span>
-            <textarea id="bannedKeywords" rows="3" placeholder="vd: kiếm tiền nhanh, sex, t.me/"></textarea>
-          </label>
-          <label class="text-row">
-            <span><b>Username luôn từ chối</b></span>
-            <textarea id="blockUsernames" rows="2" placeholder="@username, mỗi người cách nhau dấu phẩy"></textarea>
-          </label>
+        <div class="scope-row">
+          <select id="scope-group" aria-label="Phạm vi quy tắc"></select>
+          <button class="ghost" id="scope-own">Dùng quy tắc riêng cho group này</button>
+          <button class="danger" id="scope-drop">Bỏ quy tắc riêng</button>
         </div>
-        <div class="group">
-          <div class="group-title">✓ Luôn gợi ý duyệt</div>
-          <label class="text-row">
-            <span><b>Username luôn duyệt</b><br /><span class="muted small">Bỏ qua mọi quy tắc khác</span></span>
-            <textarea id="allowUsernames" rows="3" placeholder="@username, mỗi người cách nhau dấu phẩy"></textarea>
-          </label>
+        <p class="muted small scope-note" id="scope-note"></p>
+      </section>
+      <section class="card" id="rules">
+        <div class="card-head">
+          <h2>Quy tắc lọc thành viên <span class="scope-tag" id="rules-scope-tag"></span></h2>
+          <span class="muted small" id="rules-saved"></span>
         </div>
-      </div>
-    </section>
+        <p class="muted small intro">Addon chấm mỗi yêu cầu: vi phạm quy tắc từ chối → <b>Gợi ý từ chối</b>; thiếu điều kiện → <b>Cần xem</b>; đạt hết → <b>Gợi ý duyệt</b>. Chỉ là gợi ý, bạn vẫn bấm duyệt — trừ khi bật tự xử lý ở Cài đặt.</p>
+        <div class="rules-grid">
+          <div class="group">
+            <div class="group-title">⚠ Cần xem khi</div>
+            <label class="switch-row"><input type="checkbox" id="requireAvatar" /><span><b>Không có ảnh đại diện</b></span></label>
+            <label class="switch-row"><input type="checkbox" id="requireAnswers" /><span><b>Chưa trả lời câu hỏi bắt buộc</b><br /><span class="muted small">Hoặc trả lời quá ngắn</span></span></label>
+            <label class="select-row" data-requires="requireAnswers">
+              <span><b>Câu trả lời tối thiểu</b></span>
+              <span class="inline"><input type="number" id="minAnswerLength" min="0" max="200" /> ký tự</span>
+            </label>
+            <label class="switch-row"><input type="checkbox" id="requireVerified" /><span><b>Tài khoản chưa xác minh</b></span></label>
+            <label class="switch-row"><input type="checkbox" id="reviewViolators" /><span><b>Có hồ sơ vi phạm</b><br /><span class="muted small">Từng bị cấm, bị xoá, bị ẩn bài… (xem tab Thành viên → Hồ sơ vi phạm). Người có hồ sơ không bao giờ được tự duyệt.</span></span></label>
+          </div>
+          <div class="group">
+            <div class="group-title">✕ Gợi ý từ chối khi</div>
+            <label class="switch-row"><input type="checkbox" id="declineDeactivated" /><span><b>Tài khoản đã bị vô hiệu hoá</b></span></label>
+            <label class="text-row">
+              <span><b>Từ khoá cấm</b><br /><span class="muted small">Trong tên, username hoặc câu trả lời. Cách nhau dấu phẩy, không phân biệt hoa thường và dấu.</span></span>
+              <textarea id="bannedKeywords" rows="3" placeholder="vd: kiếm tiền nhanh, sex, t.me/"></textarea>
+            </label>
+            <label class="text-row">
+              <span><b>Username luôn từ chối</b></span>
+              <textarea id="blockUsernames" rows="2" placeholder="@username, mỗi người cách nhau dấu phẩy"></textarea>
+            </label>
+          </div>
+          <div class="group">
+            <div class="group-title">✓ Luôn gợi ý duyệt</div>
+            <label class="text-row">
+              <span><b>Username luôn duyệt</b><br /><span class="muted small">Bỏ qua mọi quy tắc khác</span></span>
+              <textarea id="allowUsernames" rows="3" placeholder="@username, mỗi người cách nhau dấu phẩy"></textarea>
+            </label>
+          </div>
+        </div>
+      </section>
 
+
+      <section class="card" id="post-rules">
+        <div class="card-head">
+          <h2>Quy tắc bài viết <span class="scope-tag" id="post-rules-scope-tag"></span></h2>
+          <span class="muted small" id="post-rules-saved"></span>
+        </div>
+        <p class="muted small intro">Dùng cho cả <b>Duyệt bài</b> và <b>Bài mới đăng</b>: vi phạm → <b>Gợi ý từ chối</b> / <b>Vi phạm</b>; có link ngoài (nếu bật) → <b>Cần xem</b>. Không vi phạm gì → <b>Gợi ý duyệt</b>. Addon không tự duyệt hay ẩn bài.</p>
+        <div class="rules-grid">
+          <div class="group">
+            <div class="group-title">✕ Vi phạm khi có</div>
+            <label class="text-row">
+              <span><b>Từ khoá cấm</b><br /><span class="muted small">Cách nhau dấu phẩy, không phân biệt hoa thường và dấu.</span></span>
+              <textarea id="post-bannedKeywords" rows="3" placeholder="vd: lừa đảo, x100 tài khoản, cam kết lợi nhuận"></textarea>
+            </label>
+          </div>
+          <div class="group">
+            <div class="group-title">🔗 Link</div>
+            <label class="text-row">
+              <span><b>Tên miền cấm</b><br /><span class="muted small">Gồm cả tên miền con: <code>t.me</code> chặn cả <code>www.t.me</code>.</span></span>
+              <textarea id="post-blockedDomains" rows="3" placeholder="vd: t.me, bit.ly, tinyurl.com"></textarea>
+            </label>
+          </div>
+          <div class="group">
+            <div class="group-title">⚠ Cần xem khi</div>
+            <label class="switch-row"><input type="checkbox" id="post-reviewExternalLinks" /><span><b>Có link ra ngoài</b><br /><span class="muted small">Trừ các tên miền cho phép bên dưới</span></span></label>
+            <label class="text-row" data-requires="reviewExternalLinks">
+              <span><b>Tên miền cho phép</b></span>
+              <textarea id="post-allowedDomains" rows="2" placeholder="beincom.com, coingecko.com"></textarea>
+            </label>
+          </div>
+        </div>
+      </section>
+    </div>
     <section class="card settings-card" id="settings" data-tab="settings">
       <div class="card-head">
         <h2>Cài đặt</h2>
@@ -542,7 +708,9 @@
         <label class="switch-row dry"><input type="checkbox" id="dryRun" /><span><b>Chạy thử</b><br /><span class="muted small">Duyệt/từ chối chỉ ghi nhật ký, chưa gửi lên Beincom. Tắt khi đã kiểm tra quy tắc ổn.</span></span></label>
         <label class="switch-row"><input type="checkbox" id="notify" /><span><b>Thông báo</b><br /><span class="muted small">Khi có yêu cầu tham gia, bài chờ duyệt, bài mới vi phạm hoặc báo cáo vi phạm</span></span></label>
         <label class="switch-row"><input type="checkbox" id="scanPosts" /><span><b>Quét bài mới đăng</b><br /><span class="muted small">20 bài mới nhất của mỗi group, chấm theo quy tắc bài viết</span></span></label>
+        <label class="switch-row"><input type="checkbox" id="scanComments" /><span><b>Quét bình luận mới</b><br /><span class="muted small">Mỗi lần quét đọc bình luận mới nhất của tối đa 8 bài có bình luận mới, chấm theo quy tắc bài viết. Cần bật Quét bài mới đăng.</span></span></label>
         <label class="switch-row"><input type="checkbox" id="scanReports" /><span><b>Quét báo cáo vi phạm</b><br /><span class="muted small">Báo cáo chờ xử lý (community bạn làm chủ / admin) và bài bị Beincom gắn cờ tự động</span></span></label>
+        <label class="switch-row"><input type="checkbox" id="weeklyReport" /><span><b>Tóm tắt tuần</b><br /><span class="muted small">Sáng thứ Hai (sau 8 giờ) thông báo tóm tắt tuần trước. Xem bất cứ lúc nào ở Tổng quan → Tóm tắt hoạt động.</span></span></label>
         <label class="switch-row"><input type="checkbox" id="trackViolations" /><span><b>Ghi hồ sơ vi phạm</b><br /><span class="muted small">Ghi lại ai bị cấm, xoá, ẩn bài, báo cáo… (mỗi lần quét đọc thêm nhật ký hoạt động của group). Chỉ lưu trong trình duyệt này.</span></span></label>
         <label class="select-row">
           <span><b>Chu kỳ quét</b></span>
@@ -568,37 +736,16 @@
         <label class="switch-row"><input type="checkbox" id="autoDecline" /><span><b>Tự từ chối "Gợi ý từ chối"</b></span></label>
         <div class="muted small">"Cần xem" không bao giờ tự xử lý.</div>
       </div>
-    </section>
-
-    <section class="card span-2" id="post-rules" data-tab="settings">
-      <div class="card-head">
-        <h2>Quy tắc bài viết</h2>
-        <span class="muted small" id="post-rules-saved"></span>
-      </div>
-      <p class="muted small intro">Dùng cho cả <b>Duyệt bài</b> và <b>Bài mới đăng</b>: vi phạm → <b>Gợi ý từ chối</b> / <b>Vi phạm</b>; có link ngoài (nếu bật) → <b>Cần xem</b>. Không vi phạm gì → <b>Gợi ý duyệt</b>. Addon không tự duyệt hay ẩn bài.</p>
-      <div class="rules-grid">
-        <div class="group">
-          <div class="group-title">✕ Vi phạm khi có</div>
-          <label class="text-row">
-            <span><b>Từ khoá cấm</b><br /><span class="muted small">Cách nhau dấu phẩy, không phân biệt hoa thường và dấu.</span></span>
-            <textarea id="post-bannedKeywords" rows="3" placeholder="vd: lừa đảo, x100 tài khoản, cam kết lợi nhuận"></textarea>
-          </label>
+      <div class="group backup-group">
+        <div class="group-title">💾 Sao lưu cài đặt</div>
+        <div class="muted small">Cài đặt, quy tắc (chung và riêng từng group), mẫu bài — để chuyển sang máy / trình duyệt khác hoặc giữ lại khi cài lại addon. Không chứa mật khẩu hay phiên đăng nhập.</div>
+        <label class="check small"><input type="checkbox" id="backup-profiles" /> Kèm hồ sơ vi phạm <span class="muted" id="backup-profiles-n"></span></label>
+        <div class="backup-actions">
+          <button class="ghost" id="btn-backup">Tải bản sao lưu</button>
+          <button class="ghost" id="btn-restore">Khôi phục từ tệp…</button>
+          <input type="file" id="restore-file" accept=".json,application/json" hidden />
         </div>
-        <div class="group">
-          <div class="group-title">🔗 Link</div>
-          <label class="text-row">
-            <span><b>Tên miền cấm</b><br /><span class="muted small">Gồm cả tên miền con: <code>t.me</code> chặn cả <code>www.t.me</code>.</span></span>
-            <textarea id="post-blockedDomains" rows="3" placeholder="vd: t.me, bit.ly, tinyurl.com"></textarea>
-          </label>
-        </div>
-        <div class="group">
-          <div class="group-title">⚠ Cần xem khi</div>
-          <label class="switch-row"><input type="checkbox" id="post-reviewExternalLinks" /><span><b>Có link ra ngoài</b><br /><span class="muted small">Trừ các tên miền cho phép bên dưới</span></span></label>
-          <label class="text-row" data-requires="reviewExternalLinks">
-            <span><b>Tên miền cho phép</b></span>
-            <textarea id="post-allowedDomains" rows="2" placeholder="beincom.com, coingecko.com"></textarea>
-          </label>
-        </div>
+        <div class="muted small" id="backup-hint"></div>
       </div>
     </section>
 
@@ -651,6 +798,17 @@
   <script src="common.js"></script>
   <script src="upload.js"></script>
   <script src="charts.js"></script>
+  <script src="dash/core.js"></script>
+  <script src="dash/ui.js"></script>
+  <script src="dash/overview.js"></script>
+  <script src="dash/members.js"></script>
+  <script src="dash/content.js"></script>
+  <script src="dash/reports.js"></script>
+  <script src="dash/compose.js"></script>
+  <script src="dash/attach.js"></script>
+  <script src="dash/stats.js"></script>
+  <script src="dash/settings.js"></script>
+  <script src="dash/log.js"></script>
   <script src="dashboard.js"></script>
 </body>
 </html>
