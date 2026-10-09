@@ -104,7 +104,7 @@ function recentRows() {
 }
 
 function inFilter(r, f) {
-  if (f === 'unanswered') return !r.p.dismissed && BG.isUnanswered(r.p, { meId: data.state.me?.id });
+  if (f === 'unanswered') return !r.p.dismissed && BG.isUnanswered(r.p, { meId: data.state.me?.id, minHours: data.settings.unansweredHours });
   if (f === 'hidden') return r.p.isHidden;
   if (f === 'dismissed') return r.p.dismissed && !r.p.isHidden;
   if (f === 'all') return !r.p.isHidden;
@@ -120,7 +120,7 @@ function renderRecent() {
   const note = $('recent-note');
   if (!data.settings.scanPosts) note.textContent = 'Đang tắt "Quét bài mới đăng" ở phần Cài đặt.';
   else if (!data.state.recentPosts) note.textContent = data.state.snapshot ? 'Chưa quét bài mới — bấm Quét ngay.' : '';
-  else if (recentFilter === 'unanswered') note.textContent = 'Bài đăng đã hơn 3 giờ (trong 7 ngày) mà chưa có bình luận nào, theo số bình luận ở lần quét gần nhất. Bấm 💬 Bình luận để trả lời ngay.';
+  else if (recentFilter === 'unanswered') note.textContent = `Bài đăng đã hơn ${data.settings.unansweredHours} giờ (trong 7 ngày) mà chưa có bình luận nào, theo số bình luận ở lần quét gần nhất (đổi số giờ ở Cài đặt → Theo dõi). Bấm 💬 Bình luận để trả lời ngay.`;
   else note.textContent = 'Xoá bài: chỉ với bài của chính bạn (Beincom không cho admin xoá bài người khác). Ẩn bài: gỡ bài người khác khỏi các group bạn quản trị; addon chưa hiện lại được. Bỏ qua: chỉ ẩn khỏi danh sách này.';
 
   pruneSelection(selectedRecent, new Set(rows.map((r) => r.p.id)));

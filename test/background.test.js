@@ -346,8 +346,11 @@ function makeEnv({ data = fixture(), settings = {}, rules = {}, postRules = {}, 
     return reply(404, { code: 'not_found', meta: { message: 'No route ' + p } });
   };
 
-  const storage = { settings: { ...BG.DEFAULT_SETTINGS, ...settings }, rules: { ...BG.DEFAULT_RULES, ...rules }, postRules: { ...BG.DEFAULT_POST_RULES, ...postRules } };
+  // Nhắc bài chưa ai trả lời tắt sẵn (bài mẫu chưa có bình luận); test riêng bật lại
+  const storage = { settings: { ...BG.DEFAULT_SETTINGS, remindUnanswered: false, ...settings }, rules: { ...BG.DEFAULT_RULES, ...rules }, postRules: { ...BG.DEFAULT_POST_RULES, ...postRules } };
   if (groupRules) storage.groupRules = groupRules;
+  const syncStore = {};
+  const syncWrites = [];
   const listeners = {};
   const ev = (name) => ({ addListener: (fn) => (listeners[name] = fn), removeListener: () => {} });
   const notifications = [];
@@ -361,6 +364,16 @@ function makeEnv({ data = fixture(), settings = {}, rules = {}, postRules = {}, 
         },
         async set(o) {
           Object.assign(storage, structuredClone(o));
+        },
+      },
+      // Bản đồng bộ của tài khoản trình duyệt (chrome.storage.sync)
+      sync: {
+        async get(keys) {
+          return Object.fromEntries([].concat(keys).filter((k) => k in syncStore).map((k) => [k, structuredClone(syncStore[k])]));
+        },
+        async set(o) {
+          syncWrites.push(Object.keys(o));
+          Object.assign(syncStore, structuredClone(o));
         },
       },
       onChanged: ev('storage'),
@@ -383,11 +396,15 @@ function makeEnv({ data = fixture(), settings = {}, rules = {}, postRules = {}, 
     chrome,
     BG,
     fetch,
-    importScripts() {},
+    // Nạp thật các tệp bg/*.js như service worker (common.js đã có sẵn dưới tên BG)
+    importScripts: (...files) => {
+      for (const f of files) if (f !== 'common.js') vm.runInContext(fs.readFileSync(path.join(__dirname, '..', f), 'utf8'), ctx, { filename: f });
+    },
     setTimeout: (fn) => setImmediate(fn),
     clearTimeout: () => {},
     console,
     structuredClone,
+    TextEncoder,
     URL,
     AbortController,
   });
@@ -395,7 +412,7 @@ function makeEnv({ data = fixture(), settings = {}, rules = {}, postRules = {}, 
 
   // structuredClone: đưa kết quả về realm của test để deepEqual so được
   const send = (msg) => new Promise((resolve) => listeners.message(msg, {}, (r) => resolve(structuredClone(r))));
-  return { send, storage, calls, bodies, headers, notifications, tabsCreated, badge, data, listeners };
+  return { send, storage, calls, bodies, headers, notifications, tabsCreated, badge, data, listeners, syncStore, syncWrites };
 }
 
 const scan = (env, source = 'dashboard') => env.send({ type: 'scan', source });
@@ -1833,4 +1850,131 @@ test('tìm người mới: group gốc đọc danh sách thành viên mới vào
   const b = await env.send({ type: 'newMembers', groupId: 'gCLsub', days: 7 });
   assert.deepEqual([b.source, b.items.map((u) => u.id)], ['activity', ['u42']]);
   assert.ok(!env.calls.some((c) => c.startsWith('POST') || c.startsWith('PUT')));
+});
+
+// ---------- Theo dõi từ khoá, nhắc bài chưa ai trả lời ----------
+
+test('theo dõi từ khoá: chỉ báo bài / bình luận MỚI nhắc tới (không phải của mình, lần đầu chỉ ghi nhận)', async () => {
+  const data = fixture();
+  data.timeline.gCL[0].commentsCount = 1;
+  data.comments = { t1: [cmt('c1', 'Mình bị lừa đảo mất tiền rồi', { createdAt: nowIso(60) })] };
+  const env = makeEnv({ data, settings: { watchKeywords: ['lừa đảo', 'rút tiền'] } });
+  await scan(env); // lần đầu: c1 có từ khoá nhưng chỉ ghi nhận
+  env.listeners.alarm({ name: 'beingroup-scan' });
+  await scan(env, 'popup');
+  assert.ok(!env.notifications.some((n) => n.id === 'bg-watch'));
+  env.data.timeline.gCL.unshift(
+    post('t5', 'Sàn này không RÚT TIỀN được, ai biết không?', { publishedAt: nowIso(5) }),
+    post('t6', 'Admin: cảnh giác lừa đảo nhé', { publishedAt: nowIso(4), actor: { id: 'me1', username: 'kai', fullname: 'Kai Crypto', avatar: '' } }),
+  );
+  env.listeners.alarm({ name: 'beingroup-scan' });
+  await scan(env, 'popup');
+  const w = env.notifications.filter((n) => n.id === 'bg-watch');
+  assert.equal(w.length, 1);
+  assert.match(w[0].title, /1 bài \/ bình luận nhắc tới rút tiền/);
+  assert.match(w[0].message, /^Tác giả t5: Sàn này không RÚT TIỀN/);
+  // Không có từ khoá thì không đọc gì thêm
+  const off = makeEnv();
+  await scan(off);
+  assert.ok(!off.notifications.some((n) => n.id === 'bg-watch'));
+});
+
+test('nhắc bài chưa ai trả lời: quá số giờ trong cài đặt, mỗi bài một lần, bỏ bài của mình', async () => {
+  const data = fixture();
+  data.timeline.gCL = [
+    post('q1', 'Cho hỏi ví nào an toàn?', { publishedAt: nowIso(7 * 60), commentsCount: 0 }),
+    post('q2', 'Câu hỏi mới đăng', { publishedAt: nowIso(60), commentsCount: 0 }),
+    post('q3', 'Đã có người trả lời', { publishedAt: nowIso(8 * 60), commentsCount: 2 }),
+    post('q4', 'Bài admin', { publishedAt: nowIso(9 * 60), commentsCount: 0, actor: { id: 'me1', username: 'kai', fullname: 'Kai', avatar: '' } }),
+  ];
+  data.timeline.gCLsub = [];
+  const env = makeEnv({ data, settings: { remindUnanswered: true, unansweredHours: 6 } });
+  env.listeners.alarm({ name: 'beingroup-scan' });
+  await scan(env, 'popup');
+  let r = env.notifications.filter((n) => n.id === 'bg-unanswered');
+  assert.equal(r.length, 1);
+  assert.match(r[0].title, /1 bài chưa ai trả lời quá 6 giờ/);
+  assert.deepEqual(env.storage.state.remindedIds, ['q1']);
+  // Lần sau không nhắc lại q1; q2 chưa đủ giờ
+  env.listeners.alarm({ name: 'beingroup-scan' });
+  await scan(env, 'popup');
+  r = env.notifications.filter((n) => n.id === 'bg-unanswered');
+  assert.equal(r.length, 1);
+  // Quét bấm tay không thông báo
+  const manual = makeEnv({ data, settings: { remindUnanswered: true, unansweredHours: 6 } });
+  await scan(manual);
+  assert.ok(!manual.notifications.some((n) => n.id === 'bg-unanswered'));
+});
+
+// ---------- Đồng bộ cài đặt giữa các máy ----------
+
+const tick = () => new Promise((r) => setTimeout(r, 10));
+
+test('đồng bộ: tắt thì không gửi; bật thì gửi cài đặt (bỏ trường của máy), quy tắc; đổi quy tắc thì gửi lại', async () => {
+  const env = makeEnv({ rules: { bannedKeywords: ['spam'] } });
+  env.listeners.storage({ rules: { newValue: {} } }, 'local');
+  await tick();
+  assert.equal(env.syncWrites.length, 0);
+  const st0 = await env.send({ type: 'syncStatus' });
+  assert.deepEqual([st0.keys, st0.fromOther], [[], false]);
+  const r = await env.send({ type: 'syncNow', mode: 'push', enable: true });
+  assert.equal(r.status, 'ok');
+  assert.equal(env.storage.settings.syncSettings, true);
+  assert.deepEqual(r.keys.sort(), ['postRules', 'rules', 'settings']);
+  const sv = env.syncStore.settings.v;
+  assert.ok(!('active' in sv) && !('syncSettings' in sv) && sv.dryRun === true);
+  assert.deepEqual(env.syncStore.rules.v.bannedKeywords, ['spam']);
+  assert.equal(env.syncStore.rules.from, env.storage.deviceId);
+  // Máy này đổi quy tắc -> gửi lên sau một nhịp
+  env.storage.rules = { ...env.storage.rules, bannedKeywords: ['spam', 'casino'] };
+  env.listeners.storage({ rules: { newValue: env.storage.rules } }, 'local');
+  await tick();
+  assert.deepEqual(env.syncStore.rules.v.bannedKeywords, ['spam', 'casino']);
+  assert.match((await env.send({ type: 'syncStatus' })).last.dir, /push/);
+});
+
+test('đồng bộ: nhận từ máy khác (làm sạch, giữ công tắc của máy này), không gửi ngược lại; lấy về / mục quá 8 KB', async () => {
+  const env = makeEnv({ settings: { syncSettings: true } });
+  const at = Date.now();
+  env.listeners.storage(
+    {
+      rules: { newValue: { v: { bannedKeywords: ['lừa đảo', 5], evil: 1 }, at, from: 'other' } },
+      settings: { newValue: { v: { dryRun: false, intervalMin: 60, active: false, syncSettings: false }, at, from: 'other' } },
+      log: { newValue: { v: [], at, from: 'other' } }, // không phải khoá đồng bộ
+    },
+    'sync',
+  );
+  await tick();
+  assert.deepEqual(env.storage.rules.bannedKeywords, ['lừa đảo']);
+  assert.ok(!('evil' in env.storage.rules));
+  assert.deepEqual([env.storage.settings.intervalMin, env.storage.settings.dryRun, env.storage.settings.active, env.storage.settings.syncSettings], [60, false, true, true]);
+  assert.equal(env.storage.log, undefined);
+  // Ghi local do nhận về -> không gửi ngược lại
+  env.listeners.storage({ rules: { newValue: env.storage.rules }, settings: { newValue: env.storage.settings } }, 'local');
+  await tick();
+  assert.equal(env.syncWrites.length, 0);
+  // Tự ghi của chính máy này trên bản đồng bộ thì bỏ qua
+  const myId = env.storage.deviceId;
+  env.listeners.storage({ postRules: { newValue: { v: { blockedDomains: ['x.y'] }, at, from: myId } } }, 'sync');
+  await tick();
+  assert.equal(env.storage.postRules.blockedDomains.length, 0);
+  // syncStatus thấy bản từ máy khác; lấy về toàn bộ
+  env.syncStore.postRules = { v: { blockedDomains: ['t.me'] }, at: at + 1, from: 'other' };
+  const st = await env.send({ type: 'syncStatus' });
+  assert.equal(st.fromOther, true);
+  const pull = await env.send({ type: 'syncNow', mode: 'pull' });
+  assert.ok(pull.keys.includes('postRules'));
+  assert.deepEqual(env.storage.postRules.blockedDomains, ['t.me']);
+  // Quy tắc riêng quá 8 KB: bỏ qua và ghi rõ
+  env.storage.groupRules = Object.fromEntries(Array.from({ length: 40 }, (_, i) => ['g' + i, { name: 'Group ' + i, rules: { bannedKeywords: Array.from({ length: 20 }, (_, j) => 'tu-khoa-' + j) }, postRules: {} }]));
+  const push = await env.send({ type: 'syncNow', mode: 'push' });
+  assert.deepEqual(push.skipped, ['groupRules']);
+  assert.ok(!('groupRules' in env.syncStore));
+  assert.deepEqual(env.storage.syncStatus.skipped, ['groupRules']);
+});
+
+test('khôi phục sao lưu giữ công tắc đồng bộ của máy này', async () => {
+  const env = makeEnv({ settings: { syncSettings: true } });
+  await env.send({ type: 'restoreBackup', data: { settings: { syncSettings: false, intervalMin: 120 } } });
+  assert.deepEqual([env.storage.settings.syncSettings, env.storage.settings.intervalMin], [true, 120]);
 });

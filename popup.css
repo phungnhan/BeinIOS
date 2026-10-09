@@ -85,3 +85,5 @@ li.empty { color: var(--muted); border: 0; }
 
 footer { margin-top: 8px; text-align: center; font-size: 12px; }
 .ver { color: var(--muted); font-size: 11px; }
+.label-row { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.label-row a { font-size: 12px; font-weight: 600; color: var(--accent); text-decoration: none; text-transform: none; letter-spacing: 0; }

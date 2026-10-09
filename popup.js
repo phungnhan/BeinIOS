@@ -27,6 +27,8 @@ function renderStatus(state, flagged = 0, reports = 0) {
   $('last-scan').textContent = state.lastScan ? 'Lần quét gần nhất: ' + fmtTime(state.lastScan) : '';
 }
 
+$('open-todo').href = chrome.runtime.getURL('dashboard.html') + '#tab=overview';
+
 function todoLine(ul, text, hash, count) {
   const li = document.createElement('li');
   const a = document.createElement('a');

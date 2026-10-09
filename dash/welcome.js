@@ -110,6 +110,7 @@ function openWelcome() {
   showTab('compose');
   $('welcome').scrollIntoView({ block: 'start' });
   if (!welcome.loaded && !welcome.loading) loadWelcome();
+  if (!shout.loaded && !shout.loading) loadShoutout(); // dash/shoutout.js
 }
 
 $('welcome-group').addEventListener('change', (e) => {

@@ -225,6 +225,10 @@ function renderSettings() {
   $('master-row').classList.toggle('off', !s.active);
   $('master-title').textContent = s.active ? 'Addon đang hoạt động' : 'Đã tắt tất cả chức năng';
   $('settings-group').classList.toggle('paused', !s.active);
+  fillList('watchKeywords', s.watchKeywords);
+  renderSync();
+  const watchHours = document.querySelector('[data-requires="remindUnanswered"]');
+  watchHours.classList.toggle('is-disabled', !s.remindUnanswered);
 }
 
 const saveSettings = (patch) => saveTo('settings', BG.DEFAULT_SETTINGS, patch, 'saved-hint');
@@ -257,3 +261,47 @@ for (const k of SETTING_BOOLS) {
   });
 }
 for (const k of SETTING_NUMS) $(k).addEventListener('change', () => saveSettings({ [k]: Number($(k).value) }));
+$('watchKeywords').addEventListener('change', () => saveSettings({ watchKeywords: BG.parseList($('watchKeywords').value) }));
+
+// ---------- Đồng bộ giữa các máy ----------
+
+const SYNC_KEY_LABELS = { settings: 'Cài đặt', rules: 'Quy tắc thành viên', postRules: 'Quy tắc bài viết', groupRules: 'Quy tắc riêng', welcome: 'Mẫu bài chào', shoutout: 'Mẫu bài vinh danh' };
+
+function renderSync() {
+  const on = !!data.settings.syncSettings;
+  $('syncSettings').checked = on;
+  $('btn-sync-now').hidden = !on;
+  const st = data.syncStatus;
+  const what = (keys) => (keys || []).map((k) => SYNC_KEY_LABELS[k] || k).join(', ');
+  let text = on ? 'Đang bật.' : 'Đang tắt.';
+  if (on && st?.at) text = `Lần cuối ${fmtTime(st.at)}: ${st.dir === 'pull' ? 'nhận từ máy khác' : 'gửi lên'}${st.keys?.length ? ' (' + what(st.keys) + ')' : ''}.`;
+  if (on && st?.skipped?.length) text += ` Không đồng bộ được vì quá 8 KB: ${what(st.skipped)} — dùng Sao lưu.`;
+  $('sync-status').textContent = text;
+}
+
+$('syncSettings').addEventListener('change', async () => {
+  if (!$('syncSettings').checked) return saveSettings({ syncSettings: false });
+  const st = await chrome.runtime.sendMessage({ type: 'syncStatus' });
+  let mode = 'push';
+  // Đã có bản đồng bộ từ máy khác: hỏi lấy bản nào
+  if (st?.keys?.length && st.fromOther) {
+    const pull = el('input', { type: 'radio', name: 'sync-mode', checked: true });
+    const push = el('input', { type: 'radio', name: 'sync-mode' });
+    const extra = el('div', { class: 'sync-choice' }, el('label', { class: 'check' }, pull, ` Dùng cài đặt đã đồng bộ từ máy khác (cập nhật ${fmtTime(st.at)})`), el('label', { class: 'check' }, push, ' Dùng cài đặt của máy này (ghi đè bản đồng bộ)'));
+    const ok = await confirmDialog({ title: 'Bật đồng bộ cài đặt?', text: 'Tài khoản trình duyệt đã có bản đồng bộ từ một máy khác.', okText: 'Bật đồng bộ', extra, local: true, sendNote: 'Chỉ đổi trong addon và tài khoản trình duyệt, không gửi gì lên Beincom.' });
+    if (!ok) {
+      $('syncSettings').checked = false;
+      return;
+    }
+    mode = pull.checked ? 'pull' : 'push';
+  }
+  const r = await chrome.runtime.sendMessage({ type: 'syncNow', mode, enable: true });
+  if (r?.status !== 'ok') return toast('Bật đồng bộ lỗi: ' + (r?.message || 'không rõ'), 'err');
+  toast(mode === 'pull' ? 'Đã bật đồng bộ và lấy cài đặt từ máy khác.' : 'Đã bật đồng bộ và gửi cài đặt của máy này lên.');
+});
+
+$('btn-sync-now').addEventListener('click', async () => {
+  const r = await chrome.runtime.sendMessage({ type: 'syncNow', mode: 'push' });
+  if (r?.status !== 'ok') return toast('Đồng bộ lỗi: ' + (r?.message || 'không rõ'), 'err');
+  toast(r.skipped?.length ? `Đã gửi lên; bỏ qua vì quá lớn: ${r.skipped.map((k) => SYNC_KEY_LABELS[k] || k).join(', ')}.` : 'Đã gửi cài đặt lên bản đồng bộ.');
+});

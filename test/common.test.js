@@ -780,3 +780,30 @@ test('bình luận và chào thành viên mới: kiểm tra nội dung, nhắc t
   assert.deepEqual(w.mentions.nguoi0, { id: 'u0', avatar: '', name: 'nguoi0', fullname: 'Người 0', isVerified: false });
   assert.match(BG.welcomeText('', { users: users.slice(0, 1), groupName: 'G' }).text, /^Chào mừng 1 thành viên mới của G 👋/);
 });
+
+test('vinh danh và theo dõi: xếp hạng thành viên, bài vinh danh, từ khoá theo dõi', () => {
+  const since = Date.parse('2026-10-02T00:00:00Z');
+  const A = { id: 'a', username: 'an', fullname: 'An' };
+  const B = { id: 'b', username: 'binh', fullname: 'Bình' };
+  const C = { id: 'c', username: 'chi', fullname: 'Chi' };
+  const ME = { id: 'me', username: 'kai' };
+  const posts = [
+    { actor: A, publishedAt: '2026-10-05T00:00:00Z', reactions: 20, commentsCount: 4 },
+    { actor: A, publishedAt: '2026-10-06T00:00:00Z', reactions: 3, commentsCount: 0 },
+    { actor: B, publishedAt: '2026-10-07T00:00:00Z', reactions: 0, commentsCount: 1 },
+    { actor: C, publishedAt: '2026-09-20T00:00:00Z', reactions: 99 }, // ngoài kỳ
+    { actor: ME, publishedAt: '2026-10-07T00:00:00Z', reactions: 50 },
+  ];
+  const comments = [{ actor: B, createdAt: '2026-10-07T01:00:00Z' }, { actor: B, createdAt: '2026-10-07T02:00:00Z' }, { actor: C, createdAt: '2026-10-08T00:00:00Z' }, { actor: C, createdAt: '2026-09-01T00:00:00Z' }];
+  const rows = BG.topMembers({ posts, comments, since, skipIds: ['me'] });
+  // An: 2×5 + 0 + 23×0,5 = 21,5 -> 22; Bình: 5 + 2 = 7; Chi: 1
+  assert.deepEqual(rows.map((r) => [r.user.id, r.posts, r.comments, r.reactions, r.replies, r.score]), [['a', 2, 0, 23, 4, 22], ['b', 1, 2, 0, 1, 7], ['c', 0, 1, 0, 0, 1]]);
+  assert.equal(BG.topMembers({ posts, comments, since, skipIds: ['me'], limit: 1 }).length, 1);
+  const t = BG.shoutoutText('Top {so_nguoi} của {group}:\n{danh_sach}', { rows: [...rows, { user: { id: 'd', username: 'du' }, posts: 0, comments: 1 }], groupName: 'Crypto Life' });
+  assert.equal(t.text, 'Top 4 của Crypto Life:\n🥇 @an — 2 bài\n🥈 @binh — 1 bài, 2 bình luận\n🥉 @chi — 1 bình luận\n4. @du — 1 bình luận');
+  assert.deepEqual(Object.keys(t.mentions), ['an', 'binh', 'chi', 'du']);
+  assert.match(BG.shoutoutText('', { rows: rows.slice(0, 1), groupName: 'G' }).text, /^Cảm ơn những thành viên tích cực nhất của G tuần qua 🏆\n\n🥇 @an/);
+  assert.deepEqual(BG.watchHits('Sàn này LUA DAO, không rút tiền được', ['lừa đảo', 'rút tiền', 'scam', '']), ['lừa đảo', 'rút tiền']);
+  assert.deepEqual(BG.watchHits('bình thường', ['lừa đảo']), []);
+  assert.equal(BG.readBackup({ app: 'BeinGroup', data: { settings: { unansweredHours: 500, watchKeywords: ['a', 1] } } }).data.settings.unansweredHours, 72);
+});

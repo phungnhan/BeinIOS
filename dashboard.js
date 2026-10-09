@@ -54,6 +54,7 @@ function renderAll() {
   renderBadges();
   renderTabRefresh();
   renderStatsHead();
+  renderTodo();
   renderGroups();
   renderWeekly();
   renderReview();
@@ -78,6 +79,7 @@ function renderAll() {
   updateCompose();
   renderScheduled();
   renderWelcome();
+  renderShoutout();
   renderRules();
   renderSettings();
   renderBackup();
@@ -85,7 +87,7 @@ function renderAll() {
 }
 
 async function loadAll() {
-  const { settings, rules, postRules, groupRules, recurring, state, log, templates, profiles } = await chrome.storage.local.get(['settings', 'rules', 'postRules', 'groupRules', 'recurring', 'state', 'log', 'templates', 'profiles']);
+  const { settings, rules, postRules, groupRules, recurring, state, log, templates, profiles, syncStatus } = await chrome.storage.local.get(['settings', 'rules', 'postRules', 'groupRules', 'recurring', 'state', 'log', 'templates', 'profiles', 'syncStatus']);
   data = {
     settings: { ...BG.DEFAULT_SETTINGS, ...settings },
     rules: { ...BG.DEFAULT_RULES, ...rules },
@@ -96,6 +98,7 @@ async function loadAll() {
     log: log || [],
     templates: templates || [],
     profiles: profiles || { users: {} },
+    syncStatus: syncStatus || null,
   };
   renderAll();
   await loadDraftOnce();

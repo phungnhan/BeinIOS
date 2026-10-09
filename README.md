@@ -27,6 +27,10 @@ Nút **↻ Tải lại** bên phải thanh tab chỉ tải dữ liệu của tab
 Tab Quy tắc & cài đặt và Nhật ký chỉ dùng dữ liệu trong máy nên không có nút.
 
 - **Tổng quan**
+  - **Việc cần làm** (đầu tab): gom việc đang chờ ở mọi tab thành một danh sách. Việc gấp lên trước (đợt spam, báo cáo, bài Beincom gắn cờ, bài / bình luận vi phạm, bài chờ duyệt dính quy tắc, yêu cầu gợi ý từ chối), mới nhất trước; rồi tới hàng chờ (bài chờ duyệt, yêu cầu tham gia: chờ lâu nhất trước); cuối cùng là bài chưa ai trả lời.
+    - Mỗi việc có nút xử lý ngay (Duyệt, Từ chối, Ẩn, Trả lời, Bình luận, Bỏ qua, Xem), vẫn qua hộp xác nhận như ở các tab. Lọc Gấp / Thành viên / Bài viết / Bình luận.
+    - Phím tắt: **J / K** chọn việc, **1, 2, 3** bấm nút tương ứng, **O** mở trên web. Xử lý xong một việc thì tự chọn việc kế tiếp.
+    - Popup có link **Mở hộp việc**.
   - Các ô số liệu: group đang quản trị, yêu cầu tham gia, bài chờ duyệt, bài mới vi phạm, báo cáo vi phạm, lần quét gần nhất. Bấm ô để mở tab tương ứng.
   - Bảng **Group bạn quản trị**: số thành viên, đang bật hay tắt duyệt thành viên và duyệt bài, số việc đang chờ (cột **Báo cáo** = báo cáo chờ xử lý + bài bị gắn cờ), link mở thẳng trang Beincom.
   - Group con nằm ngay dưới group gốc cùng community, thụt lề theo cấp. Bấm một dòng để mở tab Thành viên của group đó.
@@ -54,7 +58,7 @@ Tab Quy tắc & cài đặt và Nhật ký chỉ dùng dữ liệu trong máy n�
 - **Bài viết**
   - **Duyệt bài** (community bật duyệt bài và bạn quản trị group gốc): bài chờ duyệt kèm nội dung đầy đủ và đánh giá theo quy tắc bài viết. Duyệt hoặc từ chối kèm lý do gửi người đăng; từ chối một bài thì lý do được điền sẵn.
   - **Bài mới đăng**: 20 bài mới nhất của mỗi group sau mỗi lần quét, chấm theo quy tắc. Mục **Cần xử lý** gồm bài vi phạm và bài cần xem.
-    - Mục **Chưa ai trả lời**: bài đăng đã hơn 3 giờ (trong 7 ngày) mà chưa có bình luận nào (không tính bài của bạn), thường là câu hỏi của thành viên. Nút **💬 Bình luận** ở mỗi bài để trả lời ngay.
+    - Mục **Chưa ai trả lời**: bài đăng đã hơn 6 giờ (đổi ở Cài đặt → Theo dõi: 3 / 6 / 12 / 24 giờ; trong 7 ngày) mà chưa có bình luận nào (không tính bài của bạn), thường là câu hỏi của thành viên. Nút **💬 Bình luận** ở mỗi bài để trả lời ngay.
     - **Xoá bài**: chỉ với **bài của chính bạn**. Beincom không cho admin xoá bài của người khác.
     - **Ẩn bài**: với bài người khác, gỡ khỏi các group bạn quản trị, có chọn lý do. Addon chưa hiện lại được bài đã ẩn.
     - **Bỏ qua**: chỉ ẩn khỏi danh sách của addon.
@@ -102,6 +106,9 @@ Tab Quy tắc & cài đặt và Nhật ký chỉ dùng dữ liệu trong máy n�
   - **Chào thành viên mới**: chọn group và 7 / 14 / 30 ngày, bấm **Tìm người mới** (group gốc: danh sách thành viên mới vào trước, bỏ admin; group con: nhật ký vào / rời, bỏ người đã rời). Tick chọn người (người có hồ sơ vi phạm bỏ chọn sẵn), bấm **Soạn bài chào**: addon điền bài chào có @tên từng người (tối đa 50 người được nhắc) vào ô soạn bài, bạn xem lại rồi Đăng hoặc Hẹn giờ.
     - **Mẫu bài chào** sửa được, dùng `{so_nguoi}`, `{danh_sach}`, `{group}`.
     - Sáng thứ Hai (sau 8 giờ) có thông báo nhắc; bấm vào thì mở thẳng công cụ này và tìm người mới (tắt ở Cài đặt → Nhắc chào thành viên mới).
+  - **Vinh danh thành viên tích cực**: chọn group (group gốc tính cả các group con bạn quản trị), 7 / 30 ngày, Top 3 / 5 / 10, bấm **Tìm người tích cực**. Addon đọc bài trong khoảng (như tab Thống kê) và bình luận addon đã đọc, xếp theo điểm = 5 × số bài + số bình luận đã viết + nửa số cảm xúc bài nhận được (bỏ tài khoản của bạn).
+    - Bảng có số bài, bình luận đã viết, cảm xúc và bình luận nhận được; tick chọn người rồi **Soạn bài vinh danh**: bài có huy chương cho 3 người đầu và @tên từng người được điền vào ô soạn bài.
+    - **Mẫu bài vinh danh** sửa được (`{danh_sach}`, `{so_nguoi}`, `{group}`). Thông báo sáng thứ Hai nhắc cả chào thành viên mới lẫn vinh danh.
   - **Đăng dưới tên group**: khi chọn đúng một group mà bạn có quyền tạo bài của admin, tick "Đăng dưới tên group" để bài hiện với tên và ảnh của group (như nút trên web). Beincom còn phải bật tính năng này cho tài khoản; chưa bật thì addon báo lỗi rõ.
   - **Bài đăng định kỳ**: khi hẹn giờ, chọn **Lặp lại** (hằng ngày, hằng tuần, 2 tuần một lần, hằng tháng) và số bài (2–30).
     - Addon đặt trước từng bài hẹn giờ trên Beincom ngay lúc bấm, nên tới giờ Beincom tự đăng dù máy đang tắt. Hộp xác nhận ghi lịch đăng từng bài.
@@ -128,9 +135,14 @@ Tab Quy tắc & cài đặt và Nhật ký chỉ dùng dữ liệu trong máy n�
     - Quy tắc riêng của community (group gốc) dùng luôn cho các group con chưa có quy tắc riêng.
     - Group chưa có quy tắc riêng thì xem được quy tắc đang dùng (chỉ đọc). **Bỏ quy tắc riêng** để quay về quy tắc của community hoặc quy tắc chung.
     - Chấm yêu cầu tham gia, bài chờ duyệt, bài mới, tự xử lý và số trên icon đều theo quy tắc của group. Bài đăng vào nhiều group lấy kết quả nặng nhất.
+  - **Đồng bộ giữa các máy** (mặc định tắt): cài đặt, quy tắc chung và riêng, mẫu bài chào / vinh danh đi theo tài khoản Chrome / Edge sang máy khác có cài BeinGroup (chrome.storage.sync). Bật lần đầu mà tài khoản đã có bản đồng bộ từ máy khác thì addon hỏi lấy bản nào.
+    - Không đồng bộ: công tắc bật addon, công tắc đồng bộ (thuộc từng máy), mẫu bài đăng, hồ sơ vi phạm. Mục nào quá 8 KB (giới hạn của trình duyệt, vd quy tắc riêng của rất nhiều group) thì bỏ qua và ghi rõ — dùng Sao lưu.
   - **Sao lưu cài đặt**: **Tải bản sao lưu** tạo tệp JSON gồm cài đặt, quy tắc (chung và riêng), mẫu bài; tuỳ chọn kèm hồ sơ vi phạm. Không chứa mật khẩu hay phiên đăng nhập.
     - **Khôi phục từ tệp…**: hộp xác nhận ghi rõ các mục sẽ thay; hồ sơ vi phạm thì gộp thêm, không trùng.
     - Bản sao lưu đang tắt Chạy thử thì addon hỏi có giữ Chạy thử không (mặc định giữ). Tệp lạ / sai kiểu bị bỏ qua.
+- **Theo dõi** (Cài đặt → 🔔 Theo dõi):
+  - **Từ khoá cần để ý** (không phải vi phạm, vd "lừa đảo", "mất tiền", tên dự án): bài / bình luận mới nhắc tới thì có thông báo và hiện ở Việc cần làm (trong 3 ngày) với nút Bình luận / Trả lời / Bỏ qua.
+  - **Nhắc bài chưa ai trả lời**: bài của thành viên quá số giờ đã chọn mà chưa có bình luận thì thông báo, mỗi bài một lần.
 - **Nhật ký**: mọi thao tác (bấm tay, tự động, chạy thử, lỗi) kèm lý do và giờ đăng; lọc theo thành viên / bài viết; xuất CSV hoặc JSON.
 - Mọi thao tác ghi đều có hộp xác nhận ghi rõ số mục, group và đang chạy thử hay gửi thật.
 - **Thông báo và huy hiệu**:
@@ -234,13 +246,14 @@ Chi tiết từng API nằm trong [API.md](API.md). Tóm tắt:
 - **Xác thực**: header `x-application: BIC_GROUP`, `x-platform: WEB`, cookie của beincom.com. Gọi trực tiếp bị chặn thì addon mở tạm một tab Beincom ở nền rồi gọi trong tab đó, giống addon Beincom Check-in.
 
 ## Cấu trúc mã
-- `background.js`: service worker — quét, gọi API Beincom, thông báo, huy hiệu, mọi thao tác ghi (chạy lần lượt, có chạy thử).
+- `background.js` + `bg/`: service worker — quét, gọi API Beincom, thông báo, huy hiệu, mọi thao tác ghi (chạy lần lượt, có chạy thử).
 - `common.js`: hàm thuần dùng chung (quy tắc, chấm điểm, dựng body API, xuất CSV, sao lưu…), có test riêng.
 - `upload.js`: tải ảnh / video / tệp từ trang Dashboard. `charts.js`: biểu đồ SVG của tab Thống kê.
 - `dashboard.html` + `dashboard.css` + script theo tab trong `dash/`, nạp theo thứ tự cuối `dashboard.html` (script thường, dùng chung phạm vi toàn cục):
   - `core.js` (dữ liệu, tiện ích, hộp xác nhận, gửi thao tác, chuyển tab), `ui.js` (ô người dùng / bài dùng ở nhiều tab)
-  - `overview.js`, `members.js`, `content.js`, `reports.js`, `compose.js` + `attach.js` (đính kèm, nhắc tên, link, tag) + `welcome.js` (chào thành viên mới), `stats.js`, `settings.js`, `log.js`
+  - `todo.js` (hộp Việc cần làm), `overview.js`, `members.js`, `content.js`, `reports.js`, `compose.js` + `attach.js` (đính kèm, nhắc tên, link, tag) + `welcome.js` (chào thành viên mới) + `shoutout.js` (vinh danh), `stats.js`, `settings.js`, `log.js`
   - `dashboard.js` nạp cuối: sự kiện chung, vẽ lại toàn trang, nạp dữ liệu.
+- `background.js` (service worker) chỉ lo lịch chạy, sự kiện và nhận lệnh; phần còn lại trong `bg/` nạp bằng `importScripts`: `core.js` (gọi API, thao tác ghi, thông báo, hồ sơ vi phạm, hàng đợi), `scan.js` (quét, tự ẩn, đợt spam), `actions.js` (thao tác thành viên / bài / bình luận), `compose.js` (đăng bài, file, ghim, sửa bài), `manage.js` (cài đặt group, sao lưu, thống kê, báo cáo), `sync.js` (đồng bộ cài đặt giữa các máy).
 - `popup.html` / `popup.js`: cửa sổ nhỏ khi bấm icon.
 
 ## Kiểm thử
@@ -264,6 +277,7 @@ node --test "test/*.test.js"
   - Đợt spam: báo một lần mỗi đợt, ẩn cả đợt (bài + bình luận), bỏ qua / hiện lại; cấm ở mọi community đúng API và body
   - Viết bình luận / trả lời: đúng API và body, nhật ký ghi id bình luận mới, hiện ngay trong danh sách, chạy thử không gửi, báo lỗi rõ
   - Tìm người mới: group gốc đọc danh sách thành viên theo ngày vào (bỏ admin), group con đọc nhật ký (bỏ người đã rời), chỉ đọc
+  - Theo dõi từ khoá: chỉ báo bài / bình luận mới (không phải của mình, lần đầu quét chỉ ghi nhận); nhắc bài chưa ai trả lời mỗi bài một lần, theo số giờ trong cài đặt
   - Bị cấm: danh sách phân trang, gỡ cấm đúng API và body, admin group bị từ chối
   - Cài đặt group: quyền theo lần quét, đọc nhiều group, bật / tắt hàng loạt đúng API và body, duyệt bài cần admin community, chạy thử không gửi
   - Ghim (giới hạn 5, chỉ group mình quản trị), cài đặt bài, sửa bài (chỉ bài của mình, đúng body, cài đặt đổi mới gọi API cài đặt, chạy thử không gửi)

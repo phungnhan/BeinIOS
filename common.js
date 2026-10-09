@@ -24,6 +24,10 @@
     autoHideSpam: false, // tự ẩn bài / bình luận MỚI có link tới tên miền cấm (sau mỗi lần quét)
     spamWaves: true, // báo khi cùng một link / nội dung đến từ nhiều tài khoản trong thời gian ngắn
     welcomeReminder: true, // sáng thứ Hai nhắc soạn bài chào thành viên mới
+    watchKeywords: [], // bài / bình luận mới nhắc tới thì báo (không phải vi phạm)
+    remindUnanswered: true, // nhắc bài chưa ai trả lời quá unansweredHours giờ
+    unansweredHours: 6,
+    syncSettings: false, // đồng bộ cài đặt, quy tắc qua tài khoản Chrome / Edge (chrome.storage.sync)
   };
 
   // Quy tắc cho bài viết (bài chờ duyệt và bài mới đăng)
@@ -940,6 +944,7 @@
       const s = cleanLike(DEFAULT_SETTINGS, d.settings);
       if (s.intervalMin !== undefined) s.intervalMin = clampNum(Math.round(s.intervalMin), 5, 1440);
       if (s.actionDelaySec !== undefined) s.actionDelaySec = clampNum(s.actionDelaySec, 0, 60);
+      if (s.unansweredHours !== undefined) s.unansweredHours = clampNum(Math.round(s.unansweredHours), 1, 72);
       data.settings = s;
     }
     if (isObj(d.rules)) data.rules = cleanRules(d.rules);
@@ -1323,6 +1328,61 @@
       .replace(/\{danh_sach\}/g, list);
     const mentions = Object.fromEntries(shown.map((u) => [u.username, mentionEntry(u)]));
     return { text, mentions };
+  }
+
+  // ---------- Theo dõi từ khoá ----------
+  // Từ khoá cần để ý có trong nội dung (không phân biệt hoa thường và dấu, như từ khoá cấm)
+  function watchHits(text, keywords) {
+    const hay = norm(text);
+    return [...new Set((keywords || []).filter((k) => norm(k) && hay.includes(norm(k))))];
+  }
+
+  // ---------- Vinh danh thành viên tích cực ----------
+  // Điểm = 5 × số bài + 1 × số bình luận đã viết + 0,5 × cảm xúc bài nhận được (làm tròn). Bỏ tài khoản của mình.
+  const DEFAULT_SHOUTOUT = 'Cảm ơn những thành viên tích cực nhất của {group} tuần qua 🏆\n\n{danh_sach}\n\nCảm ơn mọi người đã chia sẻ và góp ý, tuần này tiếp tục nhé!';
+  const SHOUTOUT_MEDALS = ['🥇', '🥈', '🥉'];
+
+  // posts: bài trong khoảng (slimPost, có reactions / commentsCount); comments: bình luận addon đã đọc (slimComment)
+  function topMembers({ posts = [], comments = [], since = 0, skipIds = [], limit = 10 } = {}) {
+    const skip = new Set(skipIds.filter(Boolean));
+    const by = new Map();
+    const row = (u) => {
+      if (!u?.id || skip.has(u.id)) return null;
+      if (!by.has(u.id)) by.set(u.id, { user: { id: u.id, username: u.username || '', fullname: u.fullname || '', avatar: u.avatar || '' }, posts: 0, comments: 0, reactions: 0, replies: 0 });
+      return by.get(u.id);
+    };
+    for (const p of posts) {
+      if (Date.parse(p.publishedAt) < since) continue;
+      const r = row(p.actor);
+      if (!r) continue;
+      r.posts++;
+      r.reactions += p.reactions || 0;
+      r.replies += p.commentsCount || 0;
+    }
+    for (const c of comments) {
+      if (Date.parse(c.createdAt) < since) continue;
+      const r = row(c.actor);
+      if (r) r.comments++;
+    }
+    return [...by.values()]
+      .map((r) => ({ ...r, score: Math.round(r.posts * 5 + r.comments + r.reactions * 0.5) }))
+      .filter((r) => r.score > 0)
+      .sort((a, b) => b.score - a.score || b.posts - a.posts || b.comments - a.comments)
+      .slice(0, limit);
+  }
+
+  // Bài vinh danh: {danh_sach} = mỗi người một dòng (huy chương cho 3 người đầu), {so_nguoi}, {group}
+  function shoutoutText(template, { rows = [], groupName = '' } = {}) {
+    const named = rows.filter((r) => r.user?.id && r.user.username);
+    const lines = named.map((r, i) => {
+      const parts = [r.posts && `${r.posts} bài`, r.comments && `${r.comments} bình luận`].filter(Boolean).join(', ');
+      return `${SHOUTOUT_MEDALS[i] || i + 1 + '.'} @${r.user.username}${parts ? ' — ' + parts : ''}`;
+    });
+    const text = String(template || DEFAULT_SHOUTOUT)
+      .replace(/\{so_nguoi\}/g, String(named.length))
+      .replace(/\{group\}/g, groupName)
+      .replace(/\{danh_sach\}/g, lines.join('\n'));
+    return { text, mentions: Object.fromEntries(named.map((r) => [r.user.username, mentionEntry(r.user)])) };
   }
 
   const CONTENT_STATUS = {
@@ -1826,6 +1886,10 @@
     DEFAULT_WELCOME,
     newMembersFromActivity,
     welcomeText,
+    watchHits,
+    DEFAULT_SHOUTOUT,
+    topMembers,
+    shoutoutText,
     domainIn,
     linkKeys,
     spamWaves,
