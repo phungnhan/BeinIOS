@@ -37,6 +37,7 @@ const RECENT_MAX = 300; // số bài mới giữ lại để xem
 const COMMENT_POSTS_PER_SCAN = 8; // mỗi lần quét đọc bình luận của tối đa ngần này bài (bài có bình luận mới)
 const COMMENT_PAGE = 25; // bình luận mới nhất đọc mỗi bài (API content/ nhận tối đa 25)
 const REPLY_FETCH_PER_SCAN = 10; // mỗi lần quét đọc trả lời của tối đa ngần này bình luận (có trả lời mới)
+const AUTO_HIDE_MAX = 20; // mỗi lần quét tự ẩn tối đa ngần này bài / bình luận
 const REPORT_SCAN_TIMEOUT = 15000; // quét định kỳ chờ API báo cáo ngắn hơn khi mở tab Báo cáo
 
 // Phải tự chứa (không dùng biến ngoài) vì còn được inject vào tab group.beincom.com.
@@ -717,11 +718,13 @@ function applyPosts(state, next, posts, ctx, notifyAllowed, now) {
     notify('bg-flagged', `BeinGroup: ${badNew.length} bài mới vi phạm quy tắc`, badNew.map((p) => p.actor.fullname || p.actor.username).join(', '));
   }
   next.recentPosts = list;
+  // Lần quét bài đầu tiên chỉ ghi nhận: không coi là mới để tự ẩn
+  return state.recentPosts ? badNew : [];
 }
 
 // Ghi bình luận vừa đọc: báo bình luận mới vi phạm (lần đầu đọc bình luận chỉ ghi nhận)
 function applyComments(state, next, scan, ctx, notifyAllowed, now) {
-  if (!scan) return;
+  if (!scan) return [];
   const { list, fresh } = BG.mergeComments(state.recentComments, scan.comments, now);
   const freshSet = new Set(fresh);
   const reasons = (c) => BG.evaluatePostIn(c, ctx).reasons.filter((x) => x.level !== 'ok').map((x) => x.text).join('; ');
@@ -731,9 +734,100 @@ function applyComments(state, next, scan, ctx, notifyAllowed, now) {
     notify('bg-comments', `BeinGroup: ${badNew.length} bình luận mới vi phạm quy tắc`, badNew.map((c) => c.actor.fullname || c.actor.username).join(', '));
   }
   next.recentComments = list;
+  scan.badNew = state.recentComments ? badNew : [];
   // Chỉ nhớ số bình luận đã đọc của các bài còn trong danh sách bài mới
   const keep = new Set((next.recentPosts || state.recentPosts || []).map((p) => p.id));
   next.commentSeen = Object.fromEntries(Object.entries({ ...(state.commentSeen || {}), ...scan.read }).filter(([id]) => keep.has(id)));
+  return scan.badNew;
+}
+
+// ---------- Spam: tự ẩn, đợt spam ----------
+
+// Lệnh ẩn một bài: chỉ ẩn ở những group bài được đăng mà mình quản trị
+function postHideItem(post, groups, reasonType, source, extra = {}) {
+  const adminIds = new Set(groups.map((g) => g.id));
+  const groupIds = [...new Set([...(post.groups || []).map((x) => x.id).filter((id) => adminIds.has(id)), ...(post.seenIn || []).filter((id) => adminIds.has(id))])];
+  if (!groupIds.length) return null;
+  const g = groups.find((x) => x.id === groupIds[0]);
+  return {
+    log: { ...postLog(source, 'hide', post, g), reason: BG.HIDE_REASONS[reasonType], groupIds, ...extra },
+    call: (c) => c.call('POST', `content/contents/${post.id}/hide`, { reasonType, groupIds }),
+    gone: true,
+  };
+}
+
+// Lệnh ẩn một bình luận (POST content/comments/{id}/hide { reasonType }, như web)
+function commentHideItem(c, groups, reasonType, source, extra = {}) {
+  const g = groups.find((x) => c.seenIn?.includes(x.id)) || c.groups?.[0];
+  return {
+    log: {
+      kind: 'comment',
+      source,
+      action: 'hide',
+      groupId: g?.id || '',
+      groupName: g?.name || '',
+      communityName: g?.communityName || '',
+      contentId: c.id,
+      postId: c.postId,
+      contentType: 'COMMENT',
+      snippet: String(c.text || '').replace(/\s+/g, ' ').slice(0, 120),
+      reason: BG.HIDE_REASONS[reasonType],
+      userId: c.actor?.id || '',
+      username: c.actor?.username || '',
+      fullname: c.actor?.fullname || '',
+      ...extra,
+    },
+    call: (cl) => cl.call('POST', `content/comments/${c.id}/hide`, { reasonType }),
+    gone: true,
+  };
+}
+
+// Đánh dấu đã ẩn / bỏ mục không còn trên Beincom trong danh sách bài, bình luận
+function markHidden(next, entries) {
+  const hidden = new Set(entries.filter((e) => e.status === 'ok').map((e) => e.contentId));
+  const gone = new Set(entries.filter((e) => e.gone).map((e) => e.contentId));
+  const upd = (list) => (list ? list.filter((x) => !gone.has(x.id)).map((x) => (hidden.has(x.id) ? { ...x, isHidden: true } : x)) : list);
+  next.recentPosts = upd(next.recentPosts);
+  next.recentComments = upd(next.recentComments);
+  next.snapshot = dropFromSnapshot(next.snapshot, 'flaggedIds', hidden);
+  return hidden.size;
+}
+
+// Tự ẩn bài / bình luận MỚI có link tới tên miền cấm (bật ở Cài đặt). Bỏ qua bài / bình luận của chính mình.
+async function autoHideSpam({ settings, state, next, log, ctx, posts = [], comments = [], notifyAllowed }) {
+  if (!settings.active || !settings.autoHideSpam) return;
+  const meId = next.me?.id || state.me?.id;
+  const groups = next.snapshot?.groups || [];
+  const pick = (x) => !x.isHidden && x.actor?.id !== meId && BG.blockedHits(x, ctx).length;
+  const why = (x) => ({ autoReason: 'Link tới tên miền cấm: ' + BG.blockedHits(x, ctx).join(', ') });
+  const items = [
+    ...posts.filter(pick).map((p) => postHideItem(p, groups, 'SPAM', 'auto', why(p))),
+    ...comments.filter(pick).map((c) => commentHideItem(c, groups, 'SPAM', 'auto', why(c))),
+  ]
+    .filter(Boolean)
+    .slice(0, AUTO_HIDE_MAX);
+  if (!items.length) return;
+  const r = await performActions(items, settings);
+  pushLog(log, r.entries);
+  const n = markHidden(next, r.entries);
+  if (n && notifyAllowed) notify('bg-autohide', `BeinGroup: đã tự ẩn ${n} bài / bình luận`, 'Có link tới tên miền cấm. Xem ở tab Nhật ký.');
+}
+
+// Báo đợt spam mới (mỗi đợt một lần)
+function notifyWaves(state, next, settings, postRules, notifyAllowed, now) {
+  if (!settings.spamWaves) return;
+  const waves = BG.spamWaves(BG.waveItems(next.recentPosts, settings.scanComments ? next.recentComments : []), {
+    now,
+    allowed: ['beincom.com', ...(postRules.allowedDomains || [])],
+    skipActorIds: [next.me?.id || state.me?.id].filter(Boolean),
+  });
+  const known = new Set(state.knownWaves || []);
+  const fresh = waves.filter((w) => !known.has(w.key) && !(state.dismissedWaves || []).includes(w.key));
+  if (fresh.length && notifyAllowed && state.recentPosts) {
+    const w = fresh[0];
+    notify('bg-wave', `BeinGroup: phát hiện ${fresh.length > 1 ? fresh.length + ' đợt' : 'đợt'} spam`, `${w.type === 'link' ? w.label : '"' + w.label + '"'}: ${w.accounts.length} tài khoản, ${w.items.length} bài / bình luận`);
+  }
+  next.knownWaves = [...new Set([...waves.map((w) => w.key), ...(state.knownWaves || [])])].slice(0, 200);
 }
 
 // Báo cáo chờ xử lý mới và bài mới bị Beincom gắn cờ (lần quét đầu chỉ ghi nhận)
@@ -792,8 +886,11 @@ async function doRefresh({ part }) {
     applyGroups(state, next, result.groups, false, now);
     next.snapshot.at = state.snapshot.at; // giờ quét toàn bộ gần nhất giữ nguyên
     if (part === 'content' && settings.scanPosts) {
-      applyPosts(state, next, result.posts, rulesCtx(loaded, next.snapshot.groups), false, now);
-      applyComments(state, next, result.comments, rulesCtx(loaded, next.snapshot.groups), false, now);
+      const ctx = rulesCtx(loaded, next.snapshot.groups);
+      const badPosts = applyPosts(state, next, result.posts, ctx, false, now);
+      const badComments = applyComments(state, next, result.comments, ctx, false, now);
+      await autoHideSpam({ settings, state, next, log, ctx, posts: badPosts, comments: badComments, notifyAllowed: false });
+      notifyWaves(state, next, settings, loaded.postRules, false, now);
     }
   }
   await chrome.storage.local.set({ state: next, log });
@@ -844,12 +941,22 @@ async function doScan({ source = 'alarm' } = {}) {
     if (settings.scanReports) applyReports(state, next, groups, notifyAllowed);
     if (result.me) next.me = result.me;
     if (settings.scanPosts) {
-      applyPosts(state, next, result.posts, rulesCtx(loaded, next.snapshot.groups), notifyAllowed, now);
-      applyComments(state, next, result.comments, rulesCtx(loaded, next.snapshot.groups), notifyAllowed, now);
+      const ctx = rulesCtx(loaded, next.snapshot.groups);
+      const badPosts = applyPosts(state, next, result.posts, ctx, notifyAllowed, now);
+      const badComments = applyComments(state, next, result.comments, ctx, notifyAllowed, now);
+      await autoHideSpam({ settings, state, next, log, ctx, posts: badPosts, comments: badComments, notifyAllowed });
+      notifyWaves(state, next, settings, loaded.postRules, notifyAllowed, now);
     }
   } else if (result.status === 'need_login' && notifyAllowed && state.lastLoginNotifyDay !== BG.vnDay()) {
     next.lastLoginNotifyDay = BG.vnDay();
     notify('bg-login', 'BeinGroup: cần đăng nhập', 'Bấm để mở Beincom và đăng nhập lại.');
+  }
+
+  // Sáng thứ Hai: nhắc soạn bài chào thành viên mới (mở thẳng công cụ ở tab Đăng bài)
+  const welcomeKey = settings.welcomeReminder && notifyAllowed && result.status === 'ok' ? BG.weeklyDue(state.welcomeKey, now) : null;
+  if (welcomeKey) {
+    next.welcomeKey = welcomeKey;
+    notify('bg-welcome', 'BeinGroup: chào thành viên mới tuần này', 'Bấm để addon tìm người mới vào group trong 7 ngày và soạn sẵn bài chào.');
   }
 
   // Sáng thứ Hai: thông báo tóm tắt tuần trước (một lần mỗi tuần, chỉ khi quét tự động thành công)
@@ -955,19 +1062,10 @@ async function doPostAct({ action, contentIds, reasonType = 'OTHERS', source = '
   if (!BG.HIDE_REASONS[reasonType]) return { status: 'error', message: 'Lý do ẩn không hợp lệ' };
 
   const groups = state.snapshot?.groups || [];
-  const adminIds = new Set(groups.map((g) => g.id));
-  const items = [];
-  for (const post of recent.filter((p) => ids.has(p.id) && !p.isHidden)) {
-    // Chỉ ẩn ở những group bài được đăng mà mình đang quản trị
-    const groupIds = [...new Set([...post.groups.map((x) => x.id).filter((id) => adminIds.has(id)), ...(post.seenIn || []).filter((id) => adminIds.has(id))])];
-    if (!groupIds.length) continue;
-    const g = groups.find((x) => x.id === groupIds[0]);
-    items.push({
-      log: { ...postLog(source, 'hide', post, g), reason: BG.HIDE_REASONS[reasonType], groupIds },
-      call: (c) => c.call('POST', `content/contents/${post.id}/hide`, { reasonType, groupIds }),
-      gone: true,
-    });
-  }
+  const items = recent
+    .filter((p) => ids.has(p.id) && !p.isHidden)
+    .map((post) => postHideItem(post, groups, reasonType, source))
+    .filter(Boolean);
   if (!items.length) return { status: 'error', message: 'Không có bài nào ẩn được (bài đã ẩn hoặc không thuộc group bạn quản trị)' };
 
   const r = await performActions(items, settings);
@@ -999,31 +1097,7 @@ async function doCommentAct({ action, commentIds, reasonType = 'OTHERS', source 
   if (action !== 'hide') return { status: 'error', message: 'Thao tác không hợp lệ' };
   if (!BG.HIDE_REASONS[reasonType]) return { status: 'error', message: 'Lý do ẩn không hợp lệ' };
   const groups = state.snapshot?.groups || [];
-  const items = recent
-    .filter((c) => ids.has(c.id) && !c.isHidden)
-    .map((c) => {
-      const g = groups.find((x) => c.seenIn?.includes(x.id)) || c.groups?.[0];
-      return {
-        log: {
-          kind: 'comment',
-          source,
-          action: 'hide',
-          groupId: g?.id || '',
-          groupName: g?.name || '',
-          communityName: g?.communityName || '',
-          contentId: c.id,
-          postId: c.postId,
-          contentType: 'COMMENT',
-          snippet: String(c.text || '').replace(/\s+/g, ' ').slice(0, 120),
-          reason: BG.HIDE_REASONS[reasonType],
-          userId: c.actor?.id || '',
-          username: c.actor?.username || '',
-          fullname: c.actor?.fullname || '',
-        },
-        call: (cl) => cl.call('POST', `content/comments/${c.id}/hide`, { reasonType }),
-        gone: true,
-      };
-    });
+  const items = recent.filter((c) => ids.has(c.id) && !c.isHidden).map((c) => commentHideItem(c, groups, reasonType, source));
   if (!items.length) return { status: 'error', message: 'Không có bình luận nào ẩn được (đã ẩn hoặc không còn trong danh sách)' };
   const r = await performActions(items, settings);
   pushLog(log, r.entries);
@@ -1034,6 +1108,139 @@ async function doCommentAct({ action, commentIds, reasonType = 'OTHERS', source 
   await chrome.storage.local.set({ state: next, log });
   await updateBadge();
   return summary(r, settings);
+}
+
+// Đợt spam: ẩn cả đợt (bài + bình luận) hoặc bỏ qua / hiện lại đợt (chỉ trong addon)
+async function doSpamAct({ action, key = '', postIds = [], commentIds = [], reasonType = 'SPAM', source = 'manual' }) {
+  const { settings, state, log } = await load();
+  if (action === 'dismiss' || action === 'undismiss') {
+    if (!key) return { status: 'error', message: 'Thiếu đợt spam' };
+    const list = (state.dismissedWaves || []).filter((k) => k !== key);
+    const next = { ...state, dismissedWaves: action === 'dismiss' ? [key, ...list].slice(0, 200) : list };
+    await chrome.storage.local.set({ state: next });
+    return { status: 'ok', ok: 1, dry: 0, failed: 0, errors: [], dryRun: false };
+  }
+  if (action !== 'hide') return { status: 'error', message: 'Thao tác không hợp lệ' };
+  if (!BG.HIDE_REASONS[reasonType]) return { status: 'error', message: 'Lý do ẩn không hợp lệ' };
+  const groups = state.snapshot?.groups || [];
+  const pIds = new Set(postIds);
+  const cIds = new Set(commentIds);
+  const items = [
+    ...(state.recentPosts || []).filter((p) => pIds.has(p.id) && !p.isHidden).map((p) => postHideItem(p, groups, reasonType, source)),
+    ...(state.recentComments || []).filter((c) => cIds.has(c.id) && !c.isHidden).map((c) => commentHideItem(c, groups, reasonType, source)),
+  ].filter(Boolean);
+  if (!items.length) return { status: 'error', message: 'Không còn bài / bình luận nào để ẩn trong đợt này' };
+  const r = await performActions(items, settings);
+  pushLog(log, r.entries);
+  const next = { ...state };
+  markHidden(next, r.entries);
+  if (r.status === 'need_login') next.lastResult = { status: 'need_login', message: NEED_LOGIN.message, mode: r.mode || '' };
+  await chrome.storage.local.set({ state: next, log });
+  await updateBadge();
+  return summary(r, settings);
+}
+
+// Cấm một người ở mọi community mình là chủ / admin (POST group/communities/{cid}/users/{uid}/ban)
+async function doBanEverywhere({ user, reason = 'VIOLATE_RULE', source = 'manual' }) {
+  if (!user?.id) return { status: 'error', message: 'Thiếu người cần cấm' };
+  if (!BG.BAN_REASONS[reason]) return { status: 'error', message: 'Lý do cấm không hợp lệ' };
+  const { settings, state, log } = await load();
+  const targets = BG.banTargets(state.snapshot?.groups);
+  if (!targets.length) return { status: 'error', message: 'Bạn không là chủ / admin community nào nên không cấm được' };
+  const items = targets.map((g) => ({
+    log: { kind: 'manage', source, action: 'ban', groupId: g.id, groupName: g.name, communityName: g.communityName || g.name, userId: user.id, username: user.username || '', fullname: user.fullname || '', reason: BG.BAN_REASONS[reason] },
+    call: memberActionCall('ban', g, user.id, reason),
+  }));
+  const r = await performActions(items, settings);
+  pushLog(log, r.entries);
+  const next = r.status === 'need_login' ? { ...state, lastResult: { status: 'need_login', message: NEED_LOGIN.message, mode: r.mode || '' } } : state;
+  await chrome.storage.local.set({ state: next, log });
+  if (r.status === 'need_login') await updateBadge();
+  return { ...summary(r, settings), done: r.entries.filter((e) => e.status === 'ok').map((e) => e.groupId) };
+}
+
+// Viết bình luận vào bài (commentId rỗng) hoặc trả lời một bình luận gốc (như web)
+async function doCommentWrite({ postId, commentId = '', content, mentions = {}, source = 'manual' }) {
+  const err = BG.validateComment(content);
+  if (err) return { status: 'error', message: err };
+  if (!postId) return { status: 'error', message: 'Thiếu bài cần bình luận' };
+  const { settings, state, log } = await load();
+  const post = (state.recentPosts || []).find((p) => p.id === postId) || (state.recentComments || []).find((c) => c.postId === postId && c.groups?.length) || {};
+  const groups = state.snapshot?.groups || [];
+  const g = groups.find((x) => post.seenIn?.includes(x.id)) || post.groups?.[0];
+  const body = { postId, content: String(content).trim(), media: { images: [] }, mentions: mentions || {} };
+  const item = {
+    log: {
+      kind: 'comment',
+      source,
+      action: commentId ? 'reply' : 'comment',
+      groupId: g?.id || '',
+      groupName: g?.name || '',
+      communityName: g?.communityName || '',
+      contentId: commentId || '',
+      postId,
+      contentType: 'COMMENT',
+      snippet: body.content.replace(/\s+/g, ' ').slice(0, 120),
+    },
+    call: (c) => c.call('POST', commentId ? `content/comments/${commentId}/reply` : 'content/comments', body),
+  };
+  let created = null;
+  const r = await performActions([{ ...item, call: async (c) => {
+    const res = await item.call(c);
+    if (BG.isOk(res) && res.body.data?.id) created = res.body.data;
+    return res;
+  } }], settings);
+  // Nhật ký ghi id bình luận mới (trả lời thì nhớ thêm bình luận được trả lời)
+  if (created) r.entries[0] = { ...r.entries[0], contentId: created.id, replyTo: commentId || '' };
+  pushLog(log, r.entries);
+  const next = { ...state };
+  // Bình luận vừa viết vào danh sách luôn (không cần chờ lần quét sau)
+  if (created) {
+    const postInfo = (state.recentPosts || []).find((p) => p.id === postId) || { id: postId, groups: post.groups || [], seenIn: post.seenIn || [], type: post.postType || 'POST', text: post.postSnippet || '' };
+    const c = BG.slimComment({ ...created, actor: created.actor || state.me || {} }, postInfo);
+    next.recentComments = BG.mergeComments(state.recentComments, [c]).list;
+  }
+  if (r.status === 'need_login') next.lastResult = { status: 'need_login', message: NEED_LOGIN.message, mode: r.mode || '' };
+  await chrome.storage.local.set({ state: next, log });
+  return { ...summary(r, settings), commentId: created?.id || null };
+}
+
+// Người mới vào group trong `days` ngày: group gốc đọc danh sách thành viên (mới vào trước), group con đọc nhật ký hoạt động
+const NEW_MEMBER_PAGES = 10;
+async function doNewMembers({ groupId, days = 7 }) {
+  const g = await findGroup(groupId);
+  if (!g) return { status: 'error', message: 'Không tìm thấy group — hãy quét lại' };
+  const since = Date.now() - Math.max(1, Math.min(90, Number(days) || 7)) * 864e5;
+  return withClient(async (client) => {
+    const items = [];
+    let truncated = false;
+    if (g.isCommunity) {
+      let offset = 0;
+      for (let page = 0; page < NEW_MEMBER_PAGES; page++) {
+        const r = await client.call('GET', `group/manage/communities/${g.communityId}/members?${qs({ limit: PAGE, offset, sort: 'joined_at:desc' })}`);
+        if (r.status === 401) return { ...NEED_LOGIN };
+        if (!BG.isOk(r)) return { status: 'error', message: 'Đọc thành viên lỗi: ' + BG.errMsg(r) };
+        const list = (Array.isArray(r.body.data) ? r.body.data : []).map((u) => BG.slimMember(u));
+        const fresh = list.filter((u) => Date.parse(u.joinedAt) >= since);
+        items.push(...fresh);
+        offset += list.length;
+        if (fresh.length < list.length || !r.body.meta?.hasNextPage || !list.length) break;
+        if (page === NEW_MEMBER_PAGES - 1) truncated = true;
+      }
+      return { status: 'ok', source: 'members', since, truncated, items: items.filter((u) => !u.isDeactivated && !u.isAdmin && !u.isCommunityAdmin) };
+    }
+    const events = [];
+    for (let page = 1; page <= NEW_MEMBER_PAGES; page++) {
+      const r = await client.call('GET', `group/groups/${g.id}/activity-logs?${qs({ limit: PAGE, page, sort: 'desc' })}`);
+      if (r.status === 401) return { ...NEED_LOGIN };
+      if (!BG.isOk(r)) return { status: 'error', message: 'Đọc nhật ký hoạt động lỗi: ' + BG.errMsg(r) };
+      const list = (Array.isArray(r.body.data) ? r.body.data : []).map(BG.slimActivity);
+      events.push(...list);
+      if (!list.length || !r.body.meta?.hasNextPage || list.some((a) => Date.parse(a.time) < since)) break;
+      if (page === NEW_MEMBER_PAGES) truncated = true;
+    }
+    return { status: 'ok', source: 'activity', since, truncated, items: BG.newMembersFromActivity(events, since) };
+  });
 }
 
 // ---------- Thành viên (đọc khi Dashboard cần, không lưu vào storage) ----------
@@ -1889,8 +2096,9 @@ chrome.storage.onChanged.addListener((changes, area) => {
 // Bấm thông báo: mở thẳng tab Dashboard liên quan
 function notificationTab(id) {
   if (id === 'bg-requests' || id === 'bg-auto') return 'members';
-  if (id === 'bg-flagged' || id === 'bg-comments' || id.startsWith('bg-posts-')) return 'content';
+  if (id === 'bg-flagged' || id === 'bg-comments' || id === 'bg-autohide' || id === 'bg-wave' || id.startsWith('bg-posts-')) return 'content';
   if (id === 'bg-weekly') return 'overview';
+  if (id === 'bg-welcome') return 'compose&welcome=1';
   if (id === 'bg-reports' || id === 'bg-autoflag') return 'reports';
   return '';
 }
@@ -1919,6 +2127,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     groupSettings: () => doGroupSettings(msg),
     banned: () => doBanned(msg),
     tagsSeries: () => doTagsSeries(msg),
+    newMembers: () => doNewMembers(msg),
     linkPreview: () => doLinkPreview(msg),
   };
   if (reads[msg?.type]) {
@@ -1932,6 +2141,9 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     approvalAct: () => doApprovalAct(msg),
     postAct: () => doPostAct(msg),
     commentAct: () => doCommentAct(msg),
+    spamAct: () => doSpamAct(msg),
+    banEverywhere: () => doBanEverywhere(msg),
+    commentWrite: () => doCommentWrite(msg),
     memberAct: () => doMemberAct(msg),
     compose: () => doCompose(msg),
     scheduleAct: () => doScheduleAct(msg),

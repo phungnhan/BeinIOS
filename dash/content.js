@@ -104,6 +104,7 @@ function recentRows() {
 }
 
 function inFilter(r, f) {
+  if (f === 'unanswered') return !r.p.dismissed && BG.isUnanswered(r.p, { meId: data.state.me?.id });
   if (f === 'hidden') return r.p.isHidden;
   if (f === 'dismissed') return r.p.dismissed && !r.p.isHidden;
   if (f === 'all') return !r.p.isHidden;
@@ -112,13 +113,14 @@ function inFilter(r, f) {
 
 function renderRecent() {
   const rows = recentRows();
-  setCounts('rcnt', Object.fromEntries(['flagged', 'all', 'dismissed', 'hidden'].map((f) => [f, rows.filter((r) => inFilter(r, f)).length])));
+  setCounts('rcnt', Object.fromEntries(['flagged', 'all', 'unanswered', 'dismissed', 'hidden'].map((f) => [f, rows.filter((r) => inFilter(r, f)).length])));
   setSegActive('recent-filter', recentFilter);
   const adminIds = new Set(groups().map((g) => g.id));
 
   const note = $('recent-note');
   if (!data.settings.scanPosts) note.textContent = 'Đang tắt "Quét bài mới đăng" ở phần Cài đặt.';
   else if (!data.state.recentPosts) note.textContent = data.state.snapshot ? 'Chưa quét bài mới — bấm Quét ngay.' : '';
+  else if (recentFilter === 'unanswered') note.textContent = 'Bài đăng đã hơn 3 giờ (trong 7 ngày) mà chưa có bình luận nào, theo số bình luận ở lần quét gần nhất. Bấm 💬 Bình luận để trả lời ngay.';
   else note.textContent = 'Xoá bài: chỉ với bài của chính bạn (Beincom không cho admin xoá bài người khác). Ẩn bài: gỡ bài người khác khỏi các group bạn quản trị; addon chưa hiện lại được. Bỏ qua: chỉ ẩn khỏi danh sách này.';
 
   pruneSelection(selectedRecent, new Set(rows.map((r) => r.p.id)));
@@ -133,7 +135,7 @@ function renderRecent() {
   const body = $('recent-body');
   body.replaceChildren();
   if (!shown.length) {
-    const msg = !data.state.recentPosts ? 'Chưa có dữ liệu' : recentFilter === 'flagged' ? 'Không có bài nào cần xử lý 🎉' : 'Không có bài nào trong mục này';
+    const msg = !data.state.recentPosts ? 'Chưa có dữ liệu' : recentFilter === 'flagged' ? 'Không có bài nào cần xử lý 🎉' : recentFilter === 'unanswered' ? 'Bài nào cũng đã có người trả lời 🎉' : 'Không có bài nào trong mục này';
     body.append(el('tr', { class: 'empty-row' }, el('td', { colspan: 7, text: msg })));
   }
   for (const { p, ev } of shown) {
@@ -150,6 +152,7 @@ function renderRecent() {
         el(
           'span',
           { class: 'act-break' },
+          el('button', { class: 'ghost sm', disabled: busy, text: '💬 Bình luận', title: 'Viết bình luận vào bài (dưới tên tài khoản của bạn)', onclick: () => commentOnPost(p) }),
           el('button', { class: 'ghost sm', disabled: busy, text: '📌 Ghim', title: 'Ghim / bỏ ghim bài ở các group bạn quản trị (tối đa 5 bài mỗi group)', onclick: () => pinPost(p) }),
           el('button', { class: 'ghost sm', disabled: busy, text: '⚙ Cài đặt', title: 'Bật / tắt bình luận, cảm xúc, đánh dấu Quan trọng', onclick: () => settingPost(p) }),
           isMine(p) ? el('button', { class: 'ghost sm', disabled: busy, text: '✎ Sửa', title: 'Sửa nội dung bài đã đăng', onclick: () => editPost(p) }) : null,
@@ -222,6 +225,113 @@ async function hidePosts(posts) {
   renderRecent();
 }
 
+// ---------- Đợt spam ----------
+
+let wavesShowDismissed = false;
+
+function currentWaves() {
+  return BG.spamWaves(BG.waveItems(data.state.recentPosts, data.settings.scanComments ? data.state.recentComments : []), {
+    allowed: ['beincom.com', ...(data.postRules.allowedDomains || [])],
+    skipActorIds: [data.state.me?.id].filter(Boolean),
+  });
+}
+
+function waveEntries(w) {
+  const posts = new Map((data.state.recentPosts || []).map((p) => [p.id, p]));
+  const comments = new Map((data.state.recentComments || []).map((c) => [c.id, c]));
+  return w.items.map((i) => (i.kind === 'post' ? posts.get(i.id) : comments.get(i.id))).filter(Boolean);
+}
+
+function renderWaves() {
+  const card = $('waves');
+  if (!data.settings.spamWaves || !data.settings.scanPosts) {
+    card.hidden = true;
+    return;
+  }
+  const dismissed = new Set(data.state.dismissedWaves || []);
+  const all = currentWaves();
+  const active = all.filter((w) => !dismissed.has(w.key));
+  const shown = wavesShowDismissed ? all : active;
+  // Không còn đợt nào đang hoạt động: ẩn cả thẻ (trừ khi đang xem các đợt đã bỏ qua)
+  card.hidden = !active.length && !(wavesShowDismissed && all.length);
+  $('waves-count').textContent = active.length ? String(active.length) : '';
+  const hiddenCount = all.length - active.length;
+  $('btn-waves-dismissed').hidden = !hiddenCount;
+  $('btn-waves-dismissed').textContent = wavesShowDismissed ? 'Ẩn đợt đã bỏ qua' : `Xem ${hiddenCount} đợt đã bỏ qua`;
+  const blocked = data.postRules.blockedDomains || [];
+  $('waves-list').replaceChildren(
+    ...(shown.length
+      ? shown.map((w) => {
+          const isDismissed = dismissed.has(w.key);
+          const open = w.items.filter((i) => !i.isHidden);
+          const posts = w.items.filter((i) => i.kind === 'post').length;
+          const comments = w.items.length - posts;
+          const hostBlocked = !!w.host && BG.domainIn(w.host, blocked);
+          return el(
+            'div',
+            { class: 'wave' + (isDismissed ? ' dismissed' : '') },
+            el(
+              'div',
+              {},
+              el('div', { class: 'wave-title' }, w.type === 'link' ? ['Link ', el('code', { text: w.label })] : ['Nội dung giống nhau: ', el('i', { text: `"${w.label}"` })]),
+              el('div', { class: 'wave-meta', text: `${w.accounts.length} tài khoản · ${[posts && posts + ' bài', comments && comments + ' bình luận'].filter(Boolean).join(', ')} · ${fmtTime(w.first)} → ${fmtTime(w.last)}${open.length < w.items.length ? ` · đã ẩn ${w.items.length - open.length}` : ''}` }),
+              el('div', { class: 'wave-people' }, w.accounts.slice(0, 8).map((u) => el('span', {}, (u.fullname || u.username || '?') + (u.username ? ' @' + u.username : ''), violationBadge(u))), w.accounts.length > 8 ? el('span', { class: 'muted', text: `… và ${w.accounts.length - 8} người khác` }) : null),
+            ),
+            el(
+              'div',
+              { class: 'wave-actions' },
+              open.length ? el('button', { class: 'danger sm', disabled: busy, text: `Ẩn cả đợt (${open.length})`, onclick: () => hideWave(w) }) : null,
+              w.type === 'link' && !hostBlocked ? el('button', { class: 'ghost sm', disabled: busy, text: `Cấm tên miền ${w.host}`, onclick: () => blockWaveDomain(w) }) : null,
+              el('button', { class: 'ghost sm', disabled: busy, text: isDismissed ? 'Hiện lại' : 'Bỏ qua', onclick: () => dismissWave(w, !isDismissed) }),
+            ),
+          );
+        })
+      : [el('div', { class: 'muted small', text: 'Không có đợt spam nào đang hiện.' })]),
+  );
+}
+
+async function hideWave(w) {
+  if (busy) return;
+  const entries = waveEntries(w).filter((x) => !x.isHidden);
+  if (!entries.length) return toast('Đợt này không còn mục nào để ẩn', 'warn');
+  const select = el('select', {}, Object.entries(BG.HIDE_REASONS).map(([k, label]) => el('option', { value: k, text: label })));
+  select.value = 'SPAM';
+  const ok = await confirmDialog({
+    title: `Ẩn ${entries.length} bài / bình luận của đợt spam?`,
+    text: w.type === 'link' ? `Cùng link ${w.label}, ${w.accounts.length} tài khoản.` : `Cùng nội dung, ${w.accounts.length} tài khoản.`,
+    names: entries.map(snippet),
+    okText: 'Ẩn cả đợt',
+    danger: true,
+    extra: el('label', { class: 'text-row' }, el('span', {}, el('b', { text: 'Lý do ẩn' })), select),
+    sendNote: `Sẽ gửi lên Beincom ngay${entries.length > 1 ? ` (nghỉ ${data.settings.actionDelaySec} giây giữa mỗi mục)` : ''}. Addon chưa hiện lại được nội dung đã ẩn.`,
+  });
+  if (!ok) return;
+  const ids = (kind) => w.items.filter((i) => i.kind === kind && !i.isHidden).map((i) => i.id);
+  await send({ type: 'spamAct', action: 'hide', key: w.key, postIds: ids('post'), commentIds: ids('comment'), reasonType: select.value }, (n) => `Đã ẩn ${n} bài / bình luận.`);
+}
+
+async function blockWaveDomain(w) {
+  if (busy) return;
+  const ok = await confirmDialog({
+    title: `Thêm ${w.host} vào Tên miền cấm?`,
+    text: `Thêm vào quy tắc bài viết chung. Bài và bình luận có link tới ${w.host} (kể cả tên miền con) sẽ bị đánh Vi phạm${data.settings.autoHideSpam ? '; bài / bình luận MỚI sẽ bị tự ẩn ở lần quét sau' : ''}.`,
+    okText: 'Cấm tên miền',
+    local: true,
+    sendNote: 'Chỉ đổi quy tắc trong addon, không gửi gì lên Beincom.',
+  });
+  if (!ok) return;
+  const { postRules } = await chrome.storage.local.get('postRules');
+  const cur = { ...BG.DEFAULT_POST_RULES, ...postRules };
+  await chrome.storage.local.set({ postRules: { ...cur, blockedDomains: [...new Set([...(cur.blockedDomains || []), w.host])] } });
+  toast(`Đã thêm ${w.host} vào Tên miền cấm.`);
+}
+
+async function dismissWave(w, dismiss) {
+  if (busy) return;
+  await chrome.runtime.sendMessage({ type: 'spamAct', action: dismiss ? 'dismiss' : 'undismiss', key: w.key });
+  await loadAll();
+}
+
 // ---------- Bình luận mới ----------
 
 const COMMENT_PAGE_UI = 30;
@@ -276,6 +386,7 @@ function renderComments() {
         c.dismissed
           ? el('button', { class: 'ghost sm', disabled: busy, text: 'Hiện lại', onclick: () => dismissComments([c], false) })
           : el('button', { class: 'ghost sm', disabled: busy, text: 'Bỏ qua', onclick: () => dismissComments([c], true) }),
+        el('button', { class: 'ghost sm', disabled: busy, text: 'Trả lời', onclick: () => replyComment(c) }),
         el('button', { class: 'danger sm', disabled: busy, text: 'Ẩn', onclick: () => hideComments([c]) }),
       );
     }
@@ -295,6 +406,48 @@ function renderComments() {
   }
   $('btn-comments-more').hidden = filtered.length <= commentLimit;
   bulk();
+}
+
+// ---------- Viết bình luận / trả lời ----------
+
+// Người có thể được @ trong bài: người đăng bài và những người đã bình luận
+function peopleOfPost(postId) {
+  const post = (data.state.recentPosts || []).find((p) => p.id === postId);
+  const all = [post?.actor, ...(data.state.recentComments || []).filter((c) => c.postId === postId).map((c) => c.actor)];
+  return [...new Map(all.filter((u) => u?.id && u.username).map((u) => [u.id, u])).values()];
+}
+
+async function writeComment({ title, target, postId, commentId = '', prefill = '' }) {
+  if (busy) return;
+  const box = el('textarea', { rows: 4, placeholder: 'Nội dung…' });
+  box.value = prefill;
+  const extra = el('label', { class: 'text-row' }, el('span', {}, el('b', { text: 'Nội dung' }), el('br'), el('span', { class: 'muted small', text: 'Gõ @username để nhắc tên người đăng bài hoặc người đã bình luận trong bài.' })), box);
+  setTimeout(() => {
+    box.focus();
+    box.setSelectionRange(box.value.length, box.value.length);
+  }, 50);
+  const ok = await confirmDialog({
+    title,
+    text: '',
+    names: [target],
+    okText: commentId ? 'Gửi trả lời' : 'Gửi bình luận',
+    extra,
+    sendNote: 'Sẽ đăng lên Beincom ngay, dưới tên tài khoản của bạn.',
+  });
+  if (!ok) return;
+  const err = BG.validateComment(box.value);
+  if (err) return toast(err, 'err');
+  const mentions = BG.commentMentions(box.value, peopleOfPost(postId));
+  await send({ type: 'commentWrite', postId, commentId, content: box.value, mentions }, () => (commentId ? 'Đã gửi trả lời.' : 'Đã gửi bình luận.'));
+}
+
+function replyComment(c) {
+  const t = BG.replyTarget(c);
+  return writeComment({ title: 'Trả lời bình luận', target: snippet(c), postId: c.postId, commentId: t.commentId, prefill: t.prefill });
+}
+
+function commentOnPost(p) {
+  return writeComment({ title: 'Bình luận vào bài', target: snippet(p), postId: p.id });
 }
 
 async function dismissComments(list, dismiss) {
@@ -521,6 +674,10 @@ $('recent-check-all').addEventListener('change', (e) => {
 const pickedRecent = () => (data.state.recentPosts || []).filter((p) => selectedRecent.has(p.id));
 $('btn-dismiss-posts').addEventListener('click', () => dismissPosts(pickedRecent(), recentFilter !== 'dismissed'));
 $('btn-hide-posts').addEventListener('click', () => hidePosts(pickedRecent()));
+$('btn-waves-dismissed').addEventListener('click', () => {
+  wavesShowDismissed = !wavesShowDismissed;
+  renderWaves();
+});
 onSeg('comment-filter', (f) => {
   commentFilter = f;
   commentLimit = COMMENT_PAGE_UI;

@@ -200,6 +200,14 @@ function makeEnv({ data = fixture(), settings = {}, rules = {}, postRules = {}, 
       const src = q.parentId ? data.replies?.[q.parentId] : data.comments?.[q.postId];
       return reply(200, ok({ list: (src || []).slice(0, Number(q.limit) || 10), meta: { hasNextPage: false } }));
     }
+    // Viết bình luận / trả lời: trả về bình luận vừa tạo
+    if (path === 'content/comments' && method === 'POST') {
+      if (data.commentFail) return reply(400, { code: 'comment.invalid', meta: { message: 'Comment is invalid' } });
+      return reply(201, ok({ id: 'nc' + ++data.postSeq, postId: JSON.parse(opts.body).postId, parentId: '00000000-0000-0000-0000-000000000000', content: JSON.parse(opts.body).content, actor: { id: 'me1', username: 'kai', fullname: 'Kai Crypto' }, createdAt: new Date().toISOString(), totalReply: 0 }));
+    }
+    if ((m = path.match(/^content\/comments\/([\w-]+)\/reply$/)) && method === 'POST') {
+      return reply(201, ok({ id: 'nr' + ++data.postSeq, postId: JSON.parse(opts.body).postId, parentId: m[1], content: JSON.parse(opts.body).content, actor: { id: 'me1', username: 'kai', fullname: 'Kai Crypto' }, createdAt: new Date().toISOString(), totalReply: 0 }));
+    }
     if ((m = path.match(/^content\/comments\/([\w-]+)\/hide$/)) && method === 'POST') {
       if ((data.goneComments || []).includes(m[1])) return reply(404, { code: 'comment.not_found', meta: { message: 'Comment not found' } });
       return reply(200, ok(true));
@@ -1675,4 +1683,154 @@ test('đăng dưới tên group: nháp qua API quản trị group rồi đăng n
   env.data.groupPostOff = true;
   const off = await env.send({ type: 'compose', groupIds: ['gFood'], content: 'y', asGroup: true });
   assert.match(off.errors[0], /có thể Beincom chưa bật tính năng này/);
+});
+
+// ---------- Spam: tự ẩn, đợt spam, cấm ở mọi community ----------
+
+const nowIso = (minAgo = 0) => new Date(Date.now() - minAgo * 60e3).toISOString();
+
+test('tự ẩn spam: chỉ bài / bình luận MỚI có link tới tên miền cấm, không ẩn bài của mình, ghi nhật ký và thông báo', async () => {
+  const data = fixture();
+  // Lần quét đầu: t2 có bit.ly (cấm) nhưng là bài cũ -> chỉ ghi nhận, không tự ẩn
+  data.timeline.gCL[0].commentsCount = 1;
+  data.comments = { t1: [cmt('c1', 'Bài hay', { createdAt: nowIso(30) })] };
+  const env = makeEnv({ data, settings: { dryRun: false, autoHideSpam: true }, postRules: { blockedDomains: ['bit.ly', 't.me'], bannedKeywords: ['kèo'] } });
+  await scan(env);
+  assert.ok(!env.calls.some((c) => c.endsWith('/hide')));
+  // Lần sau: bài mới có link cấm, bài của chính mình có link cấm, bài chỉ dính từ khoá, bình luận mới có link cấm
+  env.data.timeline.gCL.unshift(
+    post('t5', 'Nhận quà tại t.me/quamienphi', { publishedAt: nowIso(5) }),
+    post('t6', 'Admin nhắc: đừng vào t.me/gia', { publishedAt: nowIso(4), actor: { id: 'me1', username: 'kai', fullname: 'Kai Crypto', avatar: '' } }),
+    post('t7', 'Kèo thơm hôm nay', { publishedAt: nowIso(3) }),
+  );
+  env.data.timeline.gCL.find((p) => p.id === 't1').commentsCount = 2;
+  env.data.comments.t1.unshift(cmt('c5', 'Vào t.me/abc nhận 100 USDT', { createdAt: nowIso(2) }));
+  env.listeners.alarm({ name: 'beingroup-scan' });
+  await scan(env, 'popup');
+  assert.deepEqual(env.bodies.filter(([c]) => c.endsWith('/hide')), [
+    ['POST content/contents/t5/hide', { reasonType: 'SPAM', groupIds: ['gCL'] }],
+    ['POST content/comments/c5/hide', { reasonType: 'SPAM' }],
+  ]);
+  const st = env.storage.state;
+  assert.deepEqual([st.recentPosts.find((p) => p.id === 't5').isHidden, st.recentPosts.find((p) => p.id === 't6').isHidden, st.recentPosts.find((p) => p.id === 't7').isHidden, st.recentComments.find((c) => c.id === 'c5').isHidden], [true, false, false, true]);
+  const auto = env.storage.log.filter((e) => e.source === 'auto');
+  assert.deepEqual(auto.map((e) => [e.kind, e.action, e.contentId, e.autoReason]), [
+    ['comment', 'hide', 'c5', 'Link tới tên miền cấm: t.me'],
+    ['post', 'hide', 't5', 'Link tới tên miền cấm: t.me'],
+  ]);
+  assert.ok(env.notifications.some((n) => n.id === 'bg-autohide' && /đã tự ẩn 2/.test(n.title)));
+  // Hồ sơ vi phạm: ẩn do addon
+  assert.ok(env.storage.profiles.users.at5.events.some((e) => e.type === 'hidden' && e.by === 'Addon tự xử lý'));
+});
+
+test('tự ẩn spam: chạy thử chỉ ghi nhật ký; tắt thì không làm gì', async () => {
+  for (const [settings, expectDry] of [[{ autoHideSpam: true }, 1], [{ dryRun: false, autoHideSpam: false }, 0]]) {
+    const env = makeEnv({ settings, postRules: { blockedDomains: ['t.me'] } });
+    await scan(env);
+    env.data.timeline.gCL.unshift(post('t5', 'Nhận quà tại t.me/x', { publishedAt: nowIso(1) }));
+    await scan(env);
+    assert.ok(!env.calls.some((c) => c.endsWith('/hide')));
+    assert.equal(env.storage.log.filter((e) => e.source === 'auto' && e.status === 'dry').length, expectDry);
+    assert.equal(env.storage.state.recentPosts.find((p) => p.id === 't5').isHidden, false);
+  }
+});
+
+test('đợt spam: cùng link từ 3 tài khoản trong 6 giờ -> báo một lần; ẩn cả đợt; bỏ qua', async () => {
+  const data = fixture();
+  data.timeline.gCL[0].commentsCount = 3;
+  data.comments = { t1: [cmt('w1', 'Xem ngay airdrop.vip/claim', { createdAt: nowIso(50) }), cmt('w2', 'Mọi người ơi airdrop.vip/claim?ref=2', { createdAt: nowIso(40) }), cmt('w3', 'https://airdrop.vip/claim/ chuẩn', { createdAt: nowIso(30) })] };
+  const env = makeEnv({ data, settings: { dryRun: false } });
+  await scan(env); // lần đầu: ghi nhận
+  assert.equal(env.notifications.length, 0);
+  assert.deepEqual(env.storage.state.knownWaves, ['link:airdrop.vip/claim']);
+  // Thêm một bình luận nữa (vẫn đợt cũ) -> không báo lại
+  env.data.timeline.gCL[0].commentsCount = 4;
+  env.data.comments.t1.unshift(cmt('w4', 'airdrop.vip/claim', { createdAt: nowIso(10) }));
+  env.listeners.alarm({ name: 'beingroup-scan' });
+  await scan(env, 'popup');
+  assert.ok(!env.notifications.some((n) => n.id === 'bg-wave'));
+  // Đợt mới -> báo
+  env.data.timeline.gCL.unshift(post('t8', 'Free coin tại coinfree.xyz/go', { publishedAt: nowIso(9), actor: { id: 'x1', username: 'x1', fullname: 'X1', avatar: '' } }), post('t9', 'coinfree.xyz/go nhanh', { publishedAt: nowIso(8), actor: { id: 'x2', username: 'x2', fullname: 'X2', avatar: '' } }), post('t10', 'coinfree.xyz/go', { publishedAt: nowIso(7), actor: { id: 'x3', username: 'x3', fullname: 'X3', avatar: '' } }));
+  env.listeners.alarm({ name: 'beingroup-scan' });
+  await scan(env, 'popup');
+  const wave = env.notifications.filter((n) => n.id === 'bg-wave');
+  assert.equal(wave.length, 1);
+  assert.match(wave[0].message, /coinfree\.xyz\/go: 3 tài khoản, 3 bài/);
+  // Ẩn cả đợt (bài + bình luận) một lần
+  const r = await env.send({ type: 'spamAct', action: 'hide', key: 'link:airdrop.vip/claim', postIds: [], commentIds: ['w1', 'w2', 'w3', 'w4'], reasonType: 'SPAM' });
+  assert.deepEqual([r.ok, r.failed], [4, 0]);
+  assert.equal(env.storage.state.recentComments.filter((c) => c.isHidden).length, 4);
+  await env.send({ type: 'spamAct', action: 'hide', postIds: ['t8', 't9'], commentIds: [], reasonType: 'SPAM' });
+  assert.deepEqual(env.bodies.filter(([c]) => c.startsWith('POST content/contents/t')).map(([c]) => c).sort(), ['POST content/contents/t8/hide', 'POST content/contents/t9/hide']);
+  // Bỏ qua / hiện lại đợt: chỉ trong addon
+  await env.send({ type: 'spamAct', action: 'dismiss', key: 'link:coinfree.xyz/go' });
+  assert.deepEqual(env.storage.state.dismissedWaves, ['link:coinfree.xyz/go']);
+  await env.send({ type: 'spamAct', action: 'undismiss', key: 'link:coinfree.xyz/go' });
+  assert.deepEqual(env.storage.state.dismissedWaves, []);
+});
+
+test('cấm ở mọi community: chỉ community mình là chủ / admin, đúng API và body, ghi nhật ký', async () => {
+  const env = makeEnv({ settings: { dryRun: false } });
+  await scan(env);
+  const r = await env.send({ type: 'banEverywhere', user: { id: 'u99', username: 'spam', fullname: 'Spam Bot' }, reason: 'SPAM' });
+  assert.deepEqual([r.ok, r.done], [1, ['gFood']]);
+  assert.deepEqual(env.bodies.at(-1), ['POST group/communities/cFood/users/u99/ban', { reason: 'SPAM' }]);
+  assert.deepEqual([env.storage.log[0].kind, env.storage.log[0].action, env.storage.log[0].communityName], ['manage', 'ban', 'Food Research']);
+  assert.match((await env.send({ type: 'banEverywhere', user: { id: 'u99' }, reason: 'XYZ' })).message, /Lý do cấm không hợp lệ/);
+});
+
+// ---------- Viết bình luận, chào thành viên mới ----------
+
+test('viết bình luận vào bài và trả lời bình luận: đúng API và body, ghi nhật ký, thêm vào danh sách; chạy thử không gửi', async () => {
+  const data = fixture();
+  data.timeline.gCL[0].commentsCount = 1;
+  data.comments = { t1: [cmt('c1', 'Ví nào tốt cho người mới?', { createdAt: nowIso(30) })] };
+  const dry = makeEnv({ data });
+  await scan(dry);
+  const d = await dry.send({ type: 'commentWrite', postId: 't1', content: 'Thử' });
+  assert.deepEqual([d.dryRun, d.dry, dry.calls.some((c) => c.startsWith('POST content/comments'))], [true, 1, false]);
+
+  const env = makeEnv({ data, settings: { dryRun: false } });
+  await scan(env);
+  const mentions = { nguoic1: { id: 'uc1', fullname: 'Người c1', username: 'nguoic1', avatar: '' } };
+  const r = await env.send({ type: 'commentWrite', postId: 't1', commentId: 'c1', content: '@nguoic1 dùng ví Beincom nhé', mentions });
+  assert.equal(r.ok, 1);
+  assert.deepEqual(env.bodies.at(-1), ['POST content/comments/c1/reply', { postId: 't1', content: '@nguoic1 dùng ví Beincom nhé', media: { images: [] }, mentions }]);
+  await env.send({ type: 'commentWrite', postId: 't3', content: '  Admin đã xem, sẽ trả lời sớm  ' });
+  assert.deepEqual(env.bodies.at(-1), ['POST content/comments', { postId: 't3', content: 'Admin đã xem, sẽ trả lời sớm', media: { images: [] }, mentions: {} }]);
+  const [e2, e1] = env.storage.log;
+  assert.deepEqual([e1.kind, e1.action, e1.replyTo, e1.postId, e1.groupName], ['comment', 'reply', 'c1', 't1', 'Crypto Life']);
+  assert.deepEqual([e2.action, e2.groupName], ['comment', 'Crypto Life - General']);
+  const mine = env.storage.state.recentComments.filter((c) => c.actor.id === 'me1');
+  assert.deepEqual(mine.map((c) => [c.postId, c.parentId]).sort(), [['t1', 'c1'], ['t3', '']]);
+  // Không có nội dung / lỗi từ Beincom
+  assert.match((await env.send({ type: 'commentWrite', postId: 't1', content: '   ' })).message, /chưa có nội dung/);
+  env.data.commentFail = true;
+  const bad = await env.send({ type: 'commentWrite', postId: 't1', content: 'x' });
+  assert.deepEqual([bad.failed, bad.errors], [1, ['Comment is invalid']]);
+});
+
+test('tìm người mới: group gốc đọc danh sách thành viên mới vào trước (bỏ admin), group con đọc nhật ký (bỏ người đã rời)', async () => {
+  const data = fixture();
+  const daysAgo = (d) => new Date(Date.now() - d * 864e5).toISOString();
+  data.members.cFood = [
+    { ...user(31), joinedAt: daysAgo(10), isCommunityAdmin: false },
+    { ...user(32), fullname: 'Trần Nguyên', joinedAt: daysAgo(2), isCommunityAdmin: false },
+    { ...user(33), joinedAt: daysAgo(4), isCommunityAdmin: true },
+    { ...user(34), joinedAt: daysAgo(6), isCommunityAdmin: false },
+  ];
+  data.activity.gCLsub = [
+    { id: 'a1', eventTime: daysAgo(1), eventType: 'CREATE', useCase: 'join.group.as_member', data: { actor: user(42) } },
+    { id: 'a2', eventTime: daysAgo(2), eventType: 'DELETE', useCase: 'leave.group', data: { actor: user(45) } },
+    { id: 'a3', eventTime: daysAgo(3), eventType: 'CREATE', useCase: 'join.group.as_member', data: { actor: user(45) } },
+    { id: 'a4', eventTime: daysAgo(9), eventType: 'CREATE', useCase: 'join.group.as_member', data: { actor: user(46) } },
+  ];
+  const env = makeEnv({ data });
+  await scan(env);
+  const a = await env.send({ type: 'newMembers', groupId: 'gFood', days: 7 });
+  assert.deepEqual([a.source, a.items.map((u) => u.id)], ['members', ['u32', 'u34']]);
+  assert.ok(env.calls.includes('GET group/manage/communities/cFood/members?limit=50&offset=0&sort=joined_at%3Adesc'));
+  const b = await env.send({ type: 'newMembers', groupId: 'gCLsub', days: 7 });
+  assert.deepEqual([b.source, b.items.map((u) => u.id)], ['activity', ['u42']]);
+  assert.ok(!env.calls.some((c) => c.startsWith('POST') || c.startsWith('PUT')));
 });

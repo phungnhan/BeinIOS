@@ -21,6 +21,9 @@
     scanComments: true, // đọc bình luận mới của các bài vừa quét (cần bật quét bài mới), chấm theo quy tắc bài viết
     trackViolations: true, // ghi hồ sơ vi phạm của thành viên (đọc thêm nhật ký hoạt động mỗi lần quét)
     weeklyReport: true, // sáng thứ Hai thông báo tóm tắt tuần trước
+    autoHideSpam: false, // tự ẩn bài / bình luận MỚI có link tới tên miền cấm (sau mỗi lần quét)
+    spamWaves: true, // báo khi cùng một link / nội dung đến từ nhiều tài khoản trong thời gian ngắn
+    welcomeReminder: true, // sáng thứ Hai nhắc soạn bài chào thành viên mới
   };
 
   // Quy tắc cho bài viết (bài chờ duyệt và bài mới đăng)
@@ -698,14 +701,14 @@
     const text = [post.title, post.text, post.link].filter(Boolean).join('\n');
     const hay = norm(text);
     const hits = r.bannedKeywords.filter((k) => norm(k) && hay.includes(norm(k)));
-    if (hits.length) reasons.push({ level: 'bad', text: 'Chứa từ khoá cấm: ' + hits.join(', ') });
+    if (hits.length) reasons.push({ level: 'bad', code: 'keyword', text: 'Chứa từ khoá cấm: ' + hits.join(', ') });
 
     const domains = linkDomains(text);
     const blocked = domains.filter((d) => domainIn(d, r.blockedDomains));
-    if (blocked.length) reasons.push({ level: 'bad', text: 'Có link bị cấm: ' + blocked.join(', ') });
+    if (blocked.length) reasons.push({ level: 'bad', code: 'blocked', domains: blocked, text: 'Có link bị cấm: ' + blocked.join(', ') });
     if (r.reviewExternalLinks) {
       const ext = domains.filter((d) => !blocked.includes(d) && !domainIn(d, r.allowedDomains));
-      if (ext.length) reasons.push({ level: 'warn', text: 'Có link ngoài: ' + ext.join(', ') });
+      if (ext.length) reasons.push({ level: 'warn', code: 'external', text: 'Có link ngoài: ' + ext.join(', ') });
     }
 
     if (reasons.some((x) => x.level === 'bad')) return { verdict: 'bad', reasons };
@@ -1177,6 +1180,149 @@
     if (vn.getUTCDay() !== 1 || vn.getUTCHours() < 8) return null;
     const key = vnDay(now);
     return key === lastKey ? null : key;
+  }
+
+  // ---------- Spam: tự ẩn và phát hiện đợt spam ----------
+
+  // Tên miền cấm có trong bài / bình luận (theo quy tắc của group). Rỗng = không tự ẩn.
+  function blockedHits(x, ctx = {}) {
+    const ev = evaluatePostIn(x, ctx);
+    return [...new Set(ev.reasons.filter((r) => r.code === 'blocked').flatMap((r) => r.domains || []))];
+  }
+
+  // Khoá của một link để gom: tên miền (bỏ www) + đường dẫn, bỏ phần ?query và # và dấu / cuối
+  function linkKeys(text) {
+    const out = [];
+    for (const m of String(text || '').matchAll(LINK_RE)) {
+      const raw = m[0].trim().toLowerCase().replace(/^https?:\/\//, '').replace(/^www\./, '');
+      const host = raw.split(/[/?#:]/)[0].replace(/\.+$/, '');
+      if (!host.includes('.')) continue;
+      const path = (raw.slice(host.length).split(/[?#]/)[0] || '').replace(/[.,!)]+$/, '').replace(/\/+$/, '');
+      const key = host + path;
+      if (!out.some((k) => k.key === key)) out.push({ key, host });
+    }
+    return out;
+  }
+
+  const WAVE_WINDOW_MS = 6 * 3600e3;
+  const WAVE_MIN_ACCOUNTS = 3;
+  const WAVE_TEXT_MIN = 25; // nội dung ngắn hơn (vd "cảm ơn admin") không tính là spam giống nhau
+
+  // Đợt spam: cùng một link (hoặc cùng nội dung) từ ít nhất `minAccounts` tài khoản khác nhau trong `windowMs` gần nhất.
+  // items: [{ id, kind: 'post' | 'comment', actor, text, time, isHidden }]; allowed: tên miền bỏ qua (vd beincom.com)
+  function spamWaves(items, { now = Date.now(), windowMs = WAVE_WINDOW_MS, minAccounts = WAVE_MIN_ACCOUNTS, allowed = ['beincom.com'], skipActorIds = [] } = {}) {
+    const skip = new Set(skipActorIds);
+    const recent = (items || []).filter((x) => x?.actor?.id && !skip.has(x.actor.id) && Date.parse(x.time) >= now - windowMs && Date.parse(x.time) <= now + 60e3);
+    const groups = new Map();
+    const add = (key, type, label, host, x) => {
+      if (!groups.has(key)) groups.set(key, { key, type, label, host, items: [] });
+      groups.get(key).items.push(x);
+    };
+    for (const x of recent) {
+      for (const l of linkKeys(x.text)) if (!domainIn(l.host, allowed)) add('link:' + l.key, 'link', l.key, l.host, x);
+      const t = norm(x.text).replace(/\s+/g, ' ').trim();
+      if (t.length >= WAVE_TEXT_MIN) add('text:' + t.slice(0, 200), 'text', String(x.text).replace(/\s+/g, ' ').trim().slice(0, 100), '', x);
+    }
+    const waves = [];
+    for (const g of groups.values()) {
+      const byId = new Map(g.items.map((x) => [x.kind + ':' + x.id, x]));
+      const list = [...byId.values()];
+      const accounts = [...new Map(list.map((x) => [x.actor.id, x.actor])).values()];
+      if (accounts.length < minAccounts) continue;
+      const times = list.map((x) => Date.parse(x.time)).sort((a, b) => a - b);
+      waves.push({
+        key: g.key,
+        type: g.type,
+        label: g.label,
+        host: g.host,
+        accounts,
+        items: list.map((x) => ({ id: x.id, kind: x.kind, isHidden: !!x.isHidden })),
+        first: new Date(times[0]).toISOString(),
+        last: new Date(times.at(-1)).toISOString(),
+      });
+    }
+    // Đợt theo nội dung mà mọi mục đã nằm trong một đợt theo link thì bỏ (tránh báo hai lần)
+    const linkSets = waves.filter((w) => w.type === 'link').map((w) => new Set(w.items.map((i) => i.kind + ':' + i.id)));
+    return waves
+      .filter((w) => w.type === 'link' || !linkSets.some((s) => w.items.every((i) => s.has(i.kind + ':' + i.id))))
+      .sort((a, b) => b.items.length - a.items.length || b.accounts.length - a.accounts.length);
+  }
+
+  // Bài + bình luận đang giữ -> dạng chung cho spamWaves
+  function waveItems(recentPosts, recentComments) {
+    return [
+      ...(recentPosts || []).map((p) => ({ id: p.id, kind: 'post', actor: p.actor, text: [p.title, p.text, p.link].filter(Boolean).join('\n'), time: p.publishedAt || p.submittedAt, isHidden: p.isHidden })),
+      ...(recentComments || []).map((c) => ({ id: c.id, kind: 'comment', actor: c.actor, text: c.text, time: c.createdAt, isHidden: c.isHidden })),
+    ];
+  }
+
+  // Community có thể cấm thành viên (mình là chủ / admin community): mỗi community một group gốc
+  function banTargets(groups) {
+    const seen = new Set();
+    return (groups || []).filter((g) => g.isCommunity && g.canBan && g.communityId && !seen.has(g.communityId) && seen.add(g.communityId));
+  }
+
+  // ---------- Viết bình luận / trả lời ----------
+  // POST content/comments { postId, content, media, giphy, mentions } hoặc POST content/comments/{id}/reply (cùng body).
+  // mentions trong bình luận (gọi thật 09/10/2026): { username: { id, fullname, username, avatar } }, nội dung ghi @username.
+  const COMMENT_TEXT_MAX = 3000;
+
+  function validateComment(content) {
+    const t = String(content || '').trim();
+    if (!t) return 'Bình luận chưa có nội dung';
+    if (t.length > COMMENT_TEXT_MAX) return `Bình luận dài ${t.length} ký tự, tối đa ${COMMENT_TEXT_MAX}`;
+    return '';
+  }
+
+  // people: [{ id, username, fullname, avatar }] -> mentions của những người còn được @ trong nội dung
+  function commentMentions(content, people) {
+    const known = {};
+    for (const u of people || []) if (u?.id && u.username) known[u.username] = { id: u.id, fullname: u.fullname || '', username: u.username, avatar: u.avatar || '' };
+    return usedMentions(content, known);
+  }
+
+  // Trả lời một bình luận: trả lời của trả lời thì gửi vào bình luận gốc (như web), nhắc tên người viết
+  function replyTarget(c) {
+    return { commentId: c.parentId || c.id, prefill: c.actor?.username ? `@${c.actor.username} ` : '' };
+  }
+
+  // Bài chưa ai trả lời: đăng đã hơn `minHours` giờ (và chưa quá `maxDays` ngày), chưa có bình luận, không phải bài của mình
+  function isUnanswered(p, { now = Date.now(), minHours = 3, maxDays = 7, meId = '' } = {}) {
+    const t = Date.parse(p.publishedAt);
+    if (!Number.isFinite(t) || p.isHidden || (p.commentsCount || 0) > 0) return false;
+    if (meId && p.actor?.id === meId) return false;
+    return now - t >= minHours * 3600e3 && now - t <= maxDays * 864e5;
+  }
+
+  // ---------- Chào thành viên mới ----------
+  const WELCOME_MAX_MENTIONS = 50;
+  const DEFAULT_WELCOME = 'Chào mừng {so_nguoi} thành viên mới của {group} 👋\n\n{danh_sach}\n\nCả nhà đọc nội quy ở bài ghim và để lại vài dòng giới thiệu về mình nhé!';
+
+  // Người mới từ nhật ký hoạt động (slimActivity): sự kiện "vào" từ `since`, bỏ người đã rời sau khi vào
+  function newMembersFromActivity(items, since) {
+    const out = new Map();
+    const left = new Map();
+    for (const a of items || []) {
+      const t = Date.parse(a.time);
+      if (!a.user?.id || !Number.isFinite(t) || t < since) continue;
+      if (a.kind === 'out') left.set(a.user.id, Math.max(left.get(a.user.id) || 0, t));
+      if (a.kind === 'in' && !out.has(a.user.id)) out.set(a.user.id, { ...a.user, joinedAt: a.time });
+    }
+    return [...out.values()].filter((u) => !(left.get(u.id) > Date.parse(u.joinedAt))).sort((x, y) => String(y.joinedAt).localeCompare(String(x.joinedAt)));
+  }
+
+  // Bài chào: thay {so_nguoi}, {group}, {danh_sach} (@username cách nhau dấu phẩy, tối đa 50 người được nhắc)
+  function welcomeText(template, { users = [], groupName = '' } = {}) {
+    const named = (users || []).filter((u) => u?.id && u.username);
+    const shown = named.slice(0, WELCOME_MAX_MENTIONS);
+    const more = named.length - shown.length;
+    const list = shown.map((u) => '@' + u.username).join(', ') + (more > 0 ? ` và ${more} bạn khác` : '');
+    const text = String(template || DEFAULT_WELCOME)
+      .replace(/\{so_nguoi\}/g, String(named.length))
+      .replace(/\{group\}/g, groupName)
+      .replace(/\{danh_sach\}/g, list);
+    const mentions = Object.fromEntries(shown.map((u) => [u.username, mentionEntry(u)]));
+    return { text, mentions };
   }
 
   const CONTENT_STATUS = {
@@ -1670,6 +1816,23 @@
     parseList,
     vnDay,
     weeklyReport,
+    blockedHits,
+    COMMENT_TEXT_MAX,
+    validateComment,
+    commentMentions,
+    replyTarget,
+    isUnanswered,
+    WELCOME_MAX_MENTIONS,
+    DEFAULT_WELCOME,
+    newMembersFromActivity,
+    welcomeText,
+    domainIn,
+    linkKeys,
+    spamWaves,
+    waveItems,
+    banTargets,
+    WAVE_WINDOW_MS,
+    WAVE_MIN_ACCOUNTS,
     reportText,
     weeklyDue,
     isOk,

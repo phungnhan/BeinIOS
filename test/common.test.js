@@ -720,3 +720,63 @@ test('tóm tắt tuần: đếm thao tác trong kỳ, thành viên tăng giảm,
   assert.equal(BG.weeklyDue('2026-10-12', mon9 + 3600e3), null);
   assert.equal(BG.weeklyDue('2026-10-12', now), null); // thứ Sáu
 });
+
+test('spam: mã lý do, tên miền cấm theo group, khoá link, đợt spam, community cấm được', () => {
+  const ev = BG.evaluatePost({ title: '', text: 'Kèo tại t.me/abc và example.org', link: '' }, { bannedKeywords: ['kèo'], blockedDomains: ['t.me'], reviewExternalLinks: true });
+  assert.deepEqual(ev.reasons.map((r) => [r.code, r.domains || null]), [['keyword', null], ['blocked', ['t.me']], ['external', null]]);
+  // Tên miền cấm theo quy tắc riêng của group; từ khoá không tính
+  const ctx = { postRules: {}, groupRules: { g1: { postRules: { blockedDomains: ['bit.ly'], bannedKeywords: ['kèo'] } } }, groups: [{ id: 'g1', isCommunity: true }] };
+  assert.deepEqual(BG.blockedHits({ text: 'kèo bit.ly/x', seenIn: ['g1'] }, ctx), ['bit.ly']);
+  assert.deepEqual(BG.blockedHits({ text: 'kèo bit.ly/x', seenIn: ['g2'] }, ctx), []);
+  assert.deepEqual(BG.blockedHits({ text: 'chỉ có kèo', seenIn: ['g1'] }, ctx), []);
+  assert.deepEqual(BG.linkKeys('A https://www.Bit.ly/Abc?x=1, B bit.ly/abc/ C t.me'), [{ key: 'bit.ly/abc', host: 'bit.ly' }, { key: 't.me', host: 't.me' }]);
+  const now = Date.parse('2026-10-09T12:00:00Z');
+  const t = (min) => new Date(now - min * 60e3).toISOString();
+  const it = (id, uid, text, min, kind = 'comment') => ({ id, kind, actor: { id: uid, username: uid }, text, time: t(min) });
+  const items = [
+    it('a', 'u1', 'Vào scam.xyz/go nhận quà', 10), it('b', 'u2', 'scam.xyz/go', 20), it('c', 'u3', 'scam.xyz/go/', 30, 'post'),
+    it('d', 'u4', 'scam.xyz/go cũ', 7 * 60), // ngoài 6 giờ
+    it('e', 'u1', 'beincom.com/posts/1', 5), it('f', 'u2', 'beincom.com/posts/1', 5), it('g', 'u3', 'beincom.com/posts/1', 5), // tên miền cho phép
+    it('h', 'u5', 'Nhận ngay 500 USDT miễn phí cho thành viên mới!!!', 5), it('i', 'u6', 'Nhận ngay 500 USDT miễn phí cho thành viên mới', 6), it('j', 'u7', 'nhận ngay 500 usdt mien phi cho thanh vien moi', 7),
+    it('k', 'u8', 'ok', 1), it('l', 'u9', 'ok', 1), it('m', 'u10', 'ok', 1), // quá ngắn
+    it('n', 'me', 'two.io/x', 1), it('o', 'u11', 'two.io/x', 1), it('p', 'u12', 'two.io/x', 1), // có bài của chính mình -> chưa đủ 3
+  ];
+  const waves = BG.spamWaves(items, { now, skipActorIds: ['me'] });
+  // scam.xyz/go: 3 tài khoản trong 6 giờ (d quá cũ); beincom.com bỏ qua; "ok" quá ngắn; two.io chỉ 2 tài khoản khi bỏ bài của mình
+  assert.deepEqual(waves.map((w) => [w.key, w.accounts.length, w.items.map((i) => i.id).join('')]), [['link:scam.xyz/go', 3, 'abc']]);
+  // Dấu câu khác nhau vẫn khác khoá: h có "!!!" -> chỉ i, j giống nhau (2 tài khoản) nên không thành đợt
+  const waves2 = BG.spamWaves([...items, it('q', 'u13', 'Nhận ngay 500 USDT miễn phí cho thành viên mới', 3)], { now, skipActorIds: ['me'] });
+  assert.deepEqual(waves2.map((w) => w.key), ['link:scam.xyz/go', 'text:nhan ngay 500 usdt mien phi cho thanh vien moi']);
+  // Đợt nội dung đã nằm trọn trong đợt link thì không báo lần hai
+  const dup = BG.spamWaves([it('a', 'u1', 'Nhận quà miễn phí tại scam.xyz/go nhanh', 1), it('b', 'u2', 'Nhận quà miễn phí tại scam.xyz/go nhanh', 2), it('c', 'u3', 'Nhận quà miễn phí tại scam.xyz/go nhanh', 3)], { now });
+  assert.deepEqual(dup.map((w) => w.key), ['link:scam.xyz/go']);
+  assert.deepEqual(BG.waveItems([{ id: 'p', actor: { id: 'u' }, title: 'T', text: 'x', link: 'l', publishedAt: 'd', isHidden: true }], [{ id: 'c', actor: { id: 'v' }, text: 'y', createdAt: 'e' }]), [
+    { id: 'p', kind: 'post', actor: { id: 'u' }, text: 'T\nx\nl', time: 'd', isHidden: true },
+    { id: 'c', kind: 'comment', actor: { id: 'v' }, text: 'y', time: 'e', isHidden: undefined },
+  ]);
+  assert.deepEqual(BG.banTargets([{ id: 'a', isCommunity: true, canBan: true, communityId: 'k1' }, { id: 'b', isCommunity: false, canBan: true, communityId: 'k1' }, { id: 'c', isCommunity: true, canBan: false, communityId: 'k2' }, { id: 'd', isCommunity: true, canBan: true, communityId: 'k1' }]).map((g) => g.id), ['a']);
+});
+
+test('bình luận và chào thành viên mới: kiểm tra nội dung, nhắc tên, trả lời, bài chưa ai trả lời, người mới, bài chào', () => {
+  assert.equal(BG.validateComment('  '), 'Bình luận chưa có nội dung');
+  assert.match(BG.validateComment('a'.repeat(3001)), /tối đa 3000/);
+  assert.equal(BG.validateComment('ok'), '');
+  const people = [{ id: 'u1', username: 'an', fullname: 'An', avatar: 'x' }, { id: 'u2', username: 'binh' }, { id: 'u3' }];
+  assert.deepEqual(BG.commentMentions('@an, cảm ơn nhé', people), { an: { id: 'u1', fullname: 'An', username: 'an', avatar: 'x' } });
+  assert.deepEqual(BG.replyTarget({ id: 'c2', parentId: 'c1', actor: { username: 'binh' } }), { commentId: 'c1', prefill: '@binh ' });
+  assert.deepEqual(BG.replyTarget({ id: 'c1', parentId: '', actor: {} }), { commentId: 'c1', prefill: '' });
+  const now = Date.parse('2026-10-09T12:00:00Z');
+  const h = (x) => new Date(now - x * 3600e3).toISOString();
+  const P = (extra) => ({ publishedAt: h(5), commentsCount: 0, actor: { id: 'a' }, ...extra });
+  assert.deepEqual([P({}), P({ publishedAt: h(1) }), P({ commentsCount: 2 }), P({ publishedAt: h(24 * 8) }), P({ isHidden: true }), P({ actor: { id: 'me' } })].map((p) => BG.isUnanswered(p, { now, meId: 'me' })), [true, false, false, false, false, false]);
+  const ev = (id, kind, uid, hoursAgo) => ({ id, kind, user: { id: uid, username: uid }, time: h(hoursAgo) });
+  const fresh = BG.newMembersFromActivity([ev(1, 'in', 'a', 5), ev(2, 'out', 'b', 2), ev(3, 'in', 'b', 10), ev(4, 'in', 'c', 24 * 9), ev(5, 'role', 'd', 1), ev(6, 'in', 'a', 20)], now - 7 * 864e5);
+  assert.deepEqual(fresh.map((u) => [u.id, u.joinedAt]), [['a', h(5)]]);
+  const users = Array.from({ length: 52 }, (_, i) => ({ id: 'u' + i, username: 'nguoi' + i, fullname: 'Người ' + i }));
+  const w = BG.welcomeText('Chào {so_nguoi} bạn mới ở {group}: {danh_sach}', { users: [...users, { id: 'x', username: '' }], groupName: 'Crypto Life' });
+  assert.match(w.text, /^Chào 52 bạn mới ở Crypto Life: @nguoi0, @nguoi1, /);
+  assert.match(w.text, /@nguoi49 và 2 bạn khác$/);
+  assert.equal(Object.keys(w.mentions).length, 50);
+  assert.deepEqual(w.mentions.nguoi0, { id: 'u0', avatar: '', name: 'nguoi0', fullname: 'Người 0', isVerified: false });
+  assert.match(BG.welcomeText('', { users: users.slice(0, 1), groupName: 'G' }).text, /^Chào mừng 1 thành viên mới của G 👋/);
+});

@@ -284,6 +284,7 @@ function renderProfiles() {
           'td',
           { class: 'act' },
           el('button', { class: 'ghost sm', text: open ? 'Thu gọn' : 'Chi tiết', 'aria-expanded': open ? 'true' : 'false', onclick: toggle }),
+          BG.banTargets(groups()).length ? el('button', { class: 'danger sm', disabled: busy, text: 'Cấm ở mọi community', title: 'Cấm người này ở mọi community bạn là chủ / admin', onclick: () => banEverywhere(p.user) }) : null,
           el('button', { class: 'ghost sm danger', disabled: busy, text: 'Xoá hồ sơ', onclick: () => forgetProfile(p) }),
         ),
       ),
@@ -320,6 +321,25 @@ function renderProfiles() {
       );
     }
   }
+}
+
+// Cấm ở mọi community mình là chủ / admin (mỗi community một lệnh cấm)
+async function banEverywhere(u) {
+  if (busy || !u?.id) return;
+  const targets = BG.banTargets(groups());
+  const select = el('select', {}, Object.entries(BG.BAN_REASONS).map(([k, label]) => el('option', { value: k, text: label })));
+  select.value = 'SPAM';
+  const ok = await confirmDialog({
+    title: `Cấm ${personName(u)} ở ${targets.length} community?`,
+    text: 'Người bị cấm bị xoá khỏi community và không xin vào lại được (gỡ được ở Thành viên → Bị cấm).',
+    names: targets.map((g) => g.communityName || g.name),
+    okText: 'Cấm',
+    danger: true,
+    extra: el('label', { class: 'text-row' }, el('span', {}, el('b', { text: 'Lý do cấm' })), select),
+    sendNote: `Sẽ gửi lên Beincom ngay${targets.length > 1 ? ` (nghỉ ${data.settings.actionDelaySec} giây giữa mỗi community)` : ''}.`,
+  });
+  if (!ok) return;
+  await send({ type: 'banEverywhere', user: { id: u.id, username: u.username, fullname: u.fullname }, reason: select.value }, (n) => `Đã cấm ở ${n} community.`);
 }
 
 async function forgetProfile(p) {

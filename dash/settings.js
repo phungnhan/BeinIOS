@@ -240,8 +240,15 @@ for (const k of SETTING_BOOLS) {
         return;
       }
     }
-    if (!on && k === 'dryRun' && (data.settings.autoApprove || data.settings.autoDecline)) {
-      if (!confirm('Tắt Chạy thử khi đang bật tự xử lý: lần quét tới addon sẽ tự duyệt/từ chối thật. Tiếp tục?')) {
+    if (on && k === 'autoHideSpam' && !data.settings.dryRun) {
+      const domains = data.postRules.blockedDomains || [];
+      if (!confirm(`Bật tự ẩn spam? Sau mỗi lần quét, bài và bình luận mới có link tới tên miền cấm (${domains.length ? domains.join(', ') : 'chưa có tên miền nào'}${Object.keys(data.groupRules || {}).length ? ' và tên miền cấm trong quy tắc riêng của group' : ''}) sẽ bị ẩn thật trên Beincom.`)) {
+        $(k).checked = false;
+        return;
+      }
+    }
+    if (!on && k === 'dryRun' && (data.settings.autoApprove || data.settings.autoDecline || data.settings.autoHideSpam)) {
+      if (!confirm('Tắt Chạy thử khi đang bật tự xử lý: lần quét tới addon sẽ tự duyệt / từ chối / ẩn thật. Tiếp tục?')) {
         $(k).checked = true;
         return;
       }

@@ -128,10 +128,12 @@ Bộ gọi API `content/comments` của web (header `x-version-id: 2.0.0`). Đ�
 | GET | `content/comments` | `postId`, `parentId?`, `limit`, `after` / `before` → `{ list, meta: { startCursor, endCursor, hasNextPage, hasPreviousPage } }`. Không có `parentId`: bình luận gốc, **mới nhất trước**, không kèm trả lời; có `parentId`: trả lời của bình luận đó (mới nhất trước) | ✅ |
 | GET | `content/comments/{id}` | `limit`, `target_child_limit`: một bình luận kèm vài trả lời (trang mở từ thông báo) | — |
 | POST | `content/comments/{id}/hide` | `{ reasonType }` (lý do như ẩn bài): admin ẩn bình luận | — |
-| POST | `content/comments/{id}/reply` | `{ postId, content, media: { images }, giphy, mentions }` | — |
+| POST | `content/comments` | Bình luận vào bài: `{ postId, content, media: { images }, giphy, mentions }` → bình luận vừa tạo | — |
+| POST | `content/comments/{id}/reply` | Trả lời bình luận gốc, cùng body. Trả lời của một trả lời: web gửi vào bình luận gốc và nhắc tên người được trả lời | — |
 | PUT / DELETE | `content/comments/{id}` | Sửa / xoá bình luận (của mình) | — |
 | POST | `content/comments/{id}/reports` | Báo cáo bình luận | — |
 
+- `mentions` của bình luận (gọi thật): `{ username: { id, fullname, username, avatar } }`, nội dung ghi `@username`.
 - Mỗi bình luận (gọi thật): `id`, `postId`, `parentId` (bình luận gốc: `00000000-0000-0000-0000-000000000000`), `actor` (`id`, `username`, `fullname`, `avatar`, `isVerified`, `isDeactivated`, …), `content` (markdown), `mentions`, `media`, `giphyId` / `giphyUrl`, `totalReply`, `edited`, `createdBy`, `createdAt`, `updatedAt`, `ownerReactions`, `reactionsCount`. Danh sách không có `child` kể cả khi `totalReply > 0` (web chỉ có `child` ở API chi tiết một bình luận).
 - Bài trên timeline có `commentsCount` và `latestComment`: addon chỉ đọc bình luận của bài có `commentsCount` tăng so với lần đọc trước.
 - Link mở bài và cuộn tới bình luận (giống thông báo của web): `/posts/{postId}?comment_id={id}`, trả lời thêm `&parent_id={parentId}`.

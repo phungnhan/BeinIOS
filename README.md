@@ -44,7 +44,7 @@ Tab Quy tắc & cài đặt và Nhật ký chỉ dùng dữ liệu trong máy n�
   - **Bị cấm**: danh sách người bị cấm của community (lý do, lúc cấm), **Gỡ cấm** từng người hoặc hàng loạt. Chỉ chủ / admin community (admin group bị Beincom từ chối). Gỡ cấm thì người đó xin vào lại được; hồ sơ vi phạm vẫn giữ.
   - **Xuất CSV** toàn bộ danh sách, tải 100 người mỗi lần, bấm lại để dừng. File không có email.
   - **Vào / rời gần đây**: từ nhật ký hoạt động của group, có số người vào/rời trong 24 giờ và 7 ngày. Sự kiện mới kể từ lần xem trước có viền tím.
-  - **Hồ sơ vi phạm**: mỗi người một hồ sơ, gom từ mọi community bạn quản trị. Addon tự ghi khi:
+  - **Hồ sơ vi phạm**: mỗi người một hồ sơ, gom từ mọi community bạn quản trị. Nút **Cấm ở mọi community** cấm người đó ở tất cả community bạn là chủ / admin (một lệnh cấm mỗi community, có chọn lý do). Addon tự ghi khi:
     - bạn ẩn bài, từ chối bài, từ chối yêu cầu tham gia, xoá hoặc cấm thành viên qua addon (cả tự xử lý; chạy thử thì không);
     - nhật ký hoạt động Beincom có người bị xoá, bị cấm, bị từ chối vào — kể cả do admin khác làm trên web (mỗi lần quét đọc trang mới nhất của từng group);
     - có báo cáo của người dùng (báo cáo bị bỏ qua thì gỡ khỏi hồ sơ), bài bị Beincom gắn cờ, bài đã bị ẩn trong group, bài mới vi phạm quy tắc bài viết.
@@ -54,6 +54,7 @@ Tab Quy tắc & cài đặt và Nhật ký chỉ dùng dữ liệu trong máy n�
 - **Bài viết**
   - **Duyệt bài** (community bật duyệt bài và bạn quản trị group gốc): bài chờ duyệt kèm nội dung đầy đủ và đánh giá theo quy tắc bài viết. Duyệt hoặc từ chối kèm lý do gửi người đăng; từ chối một bài thì lý do được điền sẵn.
   - **Bài mới đăng**: 20 bài mới nhất của mỗi group sau mỗi lần quét, chấm theo quy tắc. Mục **Cần xử lý** gồm bài vi phạm và bài cần xem.
+    - Mục **Chưa ai trả lời**: bài đăng đã hơn 3 giờ (trong 7 ngày) mà chưa có bình luận nào (không tính bài của bạn), thường là câu hỏi của thành viên. Nút **💬 Bình luận** ở mỗi bài để trả lời ngay.
     - **Xoá bài**: chỉ với **bài của chính bạn**. Beincom không cho admin xoá bài của người khác.
     - **Ẩn bài**: với bài người khác, gỡ khỏi các group bạn quản trị, có chọn lý do. Addon chưa hiện lại được bài đã ẩn.
     - **Bỏ qua**: chỉ ẩn khỏi danh sách của addon.
@@ -61,8 +62,13 @@ Tab Quy tắc & cài đặt và Nhật ký chỉ dùng dữ liệu trong máy n�
     - **⚙ Cài đặt**: bật / tắt bình luận, cảm xúc, đánh dấu Quan trọng (có hạn chọn sẵn). Admin đổi được cả bài của người khác.
     - **✎ Sửa** (chỉ bài của chính bạn): mở bài trong tab Đăng bài với đủ nội dung, ảnh / video / tệp đang có, nhắc tên, xem trước link, tag, series, cài đặt. Nơi đăng giữ nguyên. Thêm hoặc bỏ ảnh được; ảnh mới tải lên khi bấm **Lưu thay đổi**. Bài đang viết dở được cất lại và trả về khi lưu xong hoặc bấm **Huỷ sửa**.
   - **Bài đang ghim**: chọn group để xem các bài đang ghim (x/5) và bỏ ghim.
+  - **Đợt spam** (đầu tab, chỉ hiện khi có): cùng một link (hoặc cùng nội dung từ 25 ký tự) từ **3 tài khoản trở lên trong 6 giờ**, tính trên bài mới và bình luận mới đã quét. Không tính bài của chính bạn và link tới tên miền cho phép.
+    - Mỗi đợt: link / nội dung, số tài khoản, số bài và bình luận, thời gian, danh sách người (kèm huy hiệu hồ sơ vi phạm).
+    - **Ẩn cả đợt** (một lần cho cả bài lẫn bình luận), **Cấm tên miền** (thêm vào Tên miền cấm của quy tắc chung), **Bỏ qua**.
+    - Đợt mới có thông báo (mỗi đợt một lần, tắt được ở Cài đặt → Báo đợt spam).
   - **Bình luận mới** (bật "Quét bình luận mới"): mỗi lần quét đọc 25 bình luận gốc mới nhất của tối đa 8 bài có số bình luận tăng, cùng trả lời của tối đa 10 bình luận có trả lời mới; chấm theo quy tắc bài viết của group (kể cả quy tắc riêng).
     - Lọc Cần xử lý / Tất cả / Đã bỏ qua / Đã ẩn. **Ẩn** bình luận (như nút Ẩn của admin trên web, có lý do), **Bỏ qua**, **Mở ↗** tới đúng bình luận.
+    - **Trả lời** ngay trong addon (dưới tên tài khoản của bạn): điền sẵn @tên người viết; trả lời của một trả lời thì gửi vào bình luận gốc như web. Gõ @username để nhắc tên người đăng bài hoặc người đã bình luận; bình luận vừa gửi hiện luôn trong danh sách.
     - Bình luận mới vi phạm: có thông báo, cộng vào số trên icon và ô "Bài, bình luận vi phạm", ghi vào hồ sơ vi phạm của người viết.
 - **Báo cáo**
   - **Người dùng báo cáo** (chỉ **chủ / admin community**, chọn group gốc): bài viết, article, bình luận bị thành viên báo cáo, kèm tác giả, lý do và số lượt báo cáo theo từng lý do. Bấm **Ai đã báo cáo?** để xem người báo cáo.
@@ -93,6 +99,9 @@ Tab Quy tắc & cài đặt và Nhật ký chỉ dùng dữ liệu trong máy n�
     - Có thể đăng bài chỉ có ảnh / video / tệp, không cần chữ.
   - Tuỳ chọn cho bình luận, cho thả cảm xúc, đánh dấu **Quan trọng** với hạn như trên Beincom: không hết hạn, 1 ngày, 3 ngày, 1 tuần, 2 tuần, 1 tháng, 3 tháng, 6 tháng, 1 năm, hoặc tự chọn ngày giờ. Hạn tính từ lúc bài được đăng (giờ hẹn nếu hẹn giờ).
   - Đăng ngay hoặc **hẹn giờ** (ít nhất 5 phút sau). Hẹn giờ dùng chức năng có sẵn của Beincom, nên không cần mở trình duyệt lúc tới giờ.
+  - **Chào thành viên mới**: chọn group và 7 / 14 / 30 ngày, bấm **Tìm người mới** (group gốc: danh sách thành viên mới vào trước, bỏ admin; group con: nhật ký vào / rời, bỏ người đã rời). Tick chọn người (người có hồ sơ vi phạm bỏ chọn sẵn), bấm **Soạn bài chào**: addon điền bài chào có @tên từng người (tối đa 50 người được nhắc) vào ô soạn bài, bạn xem lại rồi Đăng hoặc Hẹn giờ.
+    - **Mẫu bài chào** sửa được, dùng `{so_nguoi}`, `{danh_sach}`, `{group}`.
+    - Sáng thứ Hai (sau 8 giờ) có thông báo nhắc; bấm vào thì mở thẳng công cụ này và tìm người mới (tắt ở Cài đặt → Nhắc chào thành viên mới).
   - **Đăng dưới tên group**: khi chọn đúng một group mà bạn có quyền tạo bài của admin, tick "Đăng dưới tên group" để bài hiện với tên và ảnh của group (như nút trên web). Beincom còn phải bật tính năng này cho tài khoản; chưa bật thì addon báo lỗi rõ.
   - **Bài đăng định kỳ**: khi hẹn giờ, chọn **Lặp lại** (hằng ngày, hằng tuần, 2 tuần một lần, hằng tháng) và số bài (2–30).
     - Addon đặt trước từng bài hẹn giờ trên Beincom ngay lúc bấm, nên tới giờ Beincom tự đăng dù máy đang tắt. Hộp xác nhận ghi lịch đăng từng bài.
@@ -151,12 +160,16 @@ Dùng chung cho Duyệt bài và Bài mới đăng:
 
 Addon nhận ra link dạng `https://…`, `www.…` và tên miền trần có đuôi phổ biến (`t.me/…`, `bit.ly/…`, `abc.vn`…). Đổi quy tắc là đánh giá cập nhật ngay, không cần quét lại.
 
-## Tự xử lý (mặc định tắt, chỉ cho thành viên)
-Dashboard → Cài đặt có hai tuỳ chọn, chạy sau mỗi lần quét khi addon đang bật:
-- **Tự duyệt "Gợi ý duyệt"**
-- **Tự từ chối "Gợi ý từ chối"**
+## Tự xử lý (mặc định tắt)
+Dashboard → Cài đặt có ba tuỳ chọn, chạy sau mỗi lần quét khi addon đang bật:
+- **Tự duyệt "Gợi ý duyệt"** (yêu cầu tham gia)
+- **Tự từ chối "Gợi ý từ chối"** (yêu cầu tham gia)
+- **Tự ẩn spam có link cấm**: bài và bình luận **mới** (chưa thấy ở lần quét trước) có link tới **Tên miền cấm** của quy tắc bài viết (chung hoặc riêng của group) bị ẩn với lý do Spam.
+  - Chỉ xét tên miền cấm; dính từ khoá cấm hay link ngoài thì vẫn chờ bạn xử lý.
+  - Không ẩn bài / bình luận của chính bạn; tối đa 20 mục mỗi lần quét; lần đầu quét (hoặc lần đầu đọc bình luận) chỉ ghi nhận.
+  - Nhật ký ghi "Addon tự xử lý" kèm tên miền; người bị ẩn được ghi vào hồ sơ vi phạm; có thông báo số mục đã ẩn.
 
-"Cần xem" không bao giờ tự xử lý. **Bài viết không bao giờ tự duyệt, từ chối hay ẩn**: bạn luôn phải bấm. Khi bật Chạy thử, mỗi yêu cầu chỉ được ghi nhật ký một lần. Bật tự xử lý lúc đã tắt Chạy thử (hoặc ngược lại) đều phải xác nhận lại.
+"Cần xem" không bao giờ tự xử lý. Bài chờ duyệt không bao giờ tự duyệt hay từ chối. Khi bật Chạy thử, mỗi mục chỉ được ghi nhật ký một lần. Bật tự xử lý lúc đã tắt Chạy thử (hoặc ngược lại) đều phải xác nhận lại.
 
 ## Cách hoạt động
 Chi tiết từng API nằm trong [API.md](API.md). Tóm tắt:
@@ -199,7 +212,8 @@ Chi tiết từng API nằm trong [API.md](API.md). Tóm tắt:
 - **Nhắc tên**: `GET user/users/mentionable?group_ids=a,b&key=…` (không kèm header phiên bản). Body bài có `mentions: { username: { id, avatar, name, fullname, isVerified } }`, nội dung ghi `@username`.
 - **Tag / series**: `GET content/tags?groupIds[]=<group gốc>&offset=…` và `GET content/series?groupIds[]=<group>&offset=…` (25 mục mỗi trang); trước khi đăng: `POST content/contents/validate-series-tags` với `{ groups, series, tags }`. Body bài chỉ gửi id.
 - **Xem trước link**: `GET group/url-metadata?url=…` (link ngoài) hoặc `GET content/contents/{id}/link-preview` (bài / article / series trên Beincom). Body bài có `linkPreview: { url, domain, title, image, description }`.
-- **Bình luận**: `GET content/comments?postId=…&limit=25` (bình luận gốc, mới nhất trước); trả lời: thêm `parentId={id bình luận}`; ẩn: `POST content/comments/{id}/hide` với `{ reasonType }`.
+- **Bình luận**: `GET content/comments?postId=…&limit=25` (bình luận gốc, mới nhất trước); trả lời: thêm `parentId={id bình luận}`; ẩn: `POST content/comments/{id}/hide` với `{ reasonType }`; viết: `POST content/comments` hoặc `POST content/comments/{id}/reply` với `{ postId, content, media, mentions }`.
+- **Người mới**: group gốc `GET group/manage/communities/{communityId}/members?sort=joined_at:desc` (dừng khi gặp người vào trước khoảng ngày); group con `GET group/groups/{id}/activity-logs` (sự kiện vào / rời).
 - **Đăng dưới tên group**: bản nháp tạo bằng `POST content/manage/groups/{groupId}/posts` thay cho `POST content/posts`, các bước sau như bài thường.
 - **Bài đã hẹn giờ**: `GET content/manage/groups/{groupId gốc}/contents/scheduled`; đổi giờ: `PUT content/contents/{id}/reschedule`; huỷ: `DELETE content/posts/{id}`.
 - **Cài đặt group**: đọc `GET group/groups/{id}/settings`; đổi `PUT group/groups/{id}/settings` với một khoá snake_case (vd `{ id, is_join_approval: false }`); Duyệt bài: `PUT group/communities/{communityId}/content-settings` với `{ group_id, content_approval: { value }, is_update_all: false }`. Quyền lấy từ `group/me/permissions` (`edit_join_setting`, `edit_privacy`).
@@ -225,7 +239,7 @@ Chi tiết từng API nằm trong [API.md](API.md). Tóm tắt:
 - `upload.js`: tải ảnh / video / tệp từ trang Dashboard. `charts.js`: biểu đồ SVG của tab Thống kê.
 - `dashboard.html` + `dashboard.css` + script theo tab trong `dash/`, nạp theo thứ tự cuối `dashboard.html` (script thường, dùng chung phạm vi toàn cục):
   - `core.js` (dữ liệu, tiện ích, hộp xác nhận, gửi thao tác, chuyển tab), `ui.js` (ô người dùng / bài dùng ở nhiều tab)
-  - `overview.js`, `members.js`, `content.js`, `reports.js`, `compose.js` + `attach.js` (đính kèm, nhắc tên, link, tag), `stats.js`, `settings.js`, `log.js`
+  - `overview.js`, `members.js`, `content.js`, `reports.js`, `compose.js` + `attach.js` (đính kèm, nhắc tên, link, tag) + `welcome.js` (chào thành viên mới), `stats.js`, `settings.js`, `log.js`
   - `dashboard.js` nạp cuối: sự kiện chung, vẽ lại toàn trang, nạp dữ liệu.
 - `popup.html` / `popup.js`: cửa sổ nhỏ khi bấm icon.
 
@@ -233,7 +247,7 @@ Chi tiết từng API nằm trong [API.md](API.md). Tóm tắt:
 ```
 node --test "test/*.test.js"
 ```
-- `test/common.test.js`: quy tắc thành viên và bài viết (chung / riêng từng group), nhận link, quyền, đường dẫn, xuất CSV, xem trước markdown (an toàn với HTML), ghép số liệu thống kê, lịch bài định kỳ, đọc / làm sạch tệp sao lưu, bình luận (thu gọn, chọn bài cần đọc, gộp), tóm tắt tuần.
+- `test/common.test.js`: quy tắc thành viên và bài viết (chung / riêng từng group), nhận link, quyền, đường dẫn, xuất CSV, xem trước markdown (an toàn với HTML), ghép số liệu thống kê, lịch bài định kỳ, đọc / làm sạch tệp sao lưu, bình luận (thu gọn, chọn bài cần đọc, gộp), tóm tắt tuần, phát hiện đợt spam, nhắc tên trong bình luận, bài chưa ai trả lời, bài chào thành viên mới.
 - `test/upload.test.js`: luồng tải ảnh / video / tệp với kho lưu trữ giả lập (thứ tự trường, lỗi S3, không đọc được phản hồi, tệp kèm cookie, hết phiên).
 - `test/background.test.js`: chạy `background.js` thật với `chrome.*` và API Beincom giả lập. Kiểm tra:
   - Quét, thông báo, chạy thử, hết phiên đăng nhập, phân trang
@@ -246,6 +260,10 @@ node --test "test/*.test.js"
   - Khôi phục sao lưu: ghi đúng các mục, giữ Chạy thử khi chọn, gộp hồ sơ không trùng, không gọi Beincom
   - Quét bình luận: chỉ đọc bài có bình luận mới, lần đầu chỉ ghi nhận, lần sau báo bình luận vi phạm, đếm vào icon, ghi hồ sơ, tắt thì không đọc; ẩn đúng API / body, chạy thử không gửi, bình luận đã xoá tính là xong
   - Đăng dưới tên group: nháp qua API quản trị group rồi đăng như thường, chỉ một group, cần quyền, Beincom chưa bật thì báo rõ
+  - Tự ẩn spam: chỉ mục mới có tên miền cấm (không xét từ khoá), bỏ qua bài của mình, lần đầu chỉ ghi nhận, chạy thử chỉ ghi nhật ký, tắt thì không làm gì
+  - Đợt spam: báo một lần mỗi đợt, ẩn cả đợt (bài + bình luận), bỏ qua / hiện lại; cấm ở mọi community đúng API và body
+  - Viết bình luận / trả lời: đúng API và body, nhật ký ghi id bình luận mới, hiện ngay trong danh sách, chạy thử không gửi, báo lỗi rõ
+  - Tìm người mới: group gốc đọc danh sách thành viên theo ngày vào (bỏ admin), group con đọc nhật ký (bỏ người đã rời), chỉ đọc
   - Bị cấm: danh sách phân trang, gỡ cấm đúng API và body, admin group bị từ chối
   - Cài đặt group: quyền theo lần quét, đọc nhiều group, bật / tắt hàng loạt đúng API và body, duyệt bài cần admin community, chạy thử không gửi
   - Ghim (giới hạn 5, chỉ group mình quản trị), cài đặt bài, sửa bài (chỉ bài của mình, đúng body, cài đặt đổi mới gọi API cài đặt, chạy thử không gửi)

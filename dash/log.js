@@ -9,7 +9,7 @@ const ACTION_LABELS = {
   post: { approve: 'Duyệt bài', reject: 'Từ chối bài', hide: 'Ẩn bài', delete: 'Xoá bài', pin: 'Ghim bài', unpin: 'Bỏ ghim bài', edit: 'Sửa bài', setting: 'Đổi cài đặt bài' },
   groupSetting: { on: 'Bật cài đặt group', off: 'Tắt cài đặt group' },
   backup: { restore: 'Khôi phục cài đặt' },
-  comment: { hide: 'Ẩn bình luận' },
+  comment: { hide: 'Ẩn bình luận', reply: 'Trả lời bình luận', comment: 'Bình luận vào bài' },
   report: { ignore: 'Bỏ qua báo cáo', hide: 'Ẩn nội dung bị báo cáo', hidePost: 'Ẩn bài gắn cờ' },
 };
 const STATUS_TAGS = { ok: ['ok', 'Thành công'], dry: ['warn', 'Chạy thử'], error: ['err', 'Lỗi'] };
@@ -25,7 +25,7 @@ const targetText = (e) =>
     : kindOf(e) === 'post' || kindOf(e) === 'report' || kindOf(e) === 'comment'
       ? `${e.fullname || e.username || '?'}: ${e.snippet || ''}`
       : `${e.fullname || ''}${e.username ? ' @' + e.username : ''}`;
-const noteText = (e) => [e.asGroup ? 'Dưới tên group' : '', e.scheduledAt ? 'Giờ đăng: ' + fmtTime(e.scheduledAt) : '', e.reason ? 'Lý do: ' + e.reason : '', e.message || ''].filter(Boolean).join(' · ');
+const noteText = (e) => [e.asGroup ? 'Dưới tên group' : '', e.scheduledAt ? 'Giờ đăng: ' + fmtTime(e.scheduledAt) : '', e.reason ? 'Lý do: ' + e.reason : '', e.autoReason || '', e.message || ''].filter(Boolean).join(' · ');
 
 function filteredLog() {
   // "Thành viên" gồm cả duyệt yêu cầu và xoá / gán admin / cấm; "Bài viết" gồm cả kiểm duyệt và đăng bài

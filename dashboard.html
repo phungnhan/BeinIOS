@@ -269,6 +269,14 @@
       </div>
     </section>
 
+    <section class="card span-3 waves-card" id="waves" data-tab="content" hidden>
+      <div class="card-head">
+        <h2>Đợt spam <span class="tag err" id="waves-count"></span></h2>
+        <button class="ghost sm" id="btn-waves-dismissed" hidden></button>
+      </div>
+      <p class="muted small intro">Cùng một link hoặc cùng nội dung từ nhiều tài khoản trong 6 giờ gần nhất (theo bài mới và bình luận mới addon đã quét). Không tính bài của chính bạn và link tới tên miền cho phép.</p>
+      <div class="waves-list" id="waves-list"></div>
+    </section>
     <section class="card span-3" id="approval" data-tab="content">
       <div class="card-head">
         <h2>Duyệt bài</h2>
@@ -308,6 +316,7 @@
           <div class="seg" id="recent-filter">
             <button data-f="flagged" class="active">Cần xử lý <span id="rcnt-flagged"></span></button>
             <button data-f="all">Tất cả <span id="rcnt-all"></span></button>
+            <button data-f="unanswered">Chưa ai trả lời <span id="rcnt-unanswered"></span></button>
             <button data-f="dismissed">Đã bỏ qua <span id="rcnt-dismissed"></span></button>
             <button data-f="hidden">Đã ẩn <span id="rcnt-hidden"></span></button>
           </div>
@@ -522,6 +531,37 @@
       </div>
     </section>
 
+    <section class="card span-3" id="welcome" data-tab="compose">
+      <div class="card-head">
+        <h2>Chào thành viên mới</h2>
+        <div class="review-tools">
+          <select id="welcome-group" aria-label="Group"></select>
+          <div class="seg" id="welcome-days">
+            <button data-f="7" class="active">7 ngày</button>
+            <button data-f="14">14 ngày</button>
+            <button data-f="30">30 ngày</button>
+          </div>
+          <button class="ghost" id="btn-welcome-load">Tìm người mới</button>
+        </div>
+      </div>
+      <p class="muted small intro" id="welcome-note"></p>
+      <div class="bulk-bar">
+        <label class="check"><input type="checkbox" id="welcome-check-all" /> Chọn tất cả</label>
+        <span class="muted small" id="welcome-selected"></span>
+        <span class="spacer"></span>
+        <button class="primary" id="btn-welcome-compose" disabled>Soạn bài chào</button>
+      </div>
+      <div class="welcome-people" id="welcome-people"></div>
+      <details class="welcome-tpl">
+        <summary>Mẫu bài chào</summary>
+        <textarea id="welcome-template" rows="5" aria-label="Mẫu bài chào"></textarea>
+        <div class="muted small">Dùng <code>{so_nguoi}</code> (số người), <code>{danh_sach}</code> (@tên từng người, cách nhau dấu phẩy), <code>{group}</code> (tên group).</div>
+        <div class="tpl-actions">
+          <button class="ghost sm" id="btn-welcome-save">Lưu mẫu</button>
+          <button class="ghost sm" id="btn-welcome-reset">Dùng mẫu mặc định</button>
+        </div>
+      </details>
+    </section>
     <section class="card span-3" id="scheduled" data-tab="compose">
       <div class="card-head">
         <h2>Bài đã hẹn giờ</h2>
@@ -710,6 +750,8 @@
         <label class="switch-row"><input type="checkbox" id="scanPosts" /><span><b>Quét bài mới đăng</b><br /><span class="muted small">20 bài mới nhất của mỗi group, chấm theo quy tắc bài viết</span></span></label>
         <label class="switch-row"><input type="checkbox" id="scanComments" /><span><b>Quét bình luận mới</b><br /><span class="muted small">Mỗi lần quét đọc bình luận mới nhất của tối đa 8 bài có bình luận mới, chấm theo quy tắc bài viết. Cần bật Quét bài mới đăng.</span></span></label>
         <label class="switch-row"><input type="checkbox" id="scanReports" /><span><b>Quét báo cáo vi phạm</b><br /><span class="muted small">Báo cáo chờ xử lý (community bạn làm chủ / admin) và bài bị Beincom gắn cờ tự động</span></span></label>
+        <label class="switch-row"><input type="checkbox" id="spamWaves" /><span><b>Báo đợt spam</b><br /><span class="muted small">Cùng một link (hoặc cùng nội dung) từ 3 tài khoản trở lên trong 6 giờ: thông báo và hiện ở đầu tab Bài viết.</span></span></label>
+        <label class="switch-row"><input type="checkbox" id="welcomeReminder" /><span><b>Nhắc chào thành viên mới</b><br /><span class="muted small">Sáng thứ Hai (sau 8 giờ) thông báo nhắc; bấm vào thì addon tìm người mới trong 7 ngày và soạn sẵn bài chào.</span></span></label>
         <label class="switch-row"><input type="checkbox" id="weeklyReport" /><span><b>Tóm tắt tuần</b><br /><span class="muted small">Sáng thứ Hai (sau 8 giờ) thông báo tóm tắt tuần trước. Xem bất cứ lúc nào ở Tổng quan → Tóm tắt hoạt động.</span></span></label>
         <label class="switch-row"><input type="checkbox" id="trackViolations" /><span><b>Ghi hồ sơ vi phạm</b><br /><span class="muted small">Ghi lại ai bị cấm, xoá, ẩn bài, báo cáo… (mỗi lần quét đọc thêm nhật ký hoạt động của group). Chỉ lưu trong trình duyệt này.</span></span></label>
         <label class="select-row">
@@ -734,6 +776,7 @@
         <div class="group-title auto-title">🤖 Tự xử lý sau mỗi lần quét</div>
         <label class="switch-row"><input type="checkbox" id="autoApprove" /><span><b>Tự duyệt "Gợi ý duyệt"</b></span></label>
         <label class="switch-row"><input type="checkbox" id="autoDecline" /><span><b>Tự từ chối "Gợi ý từ chối"</b></span></label>
+        <label class="switch-row"><input type="checkbox" id="autoHideSpam" /><span><b>Tự ẩn spam có link cấm</b><br /><span class="muted small">Bài và bình luận <b>mới</b> có link tới <b>Tên miền cấm</b> (quy tắc bài viết) bị ẩn ngay sau lần quét, lý do Spam. Chỉ xét tên miền cấm, không xét từ khoá; không ẩn bài của chính bạn; tối đa 20 mục mỗi lần quét.</span></span></label>
         <div class="muted small">"Cần xem" không bao giờ tự xử lý.</div>
       </div>
       <div class="group backup-group">
@@ -806,6 +849,7 @@
   <script src="dash/reports.js"></script>
   <script src="dash/compose.js"></script>
   <script src="dash/attach.js"></script>
+  <script src="dash/welcome.js"></script>
   <script src="dash/stats.js"></script>
   <script src="dash/settings.js"></script>
   <script src="dash/log.js"></script>

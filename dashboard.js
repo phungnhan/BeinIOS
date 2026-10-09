@@ -18,6 +18,7 @@ window.addEventListener('hashchange', () => {
   const p = hashParams();
   if (p.get('group') && p.get('group') !== selectedGroupId) selectGroup(p.get('group'));
   if (p.get('tab') && p.get('tab') !== currentTab) showTab(p.get('tab'));
+  if (p.get('welcome')) openWelcome();
 });
 
 // Thanh tab: bấm chuột hoặc phím mũi tên trái/phải
@@ -63,6 +64,7 @@ function renderAll() {
     renderMembersHead();
     renderProfiles();
   }
+  renderWaves();
   renderApproval();
   renderRecent();
   renderComments();
@@ -75,6 +77,7 @@ function renderAll() {
   renderTagsSeries();
   updateCompose();
   renderScheduled();
+  renderWelcome();
   renderRules();
   renderSettings();
   renderBackup();
@@ -99,6 +102,7 @@ async function loadAll() {
   if (!loadAll.started) {
     loadAll.started = true;
     showTab(currentTab);
+    if (hashParams().get('welcome')) openWelcome(); // mở từ thông báo nhắc chào thành viên mới
   } else ensureTabData();
 }
 

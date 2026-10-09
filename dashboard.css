@@ -385,6 +385,23 @@ table.posts td.act { white-space: nowrap; }
 table.posts td.act > * { margin-left: 6px; }
 table.posts td.act a { font-size: 12px; }
 .cmt-text { white-space: pre-wrap; overflow-wrap: anywhere; max-width: 46ch; }
+.waves-card { border-color: var(--err); }
+.welcome-people { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 6px; margin-bottom: 10px; }
+.welcome-person { display: flex; align-items: center; gap: 8px; border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; cursor: pointer; min-width: 0; }
+.welcome-person.off { opacity: .55; }
+.welcome-person .wp-name { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.welcome-tpl summary { cursor: pointer; font-weight: 600; font-size: 13px; }
+.welcome-tpl textarea { width: 100%; margin: 8px 0 4px; }
+.welcome-tpl .tpl-actions { display: flex; gap: 8px; margin-top: 6px; }
+.waves-list { display: flex; flex-direction: column; gap: 10px; }
+.wave { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 16px; align-items: start; border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; }
+.wave.dismissed { opacity: .6; }
+.wave-title { font-weight: 600; overflow-wrap: anywhere; }
+.wave-title code { font-size: 13px; background: var(--err-soft); color: var(--err); padding: 1px 6px; border-radius: 6px; }
+.wave-meta { font-size: 12px; color: var(--muted); }
+.wave-people { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 13px; margin-top: 4px; }
+.wave-actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+@media (max-width: 720px) { .wave { grid-template-columns: minmax(0, 1fr); } .wave-actions { justify-content: flex-start; } }
 .cmt-post { font-size: 12px; color: var(--muted); max-width: 30ch; overflow-wrap: anywhere; }
 .cmt-post a { color: inherit; }
 tr.muted-row td { opacity: .6; }
