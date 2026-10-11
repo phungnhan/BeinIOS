@@ -223,7 +223,7 @@ td.wrap { white-space: normal; }
 
 /* Review */
 .review-tools { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-select, input[type="number"], input[type="text"], input[type="password"], textarea {
+select, input[type="number"], input[type="text"], input[type="password"], input[type="search"], textarea {
   font: inherit;
   padding: 5px 8px;
   border-radius: 8px;
@@ -435,6 +435,10 @@ tr.csv-bad td { background: color-mix(in srgb, var(--err-soft) 50%, transparent)
 #art-title { font-size: 16px; font-weight: 600; }
 #art-content { width: 100%; resize: vertical; line-height: 1.6; }
 .art-editor-box .editor-body textarea, .art-editor-box .md-preview { min-height: 320px; }
+.tag-create { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; flex-wrap: wrap; }
+.tag-create input { flex: 1 1 220px; max-width: 360px; }
+#tags-search { width: 160px; }
+.tags-table td.num, .tags-table th.num { text-align: right; width: 90px; font-variant-numeric: tabular-nums; }
 .art-editor-box .editor-toolbar > button { min-width: 30px; }
 .art-preview .art-img img { max-width: 100%; border-radius: 6px; }
 .art-preview table { border-collapse: collapse; margin: 8px 0; }

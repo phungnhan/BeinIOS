@@ -74,6 +74,7 @@ const TAB_RENDER = {
     renderRecent();
     renderComments();
     renderPinned();
+    renderTagAdmin();
   },
   reports: () => renderReports(),
   compose: () => {

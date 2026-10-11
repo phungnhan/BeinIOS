@@ -154,8 +154,14 @@
     return /(content|comment)[._ ]?not[._ ]?found/i.test(`${r?.body?.code || ''} ${r?.body?.meta?.message || ''}`);
   }
 
+  // Mã lỗi Beincom có câu tiếng Việt dễ hiểu hơn câu gốc
+  const ERR_CODES = {
+    'tag.is_used': 'Tag đang gắn vào bài — Beincom chỉ cho đổi tên / xoá tag chưa dùng',
+  };
+
   function errMsg(r) {
     if (!r) return 'Không có phản hồi';
+    if (ERR_CODES[r.body?.code]) return ERR_CODES[r.body.code];
     if (r.body?.meta?.message || r.body?.code) {
       const base = r.body.meta?.message || r.body.code;
       const more = errDetails(r.body.meta?.errors);
@@ -1794,6 +1800,38 @@
     );
   }
 
+  // ---------- Quản lý tag (theo community) ----------
+  // Giống web: tên 3–32 ký tự, viết hoa; chỉ sửa / xoá được tag chưa gắn vào bài nào (web ẩn nút với tag đã dùng),
+  // cần quyền quản lý tag của community (GET group/me/permissions/can-cud-tags/community/{id}).
+  const TAG_NAME_MIN = 3;
+  const TAG_NAME_MAX = 32;
+  const tagName = (s) => String(s || '').trim().replace(/\s+/g, ' ').toUpperCase();
+
+  function validateTagName(name, existing = [], selfId = '') {
+    const n = tagName(name);
+    if (n.length < TAG_NAME_MIN) return `Tên tag cần ít nhất ${TAG_NAME_MIN} ký tự`;
+    if (n.length > TAG_NAME_MAX) return `Tên tag tối đa ${TAG_NAME_MAX} ký tự`;
+    if ((existing || []).some((t) => t.id !== selfId && tagName(t.name) === n)) return `Community đã có tag ${n}`;
+    return '';
+  }
+
+  // Kết quả API quyền: true / false, hoặc đối tượng có một cờ true; không đọc được thì null (chưa biết)
+  function tagPermission(data) {
+    if (typeof data === 'boolean') return data;
+    if (data && typeof data === 'object') {
+      const flags = Object.values(data).filter((v) => typeof v === 'boolean');
+      if (flags.length) return flags.some(Boolean);
+    }
+    return null;
+  }
+
+  // Trang tìm bài gắn tag trong community (như bấm tag trên web): /search?tags=["TÊN"]&group={…}
+  function tagSearchUrl(name, g = null) {
+    const q = new URLSearchParams({ tags: JSON.stringify([name]) });
+    if (g) q.set('group', JSON.stringify({ id: g.id, name: g.name || '', avatar: '', isIncludeInnerGroups: true }));
+    return `${SITE}/search?${q}`;
+  }
+
   // ---------- Lịch nội dung ----------
   // Lưới tháng (Thứ Hai đầu tuần) theo ngày Việt Nam: mảng tuần, mỗi tuần 7 ô { key: 'YYYY-MM-DD', day, inMonth }
   function monthGrid(year, month) {
@@ -2605,6 +2643,12 @@
     LOCAL_IMAGE,
     trustReason,
     tallyPostTrust,
+    TAG_NAME_MIN,
+    TAG_NAME_MAX,
+    tagName,
+    validateTagName,
+    tagPermission,
+    tagSearchUrl,
     plateText,
     plateWords,
     plateHtml,

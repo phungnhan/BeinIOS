@@ -120,7 +120,7 @@ try {
   if (!sw) throw new Error('Service worker không khởi động');
   const swSid = await attach(sw.targetId, 'service worker');
   result.version = await evalIn(swSid, 'chrome.runtime.getManifest().version');
-  const missing = await evalIn(swSid, `['doScan','doRefresh','doCompose','doComposeArticle','doComposeSeries','doCategories','doStats','doSyncNow','doTelegramTest','pollTelegram','scheduleTelegramPoll','doEditScheduled','postAutoItems','exclusive','notify'].filter((f) => typeof globalThis[f] !== 'function')`);
+  const missing = await evalIn(swSid, `['doScan','doRefresh','doCompose','doComposeArticle','doComposeSeries','doCategories','doStats','doSyncNow','doTelegramTest','pollTelegram','scheduleTelegramPoll','doEditScheduled','postAutoItems','doTags','doTagAct','exclusive','notify'].filter((f) => typeof globalThis[f] !== 'function')`);
   if (missing.length) fail('Service worker thiếu hàm: ' + missing.join(', '));
   // Nạp dữ liệu mẫu qua hàng đợi của service worker: chạy sau lần quét lúc cài (đang chờ hoặc đang chạy),
   // và dữ liệu mẫu tắt addon (active: false) nên không có lần quét tự động nào ghi đè sau đó.

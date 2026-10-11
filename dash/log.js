@@ -11,17 +11,20 @@ const ACTION_LABELS = {
   backup: { restore: 'Khôi phục cài đặt' },
   comment: { hide: 'Ẩn bình luận', reply: 'Trả lời bình luận', comment: 'Bình luận vào bài' },
   report: { ignore: 'Bỏ qua báo cáo', hide: 'Ẩn nội dung bị báo cáo', hidePost: 'Ẩn bài gắn cờ' },
+  tag: { create: 'Tạo tag', rename: 'Đổi tên tag', delete: 'Xoá tag' },
 };
 const STATUS_TAGS = { ok: ['ok', 'Thành công'], dry: ['warn', 'Chạy thử'], error: ['err', 'Lỗi'] };
 
 const kindOf = (e) => e.kind || 'member'; // nhật ký cũ chưa có kind
 const actionLabel = (e) => ACTION_LABELS[kindOf(e)]?.[e.action] || e.action;
-const isPostKind = (e) => ['post', 'compose', 'report', 'comment'].includes(kindOf(e));
+const isPostKind = (e) => ['post', 'compose', 'report', 'comment', 'tag'].includes(kindOf(e));
 const targetText = (e) =>
   kindOf(e) === 'groupSetting'
     ? BG.GROUP_SETTINGS[e.setting]?.label || e.setting || ''
     : kindOf(e) === 'compose' || kindOf(e) === 'backup'
     ? e.snippet || ''
+    : kindOf(e) === 'tag'
+    ? '#' + (e.snippet || '')
     : kindOf(e) === 'post' || kindOf(e) === 'report' || kindOf(e) === 'comment'
       ? `${e.fullname || e.username || '?'}: ${e.snippet || ''}`
       : `${e.fullname || ''}${e.username ? ' @' + e.username : ''}`;

@@ -301,6 +301,10 @@ function makeEnv({ data = fixture(), settings = {}, rules = {}, postRules = {}, 
       const offset = Number(q.offset || 0);
       return reply(200, ok({ list: list.slice(offset, offset + 25), meta: { limit: 25, offset, total: list.length } }));
     }
+    // Quản lý tag
+    if ((m = path.match(/^group\/me\/permissions\/can-cud-tags\/community\/(\w+)$/))) return reply(200, ok(data.tagPerm?.[m[1]] ?? true));
+    if (path === 'content/tags' && method === 'POST') return reply(201, ok({ id: 'tNew', name: JSON.parse(opts.body).name }));
+    if (path.match(/^content\/tags\/\w+$/) && (method === 'PUT' || method === 'DELETE')) return reply(200, ok(true));
     if (path === 'content/contents/validate-series-tags' && method === 'POST') {
       const b = JSON.parse(opts.body);
       const tagIds = b.tags.filter((id) => id.startsWith('tBad'));
@@ -2412,4 +2416,45 @@ test('Article có nhắc tên và ảnh trong bài: body gửi mentions và kh�
   assert.match(local.message, /chưa tải lên/);
   await env.send({ type: 'uploadInit', kind: 'image', mimeType: 'image/png', resource: 'article:content' });
   assert.equal(env.bodies.at(-1)[1].resource, 'article:content');
+});
+
+// ---------- Quản lý tag ----------
+
+test('Quản lý tag: đọc đủ tag (nhiều trang) và quyền; tạo, đổi tên, xoá đúng API / body; tên sai không gọi API; chạy thử không gửi', async () => {
+  const env = makeEnv({ settings: { dryRun: false } });
+  await scan(env);
+  const r = await env.send({ type: 'tags', groupId: 'gCL' });
+  assert.deepEqual([r.status, r.tags.length, r.canManage, r.tags[29]], ['ok', 30, true, { id: 'tC29', name: 'TAG 29', totalUsed: 29 }]);
+  assert.ok(env.calls.includes('GET content/tags?groupIds[]=gCL&offset=25'));
+  assert.ok(env.calls.includes('GET group/me/permissions/can-cud-tags/community/cCL'));
+  env.data.tagPerm = { cFood: false };
+  assert.equal((await env.send({ type: 'tags', groupId: 'gFood' })).canManage, false);
+  assert.match((await env.send({ type: 'tags', groupId: 'gOther' })).message, /quét lại/);
+  await env.send({ type: 'tagAct', action: 'create', groupId: 'gCL', name: ' bic  army ' });
+  await env.send({ type: 'tagAct', action: 'rename', groupId: 'gCL', tagId: 'tC0', name: 'tin tức', oldName: 'TAG 0' });
+  await env.send({ type: 'tagAct', action: 'delete', groupId: 'gCL', tagId: 'tC0', oldName: 'TIN TỨC' });
+  assert.deepEqual(writes(env), ['POST content/tags', 'PUT content/tags/tC0', 'DELETE content/tags/tC0']);
+  assert.deepEqual(env.bodies, [
+    ['POST content/tags', { name: 'BIC ARMY', groupId: 'gCL' }],
+    ['PUT content/tags/tC0', { name: 'TIN TỨC' }],
+  ]);
+  assert.deepEqual(
+    env.storage.log.map((e) => [e.kind, e.action, e.snippet, e.status, e.tagId, e.contentId]).reverse(),
+    [
+      ['tag', 'create', 'BIC ARMY', 'ok', '', undefined],
+      ['tag', 'rename', 'TAG 0 → TIN TỨC', 'ok', 'tC0', undefined],
+      ['tag', 'delete', 'TIN TỨC', 'ok', 'tC0', undefined],
+    ],
+  );
+  // Tên sai, thiếu tag, thao tác lạ: không gọi API
+  const before = writes(env).length;
+  assert.match((await env.send({ type: 'tagAct', action: 'create', groupId: 'gCL', name: 'ab' })).message, /ít nhất 3/);
+  assert.match((await env.send({ type: 'tagAct', action: 'create', groupId: 'gCL', name: 'x'.repeat(33) })).message, /tối đa 32/);
+  assert.match((await env.send({ type: 'tagAct', action: 'rename', groupId: 'gCL', name: 'ABC' })).message, /Thiếu tag/);
+  assert.match((await env.send({ type: 'tagAct', action: 'merge', groupId: 'gCL', tagId: 'tC1' })).message, /không hợp lệ/);
+  assert.equal(writes(env).length, before);
+  // Chạy thử: chỉ ghi nhật ký
+  env.storage.settings = { ...env.storage.settings, dryRun: true };
+  const dry = await env.send({ type: 'tagAct', action: 'delete', groupId: 'gCL', tagId: 'tC1', oldName: 'TAG 1' });
+  assert.deepEqual([dry.dryRun, writes(env).length, env.storage.log[0].status], [true, before, 'dry']);
 });

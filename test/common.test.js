@@ -1145,3 +1145,24 @@ test('Article: bảng, ảnh, nhắc tên (chỉ người đã chọn), xem trư
   assert.deepEqual(BG.articleMentionEntry({ id: 'u9', username: 'lan', fullname: 'Lan', avatar: 'x', isVerified: true }), { id: 'u9', avatar: 'x', name: 'lan', fullname: 'Lan', username: 'lan' });
   assert.equal(BG.editState({ id: 's', scheduledAt: '2026-10-11T02:00:00Z' }).scheduledAt, '2026-10-11T02:00:00Z');
 });
+
+test('Quản lý tag: tên viết hoa 3–32 ký tự, không trùng (trừ chính nó), đọc quyền, link tìm bài theo tag', () => {
+  assert.equal(BG.tagName('  bic   army '), 'BIC ARMY');
+  const list = [{ id: 't1', name: 'AMA' }, { id: 't2', name: 'Bản tin' }];
+  assert.equal(BG.validateTagName('defi', list), '');
+  assert.match(BG.validateTagName('ab', list), /ít nhất 3/);
+  assert.match(BG.validateTagName('x'.repeat(33), list), /tối đa 32/);
+  assert.match(BG.validateTagName('ama', list), /đã có tag AMA/);
+  assert.equal(BG.validateTagName('bản tin', list, 't2'), ''); // đổi tên chính nó
+  assert.deepEqual([true, false, { canCud: true }, { a: false, b: false }, null, 'x', {}].map(BG.tagPermission), [true, false, true, false, null, null, null]);
+  const u = new URL(BG.tagSearchUrl('BIC ARMY', { id: 'g1', name: 'Crypto Life' }));
+  assert.equal(u.origin + u.pathname, 'https://group.beincom.com/search');
+  assert.deepEqual(JSON.parse(u.searchParams.get('tags')), ['BIC ARMY']);
+  assert.deepEqual(JSON.parse(u.searchParams.get('group')), { id: 'g1', name: 'Crypto Life', avatar: '', isIncludeInnerGroups: true });
+  assert.equal(new URL(BG.tagSearchUrl('AMA')).searchParams.get('group'), null);
+});
+
+test('lỗi tag đang dùng có câu tiếng Việt (gọi thật: DELETE tag đã gắn bài -> 400 tag.is_used)', () => {
+  assert.match(BG.errMsg({ status: 400, body: { code: 'tag.is_used', meta: { message: 'The tag is used', errors: 'The tag is used' } } }), /Tag đang gắn vào bài/);
+  assert.equal(BG.errMsg({ status: 400, body: { code: 'x', meta: { message: 'Khác' } } }), 'Khác');
+});

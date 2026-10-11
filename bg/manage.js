@@ -297,3 +297,54 @@ async function doReportAct({ action, groupId, items, reasonType = 'OTHERS', sour
   if (r.status === 'need_login' || ok.length) await updateBadge();
   return { ...summary(r, settings), done: ok.map((e) => e.contentId) };
 }
+
+// ---------- Quản lý tag (theo community) ----------
+// Đọc: GET content/tags?groupIds[]=<group gốc>&offset=… (25 mục mỗi trang) và quyền GET group/me/permissions/can-cud-tags/community/{id}.
+// Ghi (giống web): POST content/tags { name, groupId }, PUT content/tags/{id} { name }, DELETE content/tags/{id}.
+const TAG_ADMIN_PAGES = 20; // tối đa 500 tag
+
+async function doTags({ groupId }) {
+  const { state } = await load();
+  const g = (state.snapshot?.groups || []).find((x) => x.id === groupId);
+  if (!g) return { status: 'error', message: 'Không tìm thấy community — hãy quét lại' };
+  return withClient(async (client) => {
+    const tags = [];
+    for (let page = 0, offset = 0; page < TAG_ADMIN_PAGES; page++) {
+      const r = await client.call('GET', `content/tags?groupIds[]=${encodeURIComponent(g.id)}&offset=${offset}`);
+      if (r.status === 401) return { ...NEED_LOGIN };
+      if (!BG.isOk(r)) return { status: 'error', message: 'Đọc tag lỗi: ' + BG.errMsg(r) };
+      const list = r.body.data?.list || [];
+      tags.push(...list.map(BG.slimTag));
+      offset += list.length;
+      if (!list.length || offset >= (r.body.data?.meta?.total ?? 0)) break;
+    }
+    // Quyền không đọc được thì để null: vẫn cho thử, Beincom sẽ báo nếu không được
+    const p = g.communityId ? await client.call('GET', `group/me/permissions/can-cud-tags/community/${g.communityId}`) : null;
+    const canManage = p && BG.isOk(p) ? BG.tagPermission(p.body?.data) : null;
+    return { status: 'ok', tags, canManage };
+  });
+}
+
+async function doTagAct({ action, groupId, tagId = '', name = '', oldName = '', source = 'manual' }) {
+  if (!['create', 'rename', 'delete'].includes(action)) return { status: 'error', message: 'Thao tác không hợp lệ' };
+  if (action !== 'create' && !tagId) return { status: 'error', message: 'Thiếu tag' };
+  const n = BG.tagName(name);
+  if (action !== 'delete') {
+    const err = BG.validateTagName(n);
+    if (err) return { status: 'error', message: err };
+  }
+  const { settings, state, log } = await load();
+  const g = (state.snapshot?.groups || []).find((x) => x.id === groupId);
+  if (!g) return { status: 'error', message: 'Không tìm thấy community — hãy quét lại' };
+  const item = {
+    log: { kind: 'tag', source, action, groupId: g.id, groupName: g.name, communityName: g.communityName || g.name, tagId, snippet: action === 'rename' ? `${oldName} → ${n}` : n || oldName },
+    call: (c) =>
+      action === 'create' ? c.call('POST', 'content/tags', { name: n, groupId: g.id }) : action === 'rename' ? c.call('PUT', `content/tags/${tagId}`, { name: n }) : c.call('DELETE', `content/tags/${tagId}`),
+  };
+  const r = await performActions([item], settings);
+  pushLog(log, r.entries);
+  const next = r.status === 'need_login' ? { ...state, lastResult: { status: 'need_login', message: NEED_LOGIN.message, mode: r.mode || '' } } : state;
+  await chrome.storage.local.set({ state: next, log });
+  if (r.status === 'need_login') await updateBadge();
+  return summary(r, settings);
+}
