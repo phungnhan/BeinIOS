@@ -2,6 +2,11 @@
 
 Mỗi bản một mục, bản mới nhất ở trên. Dashboard tự hiện các mục mới sau khi cập nhật (bấm "Có gì mới" ở cuối trang để xem lại).
 
+## v0.26.0 — 11/10/2026
+- **Tự kiểm tra** (Nhật ký): bấm một nút, addon gọi thử (chỉ đọc) các API mà từng tính năng dùng với community / group đã chọn và báo mục nào dùng được, mục nào bỏ qua vì không có quyền, mục nào lỗi. **Sao chép kết quả** hoặc **Gửi về Telegram** để gửi người hỗ trợ.
+- **Nhắc người mới hằng tuần** (Thống kê → Thành viên mới có ở lại không, mặc định tắt): sáng thứ Hai addon soạn sẵn bài nhắc những người mới còn ở lại nhưng chưa đăng bài / bình luận và báo cho bạn; bạn tự mở, sửa rồi đăng hoặc hẹn giờ. Mỗi người được nhắc tối đa một lần trong 30 ngày.
+- **Hiệu quả các lần nhắc**: addon ghi lại ai được nhắc trong bài đã đăng, bấm **Đo hiệu quả** để xem bao nhiêu người bắt đầu đăng bài / bình luận sau khi được nhắc, bao nhiêu người đã rời. Danh sách người mới có dấu "Đã nhắc".
+
 ## v0.25.0 — 11/10/2026
 - **Có gì mới**: sau khi cập nhật, Dashboard tự hiện những thay đổi của các bản mới; xem lại bất cứ lúc nào ở cuối trang.
 - **Đóng gói để chia sẻ**: tệp `.zip` kèm hướng dẫn cài / cập nhật bằng tiếng Việt cho các admin khác.

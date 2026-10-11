@@ -103,6 +103,12 @@
   };
   // Có gì mới: bản đã xem = bản hiện tại (không hiện hộp), trừ khi mở trang với #…&seen=0.22.0
   store.seenVersion = new URLSearchParams(location.hash.slice(1)).get('seen') || '__VERSION__';
+  // Nhắc người mới: bản soạn sẵn sáng thứ Hai (3 người) và hai lần nhắc đã đăng (An Nhiên — nm0 — được nhắc 9 ngày trước)
+  store.nudgeDraft = { id: 'nd1', groupId: 'gCL', groupName: 'Crypto Life', at: now - 2 * 3600e3, joined: 8, users: [0, 1, 2].map((i) => ({ id: 'nd' + i, username: 'thanhvienmoi' + i, fullname: 'Thành viên mới ' + i, avatar: '' })) };
+  store.nudges = [
+    { id: 'pn2', groupId: 'gCL', groupName: 'Crypto Life', at: new Date(now - 2 * 864e5).toISOString(), userIds: ['nx1', 'nx2'] },
+    { id: 'pn1', groupId: 'gCL', groupName: 'Crypto Life', at: new Date(now - 9 * 864e5).toISOString(), userIds: ['nm0', 'nx3', 'nx4', 'nx5'] },
+  ];
   // fetch không đọc được file://: CHANGELOG.md đọc bằng XHR (Chrome chạy với --allow-file-access-from-files)
   const realFetch = window.fetch.bind(window);
   window.fetch = (u, o) =>
@@ -125,6 +131,10 @@
         set: async (o) => {
           Object.assign(store, structuredClone(o));
           listeners.forEach((fn) => fn(Object.fromEntries(Object.keys(o).map((k) => [k, {}])), 'local'));
+        },
+        remove: async (keys) => {
+          for (const k of [].concat(keys)) delete store[k];
+          listeners.forEach((fn) => fn(Object.fromEntries([].concat(keys).map((k) => [k, {}])), 'local'));
         },
       },
       onChanged: { addListener: (fn) => listeners.push(fn) },
@@ -407,6 +417,31 @@
             actorChecked: 5,
             errors: [],
           };
+        }
+        // Tự kiểm tra: phần lớn dùng được, vài mục bỏ qua vì quyền, một mục lỗi
+        if (m.type === 'selfCheck') {
+          window.__selfCheck = m;
+          const it = (id, label, uses, status, detail, extra = {}) => ({ id, label, uses, status, detail, ms: 120, ...extra });
+          const items = [
+            it('login', 'Đăng nhập Beincom', 'mọi tính năng', 'ok', '@kaicrypto'),
+            it('group', 'Thông tin group', 'Tổng quan, số thành viên', 'ok', '12.361 thành viên'),
+            it('memberLog', 'Nhật ký thành viên theo ngày', 'báo cáo tháng, thành viên mới', 'ok', '61 sự kiện trong 30 ngày'),
+            it('search', 'Tìm bài theo thời gian', 'báo cáo tháng, thành viên mới', 'ok', '1 bài trong 30 ngày'),
+            it('reports', 'Báo cáo của người dùng', 'tab Báo cáo', 'skip', 'chỉ chủ / admin community xem được'),
+            it('pinned', 'Bài ghim', 'ghim bài', 'fail', 'Không thấy API (404) — Beincom có thể đã đổi đường dẫn', { httpStatus: 404, path: 'content/contents/pinned-content/groups/' + m.groupId }),
+          ];
+          const r = { status: 'ok', at: Date.now(), group: { id: m.groupId, name: (groups.find((g) => g.id === m.groupId) || {}).name || '' }, mode: 'direct', items, summary: { ok: 4, skip: 1, fail: 1 } };
+          store.selfCheck = r;
+          return r;
+        }
+        if (m.type === 'nudgeEffect') {
+          window.__nudgeEffect = (window.__nudgeEffect || 0) + 1;
+          const items = [
+            { id: 'pn2', groupId: 'gCL', groupName: 'Crypto Life', at: store.nudges[0].at, total: 2, posted: 0, commented: 1, active: 1, left: 0, pending: false, days: 2 },
+            { id: 'pn1', groupId: 'gCL', groupName: 'Crypto Life', at: store.nudges[1].at, total: 4, posted: 1, commented: 1, active: 2, left: 1, pending: false, days: 9 },
+          ];
+          store.nudgeEffect = { at: Date.now(), items };
+          return { status: 'ok', at: store.nudgeEffect.at, items };
         }
         if (m.type === 'telegramReport') {
           window.__tgReport = m;

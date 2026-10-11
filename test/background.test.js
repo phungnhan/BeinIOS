@@ -298,6 +298,7 @@ function makeEnv({ data = fixture(), settings = {}, rules = {}, postRules = {}, 
     }
     if (path.match(/^group\/communities\/\w+\/users\/\w+\/unban$/) && method === 'POST') return reply(201, ok(true));
     // Cài đặt group
+    if (path.match(/^group\/groups\/\w+\/settings$/) && method === 'GET' && data.forbidSettings) return reply(403, { code: 'forbidden', meta: { message: 'Forbidden' } });
     if ((m = path.match(/^group\/groups\/(\w+)\/settings$/)) && method === 'GET') {
       const v = data.groupSettings?.[m[1]] || {};
       return reply(200, ok({ settings: { isJoinApproval: !!v.isJoinApproval, isActiveMembershipQuestions: false, isInvitedOnly: false, isHiddenMembers: true, contentApproval: { value: !!v.contentApproval } }, changeableSettings: { isJoinApproval: '' } }));
@@ -413,6 +414,9 @@ function makeEnv({ data = fixture(), settings = {}, rules = {}, postRules = {}, 
         },
         async set(o) {
           Object.assign(storage, structuredClone(o));
+        },
+        async remove(keys) {
+          for (const k of [].concat(keys)) delete storage[k];
         },
       },
       // Bản đồng bộ của tài khoản trình duyệt (chrome.storage.sync)
@@ -2754,4 +2758,118 @@ test('báo cáo tháng: đầu tháng (7 ngày đầu) quét tự động thì n
   assert.equal(msg.method, 'sendMessage');
   assert.ok(msg.body.text.startsWith('<b>BeinGroup: báo cáo Tháng 10/2026 — Crypto Life</b>\n'));
   assert.ok(msg.body.text.length > 2000 && msg.body.text.length < 3700);
+});
+
+// ---------- Tự kiểm tra ----------
+
+test('Tự kiểm tra: gọi thử các API đọc (chỉ GET), báo dùng được / bỏ qua theo quyền / lỗi khi Beincom đổi dữ liệu; không ghi Lỗi kỹ thuật', async () => {
+  const env = makeEnv();
+  await scan(env);
+  const before = env.calls.length;
+  const diagBefore = (env.storage.diagLog || []).length;
+  const r = await env.send({ type: 'selfCheck', groupId: 'gFood' });
+  assert.equal(r.status, 'ok');
+  const by = Object.fromEntries(r.items.map((x) => [x.id, x]));
+  const fails = r.items.filter((x) => x.status === 'fail').map((x) => `${x.id}: ${x.detail} ${x.httpStatus} ${x.path}`);
+  assert.deepEqual(fails, []);
+  assert.deepEqual([by.login.status, by.login.detail, by.members.status, by.approvals.status, by.reports.status, by.memberLog.status, by.search.status], ['ok', '@kai', 'ok', 'ok', 'ok', 'ok', 'ok']);
+  assert.deepEqual([by.telegram.status, by.telegram.detail], ['skip', 'chưa bật gửi về Telegram']);
+  assert.equal(r.summary.ok + r.summary.skip + r.summary.fail, r.items.length);
+  assert.ok(env.calls.slice(before).every((c) => c.startsWith('GET ')));
+  assert.deepEqual(env.storage.selfCheck.items.length, r.items.length);
+  // Admin group (không phải admin community): mục chỉ dành cho chủ / admin community bị bỏ qua, không gọi API
+  const sub = await env.send({ type: 'selfCheck', groupId: 'gCLsub' });
+  const sb = Object.fromEntries(sub.items.map((x) => [x.id, x]));
+  assert.deepEqual([sb.reports.status, sb.banned.status, sb.officialStats.status, sb.approvals.status], ['skip', 'skip', 'skip', 'skip']);
+  assert.ok(!env.calls.some((c) => c.includes('communities/cCL/banned-members')));
+  // Beincom trả dữ liệu khác trước: báo lỗi đúng mục; 403 thì là bỏ qua; không ghi vào Lỗi kỹ thuật
+  env.data.tagPerm = { cFood: 'lạ' };
+  env.data.forbidSettings = true;
+  const odd = await env.send({ type: 'selfCheck', groupId: 'gFood' });
+  const ob = Object.fromEntries(odd.items.map((x) => [x.id, x]));
+  assert.deepEqual([ob.tagPerm.status, ob.settings.status], ['fail', 'skip']);
+  assert.match(ob.tagPerm.detail, /đổi API/);
+  assert.match(BG.selfCheckText(odd, { version: '0.26.0', ua: 'Chrome/141.0.0.0' }), /^BeinGroup v0\.26\.0 · Chrome\/141\.0\.0\.0 · tự kiểm tra Food Research lúc .*\n\d+ dùng được · \d+ bỏ qua · 1 lỗi\n[\s\S]*✗ Quyền quản lý tag: Beincom trả dữ liệu khác trước — có thể đã đổi API \[200 group\/me\/permissions\/can-cud-tags\/community\/cFood\]/);
+  await new Promise((res) => setImmediate(res));
+  assert.equal((env.storage.diagLog || []).length, diagBefore);
+  // Telegram đã bật: hỏi getMe (không gửi tin)
+  env.storage.telegram = { enabled: true, token: '123456789:' + 'A'.repeat(35), chatId: '42' };
+  const tgr = await env.send({ type: 'selfCheck', groupId: 'gFood' });
+  assert.equal(tgr.items.find((x) => x.id === 'telegram').status, 'ok');
+  assert.equal(env.tg.at(-1).method, 'getMe');
+  assert.ok(!env.tg.some((t) => t.method === 'sendMessage'));
+  // Hết phiên đăng nhập
+  const out = makeEnv({ loggedIn: false });
+  out.storage.state = env.storage.state;
+  assert.equal((await out.send({ type: 'selfCheck', groupId: 'gFood' })).status, 'need_login');
+});
+
+// ---------- Nhắc người mới chưa hoạt động ----------
+
+test('nhắc người mới: soạn sẵn sáng thứ Hai (chỉ đọc, không tự đăng), ghi người được nhắc khi đăng thật, đo hiệu quả', async () => {
+  const now = Date.parse('2026-10-12T02:00:00Z'); // 9 giờ sáng thứ Hai giờ VN
+  const ago = (d) => now - d * 864e5;
+  const data = fixture();
+  data.memberEvents = {
+    gCL: [
+      memberEvent(501, 'join.community.as_member', ago(10)), // im lặng -> nhắc
+      memberEvent(502, 'join.community.as_member', ago(12)), // đã đăng bài -> không nhắc
+      memberEvent(503, 'join.community.as_member', ago(1)), // mới vào 1 ngày -> chưa nhắc
+      memberEvent(504, 'join.community.as_member', ago(20)),
+      memberEvent(504, 'leave.group', ago(19)), // đã rời -> không nhắc
+      memberEvent(505, 'join.community.as_member', ago(25)), // im lặng -> nhắc
+      memberEvent(506, 'join.community.as_member', ago(15)), // đã được nhắc 5 ngày trước -> không nhắc lại
+    ],
+  };
+  data.search = [post('n1', 'Chào mọi người', { publishedAt: new Date(ago(5)).toISOString(), actor: user(502) })];
+  const env = makeEnv({ data, now, settings: { nudgeWeekly: true, nudgeGroupId: 'gCL', dryRun: false } });
+  env.storage.nudges = [{ id: 'old1', groupId: 'gCL', groupName: 'Crypto Life', at: new Date(ago(5)).toISOString(), userIds: ['u506'] }];
+  await scan(env);
+  env.listeners.alarm({ name: 'beingroup-scan' });
+  await scan(env, 'popup');
+  const d = env.storage.nudgeDraft;
+  assert.deepEqual([d.groupId, d.groupName, d.users.map((u) => u.id)], ['gCL', 'Crypto Life', ['u501', 'u505']]);
+  const n = env.notifications.filter((x) => x.id === 'bg-nudge');
+  assert.equal(n.length, 1);
+  assert.equal(n[0].title, 'BeinGroup: soạn sẵn bài nhắc 2 người mới');
+  assert.ok(!writes(env).some((c) => c.startsWith('POST content/posts')), 'không tự đăng');
+  // Cùng tuần: không soạn lại
+  env.listeners.alarm({ name: 'beingroup-scan' });
+  await scan(env, 'popup');
+  assert.equal(env.notifications.filter((x) => x.id === 'bg-nudge').length, 1);
+  env.listeners.notif('bg-nudge');
+  assert.match(env.tabsCreated.at(-1), /#tab=stats&nudge=1$/);
+
+  // Chạy thử: không ghi lần nhắc
+  const { text, mentions } = BG.welcomeText(BG.DEFAULT_NUDGE, { users: d.users, groupName: 'Crypto Life' });
+  env.storage.settings = { ...env.storage.settings, dryRun: true };
+  await env.send({ type: 'compose', groupIds: ['gCL'], content: text, setting: BG.DEFAULT_POST_SETTING, mentions, nudge: { userIds: ['u501', 'u505'] } });
+  assert.equal(env.storage.nudges.length, 1);
+  // Đăng thật: ghi người còn được nhắc tên trong bài (u505 bị xoá khỏi bài), bỏ bản soạn sẵn
+  env.storage.settings = { ...env.storage.settings, dryRun: false };
+  const edited = text.replace(', @user505', '');
+  const r = await env.send({ type: 'compose', groupIds: ['gCL'], content: edited, setting: BG.DEFAULT_POST_SETTING, mentions, nudge: { userIds: ['u501', 'u505'] } });
+  assert.equal(r.status, 'ok', r.message);
+  const rec = env.storage.nudges[0];
+  assert.deepEqual([rec.id, rec.groupId, rec.userIds, env.storage.nudges.length], [r.contentId, 'gCL', ['u501'], 2]);
+  assert.equal(env.storage.nudgeDraft, undefined);
+
+  // Đo hiệu quả: u501 đăng bài sau khi được nhắc; u506 (lần nhắc cũ) rời sau đó
+  data.search.push(post('n2', 'Mình là thành viên mới', { publishedAt: new Date(now + 3600e3).toISOString(), actor: user(501) }));
+  data.memberEvents.gCL.push(memberEvent(506, 'leave.group', ago(2)));
+  rec.at = new Date(ago(0.5)).toISOString();
+  const eff = await env.send({ type: 'nudgeEffect' });
+  assert.equal(eff.status, 'ok');
+  const byId = Object.fromEntries(eff.items.map((x) => [x.id, x]));
+  assert.deepEqual([byId[rec.id].total, byId[rec.id].posted, byId[rec.id].active, byId[rec.id].left], [1, 1, 1, 0]);
+  assert.deepEqual([byId.old1.total, byId.old1.active, byId.old1.left], [1, 0, 1]);
+  assert.deepEqual(env.storage.nudgeEffect.items.length, 2);
+
+  // Tắt: không soạn
+  const off = makeEnv({ data: fixture(), now, settings: { nudgeWeekly: false, nudgeGroupId: 'gCL' } });
+  await scan(off);
+  off.listeners.alarm({ name: 'beingroup-scan' });
+  await scan(off, 'popup');
+  assert.equal(off.storage.nudgeDraft, undefined);
+  assert.ok(!off.calls.some((c) => c.includes('objectType=MEMBER')));
 });

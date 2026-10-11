@@ -343,6 +343,8 @@ input[type="datetime-local"]:disabled { opacity: .5; }
 .ret-bar .bar { flex: 1; height: 8px; border-radius: 99px; background: var(--none); overflow: hidden; }
 .ret-bar .bar i { display: block; height: 100%; background: var(--accent); }
 .ret-bar.ok .bar i { background: var(--ok); }
+.nudge-draft { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; padding: 10px 12px; margin-bottom: 10px; border-radius: 10px; background: var(--accent-soft); }
+.nudge-weekly { margin-bottom: 12px; }
 .ret-list-head { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; margin: 16px 0 8px; }
 .chart-card { margin: 0; border: 1px solid var(--border); border-radius: 10px; padding: 12px; min-width: 0; }
 .chart-card figcaption { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; margin-bottom: 6px; }
@@ -449,6 +451,9 @@ tr.csv-bad td { background: color-mix(in srgb, var(--err-soft) 50%, transparent)
 #tags-search { width: 160px; }
 .list-q { width: 190px; }
 .diag-table td { vertical-align: top; }
+.check-table td { vertical-align: top; }
+.card-head .review-tools select { width: auto; max-width: min(300px, 100%); }
+.check-table td.small { color: var(--muted); }
 .diag-msg { white-space: pre-wrap; word-break: break-word; font-size: 12.5px; }
 .diag-stack { white-space: pre-wrap; font: 11px/1.45 ui-monospace, Consolas, monospace; color: var(--muted); margin-top: 4px; }
 .ins-m span { display: block; white-space: nowrap; font-size: 12.5px; font-variant-numeric: tabular-nums; }

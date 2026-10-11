@@ -1,5 +1,7 @@
 // Dashboard — tab Thống kê: Thành viên mới có ở lại không. Người vào trong 30 / 60 / 90 ngày (nhật ký thành viên), sau đó
 // còn ở lại hay đã rời, đã đăng bài / bình luận chưa. Service worker đọc (bg/insights.js doRetention, chỉ đọc).
+// Nhắc người chưa hoạt động: soạn bài vào ô Đăng bài (tự tay, hoặc bản soạn sẵn sáng thứ Hai ở khoá `nudgeDraft`);
+// bài đăng thật được ghi ở `nudges` để đo hiệu quả (bg/insights.js doNudgeEffect).
 
 const ret = { groupId: null, days: 30, raw: null, loading: false, error: '', filter: 'all' };
 
@@ -52,6 +54,7 @@ function renderRetention() {
     note.textContent = parts.join(' ');
   }
 
+  renderNudgePanels(g);
   $('ret-out').hidden = !v;
   if (!v) return;
   const s = v.sum;
@@ -73,9 +76,12 @@ function renderRetention() {
   if (!s.weeks.length) $('ret-weeks').append(el('tr', { class: 'empty-row' }, el('td', { colspan: 4, text: 'Không có ai vào trong khoảng này' })));
 
   const list = v.cohort.filter((m) => RET_FILTERS[ret.filter](m, v.activity[m.user.id]));
-  const silent = v.cohort.filter((m) => RET_FILTERS.silent(m, v.activity[m.user.id]) && m.user.username);
+  const silent = nudgeUsers(v);
+  const recentlyNudged = v.cohort.filter((m) => RET_FILTERS.silent(m, v.activity[m.user.id]) && m.user.username).length - silent.length;
   $('btn-ret-nudge').disabled = !silent.length;
   $('btn-ret-nudge').textContent = `✉ Soạn bài nhắc người chưa hoạt động${silent.length ? ` (${silent.length})` : ''}`;
+  $('btn-ret-nudge').title = recentlyNudged > 0 ? `Bỏ ${recentlyNudged} người đã được nhắc trong ${BG.NUDGE_COOLDOWN_DAYS} ngày qua` : '';
+  const nudged = BG.nudgeIndex(data.nudges);
   $('btn-ret-csv').disabled = !list.length;
   const body = $('ret-body');
   body.replaceChildren();
@@ -88,7 +94,7 @@ function renderRetention() {
         {},
         el('td', {}, postAuthor(m.user)),
         el('td', { class: 'nowrap', text: fmtTime(m.joinedAt) }),
-        el('td', {}, el('span', { class: 'tag ' + (m.status === 'stay' ? 'ok' : m.status === 'left' ? 'warn' : 'err'), text: BG.cohortStatusText(m) })),
+        el('td', {}, el('span', { class: 'tag ' + (m.status === 'stay' ? 'ok' : m.status === 'left' ? 'warn' : 'err'), text: BG.cohortStatusText(m) }), nudged.has(m.user.id) ? el('span', { class: 'tag info', title: 'Được nhắc tên trong bài nhắc đăng qua addon', text: 'Đã nhắc ' + fmtDay(nudged.get(m.user.id)) }) : null),
         el('td', { class: 'num', text: fmtN(a.posts || 0) }),
         el('td', { class: 'num', text: fmtN(a.comments || 0) }),
       ),
@@ -112,12 +118,15 @@ async function runRetention() {
   }
 }
 
-// Soạn bài nhắc những người còn ở lại nhưng chưa thấy hoạt động (nhắc tên tối đa 50 người, mới vào trước) vào ô Đăng bài
-function composeNudge() {
-  const g = retGroup();
-  const v = retView();
-  if (!g || !v) return;
-  const users = v.cohort.filter((m) => RET_FILTERS.silent(m, v.activity[m.user.id]) && m.user.username).map((m) => m.user);
+// Người nên nhắc trong lần phân tích này: còn ở lại, chưa thấy hoạt động, chưa được nhắc trong 30 ngày (mới vào trước)
+function nudgeUsers(v) {
+  return BG.nudgeCandidates(v.cohort, v.activity, data.nudges, { now: Date.now(), minDays: 0 });
+}
+
+const fmtDay = (t) => new Date(t + 7 * 3600e3).toISOString().slice(5, 10).split('-').reverse().join('/');
+
+// Điền bài nhắc (nhắc tên tối đa 50 người) vào ô Đăng bài; compose.nudge để addon ghi lại ai được nhắc khi đăng thật
+function fillNudge(g, users) {
   if (!users.length) return toast('Không có ai cần nhắc', 'err');
   if (compose.edit) return toast('Đang sửa bài đã đăng — bấm Huỷ sửa trước', 'err');
   if ($('compose-text').value.trim() && !confirm('Thay nội dung đang soạn bằng bài nhắc thành viên mới?')) return;
@@ -125,13 +134,71 @@ function composeNudge() {
   showTab('compose');
   compose.groupIds = new Set([g.id]);
   compose.mentions = { ...compose.mentions, ...mentions };
+  compose.nudge = { groupId: g.id, userIds: users.slice(0, 50).map((u) => u.id) };
   $('compose-text').value = text;
   renderComposeGroups();
   updateCompose();
   saveDraft();
   $('compose').scrollIntoView({ block: 'start' });
   $('compose-text').focus();
-  toast(`Đã soạn bài nhắc ${Math.min(users.length, 50)} người vào ô soạn bài — xem lại rồi bấm Đăng hoặc Hẹn giờ.`);
+  toast(`Đã soạn bài nhắc ${Math.min(users.length, 50)} người vào ô soạn bài — xem lại rồi bấm Đăng hoặc Hẹn giờ. Addon sẽ ghi lại ai được nhắc để đo hiệu quả.`);
+}
+
+function composeNudge() {
+  const g = retGroup();
+  const v = retView();
+  if (g && v) fillNudge(g, nudgeUsers(v));
+}
+
+// Bản soạn sẵn sáng thứ Hai, công tắc soạn hằng tuần, bảng hiệu quả các lần nhắc
+function renderNudgePanels(g) {
+  const d = data.nudgeDraft;
+  $('nudge-draft').hidden = !d;
+  if (d) {
+    $('nudge-draft-title').textContent = `📬 Bài nhắc tuần này đã soạn sẵn: ${d.users.length} người mới chưa hoạt động ở ${d.groupName}`;
+    const names = d.users.slice(0, 8).map((u) => '@' + u.username).join(', ');
+    $('nudge-draft-sub').textContent = `Soạn lúc ${fmtTime(d.at)} · ${names}${d.users.length > 8 ? ` và ${d.users.length - 8} người khác` : ''}`;
+  }
+  const st = data.settings;
+  const on = !!(st.nudgeWeekly && st.nudgeGroupId);
+  const other = on && st.nudgeGroupId !== g?.id ? groups().find((x) => x.id === st.nudgeGroupId) : null;
+  $('nudge-weekly').checked = on && st.nudgeGroupId === g?.id;
+  $('nudge-weekly').disabled = !g;
+  $('nudge-weekly-note').textContent = other ? `(đang bật cho ${other.name})` : on ? '(đang bật)' : '';
+
+  const nudges = data.nudges || [];
+  $('nudge-effect').hidden = !nudges.length;
+  if (!nudges.length) return;
+  const eff = new Map((data.nudgeEffect?.items || []).map((x) => [x.id, x]));
+  $('nudge-effect-at').textContent = data.nudgeEffect ? `đo lúc ${fmtTime(data.nudgeEffect.at)}` : 'chưa đo';
+  $('nudge-effect-body').replaceChildren(
+    ...nudges.slice(0, 10).map((n) => {
+      const e = eff.get(n.id);
+      const pending = Date.parse(n.at) > Date.now();
+      return el(
+        'tr',
+        {},
+        el('td', { class: 'nowrap' }, el('div', { text: fmtTime(n.at) }), pending ? el('span', { class: 'tag info', text: 'Chờ tới giờ đăng' }) : null),
+        el('td', { class: 'small', text: n.groupName || '' }),
+        el('td', { class: 'num', text: fmtN(n.userIds.length) }),
+        el(
+          'td',
+          {},
+          e && !pending ? retBar(e.active, e.total, 'ok') : el('span', { class: 'muted small', text: pending ? 'chưa đăng' : 'bấm Đo hiệu quả' }),
+          e && !pending && e.active ? el('div', { class: 'muted small', text: `${e.posted} đăng bài · ${e.commented} bình luận · sau ${e.days} ngày` }) : null,
+        ),
+        el('td', { class: 'num', text: e && !pending ? fmtN(e.left) : '–' }),
+      );
+    }),
+  );
+}
+
+// Mở từ thông báo sáng thứ Hai (#tab=stats&nudge=1)
+function openNudge() {
+  showTab('stats');
+  if (data.nudgeDraft) ret.groupId = data.nudgeDraft.groupId;
+  renderRetention();
+  $('retention').scrollIntoView({ block: 'start' });
 }
 
 function exportRetention() {
@@ -164,4 +231,39 @@ onSeg('ret-filter', (f) => {
 });
 $('btn-ret-run').addEventListener('click', runRetention);
 $('btn-ret-nudge').addEventListener('click', composeNudge);
+$('btn-nudge-open').addEventListener('click', () => {
+  const d = data.nudgeDraft;
+  const g = d && groups().find((x) => x.id === d.groupId);
+  if (!g) return toast('Group của bản soạn sẵn không còn — hãy quét lại', 'err');
+  fillNudge(g, d.users);
+});
+$('btn-nudge-skip').addEventListener('click', async () => {
+  await chrome.storage.local.remove('nudgeDraft');
+  data.nudgeDraft = null;
+  renderRetention();
+});
+$('nudge-weekly').addEventListener('change', async (e) => {
+  const g = retGroup();
+  if (!g) return;
+  const patch = e.target.checked ? { nudgeWeekly: true, nudgeGroupId: g.id } : { nudgeWeekly: false };
+  await saveTo('settings', BG.DEFAULT_SETTINGS, patch);
+  Object.assign(data.settings, patch);
+  renderRetention();
+  toast(e.target.checked ? `Sáng thứ Hai addon sẽ soạn sẵn bài nhắc người mới chưa hoạt động ở ${g.name} và báo cho bạn.` : 'Đã tắt soạn sẵn bài nhắc hằng tuần.');
+});
+$('btn-nudge-effect').addEventListener('click', async () => {
+  const b = $('btn-nudge-effect');
+  b.disabled = true;
+  b.textContent = 'Đang đo…';
+  try {
+    const r = await chrome.runtime.sendMessage({ type: 'nudgeEffect' });
+    if (r?.status === 'ok') {
+      data.nudgeEffect = { at: r.at, items: r.items };
+      renderRetention();
+    } else toast(r?.status === 'need_login' ? 'Phiên đăng nhập Beincom đã hết hạn' : r?.message || 'Không đo được', 'err');
+  } finally {
+    b.disabled = false;
+    b.textContent = '↻ Đo hiệu quả';
+  }
+});
 $('btn-ret-csv').addEventListener('click', exportRetention);

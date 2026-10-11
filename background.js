@@ -31,7 +31,7 @@ globalThis.addEventListener?.('unhandledrejection', (e) => recordDiag({ where: '
 // common.js tạo BG, lib/*.js (theo BG.PARTS) gắn thêm phần còn lại, rồi tới các tệp của service worker
 importScripts('common.js');
 importScripts(...BG.PARTS.map((p) => `lib/${p}.js`));
-importScripts('bg/core.js', 'bg/scan.js', 'bg/actions.js', 'bg/compose.js', 'bg/article.js', 'bg/manage.js', 'bg/sync.js', 'bg/telegram.js', 'bg/insights.js');
+importScripts('bg/core.js', 'bg/scan.js', 'bg/actions.js', 'bg/compose.js', 'bg/article.js', 'bg/manage.js', 'bg/sync.js', 'bg/telegram.js', 'bg/insights.js', 'bg/selfcheck.js');
 
 // ---------- Lịch chạy ----------
 
@@ -92,6 +92,7 @@ function notificationTab(id) {
   if (id === 'bg-weekly' || id === 'bg-watch' || id === 'bg-unanswered') return 'overview';
   if (id === 'bg-welcome') return 'compose&welcome=1';
   if (id === 'bg-monthly') return 'stats&monthly=1';
+  if (id === 'bg-nudge') return 'stats&nudge=1';
   if (id === 'bg-reports' || id === 'bg-autoflag') return 'reports';
   return '';
 }
@@ -140,6 +141,8 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     },
     postStatsRefresh: () => measurePostStats({ refresh: true }),
     retention: () => doRetention(msg),
+    selfCheck: () => doSelfCheck(msg),
+    nudgeEffect: () => doNudgeEffect(),
     monthly: () => doMonthly(msg),
     linkPreview: () => doLinkPreview(msg),
   };

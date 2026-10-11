@@ -25,6 +25,8 @@
     trackViolations: true, // ghi hồ sơ vi phạm của thành viên (đọc thêm nhật ký hoạt động mỗi lần quét)
     weeklyReport: true, // sáng thứ Hai thông báo tóm tắt tuần trước
     monthlyReport: true, // đầu tháng nhắc xem báo cáo tháng trước
+    nudgeWeekly: false, // sáng thứ Hai soạn sẵn bài nhắc người mới chưa hoạt động (người dùng tự xem rồi đăng)
+    nudgeGroupId: '', // group soạn bài nhắc
     autoHideSpam: false, // tự ẩn bài / bình luận MỚI có link tới tên miền cấm (sau mỗi lần quét)
     spamWaves: true, // báo khi cùng một link / nội dung đến từ nhiều tài khoản trong thời gian ngắn
     welcomeReminder: true, // sáng thứ Hai nhắc soạn bài chào thành viên mới

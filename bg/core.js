@@ -126,15 +126,16 @@ let directUntil = 0;
 
 // Lệnh đọc (GET) gặp lỗi tạm thời ở máy chủ Beincom (502 / 503 / 504) thì thử lại tối đa 2 lần, cách 1,5 rồi 3 giây
 const RETRY_STATUS = new Set([502, 503, 504]);
+// quiet: không ghi Lỗi kỹ thuật (Tự kiểm tra gọi thử cả API tài khoản không có quyền)
 function withRetry(call) {
-  return async (method, path, body, version, timeoutMs) => {
+  return async (method, path, body, version, timeoutMs, { quiet = false } = {}) => {
     let r = await call(method, path, body, version, timeoutMs);
     for (let i = 0; i < 2 && method === 'GET' && RETRY_STATUS.has(r.status); i++) {
       await sleep(1500 * (i + 1));
       r = await call(method, path, body, version, timeoutMs);
     }
     // Lỗi kỹ thuật: Beincom báo lỗi hoặc không kết nối được (hết phiên đăng nhập, bài đã bị xoá là chuyện thường: bỏ qua)
-    if ((r.status >= 400 || r.status === 0) && r.status !== 401 && !BG.isContentGone(r)) {
+    if (!quiet && (r.status >= 400 || r.status === 0) && r.status !== 401 && !BG.isContentGone(r)) {
       recordDiag({ where: 'sw', kind: 'api', method, path, status: r.status, code: r.body?.code || (r.timeout ? 'timeout' : ''), message: BG.errMsg(r) });
     }
     return r;

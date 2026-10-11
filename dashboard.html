@@ -948,6 +948,17 @@
         </div>
       </div>
       <div class="muted small review-note" id="ret-note"></div>
+      <div class="nudge-draft" id="nudge-draft" hidden>
+        <div>
+          <b id="nudge-draft-title"></b>
+          <div class="muted small" id="nudge-draft-sub"></div>
+        </div>
+        <div class="review-tools">
+          <button type="button" class="primary sm" id="btn-nudge-open">✉ Mở trong ô Đăng bài</button>
+          <button type="button" class="ghost sm" id="btn-nudge-skip">Bỏ qua tuần này</button>
+        </div>
+      </div>
+      <label class="switch-row nudge-weekly"><input type="checkbox" id="nudge-weekly" /><span><b>Mỗi sáng thứ Hai soạn sẵn bài nhắc</b> người mới chưa hoạt động của group đang chọn <span class="muted small" id="nudge-weekly-note"></span><br /><span class="muted small">Addon chỉ soạn và báo; bạn tự mở, sửa rồi đăng hoặc hẹn giờ. Mỗi người được nhắc tối đa một lần trong 30 ngày.</span></span></label>
       <div id="ret-out" hidden>
         <div class="stat-tiles" id="ret-tiles"></div>
         <div class="table-wrap">
@@ -972,6 +983,21 @@
           <table class="requests">
             <thead><tr><th>Thành viên</th><th>Vào lúc</th><th>Tình trạng</th><th class="num">Bài</th><th class="num">Bình luận</th></tr></thead>
             <tbody id="ret-body"></tbody>
+          </table>
+        </div>
+      </div>
+      <div id="nudge-effect" hidden>
+        <div class="ret-list-head">
+          <h3 class="sub-h">Hiệu quả các lần nhắc</h3>
+          <div class="review-tools">
+            <span class="muted small" id="nudge-effect-at"></span>
+            <button type="button" class="ghost sm" id="btn-nudge-effect" title="Đọc bài và nhật ký vào / rời của những người đã được nhắc (chỉ đọc)">↻ Đo hiệu quả</button>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table class="requests">
+            <thead><tr><th>Nhắc lúc</th><th>Group</th><th class="num">Đã nhắc</th><th>Có hoạt động sau khi nhắc</th><th class="num">Đã rời</th></tr></thead>
+            <tbody id="nudge-effect-body"></tbody>
           </table>
         </div>
       </div>
@@ -1238,6 +1264,27 @@
       <button id="btn-more" class="ghost more" hidden>Xem thêm</button>
     </section>
 
+    <section class="card span-3" id="check-card" data-tab="log">
+      <div class="card-head">
+        <h2>Tự kiểm tra</h2>
+        <div class="review-tools">
+          <select id="check-group" aria-label="Chọn community hoặc group"></select>
+          <button type="button" class="primary sm" id="btn-check-run">▶ Chạy kiểm tra</button>
+          <button type="button" class="ghost sm" id="btn-check-copy">📋 Sao chép kết quả</button>
+          <button type="button" class="ghost sm" id="btn-check-tg" title="Gửi vào chat Telegram đã cài ở tab Quy tắc &amp; cài đặt">Gửi về Telegram</button>
+        </div>
+      </div>
+      <div class="muted small review-note" id="check-note"></div>
+      <div class="table-wrap">
+        <table class="requests check-table">
+          <thead>
+            <tr><th>Mục</th><th>Dùng cho</th><th>Kết quả</th><th>Chi tiết</th></tr>
+          </thead>
+          <tbody id="check-body"></tbody>
+        </table>
+      </div>
+    </section>
+
     <section class="card span-3" id="diag-card" data-tab="log">
       <div class="card-head">
         <h2>Lỗi kỹ thuật</h2>
@@ -1319,6 +1366,7 @@
   <script src="dash/retention.js"></script>
   <script src="dash/settings.js"></script>
   <script src="dash/log.js"></script>
+  <script src="dash/selfcheck.js"></script>
   <script src="dash/todo.js"></script>
   <script src="dash/whatsnew.js"></script>
   <script src="dashboard.js"></script>

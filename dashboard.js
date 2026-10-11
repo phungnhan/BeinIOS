@@ -20,6 +20,7 @@ window.addEventListener('hashchange', () => {
   if (p.get('tab') && p.get('tab') !== currentTab) showTab(p.get('tab'));
   if (p.get('welcome')) openWelcome();
   if (p.get('monthly')) openMonthly();
+  if (p.get('nudge')) openNudge();
 });
 
 // Thanh tab: bấm chuột hoặc phím mũi tên trái/phải
@@ -103,6 +104,7 @@ const TAB_RENDER = {
   },
   log: () => {
     renderLog();
+    renderCheck();
     renderDiag();
   },
 };
@@ -122,7 +124,7 @@ function renderAll() {
 }
 
 async function loadAll() {
-  const { settings, rules, postRules, groupRules, recurring, state, log, templates, profiles, syncStatus, telegramStatus, telegramPoll, postStats } = await chrome.storage.local.get(['settings', 'rules', 'postRules', 'groupRules', 'recurring', 'state', 'log', 'templates', 'profiles', 'syncStatus', 'telegramStatus', 'telegramPoll', 'postStats']);
+  const { settings, rules, postRules, groupRules, recurring, state, log, templates, profiles, syncStatus, telegramStatus, telegramPoll, postStats, nudges, nudgeDraft, nudgeEffect } = await chrome.storage.local.get(['settings', 'rules', 'postRules', 'groupRules', 'recurring', 'state', 'log', 'templates', 'profiles', 'syncStatus', 'telegramStatus', 'telegramPoll', 'postStats', 'nudges', 'nudgeDraft', 'nudgeEffect']);
   data = {
     settings: { ...BG.DEFAULT_SETTINGS, ...settings },
     rules: { ...BG.DEFAULT_RULES, ...rules },
@@ -137,6 +139,9 @@ async function loadAll() {
     telegramStatus: telegramStatus || null,
     telegramPoll: telegramPoll || null,
     postStats: postStats || {},
+    nudges: nudges || [],
+    nudgeDraft: nudgeDraft || null,
+    nudgeEffect: nudgeEffect || null,
   };
   renderAll();
   await loadDraftOnce();
@@ -146,6 +151,7 @@ async function loadAll() {
     showTab(currentTab);
     if (p.get('welcome')) openWelcome(); // mở từ thông báo nhắc chào thành viên mới
     if (p.get('monthly')) openMonthly(); // mở từ thông báo đầu tháng
+    if (p.get('nudge')) openNudge(); // mở từ thông báo bài nhắc người mới
     checkWhatsNew(); // vừa cập nhật addon: hiện Có gì mới
   } else ensureTabData();
 }

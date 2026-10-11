@@ -1428,3 +1428,31 @@ test('Có gì mới: so sánh phiên bản, tách mục CHANGELOG.md, chọn m�
   assert.equal(real[0].version, version, 'CHANGELOG.md cần mục cho bản ' + version + ' ở trên cùng');
   assert.ok(real.every((x, i) => i === 0 || BG.cmpVersion(real[i - 1].version, x.version) > 0), 'các mục xếp mới nhất trước');
 });
+
+test('nhắc người mới: chọn người (còn ở lại, chưa hoạt động, có username, vào đủ lâu, chưa nhắc trong 30 ngày), ghi lần nhắc, đo hiệu quả', () => {
+  const now = Date.parse('2026-10-12T02:00:00Z');
+  const ago = (d) => new Date(now - d * 864e5).toISOString();
+  const m = (id, joined, extra = {}) => ({ user: { id, username: 'u' + id }, joinedAt: ago(joined), status: 'stay', outAt: null, ...extra });
+  const cohort = [m('a', 1), m('b', 5), m('c', 6, { status: 'left', outAt: ago(5) }), m('d', 8), m('e', 9, { user: { id: 'e', username: '' } }), m('f', 10), m('g', 12)];
+  const activity = { d: { posts: 1, comments: 0 }, f: { posts: 0, comments: 0 } };
+  const nudges = [
+    { id: 'n2', at: ago(10), userIds: ['g'] },
+    { id: 'n1', at: ago(40), userIds: ['f', 'g'] },
+  ];
+  assert.deepEqual([...BG.nudgeIndex(nudges)].sort(), [['f', Date.parse(ago(40))], ['g', Date.parse(ago(10))]]);
+  // a: mới vào 1 ngày; c: đã rời; d: có bài; e: không có username; g: nhắc 10 ngày trước; f: nhắc 40 ngày trước -> nhắc lại được
+  assert.deepEqual(BG.nudgeCandidates(cohort, activity, nudges, { now }).map((u) => u.id), ['b', 'f']);
+  assert.deepEqual(BG.nudgeCandidates(cohort, activity, nudges, { now, minDays: 0 }).map((u) => u.id), ['a', 'b', 'f']);
+  assert.equal(BG.nudgeCandidates(cohort, activity, [], { now, max: 1 }).length, 1);
+  // Ghi lần nhắc: mới nhất trước, thay lần trùng id
+  let list = BG.addNudge(nudges, { id: 'n3', at: ago(1), userIds: ['b'] });
+  list = BG.addNudge(list, { id: 'n3', at: ago(1), userIds: ['b', 'f'] });
+  assert.deepEqual(list.map((x) => [x.id, x.userIds.length]), [['n3', 2], ['n2', 1], ['n1', 2]]);
+  // Hiệu quả: chỉ tính hoạt động sau lúc nhắc; người có hoạt động thì không tính là đã rời
+  const e = BG.nudgeEffect(
+    { id: 'n1', groupId: 'g1', groupName: 'G', at: ago(10), userIds: ['p', 'q', 'r', 's'] },
+    { posts: { p: [ago(5)], q: [ago(20)] }, comments: [{ actor: { id: 'r' }, createdAt: ago(2) }, { actor: { id: 's' }, createdAt: ago(11) }], leftIds: ['s', 'p'], now },
+  );
+  assert.deepEqual([e.total, e.posted, e.commented, e.active, e.left, e.pending, e.days], [4, 1, 1, 2, 1, false, 10]);
+  assert.equal(BG.nudgeEffect({ id: 'x', at: new Date(now + 3600e3).toISOString(), userIds: ['p'] }, { now }).pending, true);
+});

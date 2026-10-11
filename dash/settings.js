@@ -92,6 +92,7 @@ function saveTo(key, defaults, patch, hintId) {
   return queueSave(async () => {
     const { [key]: cur } = await chrome.storage.local.get(key);
     await chrome.storage.local.set({ [key]: { ...defaults, ...cur, ...patch } });
+    if (!hintId) return; // nơi lưu tự báo bằng toast
     $(hintId).textContent = 'Đã lưu ✓';
     setTimeout(() => ($(hintId).textContent = ''), 2000);
   });

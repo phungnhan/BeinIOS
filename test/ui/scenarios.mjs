@@ -395,8 +395,8 @@ export const scenarios = [
       assert.ok(info.heads.every((h) => !/^v0\.(22|21|20)\./.test(h)));
       assert.ok(info.items >= 3 && info.bold);
       await page.ev(`document.getElementById('whatsnew-ok').click(); true`);
-      await page.until(() => !document.getElementById('whatsnew').open);
-      assert.equal(await page.ev(`chrome.storage.local.get('seenVersion').then((o) => o.seenVersion)`), version);
+      // sự kiện close chạy sau khi hộp đóng: chờ tới khi bản đã xem được ghi
+      await page.until((v) => !document.getElementById('whatsnew').open && chrome.storage.local.get('seenVersion').then((o) => o.seenVersion === v), 4000, version);
       // Link cuối trang: xem lại 3 bản mới nhất
       await page.ev(`document.getElementById('btn-whatsnew').click(); true`);
       await page.until(() => document.getElementById('whatsnew').open && document.querySelectorAll('#whatsnew-body h4').length === 3);
@@ -404,6 +404,43 @@ export const scenarios = [
       await page.open(url('dashboard', 'tab=overview'));
       await new Promise((r) => setTimeout(r, 400));
       assert.equal(await page.ev(`document.getElementById('whatsnew').open`), false);
+    },
+  },
+  {
+    name: 'Nhắc người mới: bản soạn sẵn, soạn hằng tuần, hiệu quả',
+    async run({ page, url, assert }) {
+      await page.open(url('dashboard', 'tab=stats&nudge=1'));
+      await page.until(() => !document.getElementById('nudge-draft').hidden);
+      assert.match(await page.ev(`document.getElementById('nudge-draft-title').textContent`), /3 người mới chưa hoạt động ở Crypto Life/);
+      assert.match(await page.ev(`document.getElementById('nudge-draft-sub').textContent`), /@thanhvienmoi0, @thanhvienmoi1, @thanhvienmoi2$/);
+      assert.equal(await page.ev(`document.getElementById('ret-group').value`), 'gCL');
+      // Hiệu quả các lần nhắc: chưa đo -> bấm Đo hiệu quả
+      assert.equal(await page.ev(`document.querySelectorAll('#nudge-effect-body tr').length`), 2);
+      assert.match(await page.ev(`document.getElementById('nudge-effect-body').textContent`), /bấm Đo hiệu quả/);
+      await page.ev(`document.getElementById('btn-nudge-effect').click(); true`);
+      await page.until(() => /1 \(50%\)/.test(document.getElementById('nudge-effect-body').textContent));
+      assert.match(await page.ev(`document.getElementById('nudge-effect-body').textContent`), /1 đăng bài · 1 bình luận · sau 9 ngày/);
+      // Bật soạn sẵn hằng tuần cho group đang chọn
+      await page.ev(`document.getElementById('nudge-weekly').click(); true`);
+      await page.until(() => chrome.storage.local.get('settings').then((o) => o.settings.nudgeWeekly === true && o.settings.nudgeGroupId === 'gCL'));
+      assert.match(await page.ev(`document.getElementById('nudge-weekly-note').textContent`), /đang bật/);
+      // Group khác: công tắc tắt, ghi rõ đang bật cho group nào
+      await setValue(page, 'ret-group', 'gFood');
+      assert.deepEqual(await page.call(() => [document.getElementById('nudge-weekly').checked, document.getElementById('nudge-weekly-note').textContent]), [false, '(đang bật cho Crypto Life)']);
+      // Mở bản soạn sẵn trong ô Đăng bài rồi đăng: gửi kèm danh sách người được nhắc
+      await page.ev(`document.getElementById('btn-nudge-open').click(); true`);
+      await page.until(() => currentTab === 'compose' && /@thanhvienmoi2/.test(document.getElementById('compose-text').value));
+      assert.deepEqual(await page.ev(`compose.nudge`), { groupId: 'gCL', userIds: ['nd0', 'nd1', 'nd2'] });
+      await page.ev(`document.getElementById('btn-compose').click(); true`);
+      await confirmOk(page);
+      await page.until(() => (window.__composes || []).length === 1);
+      const m = await page.ev(`window.__composes[0]`);
+      assert.deepEqual([m.groupIds, m.nudge.userIds, Object.keys(m.mentions).sort()], [['gCL'], ['nd0', 'nd1', 'nd2'], ['thanhvienmoi0', 'thanhvienmoi1', 'thanhvienmoi2']]);
+      await page.until(() => compose.nudge === null);
+      // Bỏ qua bản soạn sẵn
+      await page.ev(`showTab('stats'); document.getElementById('btn-nudge-skip').click(); true`);
+      await page.until(() => document.getElementById('nudge-draft').hidden);
+      assert.equal(await page.ev(`chrome.storage.local.get('nudgeDraft').then((o) => o.nudgeDraft ?? null)`), null);
     },
   },
   {
@@ -432,6 +469,34 @@ export const scenarios = [
     async run({ page, url, assert }) {
       await page.open(url('dashboard', 'tab=overview'));
       await page.until(() => document.querySelectorAll('#todo-list .todo-item').length >= 3);
+    },
+  },
+  {
+    name: 'Tự kiểm tra',
+    async run({ page, url, assert }) {
+      await page.open(url('dashboard', 'tab=log'));
+      await page.until(() => /Chưa chạy lần nào/.test(document.getElementById('check-body').textContent));
+      await setValue(page, 'check-group', 'gCL');
+      await page.ev(`document.getElementById('btn-check-run').click(); true`);
+      await page.until(() => document.querySelectorAll('#check-body tr:not(.empty-row)').length === 6);
+      assert.deepEqual(await page.ev(`window.__selfCheck`), { type: 'selfCheck', groupId: 'gCL' });
+      const info = await page.call(() => ({
+        tags: [...document.querySelectorAll('#check-body .tag')].map((t) => t.textContent),
+        note: document.getElementById('check-note').textContent,
+      }));
+      assert.deepEqual(info.tags, ['✓ Dùng được', '✓ Dùng được', '✓ Dùng được', '✓ Dùng được', 'Bỏ qua', '✗ Lỗi']);
+      assert.match(info.note, /^Crypto Life · lúc .* · 4 dùng được · 1 bỏ qua · 1 lỗi\. Bấm Sao chép kết quả/);
+      await page.ev(`navigator.clipboard.writeText = async (t) => { window.__clip = t; }; document.getElementById('btn-check-copy').click(); true`);
+      await page.until(() => !!window.__clip);
+      const clip = await page.ev(`window.__clip`);
+      assert.match(clip.split('\n')[0], /^BeinGroup v\d+\.\d+\.\d+ · .* · tự kiểm tra Crypto Life lúc /);
+      assert.match(clip, /\n✗ Bài ghim: Không thấy API \(404\) — Beincom có thể đã đổi đường dẫn \[404 content\/contents\/pinned-content\/groups\/gCL\]$/);
+      // Gửi về Telegram: tiêu đề có tên group và số lỗi, nội dung là bản chữ đầy đủ
+      await page.ev(`document.getElementById('btn-check-tg').click(); true`);
+      await page.until(() => !!window.__tgReport);
+      const tg = await page.ev(`window.__tgReport`);
+      assert.deepEqual([tg.title, tg.text], ['BeinGroup: tự kiểm tra Crypto Life — 1 lỗi', clip]);
+      await page.until(() => [...document.querySelectorAll('.toast')].some((t) => /Đã gửi kết quả kiểm tra về Telegram/.test(t.textContent)));
     },
   },
   {

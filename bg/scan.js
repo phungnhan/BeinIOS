@@ -643,6 +643,17 @@ async function doScan({ source = 'alarm' } = {}) {
     notify('bg-weekly', 'BeinGroup: tóm tắt tuần qua', parts.length ? parts.join(' · ') : 'Tuần qua yên ả, không có việc gì cần xử lý. Bấm để xem chi tiết.');
   }
 
+  // Sáng thứ Hai: soạn sẵn danh sách nhắc người mới chưa hoạt động (chỉ đọc; người dùng tự xem rồi đăng)
+  const nudgeKey = settings.nudgeWeekly && settings.nudgeGroupId && auto && result.status === 'ok' ? BG.weeklyDue(state.nudgeKey, now) : null;
+  if (nudgeKey) {
+    next.nudgeKey = nudgeKey;
+    const nd = await prepareNudge({ groupId: settings.nudgeGroupId, now }).catch(() => null);
+    if (nd?.status === 'ok' && nd.users.length) {
+      await chrome.storage.local.set({ nudgeDraft: { id: 'nd' + now, groupId: nd.group.id, groupName: nd.group.name, at: now, users: nd.users, joined: nd.joined } });
+      if (notifyAllowed) notify('bg-nudge', `BeinGroup: soạn sẵn bài nhắc ${nd.users.length} người mới`, `${nd.group.name}: ${nd.users.length} người mới vào chưa thấy đăng bài hay bình luận. Bấm để xem bài nhắc, sửa rồi tự đăng hoặc hẹn giờ.`);
+    }
+  }
+
   // Đầu tháng (7 ngày đầu, từ 8 giờ sáng ngày 1): nhắc xem báo cáo tháng trước, một lần mỗi tháng
   const monthDue = settings.monthlyReport && notifyAllowed && result.status === 'ok' ? BG.monthlyDue(state.monthlyKey, now) : null;
   if (monthDue) {

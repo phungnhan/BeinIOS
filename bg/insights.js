@@ -188,3 +188,68 @@ async function doMonthly({ groupId, month }) {
     };
   });
 }
+
+// ---------- Nhắc người mới chưa hoạt động ----------
+// Sáng thứ Hai (bật ở Thống kê → Thành viên mới có ở lại không): đọc người vào trong 30 ngày, chọn người còn ở lại mà
+// chưa thấy hoạt động, chưa được nhắc trong 30 ngày → khoá `nudgeDraft`. Addon KHÔNG tự đăng: người dùng mở bản nháp
+// trong ô Đăng bài, xem lại rồi đăng / hẹn giờ. Bài nhắc đăng thật được ghi ở khoá `nudges` (doCompose → recordNudge).
+const NUDGE_COHORT_DAYS = 30;
+
+async function prepareNudge({ groupId, now = Date.now() }) {
+  const g = await findGroup(groupId);
+  if (!g) return { status: 'error', message: 'Không tìm thấy group — hãy quét lại' };
+  const { state } = await load();
+  const { nudges = [] } = await chrome.storage.local.get('nudges');
+  const from = now - NUDGE_COHORT_DAYS * 864e5;
+  return withClient(async (client) => {
+    const ev = await readMemberEvents(client, g, from, now);
+    if (ev.status !== 'ok') return ev;
+    const cohort = BG.memberCohort(ev.events, { from, to: now });
+    const ap = await readActorPosts(client, g, cohort.map((m) => m.user), from);
+    if (ap.status === 'need_login') return ap;
+    const activity = BG.cohortActivity(cohort, { posts: ap.posts, comments: state.recentComments || [] });
+    const users = BG.nudgeCandidates(cohort, activity, nudges, { now });
+    return { status: 'ok', group: { id: g.id, name: g.name }, users, joined: cohort.length };
+  });
+}
+
+// Bài nhắc vừa đăng / hẹn giờ thật: ghi những người được nhắc tên trong bài (trong số người addon đề xuất)
+async function recordNudge({ contentId, group, at, mentions, userIds }) {
+  const mentioned = new Set(Object.values(mentions || {}).map((m) => m?.id).filter(Boolean));
+  const ids = (userIds || []).filter((id) => mentioned.has(id));
+  if (!contentId || !ids.length) return;
+  const { nudges = [], nudgeDraft } = await chrome.storage.local.get(['nudges', 'nudgeDraft']);
+  const set = { nudges: BG.addNudge(nudges, { id: contentId, groupId: group.id, groupName: group.name, at, userIds: ids }) };
+  await chrome.storage.local.set(set);
+  if (nudgeDraft?.groupId === group.id) await chrome.storage.local.remove('nudgeDraft');
+}
+
+// Hiệu quả 10 lần nhắc gần nhất (chỉ đọc): bài của người được nhắc từ lúc nhắc, ai đã rời; lưu ở `nudgeEffect`
+async function doNudgeEffect() {
+  const { nudges = [] } = await chrome.storage.local.get('nudges');
+  const { state } = await load();
+  const groups = state.snapshot?.groups || [];
+  const now = Date.now();
+  const recent = nudges.slice(0, 10);
+  if (!recent.length) return { status: 'ok', at: now, items: [] };
+  const r = await withClient(async (client) => {
+    const items = [];
+    for (const n of recent) {
+      const g = groups.find((x) => x.id === n.groupId);
+      const at = Date.parse(n.at);
+      if (!g || !(at <= now)) {
+        items.push({ ...BG.nudgeEffect(n, { now }), error: g ? '' : 'group không còn trong danh sách' });
+        continue;
+      }
+      const ap = await readActorPosts(client, g, n.userIds.map((id) => ({ id })), at);
+      if (ap.status === 'need_login') return ap;
+      const ev = await readMemberEvents(client, g, at, now);
+      if (ev.status === 'need_login') return ev;
+      const leftIds = ev.status === 'ok' ? BG.memberMoves(ev.events).filter((a) => a.kind === 'out' && Date.parse(a.time) >= at).map((a) => a.user.id) : [];
+      items.push(BG.nudgeEffect(n, { posts: ap.posts || {}, comments: state.recentComments || [], leftIds, now }));
+    }
+    return { status: 'ok', at: now, items };
+  });
+  if (r.status === 'ok') await chrome.storage.local.set({ nudgeEffect: { at: r.at, items: r.items } });
+  return r;
+}
