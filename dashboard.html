@@ -336,6 +336,7 @@
             <button data-f="dismissed">Đã bỏ qua <span id="rcnt-dismissed"></span></button>
             <button data-f="hidden">Đã ẩn <span id="rcnt-hidden"></span></button>
           </div>
+          <input type="search" id="recent-q" class="list-q" placeholder="Lọc: @tên, #TAG, chữ…" aria-label="Lọc bài theo người đăng, tag hoặc nội dung" />
         </div>
       </div>
       <div id="recent-note" class="muted small review-note"></div>
@@ -367,6 +368,7 @@
             <button data-f="dismissed">Đã bỏ qua <span id="ccnt-dismissed"></span></button>
             <button data-f="hidden">Đã ẩn <span id="ccnt-hidden"></span></button>
           </div>
+          <input type="search" id="comment-q" class="list-q" placeholder="Lọc: @tên, chữ…" aria-label="Lọc bình luận theo người viết hoặc nội dung" />
         </div>
       </div>
       <div id="comments-note" class="muted small review-note"></div>
@@ -890,6 +892,114 @@
       <div class="heat-legend muted small"><span>Ít tương tác</span><i style="--lv: 15%"></i><i style="--lv: 40%"></i><i style="--lv: 65%"></i><i style="--lv: 90%"></i><span>Nhiều</span><span>· ô trống: chưa có bài · viền tím: khung giờ gợi ý</span></div>
     </section>
 
+    <section class="card span-3" id="monthly" data-tab="stats">
+      <div class="card-head">
+        <h2>Báo cáo tháng</h2>
+        <div class="review-tools">
+          <select id="monthly-group" aria-label="Chọn community hoặc group"></select>
+          <select id="monthly-month" aria-label="Chọn tháng"></select>
+          <button type="button" class="primary sm" id="btn-monthly-run">Tạo báo cáo</button>
+        </div>
+      </div>
+      <div class="muted small review-note" id="monthly-note"></div>
+      <div id="monthly-out" hidden>
+        <div class="stat-tiles" id="monthly-tiles"></div>
+        <div class="monthly-cols">
+          <div>
+            <h3 class="sub-h">Bài nổi bật trong tháng</h3>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Bài</th><th class="num">Lượt xem</th><th class="num">Cảm xúc</th><th class="num">Bình luận</th></tr></thead>
+                <tbody id="monthly-posts"></tbody>
+              </table>
+            </div>
+          </div>
+          <div>
+            <h3 class="sub-h">Người đăng tích cực</h3>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Thành viên</th><th class="num">Bài</th><th class="num">Cảm xúc</th><th class="num">Bình luận</th></tr></thead>
+                <tbody id="monthly-authors"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        <h3 class="sub-h">Bản chữ để gửi các admin khác</h3>
+        <pre class="monthly-text" id="monthly-text"></pre>
+        <div class="monthly-actions">
+          <button type="button" class="primary sm" id="btn-monthly-copy">📋 Sao chép</button>
+          <button type="button" class="ghost sm" id="btn-monthly-file">Tải tệp .txt</button>
+          <button type="button" class="ghost sm" id="btn-monthly-tg" title="Gửi vào chat Telegram đã cài ở tab Quy tắc & cài đặt">Gửi về Telegram</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="card span-3" id="retention" data-tab="stats">
+      <div class="card-head">
+        <h2>Thành viên mới có ở lại không?</h2>
+        <div class="review-tools">
+          <select id="ret-group" aria-label="Chọn community hoặc group"></select>
+          <div class="seg" id="ret-range" aria-label="Người vào trong">
+            <button data-f="30" class="active">30 ngày</button>
+            <button data-f="60">60 ngày</button>
+            <button data-f="90">90 ngày</button>
+          </div>
+          <button type="button" class="primary sm" id="btn-ret-run">Phân tích</button>
+        </div>
+      </div>
+      <div class="muted small review-note" id="ret-note"></div>
+      <div id="ret-out" hidden>
+        <div class="stat-tiles" id="ret-tiles"></div>
+        <div class="table-wrap">
+          <table class="ret-weeks">
+            <thead><tr><th>Tuần vào</th><th class="num">Người mới</th><th>Còn ở lại</th><th>Có hoạt động</th></tr></thead>
+            <tbody id="ret-weeks"></tbody>
+          </table>
+        </div>
+        <div class="ret-list-head">
+          <div class="seg" id="ret-filter" aria-label="Lọc">
+            <button data-f="all" class="active">Tất cả</button>
+            <button data-f="silent">Chưa thấy hoạt động</button>
+            <button data-f="active">Có hoạt động</button>
+            <button data-f="gone">Đã rời</button>
+          </div>
+          <div class="review-tools">
+            <button type="button" class="ghost sm" id="btn-ret-nudge">✉ Soạn bài nhắc người chưa hoạt động</button>
+            <button type="button" class="ghost sm" id="btn-ret-csv">Xuất CSV</button>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table class="requests">
+            <thead><tr><th>Thành viên</th><th>Vào lúc</th><th>Tình trạng</th><th class="num">Bài</th><th class="num">Bình luận</th></tr></thead>
+            <tbody id="ret-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section class="card span-3" id="stats-insights" data-tab="stats">
+      <div class="card-head">
+        <h2>Hiệu quả bài đã đăng qua addon</h2>
+        <div class="review-tools">
+          <div class="seg" id="ins-sort" aria-label="Sắp xếp">
+            <button data-f="new" class="active">Mới nhất</button>
+            <button data-f="score">Hiệu quả nhất</button>
+          </div>
+          <button type="button" class="ghost sm" id="btn-ins-refresh" title="Đọc số hiện tại của 40 bài mới nhất (chỉ đọc)">↻ Cập nhật số liệu</button>
+        </div>
+      </div>
+      <div class="muted small review-note" id="ins-note"></div>
+      <div class="best-top" id="ins-best"></div>
+      <div class="table-wrap">
+        <table class="requests posts">
+          <thead>
+            <tr><th>Bài</th><th>Đăng lúc</th><th>Nơi đăng</th><th>Sau 24 giờ</th><th>Sau 7 ngày</th><th>Hiện tại</th><th class="num">Điểm</th></tr>
+          </thead>
+          <tbody id="ins-body"></tbody>
+        </table>
+      </div>
+    </section>
+
     <div class="span-2 rules-col" data-tab="settings">
       <section class="card" id="rules-scope">
         <div class="card-head">
@@ -994,6 +1104,7 @@
         <label class="switch-row"><input type="checkbox" id="spamWaves" /><span><b>Báo đợt spam</b><br /><span class="muted small">Cùng một link (hoặc cùng nội dung) từ 3 tài khoản trở lên trong 6 giờ: thông báo và hiện ở đầu tab Bài viết.</span></span></label>
         <label class="switch-row"><input type="checkbox" id="welcomeReminder" /><span><b>Nhắc việc đầu tuần</b><br /><span class="muted small">Sáng thứ Hai (sau 8 giờ) thông báo nhắc chào thành viên mới và vinh danh thành viên tích cực; bấm vào thì addon tìm sẵn người mới và người tích cực trong 7 ngày.</span></span></label>
         <label class="switch-row"><input type="checkbox" id="weeklyReport" /><span><b>Tóm tắt tuần</b><br /><span class="muted small">Sáng thứ Hai (sau 8 giờ) thông báo tóm tắt tuần trước. Xem bất cứ lúc nào ở Tổng quan → Tóm tắt hoạt động.</span></span></label>
+        <label class="switch-row"><input type="checkbox" id="monthlyReport" /><span><b>Báo cáo tháng</b><br /><span class="muted small">Đầu tháng (từ 8 giờ sáng ngày 1) thông báo nhắc xem báo cáo tháng trước. Xem bất cứ lúc nào ở Thống kê → Báo cáo tháng.</span></span></label>
         <label class="switch-row"><input type="checkbox" id="trackViolations" /><span><b>Ghi hồ sơ vi phạm</b><br /><span class="muted small">Ghi lại ai bị cấm, xoá, ẩn bài, báo cáo… (mỗi lần quét đọc thêm nhật ký hoạt động của group). Chỉ lưu trong trình duyệt này.</span></span></label>
         <label class="select-row">
           <span><b>Chu kỳ quét</b></span>
@@ -1126,6 +1237,27 @@
       </div>
       <button id="btn-more" class="ghost more" hidden>Xem thêm</button>
     </section>
+
+    <section class="card span-3" id="diag-card" data-tab="log">
+      <div class="card-head">
+        <h2>Lỗi kỹ thuật</h2>
+        <div class="review-tools">
+          <span class="muted small" id="diag-count"></span>
+          <button type="button" class="ghost sm" id="btn-diag-reload" title="Đọc lại">↻</button>
+          <button type="button" class="primary sm" id="btn-diag-copy">📋 Sao chép báo cáo</button>
+          <button type="button" class="ghost sm danger" id="btn-diag-clear">Xoá</button>
+        </div>
+      </div>
+      <div class="muted small review-note">Addon tự ghi lỗi khi chạy (của nền, Dashboard, cửa sổ nhỏ) và lỗi Beincom trả về khi gọi API — không ghi nội dung bài, mật khẩu hay token. Gặp trục trặc thì bấm <b>Sao chép báo cáo</b> rồi dán cho người hỗ trợ. Hết phiên đăng nhập và bài đã bị xoá trên web không tính là lỗi.</div>
+      <div class="table-wrap">
+        <table class="requests diag-table">
+          <thead>
+            <tr><th>Lúc</th><th>Ở đâu</th><th>Lỗi</th><th class="num">Số lần</th></tr>
+          </thead>
+          <tbody id="diag-body"></tbody>
+        </table>
+      </div>
+    </section>
   </main>
 
   <dialog id="confirm">
@@ -1142,11 +1274,30 @@
     </form>
   </dialog>
 
+  <dialog id="whatsnew" class="whatsnew">
+    <form method="dialog">
+      <h3 id="whatsnew-title">Có gì mới</h3>
+      <div id="whatsnew-body" class="whatsnew-body"></div>
+      <div class="dialog-actions">
+        <a href="HUONG-DAN-CAI.html" target="_blank" class="small whatsnew-guide">Hướng dẫn cài / cập nhật</a>
+        <button value="ok" id="whatsnew-ok" class="primary">Đã xem</button>
+      </div>
+    </form>
+  </dialog>
+
   <footer class="muted small">
-    Dữ liệu chỉ lưu trong trình duyệt này · <span id="version"></span> · Tác giả: <b>Kai | Crypto Life</b>
+    Dữ liệu chỉ lưu trong trình duyệt này · <span id="version"></span> · <a href="#" id="btn-whatsnew">Có gì mới</a> · <a href="HUONG-DAN-CAI.html" target="_blank">Hướng dẫn cài</a> · Tác giả: <b>Kai | Crypto Life</b>
   </footer>
 
   <script src="common.js"></script>
+  <script src="lib/content.js"></script>
+  <script src="lib/members.js"></script>
+  <script src="lib/compose.js"></script>
+  <script src="lib/article.js"></script>
+  <script src="lib/manage.js"></script>
+  <script src="lib/reports.js"></script>
+  <script src="lib/telegram.js"></script>
+  <script src="lib/diag.js"></script>
   <script src="upload.js"></script>
   <script src="charts.js"></script>
   <script src="dash/core.js"></script>
@@ -1163,9 +1314,13 @@
   <script src="dash/welcome.js"></script>
   <script src="dash/shoutout.js"></script>
   <script src="dash/stats.js"></script>
+  <script src="dash/insights.js"></script>
+  <script src="dash/monthly.js"></script>
+  <script src="dash/retention.js"></script>
   <script src="dash/settings.js"></script>
   <script src="dash/log.js"></script>
   <script src="dash/todo.js"></script>
+  <script src="dash/whatsnew.js"></script>
   <script src="dashboard.js"></script>
 </body>
 </html>

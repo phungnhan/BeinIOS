@@ -136,7 +136,7 @@ function fixture() {
   };
 }
 
-function makeEnv({ data = fixture(), settings = {}, rules = {}, postRules = {}, groupRules = null, loggedIn = true } = {}) {
+function makeEnv({ data = fixture(), settings = {}, rules = {}, postRules = {}, groupRules = null, loggedIn = true, now = null } = {}) {
   const calls = [];
   const bodies = [];
   const headers = {};
@@ -249,6 +249,27 @@ function makeEnv({ data = fixture(), settings = {}, rules = {}, postRules = {}, 
       const page = all.slice(offset, offset + limit);
       const pick = (admin) => ({ data: page.filter((u) => !!u.isAdmin === admin), userCount: all.filter((u) => !!u.isAdmin === admin).length });
       return reply(200, ok({ groupAdmin: pick(true), groupMember: pick(false) }, { total: all.length, limit, offset, hasNextPage: offset + limit < all.length }));
+    }
+    // Nhật ký thành viên (objectType=MEMBER, from / to theo ms, trang tối đa 100): data.memberEvents[groupId] dạng API
+    if ((m = path.match(/^group\/groups\/(\w+)\/activity-logs$/)) && q.objectType === 'MEMBER') {
+      if (Number(q.limit) > 100) return reply(400, { code: 'api.validation_error', meta: { message: 'Bad Request Exception' } });
+      const t = (e) => Date.parse(e.eventTime);
+      const all = (data.memberEvents?.[m[1]] || []).filter((e) => (!q.from || t(e) >= Number(q.from)) && (!q.to || t(e) <= Number(q.to))).sort((a, b) => t(b) - t(a));
+      const [limit, page] = [Number(q.limit), Number(q.page || 1)];
+      return reply(200, ok(all.slice((page - 1) * limit, page * limit), { total: all.length, hasNextPage: page * limit < all.length }));
+    }
+    // Tìm bài như trang Tìm kiếm của web: groupId, startTime / endTime (ISO), actors[] — data.search, mới nhất trước
+    if (path === 'content/contents' && method === 'GET') {
+      const actors = new URLSearchParams(query).getAll('actors[]');
+      data.searchActorsMax = Math.max(data.searchActorsMax || 0, actors.length);
+      if (actors.length > 20) return reply(400, { code: 'api.validation_error', meta: { message: 'URL quá dài' } });
+      const all = (data.search || [])
+        .filter((x) => (!q.startTime || x.publishedAt >= q.startTime) && (!q.endTime || x.publishedAt < q.endTime) && (!actors.length || actors.includes(x.actor.id)))
+        .sort((a, b) => b.publishedAt.localeCompare(a.publishedAt));
+      const start = Number(q.after || 0);
+      const list = all.slice(start, start + Number(q.limit));
+      const more = start + list.length < all.length;
+      return reply(200, ok({ list, meta: { total: all.length, hasNextPage: more, endCursor: more ? String(start + list.length) : null } }));
     }
     if ((m = path.match(/^group\/groups\/(\w+)\/activity-logs$/))) {
       const all = (data.activity[m[1]] || []).filter((e) => !q.useCase || e.useCase === q.useCase);
@@ -424,9 +445,9 @@ function makeEnv({ data = fixture(), settings = {}, rules = {}, postRules = {}, 
     chrome,
     BG,
     fetch,
-    // Nạp thật các tệp bg/*.js như service worker (common.js đã có sẵn dưới tên BG)
+    // Nạp thật các tệp bg/*.js như service worker (common.js và lib/*.js đã có sẵn dưới tên BG)
     importScripts: (...files) => {
-      for (const f of files) if (f !== 'common.js') vm.runInContext(fs.readFileSync(path.join(__dirname, '..', f), 'utf8'), ctx, { filename: f });
+      for (const f of files) if (f !== 'common.js' && !f.startsWith('lib/')) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', f), 'utf8'), ctx, { filename: f });
     },
     setTimeout: (fn) => setImmediate(fn),
     clearTimeout: () => {},
@@ -436,6 +457,8 @@ function makeEnv({ data = fixture(), settings = {}, rules = {}, postRules = {}, 
     URL,
     AbortController,
   });
+  // Giả giờ của service worker (vd. ngày đầu tháng) — chỉ Date.now()
+  if (now) vm.runInContext(`Date.now = () => ${Number(now)};`, ctx);
   vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'background.js'), 'utf8'), ctx);
 
   // structuredClone: đưa kết quả về realm của test để deepEqual so được
@@ -2244,14 +2267,14 @@ test('Telegram có nút: bài vi phạm có nút Ẩn / Bỏ qua; đang Chạy t
   const sent = tgSends(env);
   assert.equal(sent.length, 1);
   assert.match(sent[0].body.text, /^<b>⚠️ Bài vi phạm quy tắc · Crypto Life<\/b>\nTác giả t5 @tacgiat5\nVào t\.me\/abc nhận quà\n<i>Lý do: /);
-  assert.deepEqual(sent[0].body.reply_markup.inline_keyboard[0].map((b) => b.text), ['🙈 Ẩn bài', 'Bỏ qua']);
+  assert.deepEqual(sent[0].body.reply_markup.inline_keyboard[0].map((b) => b.text), ['🙈 Ẩn bài', 'Bỏ qua', '🧹 Dọn tài khoản']);
   const [token, a] = Object.entries(env.storage.tgActions)[0];
-  assert.deepEqual(a.data, { id: 't5', reasonType: 'SPAM' });
+  assert.deepEqual(a.data, { id: 't5', reasonType: 'SPAM', actor: { id: 'at5', username: 'tacgiat5', fullname: 'Tác giả t5' } });
   await tgPress(env, 1, token, 'h');
   assert.ok(!env.calls.some((c) => c.endsWith('/hide')));
   let edited = env.tg.filter((x) => x.method === 'editMessageText').at(-1).body;
   assert.match(edited.text, /Chạy thử/);
-  assert.deepEqual(edited.reply_markup.inline_keyboard[0].map((b) => b.text), ['🙈 Ẩn bài', 'Bỏ qua']); // giữ nút
+  assert.deepEqual(edited.reply_markup.inline_keyboard[0].map((b) => b.text), ['🙈 Ẩn bài', 'Bỏ qua', '🧹 Dọn tài khoản']); // giữ nút
   assert.ok(!env.storage.tgActions[token].done);
   env.storage.settings = { ...env.storage.settings, dryRun: false };
   await tgPress(env, 2, token, 'h');
@@ -2457,4 +2480,278 @@ test('Quản lý tag: đọc đủ tag (nhiều trang) và quyền; tạo, đổ
   env.storage.settings = { ...env.storage.settings, dryRun: true };
   const dry = await env.send({ type: 'tagAct', action: 'delete', groupId: 'gCL', tagId: 'tC1', oldName: 'TAG 1' });
   assert.deepEqual([dry.dryRun, writes(env).length, env.storage.log[0].status], [true, before, 'dry']);
+});
+
+// ---------- Dọn tài khoản ----------
+
+test('Dọn tài khoản: ẩn mọi bài và bình luận gần đây còn hiện của một người (đúng API, lý do), tuỳ chọn cấm ở mọi community; không dọn chính mình', async () => {
+  const data = fixture();
+  data.timeline.gCL[0].commentsCount = 2;
+  const spam = { id: 'x9', username: 'spammer', fullname: 'Spam Bot', avatar: '' };
+  data.timeline.gCL.unshift(post('t7', 'Kèo x100 tại abc.xyz', { publishedAt: nowIso(30), actor: spam }), post('t8', 'Lại kèo', { publishedAt: nowIso(20), actor: spam }));
+  data.comments = { t1: [cmt('k1', 'Vào abc.xyz', { createdAt: nowIso(10), actor: spam }), cmt('k2', 'Bài hay', { createdAt: nowIso(9) })] };
+  const env = makeEnv({ data, settings: { dryRun: false } });
+  await scan(env);
+  const r = await env.send({ type: 'cleanupUser', user: { id: 'x9', username: 'spammer', fullname: 'Spam Bot' }, reasonType: 'SPAM', ban: true, banReason: 'SPAM' });
+  assert.deepEqual([r.status, r.hidden, r.banned], ['ok', 3, BG.banTargets(env.storage.state.snapshot.groups).length]);
+  const w = writes(env);
+  assert.deepEqual(w.filter((c) => c.endsWith('/hide')).sort(), ['POST content/comments/k1/hide', 'POST content/contents/t7/hide', 'POST content/contents/t8/hide']);
+  assert.ok(env.bodies.filter(([c]) => c.endsWith('/hide')).every(([, b]) => b.reasonType === 'SPAM'));
+  assert.ok(w.some((c) => /^POST group\/communities\/\w+\/users\/x9\/ban$/.test(c)));
+  const st = env.storage.state;
+  assert.ok(['t7', 't8'].every((id) => st.recentPosts.find((p) => p.id === id).isHidden));
+  assert.equal(st.recentComments.find((c) => c.id === 'k1').isHidden, true);
+  assert.equal(st.recentComments.find((c) => c.id === 'k2').isHidden, false); // bình luận người khác giữ nguyên
+  assert.ok(env.storage.log.filter((e) => e.action === 'hide').every((e) => e.autoReason === 'Dọn tài khoản' && e.source === 'manual'));
+  // Không còn gì để ẩn, chính mình, lý do sai: không gọi API
+  const before = writes(env).length;
+  assert.match((await env.send({ type: 'cleanupUser', user: { id: 'x9' } })).message, /Không còn bài/);
+  assert.match((await env.send({ type: 'cleanupUser', user: { id: 'me1' } })).message, /chính bạn/);
+  assert.match((await env.send({ type: 'cleanupUser', user: { id: 'x9' }, reasonType: 'XX' })).message, /không hợp lệ/);
+  assert.equal(writes(env).length, before);
+});
+
+// ---------- Hiệu quả bài đã đăng ----------
+
+test('hiệu quả bài: đăng thật qua addon thì ghi lại; quét tự động đọc số liệu khi tới mốc 24 giờ / 7 ngày; bài đã xoá đánh dấu; Cập nhật đọc số hiện tại; chạy thử không ghi', async () => {
+  const env = makeEnv({ settings: { dryRun: false } });
+  await scan(env);
+  const at = new Date(Date.now() + 3 * 3600e3).toISOString();
+  await env.send({ type: 'compose', groupIds: ['gCL'], content: 'Bản tin sáng', scheduledAt: at });
+  const e = env.storage.postStats.new1;
+  assert.deepEqual([e.type, e.publishAt, e.groupName, e.snippet], ['POST', at, 'Crypto Life', 'Bản tin sáng']);
+  // Giả như bài đã đăng 25 giờ trước, có số liệu
+  const pub = new Date(Date.now() - 25 * 3600e3).toISOString();
+  env.storage.postStats.new1.publishAt = pub;
+  env.storage.postStats.gone1 = { id: 'gone1', type: 'POST', publishAt: pub, at: Date.now() };
+  env.data.timeline.gCL.push(post('new1', 'Bản tin sáng', { status: 'PUBLISHED', publishedAt: pub, reactionsCount: { like: 3, love: 2 }, commentsCount: 4, totalUsersSeen: 120 }));
+  env.listeners.alarm({ name: 'beingroup-scan' });
+  await scan(env, 'popup');
+  const s1 = env.storage.postStats.new1;
+  assert.deepEqual([s1.d1.views, s1.d1.reactions, s1.d1.comments, s1.d1.ageH, s1.d7, s1.publishedAt], [120, 5, 4, 25, undefined, pub]);
+  assert.equal(env.storage.postStats.gone1.gone, true);
+  // Quét bấm tay không đo; Cập nhật đọc số hiện tại
+  env.data.timeline.gCL.at(-1).commentsCount = 9;
+  const r = await env.send({ type: 'postStatsRefresh' });
+  assert.deepEqual([r.status, r.measured, env.storage.postStats.new1.cur.comments, env.storage.postStats.new1.d1.comments], ['ok', 1, 9, 4]);
+  // Chạy thử: không ghi vào theo dõi
+  env.storage.settings = { ...env.storage.settings, dryRun: true };
+  await env.send({ type: 'compose', groupIds: ['gCL'], content: 'Thử' });
+  assert.deepEqual(Object.keys(env.storage.postStats).sort(), ['gone1', 'new1']);
+});
+
+// ---------- Lỗi kỹ thuật ----------
+
+const ticks = async (n = 3) => {
+  for (let i = 0; i < n; i++) await new Promise((r) => setImmediate(r));
+};
+
+test('Lỗi kỹ thuật: ghi lỗi Beincom khi gọi API (gộp lần lặp), bỏ qua hết phiên / bài đã xoá; nhận lỗi trang gửi về; lệnh hỏng giữa chừng trả câu báo', async () => {
+  const data = fixture();
+  data.failPublish = true;
+  const env = makeEnv({ data, settings: { dryRun: false } });
+  await scan(env);
+  await env.send({ type: 'compose', groupIds: ['gFood'], content: 'Bài lỗi' });
+  await env.send({ type: 'compose', groupIds: ['gFood'], content: 'Bài lỗi lần hai' });
+  await ticks();
+  const api = env.storage.diagLog.filter((e) => e.kind === 'api');
+  assert.equal(api.length, 1);
+  assert.deepEqual([api[0].method, api[0].status, api[0].code, api[0].count, api[0].where], ['PUT', 400, 'api.validation_error', 2, 'sw']);
+  assert.match(api[0].path, /^content\/posts\/new\d\/publish$/);
+  // Bài đã bị xoá trên web: không tính là lỗi
+  await env.send({ type: 'scheduleAct', action: 'cancel', contentId: 'gone1' });
+  await ticks();
+  assert.ok(!env.storage.diagLog.some((e) => String(e.path).includes('gone1')));
+  // Trang báo lỗi JavaScript; nơi lạ thì bỏ
+  await env.send({ type: 'diag', entry: { where: 'dashboard', message: 'TypeError: x is undefined', stack: 'at render (chrome-extension://abcdefghijklmnopabcdefghijklmnop/dash/content.js:12:3)' } });
+  await env.send({ type: 'diag', entry: { where: 'evil', message: 'x' } });
+  await ticks();
+  const js = env.storage.diagLog.filter((e) => e.kind === 'js');
+  assert.deepEqual([js.length, js[0].where, js[0].stack], [1, 'dashboard', 'at render (dash/content.js:12:3)']);
+  // Lệnh hỏng giữa chừng: trả câu báo, ghi lỗi
+  const bad = await env.send({
+    type: 'tags',
+    get groupId() {
+      throw new Error('boom');
+    },
+  });
+  await ticks();
+  assert.deepEqual([bad.status, /boom/.test(bad.message)], ['error', true]);
+  assert.ok(env.storage.diagLog.some((e) => e.kind === 'js' && /Lệnh "tags" lỗi: boom/.test(e.message)));
+  // Hết phiên đăng nhập: không ghi
+  const out = makeEnv({ loggedIn: false });
+  await scan(out);
+  await ticks();
+  assert.ok(!(out.storage.diagLog || []).some((e) => e.status === 401));
+});
+
+// ---------- Thành viên mới có ở lại không, báo cáo tháng ----------
+
+const DAY_MIN = 1440;
+// Sự kiện nhật ký thành viên như API trả: tự vào / rời thì chỉ có actor; bị xoá / cấm / được duyệt thì có user (người bị tác động)
+const memberEvent = (n, useCase, at, extra = {}) => ({ id: `me-${useCase}-${n}-${at}`, eventTime: typeof at === 'number' ? new Date(at).toISOString() : at, useCase, data: { actor: user(n), ...extra } });
+
+test('Thành viên mới có ở lại không: đọc nhật ký thành viên (objectType=MEMBER, from / to, trang 100) và bài của người mới theo lô ≤ 20 người; chỉ đọc', async () => {
+  const data = fixture();
+  const ago = (min) => Date.now() - min * 60e3;
+  data.memberEvents = {
+    gCL: [
+      // 130 người vào trong 26 ngày qua (2 trang nhật ký)
+      ...Array.from({ length: 130 }, (_, i) => memberEvent(100 + i, 'join.community.as_member', ago(((i % 26) + 1) * DAY_MIN))),
+      memberEvent(101, 'leave.group', ago(2 * DAY_MIN - 60)), // vào 2 ngày trước, rời sau 1 giờ
+      { ...memberEvent(9, 'remove.member', ago(DAY_MIN)), data: { actor: user(9), user: user(102) } }, // bị xoá
+      memberEvent(103, 'leave.group', ago(3 * DAY_MIN)),
+      memberEvent(103, 'join.community.as_member', ago(2 * DAY_MIN)), // rời rồi vào lại
+      memberEvent(5, 'join.community.as_member', ago(40 * DAY_MIN)), // vào trước khoảng xem
+      memberEvent(5, 'leave.group', ago(10 * DAY_MIN)),
+    ],
+  };
+  data.search = [
+    post('s1', 'Chào cả nhà, mình mới vào', { publishedAt: new Date(ago(60)).toISOString(), actor: user(104) }),
+    post('s2', 'Bài từ trước khi vào', { publishedAt: new Date(ago(20 * DAY_MIN)).toISOString(), actor: user(105) }),
+  ];
+  const env = makeEnv({ data });
+  await scan(env);
+  const before = env.calls.length;
+  const r = await env.send({ type: 'retention', groupId: 'gCL', days: 30 });
+  assert.equal(r.status, 'ok');
+  const calls = env.calls.slice(before);
+  const logCalls = calls.filter((c) => c.includes('activity-logs'));
+  assert.equal(logCalls.length, 2);
+  assert.match(logCalls[0], /^GET group\/groups\/gCL\/activity-logs\?limit=100&page=1&sort=desc&objectType=MEMBER&from=\d+&to=\d+$/);
+  assert.match(logCalls[1], /page=2/);
+  const search = calls.filter((c) => c.startsWith('GET content/contents?'));
+  assert.equal(search.length, 7); // 130 người / 20 mỗi lần
+  assert.ok(search.every((c) => /groupId=gCL&isIncludedInnerGroups=true&startTime=\d{4}-\d\d-\d\dT[\d%A]+.*&limit=25/.test(c)));
+  assert.equal(data.searchActorsMax, 20);
+  assert.equal(writes(env).length, 0);
+
+  assert.equal(r.cohort.length, 130); // người 5 vào trước khoảng xem: không tính
+  const by = Object.fromEntries(r.cohort.map((m) => [m.user.id, m]));
+  assert.deepEqual([by.u101.status, by.u102.status, by.u103.status, by.u103.rejoined, by.u100.status], ['left', 'removed', 'stay', true, 'stay']);
+  assert.deepEqual(Object.keys(r.actorPosts).sort(), ['u104', 'u105']);
+  // Ghép ở Dashboard: bài trước khi vào không tính; bình luận lấy từ bình luận addon đã đọc
+  const act = BG.cohortActivity(r.cohort, { posts: r.actorPosts, comments: [{ id: 'c1', actor: { id: 'u106' }, createdAt: new Date(ago(30)).toISOString() }] });
+  assert.deepEqual([act.u104, act.u105, act.u106], [{ posts: 1, comments: 0 }, { posts: 0, comments: 0 }, { posts: 0, comments: 1 }]);
+  const s = BG.cohortSummary(r.cohort, act, Date.now());
+  assert.deepEqual([s.joined, s.stayed, s.left, s.removed, s.posted, s.commented, s.silent, s.quickLeave], [130, 128, 1, 1, 1, 1, 126, 1]);
+
+  assert.match((await env.send({ type: 'retention', groupId: 'gOther' })).message, /quét lại/);
+});
+
+test('báo cáo tháng: đọc nhật ký từ đầu tháng trước tới nay, bài từng tháng (startTime / endTime), bài của người mới; Dashboard ghép thành báo cáo', async () => {
+  const data = fixture();
+  const now = Date.now();
+  const key = BG.shiftMonth(BG.monthKey(now), -1);
+  const cur = BG.monthRange(key, now);
+  const prev = BG.monthRange(BG.shiftMonth(key, -1), now);
+  const at = (r, day, h = 3) => r.from + day * 864e5 + h * 3600e3;
+  data.memberEvents = {
+    gCL: [
+      memberEvent(201, 'join.community.as_member', at(prev, 5)),
+      memberEvent(202, 'join.community.as_member', at(prev, 6)),
+      memberEvent(202, 'leave.group', at(prev, 20)),
+      memberEvent(211, 'join.community.as_member', at(cur, 2)),
+      memberEvent(212, 'join.community.as_member', at(cur, 3)),
+      memberEvent(213, 'join.community.as_member', at(cur, 4)),
+      memberEvent(212, 'leave.group', at(cur, 3, 9)), // rời ngay trong ngày đầu
+      memberEvent(214, 'join.community.as_member', now - 3600e3), // tháng này (sau tháng báo cáo)
+      memberEvent(150, 'leave.group', now - 2 * 3600e3),
+    ],
+  };
+  const sp = (id, r, day, extra) => post(id, 'Bài ' + id, { publishedAt: new Date(at(r, day)).toISOString(), reactionsCount: { like: 3 }, commentsCount: 2, totalUsersSeen: 40, ...extra });
+  data.search = [
+    ...Array.from({ length: 30 }, (_, i) => sp('m' + i, cur, 1 + (i % 25), { actor: user(300 + (i % 3)) })),
+    sp('new1', cur, 10, { actor: user(213), reactionsCount: { like: 9 }, commentsCount: 6 }),
+    ...Array.from({ length: 10 }, (_, i) => sp('p' + i, prev, 2 + i)),
+  ];
+  const env = makeEnv({ data });
+  await scan(env);
+  const before = env.calls.length;
+  const raw = await env.send({ type: 'monthly', groupId: 'gCL', month: key });
+  assert.equal(raw.status, 'ok');
+  const calls = env.calls.slice(before);
+  assert.ok(calls.some((c) => c === `GET group/groups/gCL/activity-logs?limit=100&page=1&sort=desc&objectType=MEMBER&from=${prev.from}&to=${raw.now}`));
+  const iso = (t) => encodeURIComponent(new Date(t).toISOString());
+  assert.ok(calls.includes(`GET content/contents?groupId=gCL&isIncludedInnerGroups=true&startTime=${iso(cur.from)}&endTime=${iso(cur.to)}&limit=25`));
+  assert.ok(calls.includes(`GET content/contents?groupId=gCL&isIncludedInnerGroups=true&startTime=${iso(prev.from)}&endTime=${iso(prev.to)}&limit=25`));
+  assert.equal(writes(env).length, 0);
+  assert.deepEqual([raw.key, raw.prevKey, raw.group.userCount, raw.months[key].total, raw.months[key].posts.length, raw.months[prev.key].total], [key, prev.key, 12000, 31, 31, 10]);
+  assert.deepEqual(Object.keys(raw.actorPosts), ['u213']);
+
+  const r = BG.monthlyReport(raw, {
+    log: [
+      { time: new Date(at(cur, 5)).toISOString(), kind: 'member', action: 'approve', status: 'ok', groupId: 'gCL' },
+      { time: new Date(at(cur, 5)).toISOString(), kind: 'post', action: 'hide', status: 'ok', groupId: 'gFood' }, // group khác: không tính
+    ],
+    scopeIds: ['gCL', 'gCLsub'],
+    scopeNames: ['Crypto Life', 'Crypto Life - General'],
+  });
+  // 12000 hiện tại; sau cuối tháng: +1 vào (214), −1 rời (150) => cuối tháng 12000; trong tháng +3 vào, −1 rời => đầu tháng 11998
+  assert.deepEqual([r.members.start, r.members.end, r.members.joined, r.members.left, r.members.prev.joined, r.members.prev.left], [11998, 12000, 3, 1, 2, 1]);
+  assert.deepEqual([r.newcomers.joined, r.newcomers.stayed, r.newcomers.left, r.newcomers.posted, r.newcomers.quickLeave], [3, 2, 1, 1, 1]);
+  assert.deepEqual([r.content.cur.posts, r.content.cur.reactions, r.content.cur.comments, r.content.cur.views, r.content.prev.posts], [31, 30 * 3 + 9, 30 * 2 + 6, 31 * 40, 10]);
+  assert.equal(r.topPosts[0].id, 'new1');
+  assert.deepEqual(r.topAuthors.map((a) => [a.actor.id, a.posts, a.isNew]).slice(0, 1), [['u300', 10, false]]);
+  assert.equal(r.topAuthors.find((a) => a.actor.id === 'u213').isNew, true);
+  assert.deepEqual([r.actions.approved, r.actions.postsHidden], [1, 0]);
+  const text = BG.monthlyText(r);
+  assert.match(text, new RegExp(`^BeinGroup: báo cáo ${r.label} — Crypto Life\\n`));
+  assert.match(text, /• Thành viên: 11\.998 → 12\.000 \(\+2\) · 3 người vào, 1 người rời \(tháng trước: 2 vào, 1 rời\)/);
+  assert.match(text, /• Người mới trong tháng: 3 người · còn ở lại 2 \(67%\) · 1 tự rời · đã đăng bài 1/);
+  assert.match(text, /• Bài viết: 31 bài \(tháng trước 10, \+210%\)/);
+  assert.match(text, /• Kiểm duyệt qua addon: 1 duyệt thành viên$/m);
+
+  // Tháng chưa tới / group lạ
+  assert.match((await env.send({ type: 'monthly', groupId: 'gCL', month: BG.shiftMonth(BG.monthKey(now), 2) })).message, /chưa bắt đầu/);
+  assert.match((await env.send({ type: 'monthly', groupId: 'gOther', month: key })).message, /quét lại/);
+});
+
+test('báo cáo tháng: đầu tháng (7 ngày đầu) quét tự động thì nhắc một lần, mở thẳng Thống kê; tắt thì không; gửi báo cáo về Telegram', async () => {
+  const now = Date.parse('2026-11-03T03:00:00Z'); // 10 giờ sáng thứ Ba 03/11 giờ VN
+  const env = makeEnv({ now });
+  env.storage.log = [
+    { time: '2026-10-15T03:00:00Z', kind: 'member', action: 'approve', status: 'ok', groupId: 'gFood' },
+    { time: '2026-10-16T03:00:00Z', kind: 'comment', action: 'hide', status: 'ok', groupId: 'gCL' },
+    { time: '2026-09-16T03:00:00Z', kind: 'member', action: 'approve', status: 'ok', groupId: 'gFood' }, // tháng khác
+  ];
+  await scan(env);
+  env.listeners.alarm({ name: 'beingroup-scan' });
+  await scan(env, 'popup');
+  const monthly = env.notifications.filter((n) => n.id === 'bg-monthly');
+  assert.equal(monthly.length, 1);
+  assert.equal(monthly[0].title, 'BeinGroup: báo cáo Tháng 10/2026');
+  assert.match(monthly[0].message, /^1 thành viên được duyệt · 1 bài \/ bình luận đã ẩn\. Bấm để xem/);
+  assert.equal(env.storage.state.monthlyKey, '2026-10');
+  // Quét lại: không nhắc nữa
+  env.listeners.alarm({ name: 'beingroup-scan' });
+  await scan(env, 'popup');
+  assert.equal(env.notifications.filter((n) => n.id === 'bg-monthly').length, 1);
+  // Bấm thông báo: mở tab Thống kê
+  env.listeners.notif('bg-monthly');
+  assert.match(env.tabsCreated.at(-1), /dashboard\.html#tab=stats&monthly=1$/);
+
+  // Tắt nhắc báo cáo tháng
+  const off = makeEnv({ now, settings: { monthlyReport: false } });
+  await scan(off);
+  off.listeners.alarm({ name: 'beingroup-scan' });
+  await scan(off, 'popup');
+  assert.equal(off.notifications.filter((n) => n.id === 'bg-monthly').length, 0);
+  // Ngày 10 của tháng: không nhắc (đã quá 7 ngày đầu)
+  const late = makeEnv({ now: Date.parse('2026-11-10T03:00:00Z') });
+  await scan(late);
+  late.listeners.alarm({ name: 'beingroup-scan' });
+  await scan(late, 'popup');
+  assert.equal(late.notifications.filter((n) => n.id === 'bg-monthly').length, 0);
+
+  // Gửi báo cáo về Telegram: cần bật Telegram; tin dài hơn tin thường (tới 3500 ký tự)
+  assert.match((await env.send({ type: 'telegramReport', title: 'BeinGroup: báo cáo', text: 'x' })).message, /Chưa bật gửi về Telegram/);
+  env.storage.telegram = { enabled: true, token: '123456789:' + 'A'.repeat(35), chatId: '42' };
+  const long = '• dòng báo cáo\n'.repeat(150);
+  const sent = await env.send({ type: 'telegramReport', title: 'BeinGroup: báo cáo Tháng 10/2026 — Crypto Life', text: long });
+  assert.equal(sent.status, 'ok');
+  const msg = env.tg.at(-1);
+  assert.equal(msg.method, 'sendMessage');
+  assert.ok(msg.body.text.startsWith('<b>BeinGroup: báo cáo Tháng 10/2026 — Crypto Life</b>\n'));
+  assert.ok(msg.body.text.length > 2000 && msg.body.text.length < 3700);
 });

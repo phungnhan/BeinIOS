@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Cài BeinGroup</title>
+  <style>
+    :root { --bg: #f7f7fb; --surface: #fff; --fg: #1c1a2e; --muted: #6b6880; --border: #e4e2ef; --accent: #6d4aff; --accent-soft: #efeaff; --warn-soft: #fff4e0; }
+    @media (prefers-color-scheme: dark) {
+      :root { --bg: #14131c; --surface: #1d1b28; --fg: #ecebf5; --muted: #a29fb8; --border: #2f2c40; --accent: #a58bff; --accent-soft: #2b2545; --warn-soft: #3a2f17; }
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+    main { max-width: 760px; margin: 0 auto; padding: 24px 16px 48px; }
+    h1 { font-size: 26px; margin: 0 0 4px; }
+    .sub { color: var(--muted); margin: 0 0 24px; }
+    section { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; margin-bottom: 16px; }
+    h2 { font-size: 18px; margin: 0 0 8px; }
+    ol, ul { padding-left: 22px; margin: 6px 0; }
+    li { margin: 6px 0; }
+    code { background: var(--accent-soft); color: var(--accent); padding: 1px 6px; border-radius: 6px; font: 13.5px ui-monospace, Consolas, monospace; }
+    .note { background: var(--warn-soft); border-radius: 8px; padding: 10px 12px; margin-top: 10px; }
+    .muted { color: var(--muted); }
+    dt { font-weight: 600; margin-top: 10px; }
+    dd { margin: 2px 0 0; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Cài BeinGroup</h1>
+    <p class="sub">Addon quản lý Group Beincom cho Chrome / Edge trên máy tính · tác giả Kai | Crypto Life</p>
+
+    <section>
+      <h2>Cần có</h2>
+      <ul>
+        <li>Google Chrome hoặc Microsoft Edge trên máy tính (Windows / macOS).</li>
+        <li>Tài khoản Beincom đang là admin của ít nhất một group / community.</li>
+        <li>Tệp <code>BeinGroup-v….zip</code> do người quản lý gửi.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Cài lần đầu</h2>
+      <ol>
+        <li>Giải nén tệp <code>.zip</code> (chuột phải → <b>Giải nén tất cả</b>), được thư mục <b>BeinGroup</b>. Chuyển thư mục này tới chỗ cố định, ví dụ <code>Tài liệu\BeinGroup</code>. <b>Đừng xoá hay đổi tên thư mục sau khi cài</b> — addon chạy thẳng từ đó.</li>
+        <li>Mở trình duyệt, gõ vào thanh địa chỉ <code>chrome://extensions</code> (Edge: <code>edge://extensions</code>) rồi Enter.</li>
+        <li>Bật <b>Chế độ dành cho nhà phát triển</b> (Developer mode): góc trên bên phải trên Chrome, cột bên trái trên Edge.</li>
+        <li>Bấm <b>Tải tiện ích đã giải nén</b> (Load unpacked) → chọn thư mục <b>BeinGroup</b> (thư mục có tệp <code>manifest.json</code> bên trong).</li>
+        <li>Bấm biểu tượng mảnh ghép trên thanh công cụ → bấm ghim ở dòng BeinGroup để icon luôn hiện.</li>
+      </ol>
+    </section>
+
+    <section>
+      <h2>Bắt đầu dùng</h2>
+      <ol>
+        <li>Đăng nhập <b>beincom.com</b> trên chính trình duyệt này.</li>
+        <li>Bấm icon BeinGroup → <b>Mở Dashboard</b> → <b>↻ Quét ngay</b>. Vài giây sau tab Tổng quan có đủ các group bạn quản trị.</li>
+        <li>Addon mặc định <b>Chạy thử</b>: mọi thao tác chỉ ghi vào Nhật ký, chưa gửi lên Beincom. Dùng quen rồi mới tắt Chạy thử ở tab <b>Quy tắc &amp; cài đặt</b>.</li>
+      </ol>
+      <p class="note">Mọi thao tác ghi (duyệt, ẩn, xoá, cấm, đăng bài) đều hỏi lại trước khi làm. Các tính năng tự xử lý đều tắt sẵn, bạn tự bật khi cần.</p>
+    </section>
+
+    <section>
+      <h2>Cập nhật lên bản mới</h2>
+      <ol>
+        <li>(Nên làm) Dashboard → <b>Quy tắc &amp; cài đặt</b> → <b>Tải bản sao lưu</b>.</li>
+        <li>Giải nén bản mới rồi chép <b>đè</b> toàn bộ vào <b>đúng thư mục BeinGroup cũ</b> (chọn <b>Thay thế các tệp</b>).</li>
+        <li>Vào <code>chrome://extensions</code>, bấm nút <b>↻</b> ở thẻ BeinGroup.</li>
+        <li>Mở Dashboard: hộp <b>Có gì mới</b> hiện các thay đổi của bản mới. Xem lại bất cứ lúc nào ở cuối Dashboard.</li>
+      </ol>
+      <p class="note">Nếu tải bản mới từ một thư mục <b>khác</b>, trình duyệt coi đó là addon mới: cài đặt, quy tắc, nhật ký sẽ trống. Khi đó dùng <b>Khôi phục từ bản sao lưu</b> ở tab Quy tắc &amp; cài đặt (token Telegram không có trong bản sao lưu, cần nhập lại), rồi gỡ bản cũ.</p>
+    </section>
+
+    <section>
+      <h2>Câu hỏi thường gặp</h2>
+      <dl>
+        <dt>Trình duyệt hỏi "Tắt các tiện ích ở chế độ nhà phát triển?"</dt>
+        <dd>Bấm <b>Giữ lại</b> / đóng thông báo. Chrome và Edge nhắc vậy với mọi addon không cài từ cửa hàng; addon vẫn chạy bình thường.</dd>
+        <dt>Addon dùng quyền gì?</dt>
+        <dd>Gọi Beincom (<code>api.beincom.com</code>, <code>group.beincom.com</code>) bằng chính phiên đăng nhập của bạn, hiện thông báo, lưu dữ liệu trong trình duyệt. Chỉ khi bạn bật gửi về Telegram thì mới xin thêm quyền tới <code>api.telegram.org</code>.</dd>
+        <dt>Dữ liệu lưu ở đâu?</dt>
+        <dd>Chỉ trong trình duyệt trên máy này; addon không gửi dữ liệu đi đâu khác ngoài Beincom (và Telegram nếu bạn bật). Gỡ addon là xoá hết.</dd>
+        <dt>Gặp lỗi thì làm gì?</dt>
+        <dd>Dashboard → <b>Nhật ký</b> → thẻ <b>Lỗi kỹ thuật</b> → <b>Sao chép báo cáo</b>, rồi dán gửi người hỗ trợ. Báo cáo không chứa mật khẩu, token hay nội dung bài.</dd>
+        <dt>Gỡ cài đặt?</dt>
+        <dd><code>chrome://extensions</code> → thẻ BeinGroup → <b>Xoá</b>, rồi xoá thư mục BeinGroup.</dd>
+      </dl>
+    </section>
+    <p class="muted">Danh sách thay đổi từng bản: tệp <code>CHANGELOG.md</code> trong thư mục BeinGroup, hoặc mục <b>Có gì mới</b> ở cuối Dashboard.</p>
+  </main>
+</body>
+</html>

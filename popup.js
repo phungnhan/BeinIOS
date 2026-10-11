@@ -1,4 +1,15 @@
 const $ = (id) => document.getElementById(id);
+const WHERE_PAGE = 'popup';
+
+// Lỗi JavaScript của trang: gửi về nền để ghi vào Nhật ký → Lỗi kỹ thuật (không làm gì thêm nếu gửi lỗi)
+function reportDiag(where, e) {
+  try {
+    chrome.runtime.sendMessage({ type: 'diag', entry: { where, kind: 'js', ...e } }).catch(() => {});
+  } catch {}
+}
+window.addEventListener('error', (e) => reportDiag(WHERE_PAGE, { message: e.message, stack: e.error?.stack || `${e.filename}:${e.lineno}:${e.colno}` }));
+window.addEventListener('unhandledrejection', (e) => reportDiag(WHERE_PAGE, { message: String(e.reason?.message || e.reason), stack: e.reason?.stack || '' }));
+
 const POPUP_SETTINGS = ['active', 'dryRun', 'notify'];
 
 function fmtTime(t) {

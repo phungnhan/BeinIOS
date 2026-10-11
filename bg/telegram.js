@@ -36,8 +36,8 @@ function tgError(r) {
   return d || 'HTTP ' + r.status;
 }
 
-async function tgSend(cfg, title, message, url) {
-  const r = await tgApi(cfg.token, 'sendMessage', { chat_id: String(cfg.chatId).trim(), text: BG.telegramText(title, message, url), parse_mode: 'HTML', disable_web_page_preview: true });
+async function tgSend(cfg, title, message, url, max) {
+  const r = await tgApi(cfg.token, 'sendMessage', { chat_id: String(cfg.chatId).trim(), text: BG.telegramText(title, message, url, max), parse_mode: 'HTML', disable_web_page_preview: true });
   await chrome.storage.local.set({ telegramStatus: r.ok ? { at: Date.now(), ok: true } : { at: Date.now(), ok: false, error: tgError(r) } });
   return r;
 }
@@ -48,6 +48,15 @@ async function forwardTelegram(id, title, message, url) {
   if (!BG.telegramShouldSend(tgConfig, id)) return;
   if (BG.telegramActionsOn(tgConfig) && BG.telegramItemNotify(id)) return;
   await tgSend(tgConfig, title, message, url);
+}
+
+// Dashboard gửi một báo cáo (vd. báo cáo tháng) về Telegram, dùng cấu hình đã lưu
+async function doTelegramReport({ title, text }) {
+  const cfg = await loadTelegram();
+  if (!telegramOn(cfg)) return { status: 'error', message: 'Chưa bật gửi về Telegram — cài ở tab Quy tắc & cài đặt' };
+  if (!String(text || '').trim()) return { status: 'error', message: 'Báo cáo trống' };
+  const r = await tgSend(cfg, String(title || 'BeinGroup'), String(text), '', 3500);
+  return r.ok ? { status: 'ok' } : { status: 'error', message: tgError(r) };
 }
 
 // Dashboard bấm "Gửi thử" (dùng token / chat ID đang gõ, chưa cần lưu)
@@ -88,6 +97,7 @@ function queueTelegramItem(item) {
 }
 
 const tgWho = (u) => [u?.fullname, u?.username && '@' + u.username].filter(Boolean).join(' ') || '(không tên)';
+const tgActor = (u) => ({ id: u?.id || '', username: u?.username || '', fullname: u?.fullname || '' });
 const tgReasons = (reasons) => (reasons || []).filter((x) => x.level !== 'ok').map((x) => x.text).join('; ');
 
 // Gom việc mới của một lần quét (gọi cuối doScan, chỉ khi được phép báo và đã có lần quét trước để so)
@@ -141,13 +151,13 @@ function queueScanItems({ state, next, ctx, profiles, freshRequestIds = [], post
     const p = shown(next.recentPosts, x.id);
     if (!p) continue;
     const ev = BG.evaluatePostIn(p, ctx);
-    queueTelegramItem({ kind: 'post', head: `⚠️ Bài vi phạm quy tắc · ${p.groups.map((g) => g.name).join(', ')}`, who: tgWho(p.actor), text: p.title || p.text, note: 'Lý do: ' + tgReasons(ev.reasons), url: BG.postUrl(p), data: { id: p.id, reasonType: BG.tgHideReason(ev.reasons) } });
+    queueTelegramItem({ kind: 'post', head: `⚠️ Bài vi phạm quy tắc · ${p.groups.map((g) => g.name).join(', ')}`, who: tgWho(p.actor), text: p.title || p.text, note: 'Lý do: ' + tgReasons(ev.reasons), url: BG.postUrl(p), data: { id: p.id, reasonType: BG.tgHideReason(ev.reasons), actor: tgActor(p.actor) } });
   }
   for (const x of comments) {
     const c = shown(next.recentComments, x.id);
     if (!c) continue;
     const ev = BG.evaluatePostIn(c, ctx);
-    queueTelegramItem({ kind: 'comment', head: `⚠️ Bình luận vi phạm quy tắc · ${c.groups.map((g) => g.name).join(', ')}`, who: tgWho(c.actor), text: c.text, note: 'Lý do: ' + tgReasons(ev.reasons), url: BG.commentUrl(c), data: { id: c.id, reasonType: BG.tgHideReason(ev.reasons) } });
+    queueTelegramItem({ kind: 'comment', head: `⚠️ Bình luận vi phạm quy tắc · ${c.groups.map((g) => g.name).join(', ')}`, who: tgWho(c.actor), text: c.text, note: 'Lý do: ' + tgReasons(ev.reasons), url: BG.commentUrl(c), data: { id: c.id, reasonType: BG.tgHideReason(ev.reasons), actor: tgActor(c.actor) } });
   }
   // Đợt spam mới
   for (const w of waves) {
@@ -204,8 +214,10 @@ function runTelegramAction(a, act) {
     case 'approval':
       return doApprovalAct({ action: 'approve', groupId: d.groupId, contentIds: [d.contentId], source });
     case 'post':
+      if (act === 'c') return doCleanupUser({ user: d.actor, reasonType: d.reasonType || 'SPAM', source });
       return act === 'h' ? doPostAct({ action: 'hide', contentIds: [d.id], reasonType: d.reasonType || 'OTHERS', source }) : doPostAct({ action: 'dismiss', contentIds: [d.id] });
     case 'comment':
+      if (act === 'c') return doCleanupUser({ user: d.actor, reasonType: d.reasonType || 'SPAM', source });
       return act === 'h' ? doCommentAct({ action: 'hide', commentIds: [d.id], reasonType: d.reasonType || 'OTHERS', source }) : doCommentAct({ action: 'dismiss', commentIds: [d.id] });
     case 'wave':
       return act === 'h' ? doSpamAct({ action: 'hide', key: d.key, postIds: d.postIds || [], commentIds: d.commentIds || [], reasonType: 'SPAM', source }) : doSpamAct({ action: 'dismiss', key: d.key });

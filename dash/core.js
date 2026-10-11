@@ -2,10 +2,21 @@
 // Các tệp dash/*.js là script thường dùng chung phạm vi toàn cục; thứ tự nạp xem cuối dashboard.html.
 
 const $ = (id) => document.getElementById(id);
+const WHERE_PAGE = 'dashboard';
+
+// Lỗi JavaScript của trang: gửi về nền để ghi vào Nhật ký → Lỗi kỹ thuật (không làm gì thêm nếu gửi lỗi)
+function reportDiag(where, e) {
+  try {
+    chrome.runtime.sendMessage({ type: 'diag', entry: { where, kind: 'js', ...e } }).catch(() => {});
+  } catch {}
+}
+window.addEventListener('error', (e) => reportDiag(WHERE_PAGE, { message: e.message, stack: e.error?.stack || `${e.filename}:${e.lineno}:${e.colno}` }));
+window.addEventListener('unhandledrejection', (e) => reportDiag(WHERE_PAGE, { message: String(e.reason?.message || e.reason), stack: e.reason?.stack || '' }));
+
 const RULE_BOOLS = ['requireAvatar', 'requireAnswers', 'requireVerified', 'declineDeactivated', 'reviewViolators'];
 const RULE_LISTS = { bannedKeywords: false, allowUsernames: true, blockUsernames: true }; // true = danh sách username
 const POST_RULE_LISTS = ['bannedKeywords', 'blockedDomains', 'allowedDomains'];
-const SETTING_BOOLS = ['active', 'dryRun', 'notify', 'scanPosts', 'scanComments', 'scanReports', 'trackViolations', 'spamWaves', 'welcomeReminder', 'remindUnanswered', 'weeklyReport', 'autoApprove', 'autoDecline', 'autoHideSpam', 'autoApprovePosts'];
+const SETTING_BOOLS = ['active', 'dryRun', 'notify', 'scanPosts', 'scanComments', 'scanReports', 'trackViolations', 'spamWaves', 'welcomeReminder', 'remindUnanswered', 'weeklyReport', 'monthlyReport', 'autoApprove', 'autoDecline', 'autoHideSpam', 'autoApprovePosts'];
 const SETTING_NUMS = ['intervalMin', 'actionDelaySec', 'unansweredHours', 'trustAfterApproved'];
 const LOG_PAGE = 50;
 const RECENT_PAGE = 30;

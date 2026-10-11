@@ -99,3 +99,65 @@ $('btn-clear').addEventListener('click', async () => {
   if (!confirm('Xoá toàn bộ nhật ký thao tác? Không khôi phục được.')) return;
   await chrome.storage.local.set({ log: [] });
 });
+
+// ---------- Lỗi kỹ thuật ----------
+// Đọc thẳng từ storage mỗi lần vẽ (Dashboard không vẽ lại khi diagLog đổi, để lỗi khi vẽ không tự lặp vòng)
+
+async function loadDiag() {
+  try {
+    const { diagLog = [] } = await chrome.storage.local.get('diagLog');
+    return diagLog;
+  } catch {
+    return [];
+  }
+}
+
+async function renderDiag() {
+  const list = await loadDiag();
+  $('diag-count').textContent = list.length ? `${list.length} lỗi` : '';
+  $('btn-diag-copy').disabled = $('btn-diag-clear').disabled = !list.length;
+  const body = $('diag-body');
+  body.replaceChildren();
+  if (!list.length) body.append(el('tr', { class: 'empty-row' }, el('td', { colspan: 4, text: 'Chưa ghi nhận lỗi nào 🎉' })));
+  for (const e of list.slice(0, 100)) {
+    const what = e.kind === 'api' ? `${e.method} ${e.path} → ${e.status || 'không kết nối'}${e.code ? ' ' + e.code : ''}\n${e.message}` : e.message;
+    body.append(
+      el(
+        'tr',
+        {},
+        el('td', { class: 'nowrap', title: e.count > 1 ? 'Lần đầu ' + fmtTime(e.first) : '', text: fmtTime(e.time) }),
+        el('td', { class: 'small' }, el('div', { text: BG.DIAG_WHERE[e.where] || e.where }), el('span', { class: 'tag ' + (e.kind === 'api' ? 'info' : 'err'), text: e.kind === 'api' ? 'API' : 'JavaScript' })),
+        el('td', {}, el('div', { class: 'diag-msg', text: what }), e.stack ? el('div', { class: 'diag-stack', text: e.stack }) : null),
+        el('td', { class: 'num', text: String(e.count || 1) }),
+      ),
+    );
+  }
+}
+
+async function copyText(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    const ta = el('textarea', { style: 'position:fixed;opacity:0' });
+    ta.value = text;
+    document.body.append(ta);
+    ta.select();
+    const ok = document.execCommand('copy');
+    ta.remove();
+    return ok;
+  }
+}
+
+$('btn-diag-copy').addEventListener('click', async () => {
+  const list = await loadDiag();
+  const text = BG.diagText(list, { version: chrome.runtime.getManifest().version, ua: navigator.userAgent });
+  const ok = await copyText(text);
+  toast(ok ? `Đã sao chép báo cáo ${list.length} lỗi — dán vào tin nhắn cho người hỗ trợ.` : 'Không sao chép được — trình duyệt chặn bộ nhớ tạm', ok ? 'ok' : 'err');
+});
+$('btn-diag-clear').addEventListener('click', async () => {
+  if (!confirm('Xoá danh sách lỗi kỹ thuật?')) return;
+  await chrome.storage.local.set({ diagLog: [] });
+  renderDiag();
+});
+$('btn-diag-reload').addEventListener('click', () => renderDiag());

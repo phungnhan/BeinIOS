@@ -19,6 +19,7 @@ window.addEventListener('hashchange', () => {
   if (p.get('group') && p.get('group') !== selectedGroupId) selectGroup(p.get('group'));
   if (p.get('tab') && p.get('tab') !== currentTab) showTab(p.get('tab'));
   if (p.get('welcome')) openWelcome();
+  if (p.get('monthly')) openMonthly();
 });
 
 // Thanh tab: bấm chuột hoặc phím mũi tên trái/phải
@@ -89,13 +90,21 @@ const TAB_RENDER = {
     renderWelcome();
     renderShoutout();
   },
-  stats: () => renderStatsHead(),
+  stats: () => {
+    renderStatsHead();
+    renderMonthly();
+    renderRetention();
+    renderInsights();
+  },
   settings: () => {
     renderRules();
     renderSettings();
     renderBackup();
   },
-  log: () => renderLog(),
+  log: () => {
+    renderLog();
+    renderDiag();
+  },
 };
 const tabDirty = new Set(TABS);
 
@@ -113,7 +122,7 @@ function renderAll() {
 }
 
 async function loadAll() {
-  const { settings, rules, postRules, groupRules, recurring, state, log, templates, profiles, syncStatus, telegramStatus, telegramPoll } = await chrome.storage.local.get(['settings', 'rules', 'postRules', 'groupRules', 'recurring', 'state', 'log', 'templates', 'profiles', 'syncStatus', 'telegramStatus', 'telegramPoll']);
+  const { settings, rules, postRules, groupRules, recurring, state, log, templates, profiles, syncStatus, telegramStatus, telegramPoll, postStats } = await chrome.storage.local.get(['settings', 'rules', 'postRules', 'groupRules', 'recurring', 'state', 'log', 'templates', 'profiles', 'syncStatus', 'telegramStatus', 'telegramPoll', 'postStats']);
   data = {
     settings: { ...BG.DEFAULT_SETTINGS, ...settings },
     rules: { ...BG.DEFAULT_RULES, ...rules },
@@ -127,13 +136,17 @@ async function loadAll() {
     syncStatus: syncStatus || null,
     telegramStatus: telegramStatus || null,
     telegramPoll: telegramPoll || null,
+    postStats: postStats || {},
   };
   renderAll();
   await loadDraftOnce();
   if (!loadAll.started) {
     loadAll.started = true;
+    const p = hashParams(); // đọc trước: showTab ghi lại hash chỉ còn tab / group
     showTab(currentTab);
-    if (hashParams().get('welcome')) openWelcome(); // mở từ thông báo nhắc chào thành viên mới
+    if (p.get('welcome')) openWelcome(); // mở từ thông báo nhắc chào thành viên mới
+    if (p.get('monthly')) openMonthly(); // mở từ thông báo đầu tháng
+    checkWhatsNew(); // vừa cập nhật addon: hiện Có gì mới
   } else ensureTabData();
 }
 
@@ -141,7 +154,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== 'local') return;
   // Đánh dấu đã xem / lưu nháp: không cần vẽ lại cả trang
   // Nút Telegram: offset đọc nút bấm / danh sách việc đã gửi đổi thường xuyên, không cần vẽ lại (thao tác thật sẽ đổi state / log)
-  if (Object.keys(changes).every((k) => ['activitySeen', 'composeDraft', 'articleDraft', 'telegramPoll', 'tgActions'].includes(k))) return;
+  if (Object.keys(changes).every((k) => ['activitySeen', 'composeDraft', 'articleDraft', 'telegramPoll', 'tgActions', 'diagLog', 'seenVersion'].includes(k))) return;
   loadAll();
 });
 $('version').textContent = 'v' + chrome.runtime.getManifest().version;

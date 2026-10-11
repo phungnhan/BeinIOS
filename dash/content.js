@@ -116,7 +116,8 @@ async function actApproval(action, g, posts) {
 // ---------- Bài mới đăng ----------
 
 function recentRows() {
-  return (data.state.recentPosts || []).map((p) => ({ p, ev: evalPost(p) }));
+  const q = $('recent-q').value;
+  return (data.state.recentPosts || []).filter((p) => BG.itemMatches(p, q)).map((p) => ({ p, ev: evalPost(p) }));
 }
 
 function inFilter(r, f) {
@@ -180,7 +181,7 @@ function renderRecent() {
         'tr',
         { class: p.isHidden || p.dismissed ? 'muted-row' : null },
         el('td', { class: 'cb' }, p.isHidden ? null : rowCheckbox(selectedRecent, p.id, 'bài của ' + (p.actor.fullname || p.actor.username), bulk)),
-        el('td', {}, postAuthor(p.actor)),
+        el('td', {}, postAuthor(p.actor), p.isHidden ? null : cleanupBtn(p.actor)),
         el('td', {}, postContent(p)),
         el('td', {}, postGroups(p, adminIds)),
         el('td', { title: fmtTime(p.publishedAt), text: ago(p.publishedAt) }),
@@ -356,7 +357,52 @@ let commentLimit = COMMENT_PAGE_UI;
 const selectedComments = new Set();
 
 function commentRows() {
-  return (data.state.recentComments || []).map((c) => ({ p: c, ev: evalPost(c) }));
+  const q = $('comment-q').value;
+  return (data.state.recentComments || []).filter((c) => BG.itemMatches(c, q)).map((c) => ({ p: c, ev: evalPost(c) }));
+}
+
+// ---------- Dọn tài khoản ----------
+// Ẩn mọi bài / bình luận gần đây còn hiện của một người (trong các bài addon đã đọc), tuỳ chọn cấm ở mọi community
+
+const footprintOf = (actor) => BG.userFootprint(actor?.id, data.state.recentPosts, data.state.recentComments);
+
+// Nút nhỏ dưới tên người đăng / người viết: chỉ khi người đó còn bài / bình luận hiện và không phải mình
+function cleanupBtn(actor) {
+  if (!actor?.id || actor.id === data.state.me?.id) return null;
+  const fp = footprintOf(actor);
+  const n = fp.posts.length + fp.comments.length;
+  if (!n) return null;
+  return el('div', {}, el('button', { class: 'ghost sm cleanup-btn', disabled: busy, title: `Dọn tài khoản: ẩn ${fp.posts.length} bài, ${fp.comments.length} bình luận gần đây của người này (tuỳ chọn cấm)`, text: `🧹 Dọn (${n})`, onclick: () => cleanupUser(actor) }));
+}
+
+async function cleanupUser(actor) {
+  if (busy || !actor?.id) return;
+  const fp = footprintOf(actor);
+  const targets = BG.banTargets(groups());
+  const reason = el('select', {}, Object.entries(BG.HIDE_REASONS).map(([k, label]) => el('option', { value: k, text: label })));
+  reason.value = 'SPAM';
+  const ban = el('input', { type: 'checkbox' });
+  const banReason = el('select', { 'aria-label': 'Lý do cấm' }, Object.entries(BG.BAN_REASONS).map(([k, label]) => el('option', { value: k, text: label })));
+  banReason.value = 'SPAM';
+  const names = [...fp.posts.map((p) => 'Bài: ' + snippet(p)), ...fp.comments.map((c) => 'Bình luận: ' + String(c.text || '').replace(/\s+/g, ' ').slice(0, 80))];
+  const ok = await confirmDialog({
+    title: `Dọn tài khoản ${personName(actor)}?`,
+    text: `Ẩn ${fp.posts.length} bài và ${fp.comments.length} bình luận gần đây còn hiện của người này trong các group bạn quản trị (chỉ những bài addon đã đọc).`,
+    names,
+    okText: 'Dọn',
+    danger: true,
+    extra: el(
+      'div',
+      {},
+      el('label', { class: 'text-row' }, el('span', {}, el('b', { text: 'Lý do ẩn' })), reason),
+      targets.length
+        ? el('label', { class: 'check' }, ban, el('span', {}, ` Cấm luôn ở ${targets.length} community bạn là chủ / admin `), banReason)
+        : el('div', { class: 'muted small', text: 'Bạn không là chủ / admin community nào nên không cấm được.' }),
+    ),
+    sendNote: `Sẽ gửi lên Beincom ngay (nghỉ ${data.settings.actionDelaySec} giây giữa mỗi thao tác). Ẩn bài chưa hiện lại được bằng addon.`,
+  });
+  if (!ok) return;
+  await send({ type: 'cleanupUser', user: { id: actor.id, username: actor.username, fullname: actor.fullname }, reasonType: reason.value, ban: ban.checked, banReason: banReason.value }, () => 'Đã dọn tài khoản.');
 }
 
 function commentContent(c) {
@@ -411,7 +457,7 @@ function renderComments() {
         'tr',
         { class: c.isHidden || c.dismissed ? 'muted-row' : null },
         el('td', { class: 'cb' }, c.isHidden ? null : rowCheckbox(selectedComments, c.id, 'bình luận của ' + (c.actor.fullname || c.actor.username), bulk)),
-        el('td', {}, postAuthor(c.actor)),
+        el('td', {}, postAuthor(c.actor), c.isHidden ? null : cleanupBtn(c.actor)),
         el('td', {}, commentContent(c)),
         el('td', {}, el('div', { class: 'cmt-post' }, el('a', { href: BG.postUrl({ id: c.postId, type: c.postType }), target: '_blank', text: c.postSnippet || 'Mở bài' })), el('div', { class: 'muted small', text: (c.groups || []).map((g) => g.name).join(', ') })),
         el('td', { title: fmtTime(c.createdAt), text: ago(c.createdAt) }),
@@ -715,3 +761,7 @@ $('btn-recent-more').addEventListener('click', () => {
   recentLimit += RECENT_PAGE;
   renderRecent();
 });
+
+// Ô lọc: @tên, #TAG, chữ (lọc rồi "Chọn tất cả đang hiện" để xử lý cả loạt)
+$('recent-q').addEventListener('input', () => renderRecent());
+$('comment-q').addEventListener('input', () => renderComments());

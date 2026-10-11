@@ -1,5 +1,5 @@
 // Dashboard — tab Đăng bài: soạn Article (tiêu đề, tóm tắt, ảnh bìa, chuyên mục, nội dung Markdown, series / tag,
-// đăng ngay hoặc hẹn giờ) và tạo Series. Nội dung được chuyển sang định dạng trình soạn thảo của Beincom ở common.js.
+// đăng ngay hoặc hẹn giờ) và tạo Series. Nội dung được chuyển sang định dạng trình soạn thảo của Beincom ở lib/article.js.
 // Dùng uploader (dash/attach.js), toLocalInput / nextQuarter (dash/compose.js).
 
 const art = {

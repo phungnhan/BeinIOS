@@ -12,3 +12,6 @@ desktop.ini
 
 # Trang xem thử giao diện với dữ liệu mẫu
 test/preview/
+
+# Gói gửi cho admin khác (node tools/pack.mjs)
+dist/

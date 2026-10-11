@@ -24,7 +24,14 @@
 // Mã chia theo phần trong bg/: core (gọi API, thao tác ghi, thông báo), scan (quét), actions (thao tác),
 // compose (đăng bài), manage (cài đặt group, thống kê, báo cáo), sync (đồng bộ cài đặt giữa các máy), telegram (gửi thông báo về Telegram). Tệp này: lịch chạy, sự kiện, nhận lệnh từ Dashboard / popup.
 
-importScripts('common.js', 'bg/core.js', 'bg/scan.js', 'bg/actions.js', 'bg/compose.js', 'bg/article.js', 'bg/manage.js', 'bg/sync.js', 'bg/telegram.js');
+// Lỗi JavaScript trong service worker: ghi vào Lỗi kỹ thuật (bg/core.js recordDiag)
+globalThis.addEventListener?.('error', (e) => recordDiag({ where: 'sw', kind: 'js', message: e.message, stack: e.error?.stack || `${e.filename}:${e.lineno}:${e.colno}` }));
+globalThis.addEventListener?.('unhandledrejection', (e) => recordDiag({ where: 'sw', kind: 'js', message: String(e.reason?.message || e.reason), stack: e.reason?.stack || '' }));
+
+// common.js tạo BG, lib/*.js (theo BG.PARTS) gắn thêm phần còn lại, rồi tới các tệp của service worker
+importScripts('common.js');
+importScripts(...BG.PARTS.map((p) => `lib/${p}.js`));
+importScripts('bg/core.js', 'bg/scan.js', 'bg/actions.js', 'bg/compose.js', 'bg/article.js', 'bg/manage.js', 'bg/sync.js', 'bg/telegram.js', 'bg/insights.js');
 
 // ---------- Lịch chạy ----------
 
@@ -84,6 +91,7 @@ function notificationTab(id) {
   if (id === 'bg-flagged' || id === 'bg-comments' || id === 'bg-autohide' || id === 'bg-wave' || id.startsWith('bg-posts-')) return 'content';
   if (id === 'bg-weekly' || id === 'bg-watch' || id === 'bg-unanswered') return 'overview';
   if (id === 'bg-welcome') return 'compose&welcome=1';
+  if (id === 'bg-monthly') return 'stats&monthly=1';
   if (id === 'bg-reports' || id === 'bg-autoflag') return 'reports';
   return '';
 }
@@ -93,6 +101,12 @@ chrome.notifications.onClicked.addListener((id) => {
   chrome.tabs.create({ url: id === 'bg-login' ? BG.SITE + '/' : chrome.runtime.getURL(DASHBOARD + (tab ? '#tab=' + tab : '')) });
   chrome.notifications.clear(id);
 });
+
+// Lệnh từ Dashboard / popup hỏng giữa chừng: ghi Lỗi kỹ thuật và trả câu báo (không để trang chờ mãi)
+function handlerError(msg, e) {
+  recordDiag({ where: 'sw', kind: 'js', message: `Lệnh "${msg?.type}" lỗi: ${e?.message || e}`, stack: e?.stack || '' });
+  return { status: 'error', message: 'Lỗi trong addon: ' + (e?.message || e) + ' — xem Nhật ký → Lỗi kỹ thuật' };
+}
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   // Đọc danh sách thành viên / nhật ký không cần chờ lần quét đang chạy
@@ -116,12 +130,21 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     newMembers: () => doNewMembers(msg),
     syncStatus: () => doSyncStatus(),
     telegramTest: () => doTelegramTest(msg),
+    telegramReport: () => doTelegramReport(msg),
     telegramChatId: () => doTelegramChatId(msg),
     telegramPoll: () => pollTelegram(),
+    // Dashboard / popup báo lỗi JavaScript của trang
+    diag: async () => {
+      if (msg.entry?.where === 'dashboard' || msg.entry?.where === 'popup') recordDiag({ ...msg.entry, kind: 'js' });
+      return { status: 'ok' };
+    },
+    postStatsRefresh: () => measurePostStats({ refresh: true }),
+    retention: () => doRetention(msg),
+    monthly: () => doMonthly(msg),
     linkPreview: () => doLinkPreview(msg),
   };
   if (reads[msg?.type]) {
-    reads[msg.type]().then(sendResponse);
+    reads[msg.type]().then(sendResponse, (e) => sendResponse(handlerError(msg, e)));
     return true;
   }
   const handlers = {
@@ -133,6 +156,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     commentAct: () => doCommentAct(msg),
     spamAct: () => doSpamAct(msg),
     banEverywhere: () => doBanEverywhere(msg),
+    cleanupUser: () => doCleanupUser(msg),
     commentWrite: () => doCommentWrite(msg),
     syncNow: () => doSyncNow(msg),
     memberAct: () => doMemberAct(msg),
@@ -153,6 +177,6 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   };
   const h = handlers[msg?.type];
   if (!h) return;
-  exclusive(h).then(sendResponse);
+  exclusive(h).then(sendResponse, (e) => sendResponse(handlerError(msg, e)));
   return true;
 });

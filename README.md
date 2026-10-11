@@ -10,6 +10,15 @@ Tác giả: **Kai | Crypto Life**
 3. Đăng nhập Beincom trên chính trình duyệt đó bằng tài khoản admin group.
 4. Addon mặc định bật **Chạy thử**: bấm Duyệt / Từ chối / Ẩn bài chỉ ghi nhật ký, chưa gửi lên Beincom. Thử quy tắc cho ổn rồi tắt Chạy thử ở Dashboard → Cài đặt.
 
+### Gửi cho admin khác
+```
+node tools/pack.mjs
+```
+- Tạo `dist/BeinGroup-v<phiên bản>.zip`: trong là thư mục `BeinGroup/` chỉ gồm tệp addon cần để chạy, kèm `CHANGELOG.md` và `HUONG-DAN-CAI.html` (hướng dẫn cài / cập nhật / gỡ bằng tiếng Việt cho người không rành kỹ thuật; mở được từ chân Dashboard). Không có mã kiểm thử, công cụ, README.
+- Trước khi ghi, công cụ kiểm tra mọi tệp mà `manifest.json`, các trang HTML, `importScripts` của service worker và `BG.PARTS` nhắc tới đều có trong gói, và `CHANGELOG.md` có mục cho phiên bản trong manifest.
+- Thử chính gói đó trên addon thật: giải nén rồi chạy `node test/e2e/addon.e2e.mjs <thư mục BeinGroup vừa giải nén>`.
+- Mỗi bản mới: tăng `version` trong `manifest.json` và thêm mục `## vX.Y.Z — ngày` ở đầu `CHANGELOG.md` (có test kiểm tra). Người nhận cập nhật bằng cách chép đè vào **đúng thư mục cũ** rồi bấm ↻ — cài từ thư mục khác thì trình duyệt coi là addon mới (mất cài đặt, phải khôi phục từ bản sao lưu).
+
 ## Chức năng (theo tab của Dashboard)
 Dashboard chia thành các tab. Số trên tab là việc đang chờ. Địa chỉ trang nhớ tab đang mở (`#tab=…`). Bảng dài cuộn trong khung của nó và **tên cột luôn hiện** ở trên cùng.
 
@@ -74,6 +83,8 @@ Tab Quy tắc & cài đặt và Nhật ký chỉ dùng dữ liệu trong máy n�
     - Lọc Cần xử lý / Tất cả / Đã bỏ qua / Đã ẩn. **Ẩn** bình luận (như nút Ẩn của admin trên web, có lý do), **Bỏ qua**, **Mở ↗** tới đúng bình luận.
     - **Trả lời** ngay trong addon (dưới tên tài khoản của bạn): điền sẵn @tên người viết; trả lời của một trả lời thì gửi vào bình luận gốc như web. Gõ @username để nhắc tên người đăng bài hoặc người đã bình luận; bình luận vừa gửi hiện luôn trong danh sách.
     - Bình luận mới vi phạm: có thông báo, cộng vào số trên icon và ô "Bài, bình luận vi phạm", ghi vào hồ sơ vi phạm của người viết.
+  - **Lọc bài / bình luận**: ô Lọc ở Bài mới đăng và Bình luận mới — `@tên` theo người đăng, `#TAG` theo tag, hoặc chữ bất kỳ (không cần dấu). Lọc xong bấm "Chọn tất cả đang hiện" rồi Ẩn / Bỏ qua cả loạt.
+  - **🧹 Dọn tài khoản**: nút dưới tên người đăng (Bài mới đăng, Bình luận mới, Hồ sơ vi phạm) hoặc trong tin Telegram có nút. Ẩn một lần mọi bài và bình luận gần đây còn hiện của người đó (trong các bài addon đã đọc) với lý do chọn được, tuỳ chọn **cấm luôn** ở mọi community bạn là chủ / admin. Không dọn được chính mình; nhật ký ghi "Dọn tài khoản".
   - **Quản lý tag** (theo community, cuối tab): danh sách tag kèm số bài đang dùng, tìm tag, **Xem bài ↗** (trang tìm các bài gắn tag đó trong community, như bấm tag trên web), **Tạo tag**, **Đổi tên**, **Xoá**.
     - Giống web Beincom: tên tag 3–32 ký tự, tự viết hoa, không trùng tag đã có; chỉ **đổi tên / xoá được tag chưa gắn vào bài nào** (tag đã dùng thì nút bị khoá).
     - Cần quyền quản lý tag của community (thường chủ hoặc admin community); không có quyền thì chỉ xem. Thao tác có hỏi lại, theo Chạy thử, ghi nhật ký.
@@ -153,6 +164,20 @@ Tab Quy tắc & cài đặt và Nhật ký chỉ dùng dữ liệu trong máy n�
   - Nguồn số liệu:
     - **Chủ / admin community**: số liệu chính thức của Beincom (thành viên và số bài theo ngày).
     - **Admin group**: addon tự tính từ nhật ký hoạt động, bài trên các group bạn quản trị, và số thành viên addon ghi lại sau mỗi lần quét. Biểu đồ số thành viên chỉ có từ ngày cài addon.
+- **Thống kê → Báo cáo tháng**: chọn community / group và tháng (tháng này tới hôm nay, hoặc 2 tháng trước), bấm **Tạo báo cáo** (chỉ đọc). So với tháng trước:
+  - **Thành viên** đầu → cuối tháng, số người vào / rời (suy ra từ số hiện tại và nhật ký vào / rời — dùng được cả khi chỉ là admin group).
+  - **Người mới trong tháng**: còn ở lại bao nhiêu %, tự rời / bị xoá / bị cấm, đã đăng bài, có bình luận, chưa thấy hoạt động.
+  - **Bài viết** trong tháng (số do Beincom đếm), lượt xem, cảm xúc, bình luận; **bài nổi bật**, **người đăng tích cực** (đánh dấu người mới).
+  - **Kiểm duyệt qua addon** (duyệt / từ chối, ẩn, xoá, cấm, báo cáo đã xử lý — theo nhật ký addon, chỉ các group trong phạm vi), người vi phạm nhiều nhất, bài đăng qua addon và hiệu quả trung bình.
+  - **📋 Sao chép**, **Tải tệp .txt** hoặc **Gửi về Telegram** (chat đã cài) để chia sẻ với các admin khác.
+  - Đầu tháng (7 ngày đầu, từ 8 giờ sáng ngày 1) addon thông báo nhắc xem báo cáo tháng trước (tắt được ở cài đặt **Báo cáo tháng**; Telegram gửi kèm loại tin "Tóm tắt tuần / báo cáo tháng"). Bấm thông báo thì mở thẳng báo cáo.
+- **Thống kê → Thành viên mới có ở lại không?**: chọn community / group và 30 / 60 / 90 ngày, bấm **Phân tích** (chỉ đọc):
+  - Số người mới, **còn ở lại** bao nhiêu %, ở lại qua **7 ngày đầu** / **30 ngày đầu** (chỉ tính người đã vào đủ lâu), người rời thường rời sau bao lâu.
+  - **Đã đăng bài** (Beincom tìm bài theo người đăng, chỉ bài sau khi vào) và **có bình luận** (trong các bình luận addon đã đọc khi quét); **chưa thấy hoạt động** = còn ở lại nhưng chưa đăng / bình luận.
+  - Bảng theo **tuần vào**: số người mới, còn ở lại, có hoạt động.
+  - Danh sách từng người (lọc Chưa thấy hoạt động / Có hoạt động / Đã rời) với tình trạng "Tự rời sau 3 ngày", "Bị xoá trong ngày đầu"…; **Xuất CSV**.
+  - **✉ Soạn bài nhắc người chưa hoạt động**: điền bài có @tên những người còn ở lại nhưng im lặng (tối đa 50 người được nhắc) vào ô Đăng bài, bạn xem lại rồi Đăng hoặc Hẹn giờ.
+- **Thống kê → Hiệu quả bài đã đăng qua addon**: mọi bài và Article đăng / hẹn giờ thật qua addon (cả bài định kỳ, nhập CSV) được đo **lượt xem, cảm xúc, bình luận** sau 24 giờ và sau 7 ngày (tự động ở các lần quét), kèm số hiện tại khi bấm **↻ Cập nhật số liệu**. Có trung bình mỗi bài, sắp xếp Mới nhất / Hiệu quả nhất (điểm = cảm xúc + 2 × bình luận), và **giờ đăng hiệu quả theo chính bài của bạn** (từ 3 bài có số liệu). Chỉ đọc; giữ 300 bài gần nhất, không có trong sao lưu.
 - **Quy tắc & cài đặt**: quy tắc lọc thành viên, quy tắc bài viết, cài đặt addon (công tắc tổng, chạy thử, thông báo, quét bài mới, quét báo cáo vi phạm, ghi hồ sơ vi phạm, chu kỳ quét, nghỉ giữa hai thao tác, tự xử lý yêu cầu tham gia).
   - **Quy tắc riêng cho từng group**: ở **Áp dụng quy tắc cho**, chọn một group rồi bấm **Dùng quy tắc riêng cho group này**.
     - Addon chép quy tắc đang dùng thành bản riêng; sửa ở hai thẻ quy tắc bên dưới chỉ áp dụng cho group đó.
@@ -177,6 +202,8 @@ Tab Quy tắc & cài đặt và Nhật ký chỉ dùng dữ liệu trong máy n�
   - **Từ khoá cần để ý** (không phải vi phạm, vd "lừa đảo", "mất tiền", tên dự án): bài / bình luận mới nhắc tới thì có thông báo và hiện ở Việc cần làm (trong 3 ngày) với nút Bình luận / Trả lời / Bỏ qua.
   - **Nhắc bài chưa ai trả lời**: bài của thành viên quá số giờ đã chọn mà chưa có bình luận thì thông báo, mỗi bài một lần.
 - **Nhật ký**: mọi thao tác (bấm tay, tự động, chạy thử, lỗi) kèm lý do và giờ đăng; lọc theo thành viên / bài viết; xuất CSV hoặc JSON.
+- **Có gì mới**: sau khi cập nhật addon, lần đầu mở Dashboard hiện các mục mới của `CHANGELOG.md` (từ bản đã xem tới bản đang chạy, tối đa 5 bản); bấm **Có gì mới** ở chân trang để xem lại 3 bản gần nhất. Cài mới thì không hiện. Bản đã xem lưu ở khoá `seenVersion`.
+  - **Lỗi kỹ thuật**: addon tự ghi lỗi JavaScript (nền, Dashboard, cửa sổ nhỏ) và lỗi Beincom trả về khi gọi API (đường dẫn, mã HTTP, mã lỗi, câu báo). Lỗi giống nhau trong 30 phút gộp một dòng (×N), giữ 200 dòng. Bấm **Sao chép báo cáo** để dán cho người hỗ trợ (kèm phiên bản addon và trình duyệt). Không ghi nội dung bài, body gửi đi, mật khẩu hay token (token Telegram trong đường dẫn bị che); hết phiên đăng nhập (401) và bài đã bị xoá trên web không tính là lỗi. Lệnh nào hỏng giữa chừng thì Dashboard nhận câu báo "Lỗi trong addon … — xem Nhật ký → Lỗi kỹ thuật" thay vì chờ mãi. Chỉ lưu trong máy, không có trong sao lưu.
 - Mọi thao tác ghi đều có hộp xác nhận ghi rõ số mục, group và đang chạy thử hay gửi thật.
 - **Thông báo và huy hiệu**:
   - Số trên icon = yêu cầu tham gia + bài chờ duyệt + bài mới vi phạm + báo cáo chờ xử lý + bài bị Beincom gắn cờ (một bài vừa vi phạm quy tắc vừa bị gắn cờ chỉ đếm một lần). `OFF` = đã tắt addon, `!` = cần đăng nhập lại.
@@ -267,6 +294,8 @@ Chi tiết từng API nằm trong [API.md](API.md). Tóm tắt:
 - **Cài đặt group**: đọc `GET group/groups/{id}/settings`; đổi `PUT group/groups/{id}/settings` với một khoá snake_case (vd `{ id, is_join_approval: false }`); Duyệt bài: `PUT group/communities/{communityId}/content-settings` với `{ group_id, content_approval: { value }, is_update_all: false }`. Quyền lấy từ `group/me/permissions` (`edit_join_setting`, `edit_privacy`).
 - **Ghim**: `GET content/contents/pinned-content/groups/{groupId}`; ghim / bỏ ghim: `PUT content/contents/pinned-content/{contentId}` với `{ pinGroupIds, unpinGroupIds }` (kiểm tra giới hạn 5 bài trước).
 - **Cài đặt bài**: `PUT content/contents/{id}/setting` với `{ canComment, canReact, isImportant, importantExpiredAt }`.
+- **Dọn tài khoản**: ẩn từng bài `POST content/contents/{id}/hide` và bình luận `POST content/comments/{id}/hide` như Ẩn thường, cấm như Cấm ở mọi community; chạy lần lượt trong một lần.
+- **Hiệu quả bài**: `GET content/contents/{id}` → `totalUsersSeen` (lượt xem), `reactionsCount`, `commentsCount`, `publishedAt`; bài đã xoá thì đánh dấu, bài chưa tới giờ thì theo giờ hẹn mới.
 - **Quản lý tag**: đọc `GET content/tags?groupIds[]=<group gốc>&offset=…`, quyền `GET group/me/permissions/can-cud-tags/community/{communityId}`; tạo `POST content/tags` với `{ name, groupId }`, đổi tên `PUT content/tags/{id}` với `{ name }`, xoá `DELETE content/tags/{id}`. Xem bài theo tag: `https://group.beincom.com/search?tags=["TÊN"]&group={…}`.
 - **Sửa bài hẹn giờ**: đọc `GET content/contents/{id}` (bài của mình, trạng thái `WAITING_SCHEDULE` / `SCHEDULE_FAILED`); lưu bằng `PUT content/posts/{id}/schedule` với đủ body như lúc hẹn giờ (nội dung, file, cài đặt, `scheduledAt` mới) — web cũng sửa bài hẹn giờ như vậy.
 - **Article: ảnh, bảng, nhắc tên**: ảnh tải với `resource: 'article:content'`, khối `{ type: 'img', url }`; bảng `table > tr > th/td > p`; nhắc tên `{ type: 'mention', value: username, data: { id, avatar, name, fullname, username } }` và `mentions: { username: data }` trong body (cấu trúc ảnh và bảng đối chiếu với Article có sẵn; nhắc tên đọc từ mã web).
@@ -275,6 +304,10 @@ Chi tiết từng API nằm trong [API.md](API.md). Tóm tắt:
 - **Thống kê** (đọc khi mở tab):
   - `GET group/manage/communities/{communityId}/stats/member-count` và `GET content/stats/communities/{groupId gốc}/contents/daily-counts`: số liệu chính thức cho chủ / admin community.
   - Không có số liệu chính thức thì addon tự tính từ `activity-logs` (tối đa 6 trang × 50 sự kiện), `content/timeline` (tối đa 8 trang × 20 bài mỗi group) và số thành viên ghi sau mỗi lần quét (giữ 120 ngày).
+- **Báo cáo tháng, thành viên mới có ở lại không** (đọc khi bấm nút, gọi thật 11/10 ở Crypto Life — số người vào trong tháng 9 khớp danh sách thành viên):
+  - Nhật ký thành viên: `GET group/groups/{id}/activity-logs?limit=100&page=…&sort=desc&objectType=MEMBER&from=<ms>&to=<ms>` (tối đa 20 trang); sự kiện vào (`join.community.as_member`, `join.group.as_member`, `approve.join_request`, `accept.invitation`), rời (`leave.group`), bị xoá (`remove.member`), bị cấm (`ban.member`).
+  - Bài trong tháng: `GET content/contents?groupId=…&isIncludedInnerGroups=true&startTime=<ISO>&endTime=<ISO>&limit=25&after=…` (API của trang Tìm kiếm; `meta.total` là số bài, đọc tối đa 8 trang để tính tương tác). Thời gian phải là ISO (số ms bị từ chối).
+  - Bài của người mới: thêm `actors[]=<id>` (tối đa 20 người mỗi lần — URL dài hơn bị chặn; `actors=` không có `[]` thì Beincom bỏ qua), tối đa 400 người mới nhất.
 - Thao tác hàng loạt chạy từng mục một, nghỉ 1–5 giây giữa hai mục (chỉnh được).
 - **Tốc độ**: một lần quét ~5–6 giây với 5 group (trước ~23 giây):
   - Các group, bài mới, chi tiết bài chờ duyệt, bài hẹn giờ, tag / series, thống kê đọc song song, tối đa 4 lệnh cùng lúc (không dồn quá nhiều vào Beincom).
@@ -287,14 +320,19 @@ Chi tiết từng API nằm trong [API.md](API.md). Tóm tắt:
 
 ## Cấu trúc mã
 - `background.js` + `bg/`: service worker — quét, gọi API Beincom, thông báo, huy hiệu, mọi thao tác ghi (chạy lần lượt, có chạy thử).
-- `common.js`: hàm thuần dùng chung (quy tắc, chấm điểm, dựng body API, xuất CSV, sao lưu…), có test riêng.
+- `common.js` + `lib/`: hàm thuần dùng chung (không gọi `chrome.*` hay mạng), gom trong đối tượng `BG`, có test riêng.
+  - `common.js`: lõi — hằng số, cài đặt mặc định, tiện ích, quyền, đường dẫn; tạo `BG` và liệt kê các phần ở `BG.PARTS`.
+  - `lib/content.js` (bài viết, bình luận, quy tắc bài, báo cáo, nhắc tên / link, spam), `lib/members.js` (yêu cầu tham gia, hồ sơ vi phạm, chào / vinh danh), `lib/compose.js` (kiểm tra và body bài đăng, đính kèm, tag / series, bài định kỳ, giờ đăng tốt nhất, lịch, nhập CSV, sửa bài, xem trước markdown), `lib/article.js` (Article, Series), `lib/manage.js` (cài đặt group, tag, sao lưu), `lib/reports.js` (tóm tắt tuần, thống kê, hiệu quả bài, người mới, báo cáo tháng), `lib/telegram.js`, `lib/diag.js` (lỗi kỹ thuật).
+  - Nạp `common.js` trước rồi `lib/*.js` theo đúng thứ tự `BG.PARTS` (background.js đọc `BG.PARTS`; dashboard.html, popup.html liệt kê sẵn — có test kiểm tra khớp). Mỗi phần lấy hàm của phần nạp trước qua `const { … } = BG` và gắn hàm của mình vào `BG`; trong Node, `require('./common.js')` tự nạp đủ các phần.
 - `upload.js`: tải ảnh / video / tệp từ trang Dashboard. `charts.js`: biểu đồ SVG của tab Thống kê.
 - `dashboard.html` + `dashboard.css` + script theo tab trong `dash/`, nạp theo thứ tự cuối `dashboard.html` (script thường, dùng chung phạm vi toàn cục):
   - `core.js` (dữ liệu, tiện ích, hộp xác nhận, gửi thao tác, chuyển tab), `ui.js` (ô người dùng / bài dùng ở nhiều tab)
-  - `todo.js` (hộp Việc cần làm), `overview.js`, `members.js`, `content.js` + `tags.js` (Quản lý tag), `reports.js`, `compose.js` + `attach.js` (đính kèm, nhắc tên, link, tag) + `calendar.js` (lịch nội dung, nhập CSV) + `article.js` (Article & Series) + `welcome.js` (chào thành viên mới) + `shoutout.js` (vinh danh), `stats.js`, `settings.js`, `log.js`
+  - `todo.js` (hộp Việc cần làm), `overview.js`, `members.js`, `content.js` (gồm Dọn tài khoản, lọc) + `tags.js` (Quản lý tag), `reports.js`, `compose.js` + `attach.js` (đính kèm, nhắc tên, link, tag) + `calendar.js` (lịch nội dung, nhập CSV) + `article.js` (Article & Series) + `welcome.js` (chào thành viên mới) + `shoutout.js` (vinh danh), `stats.js` + `monthly.js` (Báo cáo tháng) + `retention.js` (Thành viên mới có ở lại không) + `insights.js` (Hiệu quả bài đã đăng), `settings.js`, `log.js`, `whatsnew.js` (Có gì mới)
   - `dashboard.js` nạp cuối: sự kiện chung, vẽ lại toàn trang, nạp dữ liệu.
-- `background.js` (service worker) chỉ lo lịch chạy, sự kiện và nhận lệnh; phần còn lại trong `bg/` nạp bằng `importScripts`: `core.js` (gọi API, thao tác ghi, thông báo, hồ sơ vi phạm, hàng đợi), `scan.js` (quét, tự ẩn, đợt spam), `actions.js` (thao tác thành viên / bài / bình luận), `compose.js` (đăng bài, file, ghim, sửa bài), `article.js` (Article, Series, chuyên mục), `manage.js` (cài đặt group, sao lưu, thống kê, báo cáo), `sync.js` (đồng bộ cài đặt giữa các máy), `telegram.js` (gửi thông báo về Telegram, nút xử lý trong tin).
+- `background.js` (service worker) chỉ lo lịch chạy, sự kiện và nhận lệnh; phần còn lại trong `bg/` nạp bằng `importScripts`: `core.js` (gọi API, thao tác ghi, thông báo, hồ sơ vi phạm, hàng đợi), `scan.js` (quét, tự ẩn, đợt spam), `actions.js` (thao tác thành viên / bài / bình luận), `compose.js` (đăng bài, file, ghim, sửa bài), `article.js` (Article, Series, chuyên mục), `manage.js` (cài đặt group, sao lưu, thống kê, báo cáo), `sync.js` (đồng bộ cài đặt giữa các máy), `telegram.js` (gửi thông báo về Telegram, nút xử lý trong tin), `insights.js` (đo hiệu quả bài đã đăng; đọc số liệu cho báo cáo tháng và thành viên mới).
 - `popup.html` / `popup.js`: cửa sổ nhỏ khi bấm icon.
+- `CHANGELOG.md` (có gì mới từng bản, Dashboard đọc để hiện sau khi cập nhật), `HUONG-DAN-CAI.html` (hướng dẫn cài cho người nhận gói), `tools/pack.mjs` (đóng gói `.zip`).
+- `test/`: kiểm thử hàm thuần và service worker (`*.test.js`), addon thật (`e2e/`), giao diện với dữ liệu mẫu (`ui/`: `stub.js` giả `chrome.*` và service worker, `harness.mjs` điều khiển Chrome, `scenarios.mjs` các kịch bản, `run.mjs` chạy).
 
 ## Kiểm thử
 ```
@@ -304,8 +342,16 @@ Kiểm thử trên addon thật (cần Google Chrome; đặt `CHROME_PATH` nếu
 ```
 node test/e2e/addon.e2e.mjs
 ```
+- Thêm đường dẫn một thư mục để thử addon ở đó (vd. bản giải nén từ `dist/*.zip`).
 - Nạp addon vào Chrome headless bằng CDP (`Extensions.loadUnpacked`), kiểm tra service worker có đủ hàm, nạp dữ liệu mẫu (qua hàng đợi của service worker), mở **Dashboard thật** đi qua cả 8 tab và **popup thật**, báo lỗi JavaScript ở mọi trang. Không đăng nhập Beincom, không thao tác gì lên tài khoản.
-- `test/common.test.js`: quy tắc thành viên và bài viết (chung / riêng từng group), nhận link, quyền, đường dẫn, xuất CSV, xem trước markdown (an toàn với HTML), ghép số liệu thống kê, lịch bài định kỳ, đọc / làm sạch tệp sao lưu, bình luận (thu gọn, chọn bài cần đọc, gộp), tóm tắt tuần, phát hiện đợt spam, nhắc tên trong bình luận, bài chưa ai trả lời, bài chào thành viên mới, thành viên tin cậy (danh sách / số bài được duyệt, đếm từ nhật ký), tên tag (viết hoa, độ dài, trùng), quyền quản lý tag, link tìm bài theo tag, giờ đăng tốt nhất, lưới lịch tháng, đọc CSV (dấu phẩy / chấm phẩy, ngoặc kép, xuống dòng trong ô, giờ Việt Nam, bỏ ngày không có thật, tên group trùng, tệp mẫu đọc lại được), Markdown → nội dung Article (các khối, định dạng chữ, link có chữ hai bên, bảng, ảnh, nhắc tên chỉ người đã chọn, xem trước an toàn), kiểm tra và body Article / Series, nút xử lý trong tin Telegram (bàn phím, mã nút ≤ 64 byte, nội dung tin an toàn, kết quả, dọn việc cũ).
+
+Kiểm thử giao diện (cần Google Chrome, khoảng 20 giây):
+```
+node test/ui/run.mjs
+```
+- Mở Dashboard / popup thật với dữ liệu mẫu (`test/ui/stub.js` thay `chrome.*` và service worker) rồi bấm như người dùng, kiểm tra kết quả: mọi tab hiện được, popup, đăng bài có nhắc tên, giờ đăng tốt nhất, lịch tháng / tuần, nhập CSV, trình soạn thảo Article, Article hẹn giờ và Series, sửa bài hẹn giờ, thành viên tin cậy, quản lý tag, lọc bài và dọn tài khoản, hiệu quả bài, Telegram có nút, việc cần làm, lỗi kỹ thuật (sao chép báo cáo, ghi lỗi trang, xoá), báo cáo tháng (số liệu, sao chép, gửi Telegram, mở từ thông báo), thành viên mới có ở lại không (ô số liệu, lọc, soạn bài nhắc), mở từ thông báo việc đầu tuần, có gì mới sau khi cập nhật, màn hình điện thoại 390px không tràn ngang. Lỗi JavaScript trong trang làm kịch bản trượt.
+- Chạy một phần: `node test/ui/run.mjs tag` (kịch bản có chữ "tag" trong tên). Thêm `--keep` để giữ trang xem thử ở `test/preview/` (mở tay bằng trình duyệt) kèm ảnh chụp kịch bản lỗi.
+- `test/common.test.js`: quy tắc thành viên và bài viết (chung / riêng từng group), nhận link, quyền, đường dẫn, xuất CSV, xem trước markdown (an toàn với HTML), ghép số liệu thống kê, lịch bài định kỳ, đọc / làm sạch tệp sao lưu, bình luận (thu gọn, chọn bài cần đọc, gộp), tóm tắt tuần, phát hiện đợt spam, nhắc tên trong bình luận, tháng theo giờ Việt Nam và nhắc báo cáo đầu tháng, người mới (gộp sự kiện trùng, tự rời / bị xoá / bị cấm / vào lại, ở lại qua 7 / 30 ngày, hoạt động sau khi vào, theo tuần), số thành viên đầu / cuối tháng suy từ nhật ký, báo cáo tháng (phạm vi group, bản chữ), bài chưa ai trả lời, bài chào thành viên mới, thành viên tin cậy (danh sách / số bài được duyệt, đếm từ nhật ký), tên tag (viết hoa, độ dài, trùng), quyền quản lý tag, link tìm bài theo tag, dọn tài khoản và lọc (@tên, #tag, chữ không dấu), hiệu quả bài (số liệu, mốc cần đo, tổng hợp, giờ đăng hiệu quả), giờ đăng tốt nhất, lưới lịch tháng, đọc CSV (dấu phẩy / chấm phẩy, ngoặc kép, xuống dòng trong ô, giờ Việt Nam, bỏ ngày không có thật, tên group trùng, tệp mẫu đọc lại được), Markdown → nội dung Article (các khối, định dạng chữ, link có chữ hai bên, bảng, ảnh, nhắc tên chỉ người đã chọn, xem trước an toàn), kiểm tra và body Article / Series, nút xử lý trong tin Telegram (bàn phím, mã nút ≤ 64 byte, nội dung tin an toàn, kết quả, dọn việc cũ), lỗi kỹ thuật (che token / mật khẩu, rút gọn stack, gộp lỗi giống nhau kể cả khác id, giới hạn số dòng, báo cáo sao chép), có gì mới (so sánh phiên bản, tách mục CHANGELOG, CHANGELOG có mục cho bản trong manifest), thứ tự nạp `common.js` + `lib/*.js` khớp ở mọi nơi.
 - `test/upload.test.js`: luồng tải ảnh / video / tệp với kho lưu trữ giả lập (thứ tự trường, lỗi S3, không đọc được phản hồi, tệp kèm cookie, hết phiên).
 - `test/background.test.js`: chạy `background.js` thật với `chrome.*` và API Beincom giả lập. Kiểm tra:
   - Quét, thông báo, chạy thử, hết phiên đăng nhập, phân trang
@@ -334,12 +380,17 @@ node test/e2e/addon.e2e.mjs
   - Nhắc tên và xem trước link: đúng API / header, chỉ gửi người còn trong bài, không gửi xem trước khi có ảnh
   - Tải file: xin chỗ tải lên đúng API / body / header, chờ xử lý (lỗi, chưa xong, quá lâu), đăng bài kèm ảnh, chạy thử không tải
   - Telegram có nút: việc mới gửi tin riêng có nút (không gửi tin gộp), tối đa 10 tin + tin "còn N việc", loại tin tắt thì không gửi; bấm Duyệt / Từ chối / Ẩn / Ẩn cả đợt / Duyệt bài gọi đúng API, nhật ký ghi Telegram, tin được sửa; bấm lại, sai chat, mã lạ thì không làm; Chạy thử giữ nút; tắt nút thì như cũ và không đọc nút bấm
+  - Dọn tài khoản: ẩn đúng mọi bài / bình luận còn hiện của người đó (đúng API, lý do), cấm ở mọi community khi chọn, không đụng nội dung người khác, không dọn chính mình, không còn gì thì báo
+  - Hiệu quả bài: đăng thật thì ghi lại (chạy thử thì không), quét tự động đọc số liệu khi tới mốc 24 giờ / 7 ngày, bài đã xoá đánh dấu, Cập nhật đọc số hiện tại
   - Quản lý tag: đọc đủ các trang và quyền, tạo / đổi tên / xoá đúng API và body (tên viết hoa), tên sai / thiếu tag không gọi API, chạy thử chỉ ghi nhật ký
   - Tự duyệt bài tin cậy: chỉ bài đạt quy tắc của người trong danh sách hoặc đã được duyệt đủ N bài (chưa bị từ chối), có hồ sơ vi phạm / bài vi phạm thì không, nhật ký ghi lý do, chạy thử ghi một lần, tắt thì không làm; duyệt / từ chối trong Dashboard cũng được đếm
   - Sửa bài hẹn giờ: chỉ bài của mình đang hẹn giờ, lưu bằng PUT …/schedule với đủ body và giờ mới, giờ quá gần / thiếu giờ / bài người khác thì không gửi
   - Article có nhắc tên và ảnh: body gửi mentions và khối mention / img, ảnh chưa tải lên thì không gửi, ảnh trong bài tải đúng resource
   - Article: đọc chuyên mục, tạo nháp rồi publish / schedule đúng body (nội dung dạng trình soạn thảo), series / tag kiểm tra trước, dưới tên group, lỗi thì xoá nháp, thiếu dữ liệu thì không gọi API; Series đúng API / body; ảnh bìa đúng resource; bài hẹn giờ gồm Article, huỷ Article xoá đúng chỗ; chạy thử chỉ ghi nhật ký
   - Hồ sơ vi phạm: ghi từ lần quét (nhật ký Beincom, báo cáo, gắn cờ, vi phạm quy tắc) và từ thao tác qua addon, không ghi trùng, gộp cùng một lần xoá từ hai nguồn, bỏ báo cáo bị bỏ qua, không tự duyệt người có hồ sơ (kể cả người vừa bị cấm trong chính lần quét), tắt thì không đọc / ghi, dựng lần đầu từ nhật ký cũ, xoá hồ sơ
+  - Thành viên mới có ở lại không: đọc nhật ký thành viên đúng tham số (objectType=MEMBER, from / to, nhiều trang), tìm bài của người mới theo lô ≤ 20 người, không gọi API ghi
+  - Báo cáo tháng: đọc nhật ký từ đầu tháng trước, bài từng tháng theo startTime / endTime, ghép báo cáo (số đầu / cuối tháng, người mới, bài nổi bật, thao tác theo group); tháng chưa tới thì báo; đầu tháng quét tự động nhắc một lần, mở thẳng Thống kê, tắt hoặc quá 7 ngày đầu thì không; gửi báo cáo về Telegram
+  - Lỗi kỹ thuật: lỗi API được ghi (bỏ 401 và bài đã xoá), lỗi Dashboard / popup gửi sang được ghi (nơi lạ bị bỏ), lệnh hỏng giữa chừng trả câu báo và ghi lỗi
   - Quét báo cáo: đếm đúng, lần sau báo cái mới (bài gắn cờ ở nhiều group báo một lần), API treo không làm hỏng lần quét, tắt thì không gọi API, xử lý xong thì trừ số đếm, mở tab thì cập nhật số đếm và không báo lại
 
 ## Giới hạn
@@ -364,6 +415,12 @@ node test/e2e/addon.e2e.mjs
 - **Quét bình luận** chỉ thấy 25 bình luận gốc mới nhất và 25 trả lời mới nhất của mỗi bình luận, ở bài nằm trong danh sách bài mới; bình luận trong bài cũ hơn thì không đọc. API đọc đã gọi thật; nút Ẩn bình luận chưa.
 - **Đăng dưới tên group** cần Beincom bật cờ tính năng cho tài khoản (web ẩn nút khi chưa bật); chưa gọi thật lần nào.
 - **Article**: nội dung viết bằng Markdown nên chưa có căn lề, chú thích ảnh, gộp ô bảng (muốn dùng thì sửa tiếp trên web). Cấu trúc nội dung đã đối chiếu với Article có sẵn trên Beincom (chỉ đọc); đăng / hẹn giờ Article, tạo Series, nhắc tên trong Article chưa gọi thật lần nào.
+- **Dọn tài khoản** chỉ ẩn được những bài / bình luận addon đã đọc (bài mới đăng gần đây và bình luận của chúng), không quét lại toàn bộ lịch sử của người đó.
+- **Báo cáo tháng / thành viên mới**:
+  - "Có bình luận" chỉ tính bình luận addon đã đọc khi quét (25 bình luận mới nhất của các bài mới); cảm xúc của người mới thì Beincom không có API để đọc. Người "chưa thấy hoạt động" có thể vẫn đã thả cảm xúc hoặc bình luận ở bài cũ.
+  - Số thành viên đầu / cuối tháng suy ra từ nhật ký; nhật ký quá dài (hơn 2.000 sự kiện từ đầu tháng trước tới nay) thì bỏ phần này. Có thể lệch 1–2 người so với số Beincom hiển thị (tài khoản bị vô hiệu…).
+  - Lượt xem / cảm xúc / bình luận là tổng hiện tại của các bài đăng trong tháng (tối đa 200 bài mới nhất), không phải số phát sinh trong tháng. Phần kiểm duyệt chỉ có thao tác qua addon.
+- **Hiệu quả bài** chỉ đo bài đăng qua addon từ v0.22.0; máy tắt lúc tới mốc thì đo bù ở lần quét sau (ghi số giờ thật lúc đo). Lượt xem là số người đã xem (`totalUsersSeen`) do Beincom trả.
 - **Quản lý tag**: Beincom chỉ cho đổi tên / xoá tag chưa gắn vào bài nào; tag đã dùng thì không bỏ được khỏi bài cũ (admin không sửa được bài người khác). Đọc danh sách tag và quyền quản lý tag đã gọi thật (chỉ đọc); tạo / đổi tên / xoá tag chưa gọi thật.
 - **Tự duyệt bài tin cậy** chỉ đếm bài duyệt qua addon (bài duyệt trên web không được đếm). **Sửa bài hẹn giờ** chưa gọi thật; Article hẹn giờ thì sửa trên web.
 - **Nút xử lý trong Telegram** chỉ chạy khi máy đang mở trình duyệt (addon đọc nút bấm mỗi 30 giây); máy tắt thì bấm nút sẽ được xử lý khi mở lại (Telegram giữ nút bấm 24 giờ). Từ chối bài chờ duyệt cần lý do nên chỉ làm trong Dashboard.

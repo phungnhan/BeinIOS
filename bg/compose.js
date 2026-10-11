@@ -65,6 +65,10 @@ async function finishCompose(r, { base, contentType, state, log }) {
   const next = r.status === 'need_login' ? { ...state, lastResult: { status: 'need_login', message: NEED_LOGIN.message, mode: r.mode || '' } } : state;
   await chrome.storage.local.set({ state: next, log });
   if (r.status === 'need_login') await updateBadge();
+  // Theo dõi hiệu quả (bg/insights.js): bài / Article đăng thật qua addon
+  if (status === 'ok' && r.contentId && (contentType === 'POST' || contentType === 'ARTICLE')) {
+    await trackPostStat({ id: r.contentId, type: contentType, snippet: base.snippet, groupName: base.groupName, publishAt: base.scheduledAt || new Date().toISOString() });
+  }
   return {
     status: r.status,
     message: r.message || '',

@@ -643,8 +643,28 @@ async function doScan({ source = 'alarm' } = {}) {
     notify('bg-weekly', 'BeinGroup: tóm tắt tuần qua', parts.length ? parts.join(' · ') : 'Tuần qua yên ả, không có việc gì cần xử lý. Bấm để xem chi tiết.');
   }
 
+  // Đầu tháng (7 ngày đầu, từ 8 giờ sáng ngày 1): nhắc xem báo cáo tháng trước, một lần mỗi tháng
+  const monthDue = settings.monthlyReport && notifyAllowed && result.status === 'ok' ? BG.monthlyDue(state.monthlyKey, now) : null;
+  if (monthDue) {
+    next.monthlyKey = monthDue;
+    const range = BG.monthRange(monthDue, now);
+    const a = BG.countLogActions(log, (t) => {
+      const v = Date.parse(t);
+      return v >= range.from && v < range.to;
+    });
+    const parts = [
+      a.approved + a.autoApproved && `${a.approved + a.autoApproved} thành viên được duyệt`,
+      a.postsHidden + a.commentsHidden && `${a.postsHidden + a.commentsHidden} bài / bình luận đã ẩn`,
+      a.reportsHandled && `${a.reportsHandled} báo cáo đã xử lý`,
+      a.removed + a.banned && `${a.removed + a.banned} người bị xoá / cấm`,
+    ].filter(Boolean);
+    notify('bg-monthly', `BeinGroup: báo cáo ${range.label}`, (parts.length ? parts.join(' · ') + '. ' : '') + 'Bấm để xem báo cáo từng community: thành viên, người mới có ở lại không, bài viết, tương tác.');
+  }
+
   await flushTelegramItems().catch(() => {});
   await chrome.storage.local.set({ state: next, log });
   await updateBadge();
+  // Hiệu quả bài đã đăng: đọc số liệu các bài tới mốc 24 giờ / 7 ngày (chỉ khi quét tự động thành công)
+  if (auto && result.status === 'ok') await measurePostStats({ now }).catch(() => {});
   return next;
 }

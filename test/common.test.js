@@ -1166,3 +1166,265 @@ test('lỗi tag đang dùng có câu tiếng Việt (gọi thật: DELETE tag đ
   assert.match(BG.errMsg({ status: 400, body: { code: 'tag.is_used', meta: { message: 'The tag is used', errors: 'The tag is used' } } }), /Tag đang gắn vào bài/);
   assert.equal(BG.errMsg({ status: 400, body: { code: 'x', meta: { message: 'Khác' } } }), 'Khác');
 });
+
+test('dọn tài khoản / lọc: bài và bình luận còn hiện của một người; lọc theo @tên, #tag, chữ không dấu', () => {
+  const a = { id: 'u1', username: 'kaicrypto', fullname: 'Kai Crypto' };
+  const b = { id: 'u2', username: 'lan', fullname: 'Lan Anh' };
+  const posts = [{ id: 'p1', actor: a, text: 'Kèo thơm', tags: ['AIRDROP'] }, { id: 'p2', actor: a, isHidden: true }, { id: 'p3', actor: b, text: 'Hỏi đáp', tags: [] }];
+  const comments = [{ id: 'c1', actor: a, text: 'x' }, { id: 'c2', actor: b }];
+  const fp = BG.userFootprint('u1', posts, comments);
+  assert.deepEqual([fp.posts.map((x) => x.id), fp.comments.map((x) => x.id)], [['p1'], ['c1']]);
+  assert.deepEqual(BG.userFootprint('', posts, comments), { posts: [], comments: [] });
+  const m = (q) => posts.filter((p) => BG.itemMatches(p, q)).map((p) => p.id);
+  assert.deepEqual(m(''), ['p1', 'p2', 'p3']);
+  assert.deepEqual(m('@kai'), ['p1', 'p2']);
+  assert.deepEqual(m('#air'), ['p1']);
+  assert.deepEqual(m('keo thom'), ['p1']);
+  assert.deepEqual(m('lan anh'), ['p3']);
+  assert.deepEqual(BG.slimPost({ id: 'x', tags: [{ name: 'AMA' }, {}] }).tags, ['AMA']);
+});
+
+test('hiệu quả bài: số liệu, mốc cần đo, giữ 300 bài, tổng hợp và giờ đăng hiệu quả theo bài của mình', () => {
+  assert.deepEqual(BG.statMetrics({ totalUsersSeen: 50, reactionsCount: { like: 2, love: '3' }, commentsCount: 4 }), { views: 50, reactions: 5, comments: 4 });
+  assert.deepEqual(BG.statMetrics({}), { views: null, reactions: 0, comments: 0 });
+  assert.equal(BG.statScore({ reactions: 5, comments: 4 }), 13);
+  const now = Date.parse('2026-10-11T00:00:00Z');
+  const h = (n) => new Date(now - n * 3600e3).toISOString();
+  const map = {
+    a: { id: 'a', publishAt: h(2) }, // chưa đủ 24 giờ
+    b: { id: 'b', publishAt: h(30) }, // tới mốc 24 giờ
+    c: { id: 'c', publishedAt: h(200), d1: {} }, // tới mốc 7 ngày
+    d: { id: 'd', publishedAt: h(200), d1: {}, d7: {} }, // đủ cả hai
+    e: { id: 'e', publishAt: h(300), gone: true },
+    f: { id: 'f', publishAt: 'x' },
+  };
+  assert.deepEqual(BG.statsDue(map, now).map((x) => [x.id, x.slot]), [['c', 'd7'], ['b', 'd1']]);
+  assert.equal(BG.statsDue(map, now, 1).length, 1);
+  const big = Object.fromEntries(Array.from({ length: 305 }, (_, i) => ['k' + i, { id: 'k' + i, at: i }]));
+  const kept = BG.pruneStats(big);
+  assert.ok(Object.keys(kept).length === 300 && 'k304' in kept && !('k0' in kept));
+  // Tổng hợp: 3 bài có số liệu (d7 ưu tiên), bài chưa đo không tính
+  const vn = (s) => new Date(s + '+07:00').toISOString();
+  const m = (views, reactions, comments) => ({ views, reactions, comments });
+  const sum = BG.insightsSummary({
+    p1: { id: 'p1', publishedAt: vn('2026-10-06T20:00:00'), d1: m(10, 1, 0), d7: m(100, 10, 5) },
+    p2: { id: 'p2', publishedAt: vn('2026-09-29T20:30:00'), d1: m(50, 6, 2) },
+    p3: { id: 'p3', publishedAt: vn('2026-10-08T09:00:00'), cur: m(null, 2, 1) },
+    p4: { id: 'p4', publishAt: vn('2026-10-12T09:00:00') },
+    p5: { id: 'p5', publishedAt: vn('2026-10-01T09:00:00'), d7: m(1, 1, 1), gone: true },
+  });
+  assert.deepEqual([sum.tracked, sum.measured, sum.avg.reactions, sum.avg.comments, sum.avg.views], [4, 3, 6, 8 / 3, 75]);
+  assert.deepEqual(sum.times.top.map((c) => [BG.WEEKDAYS[c.day], c.hour]), [['T3', 20], ['T5', 9]]);
+  assert.equal(BG.insightsSummary({ p1: { id: 'p1', publishedAt: vn('2026-10-06T20:00:00'), d1: m(1, 1, 1) } }).times, null);
+});
+
+test('Lỗi kỹ thuật: làm sạch (không lộ token), gộp lỗi giống nhau trong 30 phút, giữ 200, báo cáo để sao chép', () => {
+  const tok = 'bot123456789:' + 'A'.repeat(30);
+  const c = BG.cleanDiag({ where: 'sw', kind: 'api', method: 'post', path: `x/${tok}/sendMessage?token=abc&a=1`, status: '500', code: 'api.error', message: `lỗi ${tok}` });
+  assert.ok(!JSON.stringify(c).includes('AAAAAAAAAA') && !c.path.includes('abc'));
+  assert.deepEqual([c.method, c.status, c.path], ['POST', 500, 'x/bot***/sendMessage?token=***&a=1']);
+  assert.equal(BG.cleanDiag({ where: 'nowhere', message: '' }).where, 'sw');
+  assert.equal(BG.cleanDiag({ where: 'dashboard', message: 'm', stack: 'Error\n  at f (chrome-extension://abcdefghijklmnopabcdefghijklmnop/dash/a.js:1:2)' }).stack, 'Error\nat f (dash/a.js:1:2)');
+  const t0 = Date.parse('2026-10-11T00:00:00Z');
+  const e = (path) => ({ where: 'sw', kind: 'api', method: 'GET', path, status: 500, message: 'Lỗi' });
+  let list = BG.pushDiag([], e('content/contents/8f1a2b3c-1111-2222-3333-444455556666'), t0);
+  list = BG.pushDiag(list, e('content/contents/9e9e9e9e-1111-2222-3333-444455556666'), t0 + 60e3); // khác id: vẫn gộp
+  list = BG.pushDiag(list, e('content/contents/9e9e9e9e-1111-2222-3333-444455556666'), t0 + 40 * 60e3); // quá 30 phút: dòng mới
+  assert.deepEqual(list.map((x) => x.count), [1, 2]);
+  let many = [];
+  for (let i = 0; i < 205; i++) many = BG.pushDiag(many, { where: 'sw', kind: 'js', message: 'lỗi ' + i }, t0 + i);
+  assert.equal(many.length, 200);
+  const text = BG.diagText(list, { version: '0.22.0', ua: 'Mozilla/5.0 Chrome/141.0.1.2 Safari/537.36', now: t0 });
+  assert.match(text, /^BeinGroup v0\.22\.0 · Chrome\/141\.0\.1\.2 · 07:00 11\/10 \(giờ VN\) · 2 lỗi\n/);
+  assert.match(text, /\[sw · API\] GET content\/contents\/8f1a2b3c-1111-2222-3333-444455556666 → 500: Lỗi \(×2, lần đầu 07:00 11\/10\)/);
+});
+
+// ---------- Thành viên mới có ở lại không, báo cáo tháng ----------
+
+test('tháng theo giờ Việt Nam: khoá, mốc đầu / cuối tháng, tháng đang chạy, danh sách tháng chọn được', () => {
+  // 30/09 18:00 UTC = 01/10 01:00 giờ VN
+  assert.equal(BG.monthKey(Date.parse('2026-09-30T18:00:00Z')), '2026-10');
+  assert.equal(BG.monthKey(Date.parse('2026-09-30T16:59:59Z')), '2026-09');
+  assert.deepEqual([BG.shiftMonth('2026-01', -1), BG.shiftMonth('2026-12', 1), BG.shiftMonth('2026-10', -2)], ['2025-12', '2027-01', '2026-08']);
+  const now = Date.parse('2026-10-11T03:00:00Z');
+  const sep = BG.monthRange('2026-09', now);
+  assert.deepEqual([new Date(sep.from).toISOString(), new Date(sep.end).toISOString(), sep.to === sep.end, sep.partial, sep.days, sep.label], ['2026-08-31T17:00:00.000Z', '2026-09-30T17:00:00.000Z', true, false, 30, 'Tháng 9/2026']);
+  const oct = BG.monthRange('2026-10', now);
+  assert.deepEqual([oct.to, oct.partial], [now, true]);
+  assert.deepEqual(BG.monthOptions(now, 2), [
+    { key: '2026-10', label: 'Tháng 10/2026 (tới hôm nay)' },
+    { key: '2026-09', label: 'Tháng 9/2026' },
+    { key: '2026-08', label: 'Tháng 8/2026' },
+  ]);
+});
+
+test('nhắc báo cáo tháng: 7 ngày đầu tháng (ngày 1 từ 8 giờ sáng giờ VN), mỗi tháng một lần', () => {
+  const at = (s) => Date.parse(s);
+  assert.equal(BG.monthlyDue(null, at('2026-10-01T00:30:00Z')), null); // 7:30 sáng ngày 1
+  assert.equal(BG.monthlyDue(null, at('2026-10-01T01:00:00Z')), '2026-09'); // 8:00 sáng ngày 1
+  assert.equal(BG.monthlyDue('2026-09', at('2026-10-02T01:00:00Z')), null); // đã nhắc
+  assert.equal(BG.monthlyDue('2026-08', at('2026-10-07T16:00:00Z')), '2026-09'); // 23 giờ ngày 7
+  assert.equal(BG.monthlyDue('2026-08', at('2026-10-07T17:00:00Z')), null); // 0 giờ ngày 8
+  assert.equal(BG.monthlyDue('2025-11', at('2026-01-03T01:00:00Z')), '2025-12'); // qua năm
+});
+
+const ev = (uid, kind, time, useCase = kind === 'in' ? 'join.group.as_member' : 'leave.group') => ({ user: { id: uid, username: 'u' + uid }, kind, time, useCase });
+
+test('người mới: gộp sự kiện trùng, tình trạng sau khi vào (tự rời / bị xoá / bị cấm / vào lại), chỉ người vào trong khoảng', () => {
+  const from = Date.parse('2026-10-01T00:00:00Z');
+  const to = Date.parse('2026-10-11T00:00:00Z');
+  const events = [
+    ev('a', 'in', '2026-10-02T01:00:00Z', 'approve.join_request'),
+    ev('a', 'in', '2026-10-02T01:00:00Z'), // được duyệt + vào group cùng lúc: một lần vào
+    ev('b', 'in', '2026-10-03T01:00:00Z'),
+    ev('b', 'out', '2026-10-03T05:00:00Z'),
+    ev('c', 'in', '2026-10-04T01:00:00Z'),
+    ev('c', 'out', '2026-10-06T01:00:00Z', 'remove.member'),
+    ev('d', 'in', '2026-10-05T01:00:00Z'),
+    ev('d', 'out', '2026-10-05T02:00:00Z', 'ban.member'),
+    ev('e', 'in', '2026-10-06T01:00:00Z'),
+    ev('e', 'out', '2026-10-07T01:00:00Z'),
+    ev('e', 'in', '2026-10-08T01:00:00Z'), // vào lại
+    ev('f', 'in', '2026-09-20T01:00:00Z'), // vào trước khoảng xem
+    ev('f', 'out', '2026-10-02T01:00:00Z'),
+    ev('g', 'in', '2026-10-12T01:00:00Z'), // sau khoảng xem
+    { user: null, kind: 'in', time: '2026-10-05T00:00:00Z' },
+    ev('h', 'role', '2026-10-05T00:00:00Z'),
+  ].reverse();
+  assert.equal(BG.memberMoves(events).filter((x) => x.user.id === 'a').length, 1);
+  const cohort = BG.memberCohort(events, { from, to });
+  assert.deepEqual(
+    cohort.map((m) => [m.user.id, m.status, m.rejoined]),
+    [
+      ['e', 'stay', true],
+      ['d', 'banned', false],
+      ['c', 'removed', false],
+      ['b', 'left', false],
+      ['a', 'stay', false],
+    ],
+  );
+  assert.deepEqual(cohort.map(BG.cohortStatusText), ['Còn ở lại (đã rời rồi vào lại)', 'Bị cấm trong ngày đầu', 'Bị xoá sau 2 ngày', 'Tự rời trong ngày đầu', 'Còn ở lại']);
+});
+
+test('người mới: tóm tắt còn ở lại, ở lại qua 7 / 30 ngày đầu (chỉ người vào đủ lâu), hoạt động sau khi vào, theo tuần', () => {
+  const now = Date.parse('2026-10-11T00:00:00Z');
+  const dayAgo = (d) => new Date(now - d * 864e5).toISOString();
+  const cohort = [
+    { user: { id: 'a' }, joinedAt: dayAgo(2), status: 'stay', outAt: null },
+    { user: { id: 'b' }, joinedAt: dayAgo(10), status: 'left', outAt: dayAgo(9) }, // rời sau 1 ngày
+    { user: { id: 'c' }, joinedAt: dayAgo(20), status: 'left', outAt: dayAgo(5) }, // rời sau 15 ngày: vẫn ở lại qua 7 ngày đầu
+    { user: { id: 'd' }, joinedAt: dayAgo(40), status: 'stay', outAt: null },
+    { user: { id: 'e' }, joinedAt: dayAgo(35), status: 'removed', outAt: dayAgo(34.5) },
+  ];
+  const act = BG.cohortActivity(cohort, {
+    posts: { a: [dayAgo(1)], d: [dayAgo(45)] }, // d đăng trước khi vào: không tính
+    comments: [
+      { actor: { id: 'd' }, createdAt: dayAgo(3) },
+      { actor: { id: 'x' }, createdAt: dayAgo(3) },
+    ],
+  });
+  assert.deepEqual(act, { a: { posts: 1, comments: 0 }, b: { posts: 0, comments: 0 }, c: { posts: 0, comments: 0 }, d: { posts: 0, comments: 1 }, e: { posts: 0, comments: 0 } });
+  const s = BG.cohortSummary(cohort, act, now);
+  assert.deepEqual(
+    [s.joined, s.stayed, s.left, s.removed, s.banned, s.d7, s.d30, s.posted, s.commented, s.active, s.silent, s.quickLeave, s.medianLeaveDays],
+    [5, 2, 2, 1, 0, { base: 4, kept: 2 }, { base: 2, kept: 1 }, 1, 1, 2, 0, 1, 1],
+  );
+  assert.equal(s.weeks[0].week, BG.vnWeekStart(Date.parse(dayAgo(2))));
+  assert.equal(s.weeks.reduce((n, w) => n + w.joined, 0), 5);
+  assert.equal(BG.vnWeekStart(Date.parse('2026-10-11T16:59:00Z')), '2026-10-05'); // 23:59 Chủ nhật giờ VN
+  assert.equal(BG.vnWeekStart(Date.parse('2026-10-11T17:00:00Z')), '2026-10-12'); // 0:00 thứ Hai giờ VN
+  assert.deepEqual(BG.cohortSummary([], {}, now).d7, { base: 0, kept: 0 });
+});
+
+test('số thành viên tại một thời điểm suy ra từ số hiện tại và lượt vào / rời sau đó; đếm thao tác theo group', () => {
+  const moves = [ev('a', 'in', '2026-10-02T00:00:00Z'), ev('b', 'out', '2026-10-05T00:00:00Z'), ev('c', 'in', '2026-10-09T00:00:00Z')];
+  assert.equal(BG.membersAt(100, moves, Date.parse('2026-10-01T00:00:00Z')), 99);
+  assert.equal(BG.membersAt(100, moves, Date.parse('2026-10-06T00:00:00Z')), 99);
+  assert.equal(BG.membersAt(100, moves, Date.parse('2026-10-10T00:00:00Z')), 100);
+  assert.equal(BG.membersAt(null, moves, 0), null);
+  const log = [
+    { time: '2026-10-02T00:00:00Z', kind: 'member', action: 'approve', status: 'ok', groupId: 'g1' },
+    { time: '2026-10-02T00:00:00Z', kind: 'member', action: 'approve', status: 'ok', groupId: 'g2', source: 'auto' },
+    { time: '2026-10-02T00:00:00Z', kind: 'post', action: 'hide', status: 'dry', groupId: 'g1' },
+  ];
+  const all = () => true;
+  assert.deepEqual([BG.countLogActions(log, all).approved, BG.countLogActions(log, all).autoApproved], [1, 1]);
+  assert.deepEqual([BG.countLogActions(log, all, new Set(['g1'])).approved, BG.countLogActions(log, all, new Set(['g1'])).autoApproved], [1, 0]);
+  // Tóm tắt một khoảng bất kỳ (vd. cả tháng)
+  const r = BG.weeklyReport({ log }, { from: Date.parse('2026-10-01T00:00:00Z'), now: Date.parse('2026-10-31T00:00:00Z') });
+  assert.equal(r.actions.approved + r.actions.autoApproved, 2);
+  assert.equal(BG.weeklyReport({ log }, { from: Date.parse('2026-10-03T00:00:00Z'), now: Date.parse('2026-10-31T00:00:00Z') }).actions.approved, 0);
+});
+
+test('báo cáo tháng: tháng đang chạy, nhật ký thiếu thì không tính số đầu / cuối tháng, hồ sơ vi phạm và bài qua addon theo group', () => {
+  const now = Date.parse('2026-10-11T03:00:00Z');
+  const raw = {
+    key: '2026-10',
+    prevKey: '2026-09',
+    now,
+    group: { name: 'Crypto Life', userCount: 500 },
+    events: [ev('a', 'in', '2026-10-02T00:00:00Z')],
+    eventsTruncated: true,
+    months: { '2026-10': { total: 0, posts: [] }, '2026-09': { total: 0, posts: [] } },
+    actorPosts: {},
+  };
+  const r = BG.monthlyReport(raw, {
+    profiles: { users: { x: { user: { id: 'x', username: 'spam1', fullname: 'Spam' }, events: [{ type: 'hidden', time: '2026-10-03T00:00:00Z', group: 'Crypto Life' }, { type: 'hidden', time: '2026-10-04T00:00:00Z', group: 'Food Research' }] } } },
+    postStats: {
+      p1: { id: 'p1', groupName: 'Crypto Life', publishedAt: '2026-10-05T00:00:00Z', d1: { views: 10, reactions: 2, comments: 1 } },
+      p2: { id: 'p2', groupName: 'Food Research', publishedAt: '2026-10-05T00:00:00Z', d1: { views: 99, reactions: 9, comments: 9 } },
+      p3: { id: 'p3', groupName: 'Crypto Life', publishedAt: '2026-09-05T00:00:00Z' },
+    },
+    scopeIds: ['gCL'],
+    scopeNames: ['Crypto Life'],
+  });
+  assert.deepEqual([r.partial, r.members.start, r.members.end, r.members.joined], [true, null, null, 1]);
+  assert.deepEqual(r.violators.map((v) => [v.user.username, v.count]), [['spam1', 1]]);
+  assert.deepEqual([r.addon.posts, r.addon.measured, r.addon.avg.views], [1, 1, 10]);
+  const text = BG.monthlyText(r);
+  assert.match(text, /^BeinGroup: báo cáo Tháng 10\/2026 \(tới 11\/10\) — Crypto Life\n• Thành viên: 1 người vào, 0 người rời \(tháng trước: 0 vào, 0 rời\)\n/);
+  assert.match(text, /• Bài viết: 0 bài · 👁 0 lượt xem/);
+  assert.match(text, /• Vi phạm nhiều nhất: Spam \(@spam1\) 1 lần/);
+  assert.match(text, /• Đăng qua addon: 1 bài · trung bình mỗi bài 👁 10 · ❤ 2 · 💬 1$/);
+  assert.ok(!/Kiểm duyệt/.test(text));
+});
+
+test('Telegram: báo cáo tháng thuộc loại tin tóm tắt; tin báo cáo được dài hơn tin thường', () => {
+  assert.equal(BG.telegramKind('bg-monthly'), 'weekly');
+  assert.equal(BG.telegramText('T', 'x'.repeat(2000)).length, '<b>T</b>\n'.length + 900);
+  assert.equal(BG.telegramText('T', 'x'.repeat(2000), '', 3500).length, '<b>T</b>\n'.length + 2000);
+});
+
+test('BG chia thành common.js + lib/*.js: mọi nơi nạp đúng thứ tự BG.PARTS, đủ các phần', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const root = path.join(__dirname, '..');
+  const expected = ['common.js', ...BG.PARTS.map((p) => `lib/${p}.js`)];
+  const tags = (f) => [...fs.readFileSync(path.join(root, f), 'utf8').matchAll(/<script src="((?:common|lib\/[\w-]+)\.js)"><\/script>/g)].map((m) => m[1]);
+  assert.deepEqual(tags('dashboard.html'), expected);
+  assert.deepEqual(tags('popup.html'), expected);
+  assert.match(fs.readFileSync(path.join(root, 'background.js'), 'utf8'), /importScripts\('common\.js'\);\nimportScripts\(\.\.\.BG\.PARTS\.map\(\(p\) => `lib\/\$\{p\}\.js`\)\);/);
+  assert.deepEqual(fs.readdirSync(path.join(root, 'lib')).sort(), BG.PARTS.map((p) => p + '.js').sort());
+  for (const f of ['norm', 'slimPerson', 'evaluateRequest', 'evaluatePostIn', 'validateCompose', 'mdToPlate', 'readBackup', 'monthlyReport', 'tgKeyboard', 'pushDiag']) assert.equal(typeof BG[f], 'function', f);
+});
+
+test('Có gì mới: so sánh phiên bản, tách mục CHANGELOG.md, chọn mục cần hiện; CHANGELOG có mục cho bản trong manifest', () => {
+  assert.deepEqual([BG.cmpVersion('0.10.0', '0.9.2'), BG.cmpVersion('0.24.0', '0.24.0'), BG.cmpVersion('0.24', '0.24.1'), BG.cmpVersion('1.0.0', '0.99.9')], [1, 0, -1, 1]);
+  const md = '# Tiêu đề\nGiới thiệu\n\n## v0.3.0 — 03/01\n- **Mới** C\n\n## v0.2.0 — 02/01\n- B1\n- B2\n\n## v0.1.0 – v0.1.5 — 01/01\n- A\n';
+  const s = BG.changelogSections(md);
+  assert.deepEqual(s.map((x) => [x.version, x.title, x.body]), [
+    ['0.3.0', 'v0.3.0 — 03/01', '- **Mới** C'],
+    ['0.2.0', 'v0.2.0 — 02/01', '- B1\n- B2'],
+    ['0.1.0', 'v0.1.0 – v0.1.5 — 01/01', '- A'],
+  ]);
+  assert.deepEqual(BG.whatsNew(s, '0.1.0', '0.3.0').map((x) => x.version), ['0.3.0', '0.2.0']);
+  assert.deepEqual(BG.whatsNew(s, '0.2.0', '0.2.0'), []); // chưa cập nhật
+  assert.deepEqual(BG.whatsNew(s, null, '0.3.0'), []); // cài mới
+  assert.deepEqual(BG.whatsNew(s, '0.1.0', '0.2.0').map((x) => x.version), ['0.2.0']); // không hiện bản mới hơn bản đang chạy
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const { version } = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'manifest.json'), 'utf8'));
+  const real = BG.changelogSections(fs.readFileSync(path.join(__dirname, '..', 'CHANGELOG.md'), 'utf8'));
+  assert.equal(real[0].version, version, 'CHANGELOG.md cần mục cho bản ' + version + ' ở trên cùng');
+  assert.ok(real.every((x, i) => i === 0 || BG.cmpVersion(real[i - 1].version, x.version) > 0), 'các mục xếp mới nhất trước');
+});

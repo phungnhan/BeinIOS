@@ -285,6 +285,7 @@ function renderProfiles() {
           { class: 'act' },
           el('button', { class: 'ghost sm', text: open ? 'Thu gọn' : 'Chi tiết', 'aria-expanded': open ? 'true' : 'false', onclick: toggle }),
           BG.banTargets(groups()).length ? el('button', { class: 'danger sm', disabled: busy, text: 'Cấm ở mọi community', title: 'Cấm người này ở mọi community bạn là chủ / admin', onclick: () => banEverywhere(p.user) }) : null,
+          cleanupBtn(p.user),
           el('button', { class: 'ghost sm danger', disabled: busy, text: 'Xoá hồ sơ', onclick: () => forgetProfile(p) }),
         ),
       ),

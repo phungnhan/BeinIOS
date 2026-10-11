@@ -161,6 +161,14 @@ async function doSpamAct({ action, key = '', postIds = [], commentIds = [], reas
   return summary(r, settings);
 }
 
+// Lệnh cấm một người ở các community (dùng cho Cấm ở mọi community và Dọn tài khoản)
+function banItems(targets, user, reason, source) {
+  return targets.map((g) => ({
+    log: { kind: 'manage', source, action: 'ban', groupId: g.id, groupName: g.name, communityName: g.communityName || g.name, userId: user.id, username: user.username || '', fullname: user.fullname || '', reason: BG.BAN_REASONS[reason] },
+    call: memberActionCall('ban', g, user.id, reason),
+  }));
+}
+
 // Cấm một người ở mọi community mình là chủ / admin (POST group/communities/{cid}/users/{uid}/ban)
 async function doBanEverywhere({ user, reason = 'VIOLATE_RULE', source = 'manual' }) {
   if (!user?.id) return { status: 'error', message: 'Thiếu người cần cấm' };
@@ -168,10 +176,7 @@ async function doBanEverywhere({ user, reason = 'VIOLATE_RULE', source = 'manual
   const { settings, state, log } = await load();
   const targets = BG.banTargets(state.snapshot?.groups);
   if (!targets.length) return { status: 'error', message: 'Bạn không là chủ / admin community nào nên không cấm được' };
-  const items = targets.map((g) => ({
-    log: { kind: 'manage', source, action: 'ban', groupId: g.id, groupName: g.name, communityName: g.communityName || g.name, userId: user.id, username: user.username || '', fullname: user.fullname || '', reason: BG.BAN_REASONS[reason] },
-    call: memberActionCall('ban', g, user.id, reason),
-  }));
+  const items = banItems(targets, user, reason, source);
   const r = await performActions(items, settings);
   pushLog(log, r.entries);
   const next = r.status === 'need_login' ? { ...state, lastResult: { status: 'need_login', message: NEED_LOGIN.message, mode: r.mode || '' } } : state;
@@ -385,4 +390,33 @@ async function doMemberAct({ action, groupId, users, reason = 'VIOLATE_RULE', so
   await chrome.storage.local.set({ state: next, log });
   if (r.status === 'need_login') await updateBadge();
   return { ...summary(r, settings), done: r.entries.filter((e) => e.status === 'ok').map((e) => e.userId) };
+}
+
+// Dọn tài khoản: ẩn mọi bài / bình luận gần đây (addon đã đọc, còn hiện) của một người trong các group mình quản trị,
+// tuỳ chọn cấm ở mọi community mình là chủ / admin. Một lần, chạy lần lượt như các thao tác hàng loạt khác.
+async function doCleanupUser({ user, reasonType = 'SPAM', ban = false, banReason = 'SPAM', source = 'manual' }) {
+  if (!user?.id) return { status: 'error', message: 'Thiếu người cần dọn' };
+  if (!BG.HIDE_REASONS[reasonType]) return { status: 'error', message: 'Lý do ẩn không hợp lệ' };
+  if (ban && !BG.BAN_REASONS[banReason]) return { status: 'error', message: 'Lý do cấm không hợp lệ' };
+  const { settings, state, log } = await load();
+  if (user.id === state.me?.id) return { status: 'error', message: 'Không dọn tài khoản của chính bạn' };
+  const groups = state.snapshot?.groups || [];
+  const fp = BG.userFootprint(user.id, state.recentPosts, state.recentComments);
+  const extra = { autoReason: 'Dọn tài khoản' };
+  const items = [...fp.posts.map((p) => postHideItem(p, groups, reasonType, source, extra)), ...fp.comments.map((c) => commentHideItem(c, groups, reasonType, source, extra))].filter(Boolean);
+  if (ban) {
+    const targets = BG.banTargets(groups);
+    if (!targets.length) return { status: 'error', message: 'Bạn không là chủ / admin community nào nên không cấm được' };
+    items.push(...banItems(targets, user, banReason, source));
+  }
+  if (!items.length) return { status: 'error', message: 'Không còn bài / bình luận nào của người này để ẩn (trong các bài addon đã đọc)' };
+  const r = await performActions(items, settings);
+  pushLog(log, r.entries);
+  const next = { ...state };
+  markHidden(next, r.entries);
+  if (r.status === 'need_login') next.lastResult = { status: 'need_login', message: NEED_LOGIN.message, mode: r.mode || '' };
+  await chrome.storage.local.set({ state: next, log });
+  await updateBadge();
+  const ok = r.entries.filter((e) => e.status === 'ok');
+  return { ...summary(r, settings), hidden: ok.filter((e) => e.action === 'hide').length, banned: ok.filter((e) => e.action === 'ban').length };
 }

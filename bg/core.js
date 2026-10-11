@@ -133,8 +133,32 @@ function withRetry(call) {
       await sleep(1500 * (i + 1));
       r = await call(method, path, body, version, timeoutMs);
     }
+    // Lỗi kỹ thuật: Beincom báo lỗi hoặc không kết nối được (hết phiên đăng nhập, bài đã bị xoá là chuyện thường: bỏ qua)
+    if ((r.status >= 400 || r.status === 0) && r.status !== 401 && !BG.isContentGone(r)) {
+      recordDiag({ where: 'sw', kind: 'api', method, path, status: r.status, code: r.body?.code || (r.timeout ? 'timeout' : ''), message: BG.errMsg(r) });
+    }
     return r;
   };
+}
+
+// ---------- Lỗi kỹ thuật ----------
+// Ghi gộp (đợi 0,5 giây) vào khoá `diagLog`; Dashboard đọc ở tab Nhật ký → Lỗi kỹ thuật
+let diagQueue = [];
+let diagTimer = 0;
+function recordDiag(entry) {
+  diagQueue.push({ ...entry, time: Date.now() });
+  if (!diagTimer) diagTimer = setTimeout(() => flushDiag().catch(() => {}), 500);
+}
+
+async function flushDiag() {
+  diagTimer = 0;
+  const q = diagQueue;
+  diagQueue = [];
+  if (!q.length) return;
+  const { diagLog = [] } = await chrome.storage.local.get('diagLog');
+  let list = diagLog;
+  for (const e of q) list = BG.pushDiag(list, e, e.time);
+  await chrome.storage.local.set({ diagLog: list });
 }
 
 function directClient() {
