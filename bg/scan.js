@@ -672,10 +672,26 @@ async function doScan({ source = 'alarm' } = {}) {
     notify('bg-monthly', `BeinGroup: báo cáo ${range.label}`, (parts.length ? parts.join(' · ') + '. ' : '') + 'Bấm để xem báo cáo từng community: thành viên, người mới có ở lại không, bài viết, tương tác.');
   }
 
+  // Sáng thứ Hai: soạn sẵn bài thảo luận (câu hỏi mồi + giờ gợi ý); người dùng tự xem rồi hẹn giờ
+  const promptKey = settings.promptWeekly && settings.promptGroupId && auto && result.status === 'ok' ? BG.weeklyDue(state.promptKey, now) : null;
+  if (promptKey) {
+    next.promptKey = promptKey;
+    const draft = await preparePrompt({ groupId: settings.promptGroupId, now }).catch(() => null);
+    if (draft) {
+      await chrome.storage.local.set({ promptDraft: draft });
+      if (notifyAllowed) notify('bg-prompt', `BeinGroup: bài thảo luận tuần này cho ${draft.groupName}`, `"${draft.text.slice(0, 120)}" — bấm để xem, sửa rồi hẹn giờ${draft.suggestAt ? ` (gợi ý ${BG.slotLabel(draft.suggestAt)})` : ''}.`);
+    }
+  }
+
+  // Tự kiểm tra mỗi ngày: lần quét tự động thành công đầu tiên trong ngày (chạy sau khi lưu, cần danh sách group mới)
+  const dailyCheck = settings.selfCheckDaily && auto && result.status === 'ok' && state.selfCheckDay !== BG.vnDay(now);
+  if (dailyCheck) next.selfCheckDay = BG.vnDay(now);
+
   await flushTelegramItems().catch(() => {});
   await chrome.storage.local.set({ state: next, log });
   await updateBadge();
   // Hiệu quả bài đã đăng: đọc số liệu các bài tới mốc 24 giờ / 7 ngày (chỉ khi quét tự động thành công)
   if (auto && result.status === 'ok') await measurePostStats({ now }).catch(() => {});
+  if (dailyCheck) await dailySelfCheck({ now, notifyAllowed }).catch(() => {});
   return next;
 }

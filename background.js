@@ -93,6 +93,8 @@ function notificationTab(id) {
   if (id === 'bg-welcome') return 'compose&welcome=1';
   if (id === 'bg-monthly') return 'stats&monthly=1';
   if (id === 'bg-nudge') return 'stats&nudge=1';
+  if (id === 'bg-selfcheck') return 'log';
+  if (id === 'bg-prompt') return 'compose&prompt=1';
   if (id === 'bg-reports' || id === 'bg-autoflag') return 'reports';
   return '';
 }

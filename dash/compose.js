@@ -442,7 +442,7 @@ async function submitCompose() {
     media = data.settings.dryRun ? mediaByField(compose.media, (m) => ({ name: m.name })) : await uploadMedia();
     if (!media) return;
   }
-  const r = await send({ type: 'compose', ...c, media, mentions, linkPreview: lp, tags: compose.tags, series: compose.series, nudge: compose.nudge || null }, () => (later ? `Đã hẹn giờ đăng lúc ${fmtTime(c.scheduledAt)}.` : 'Đã đăng bài.'));
+  const r = await send({ type: 'compose', ...c, media, mentions, linkPreview: lp, tags: compose.tags, series: compose.series, nudge: compose.nudge || null, prompt: compose.prompt || null }, () => (later ? `Đã hẹn giờ đăng lúc ${fmtTime(c.scheduledAt)}.` : 'Đã đăng bài.'));
   if (r?.status === 'ok' && !r.dryRun) await resetCompose(later);
   updateCompose();
 }
@@ -517,6 +517,7 @@ async function resetCompose(later) {
   clearMedia();
   compose.mentions = {};
   compose.nudge = null;
+  compose.prompt = null;
   compose.link = null;
   compose.linkRemoved.clear();
   compose.tags = [];

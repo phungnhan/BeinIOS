@@ -253,3 +253,25 @@ async function doNudgeEffect() {
   if (r.status === 'ok') await chrome.storage.local.set({ nudgeEffect: { at: r.at, items: r.items } });
   return r;
 }
+
+// ---------- Bài thảo luận hằng tuần ----------
+// Sáng thứ Hai (bật ở Đăng bài → Bài thảo luận hằng tuần): chọn câu hỏi trong kho `promptBank`, gợi ý giờ đăng → `promptDraft`.
+// Không tự đăng. Bài đăng / hẹn giờ thật từ câu hỏi được ghi vào lần dùng của câu (doCompose → recordPromptUse);
+// số liệu bài lấy ở Hiệu quả bài đã đăng (postStats).
+async function preparePrompt({ groupId, now = Date.now() }) {
+  const g = await findGroup(groupId);
+  if (!g) return null;
+  const { promptBank, postStats = {} } = await chrome.storage.local.get(['promptBank', 'postStats']);
+  const p = BG.pickPrompt(promptBank, { groupId: g.id, now });
+  if (!p) return null;
+  const slot = BG.promptSlot(postStats, now);
+  return { id: 'pr' + now, promptId: p.id, groupId: g.id, groupName: g.name, text: BG.promptText(p, { groupName: g.name }), suggestAt: slot.at, basis: slot.basis, at: now };
+}
+
+async function recordPromptUse({ promptId, contentId, groupId, at }) {
+  if (!promptId || !contentId) return;
+  const { promptBank, promptDraft } = await chrome.storage.local.get(['promptBank', 'promptDraft']);
+  const bank = BG.addPromptUse(promptBank, promptId, { postId: contentId, groupId, at });
+  await chrome.storage.local.set({ promptBank: bank });
+  if (promptDraft?.promptId === promptId) await chrome.storage.local.remove('promptDraft');
+}

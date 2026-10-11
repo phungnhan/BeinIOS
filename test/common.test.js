@@ -1456,3 +1456,51 @@ test('nhắc người mới: chọn người (còn ở lại, chưa hoạt độ
   assert.deepEqual([e.total, e.posted, e.commented, e.active, e.left, e.pending, e.days], [4, 1, 1, 2, 1, false, 10]);
   assert.equal(BG.nudgeEffect({ id: 'x', at: new Date(now + 3600e3).toISOString(), userIds: ['p'] }, { now }).pending, true);
 });
+
+test("Tự kiểm tra mỗi ngày: chỉ tính mục lần trước dùng được mà nay lỗi", () => {
+  const prev = [{ id: "a", status: "ok" }, { id: "b", status: "fail" }, { id: "c", status: "skip" }, { id: "d", status: "ok" }];
+  const cur = [{ id: "a", status: "fail" }, { id: "b", status: "fail" }, { id: "c", status: "fail" }, { id: "d", status: "ok" }, { id: "e", status: "fail" }];
+  assert.deepEqual(BG.selfCheckRegressions(prev, cur).map((x) => x.id), ["a"]);
+  assert.deepEqual(BG.selfCheckRegressions(undefined, cur), []);
+});
+
+test('bài thảo luận: chọn câu xoay vòng theo group, sửa kho giữ lần dùng, giờ gợi ý, hiệu quả từng câu, sao lưu', () => {
+  const now = Date.parse('2026-10-12T02:00:00Z');
+  const ago = (d) => new Date(now - d * 864e5).toISOString();
+  const bank = { items: [{ id: 'a', text: 'Câu A ở {group}', uses: [{ postId: 'p1', groupId: 'g1', at: ago(10) }] }, { id: 'b', text: 'Câu B', uses: [{ postId: 'p2', groupId: 'g1', at: ago(70) }] }, { id: 'c', text: 'Câu C', uses: [] }] };
+  // g1: A dùng 10 ngày trước (bỏ), B dùng 70 ngày trước (được), C chưa dùng -> C (ít lần dùng nhất)
+  assert.equal(BG.pickPrompt(bank, { groupId: 'g1', now }).id, 'c');
+  assert.equal(BG.pickPrompt(bank, { groupId: 'g1', now, skipIds: ['c'] }).id, 'b');
+  assert.equal(BG.pickPrompt(bank, { groupId: 'g2', now }).id, 'a'); // group khác: theo thứ tự kho
+  // Dùng hết trong 8 tuần: quay vòng
+  const all = { items: bank.items.map((x) => ({ ...x, uses: [{ postId: 'q' + x.id, groupId: 'g3', at: ago(3) }] })) };
+  assert.ok(BG.pickPrompt(all, { groupId: 'g3', now }));
+  assert.equal(BG.promptText(bank.items[0], { groupName: 'Crypto Life' }), 'Câu A ở Crypto Life');
+  // Kho mặc định khi chưa lưu / trống
+  assert.equal(BG.promptBankOf(null).items.length, BG.DEFAULT_PROMPTS.length);
+  assert.equal(BG.promptBankOf({ items: [] }).items[0].id, 'd1');
+  // Sửa kho: giữ id và lần dùng câu cũ, bỏ dòng trống / trùng
+  const edited = BG.promptBankFromText('Câu B\n\n  Câu mới  \nCâu B\nCâu A ở {group}', bank);
+  assert.deepEqual(edited.items.map((x) => [x.id === 'b' || x.id === 'a' ? x.id : 'mới', x.text, x.uses.length]), [['b', 'Câu B', 1], ['mới', 'Câu mới', 0], ['a', 'Câu A ở {group}', 1]]);
+  assert.equal(BG.promptBankFromText('Câu mới', null).items[0].id, edited.items[1].id); // id theo nội dung
+  // Ghi lần dùng (không trùng bài)
+  let b2 = BG.addPromptUse(bank, 'c', { postId: 'p9', groupId: 'g1', at: ago(0) });
+  b2 = BG.addPromptUse(b2, 'c', { postId: 'p9', groupId: 'g1', at: ago(0) });
+  assert.equal(b2.items.find((x) => x.id === 'c').uses.length, 1);
+  // Giờ gợi ý: chưa đủ số liệu -> 20 giờ thứ Tư; có >= 3 bài đo được -> khung hiệu quả nhất của mình
+  const def = BG.promptSlot({}, now);
+  assert.deepEqual([def.basis, def.at, BG.slotLabel(def.at)], ['default', '2026-10-14T13:00:00.000Z', 'Thứ Tư 20:00']);
+  const ps = Object.fromEntries([1, 2, 3].map((i) => ['s' + i, { id: 's' + i, publishedAt: '2026-10-0' + (i + 1) + 'T14:00:00Z', d7: { views: 100, reactions: 10 * i, comments: i } }]));
+  const own = BG.promptSlot(ps, now);
+  assert.equal(own.basis, 'own');
+  assert.equal(BG.slotLabel(own.at).endsWith('21:00'), true);
+  // Hiệu quả: điểm = cảm xúc + 2 × bình luận, cao trước; chưa có số liệu ở cuối
+  const perf = BG.promptPerformance(bank, { p1: { groupName: 'G1', d1: { views: 50, reactions: 4, comments: 3 } }, p2: { groupName: 'G1', d7: { views: 90, reactions: 9, comments: 5 } } });
+  assert.deepEqual(perf.map((r) => [r.promptId, r.score]), [['b', 19], ['a', 10]]);
+  // Sao lưu / khôi phục có kho câu hỏi
+  const backup = BG.makeBackup({ promptBank: bank, settings: BG.DEFAULT_SETTINGS });
+  const back = BG.readBackup(JSON.parse(JSON.stringify(backup)));
+  assert.deepEqual(back.data.promptBank.items.map((x) => [x.id, x.uses.length]), [['a', 1], ['b', 1], ['c', 0]]);
+  assert.ok(BG.backupSummary(back.data).includes('Kho câu hỏi thảo luận: 3 câu'));
+  assert.equal(BG.cleanPromptBank({ items: [{ text: '  ' }, { text: 'x', uses: [{ postId: 1 }] }] }).items[0].uses.length, 0);
+});

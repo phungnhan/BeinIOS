@@ -103,8 +103,26 @@
   };
   // Có gì mới: bản đã xem = bản hiện tại (không hiện hộp), trừ khi mở trang với #…&seen=0.22.0
   store.seenVersion = new URLSearchParams(location.hash.slice(1)).get('seen') || '__VERSION__';
+  // Cài mới (#…&fresh=1): chưa có bản đã xem, chưa có nhật ký -> hiện Bắt đầu nhanh
+  if (new URLSearchParams(location.hash.slice(1)).get('fresh')) {
+    delete store.seenVersion;
+    store.log = [];
+    store.settings = { ...store.settings, dryRun: true }; // cài mới: Chạy thử bật sẵn
+  }
   // Nhắc người mới: bản soạn sẵn sáng thứ Hai (3 người) và hai lần nhắc đã đăng (An Nhiên — nm0 — được nhắc 9 ngày trước)
   store.nudgeDraft = { id: 'nd1', groupId: 'gCL', groupName: 'Crypto Life', at: now - 2 * 3600e3, joined: 8, users: [0, 1, 2].map((i) => ({ id: 'nd' + i, username: 'thanhvienmoi' + i, fullname: 'Thành viên mới ' + i, avatar: '' })) };
+  // Bài thảo luận: hai câu đã dùng (bài ps2, ps1 có số liệu) và bản soạn sẵn tuần này
+  store.promptBank = {
+    items: [
+      { id: 'd1', text: 'Tuần này bạn đang theo dõi đồng coin / dự án nào? Chia sẻ lý do nhé 👇', uses: [{ postId: 'ps2', groupId: 'gCL', at: new Date(now - 5 * 864e5).toISOString() }] },
+      { id: 'd2', text: 'Nếu chỉ được giữ một đồng coin trong 5 năm tới, bạn chọn đồng nào? Vì sao?', uses: [{ postId: 'ps1', groupId: 'gCL', at: new Date(now - 9 * 864e5).toISOString() }] },
+      { id: 'd3', text: 'Sai lầm lớn nhất bạn từng mắc khi đầu tư crypto là gì?', uses: [] },
+      { id: 'd4', text: 'Người mới vào crypto nên học điều gì đầu tiên? Góp ý cho các thành viên mới của {group} nhé!', uses: [] },
+    ],
+  };
+  store.promptDraft = { id: 'pr1', promptId: 'd3', groupId: 'gCL', groupName: 'Crypto Life', text: 'Sai lầm lớn nhất bạn từng mắc khi đầu tư crypto là gì?', suggestAt: new Date(now + 2 * 864e5).toISOString(), basis: 'own', at: now - 3600e3 };
+  // Tự kiểm tra mỗi ngày: lần tự chạy sáng nay thấy một mục ngừng chạy
+  store.selfCheckAuto = { at: now - 5 * 3600e3, groups: { gFood: { name: 'Food Research' }, gCL: { name: 'Crypto Life' } }, regressions: [{ groupId: 'gFood', group: 'Food Research', items: ['Bài ghim'] }] };
   store.nudges = [
     { id: 'pn2', groupId: 'gCL', groupName: 'Crypto Life', at: new Date(now - 2 * 864e5).toISOString(), userIds: ['nx1', 'nx2'] },
     { id: 'pn1', groupId: 'gCL', groupName: 'Crypto Life', at: new Date(now - 9 * 864e5).toISOString(), userIds: ['nm0', 'nx3', 'nx4', 'nx5'] },

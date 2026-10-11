@@ -4,7 +4,7 @@
 // Giống web: POST content/posts (tạo nháp, nhận id) -> PUT content/posts/{id}/publish | schedule.
 // Bước 2 lỗi thì xoá bản nháp vừa tạo (Beincom giới hạn số bản nháp).
 
-async function doCompose({ groupIds, content, setting, scheduledAt = null, media = null, mentions = null, linkPreview = null, tags = [], series = [], recur = '', asGroup = false, source = 'manual', nudge = null }) {
+async function doCompose({ groupIds, content, setting, scheduledAt = null, media = null, mentions = null, linkPreview = null, tags = [], series = [], recur = '', asGroup = false, source = 'manual', nudge = null, prompt = null }) {
   const err = BG.validateCompose({ groupIds, content, setting, scheduledAt, media, tags, series, asGroup });
   if (err) return { status: 'error', message: err };
   const { settings, state, log } = await load();
@@ -55,6 +55,8 @@ async function doCompose({ groupIds, content, setting, scheduledAt = null, media
     });
   }
   // Bài nhắc người mới (Thống kê → Thành viên mới có ở lại không): ghi ai được nhắc để đo hiệu quả
+  // Bài thảo luận hằng tuần: ghi lần dùng câu hỏi (đo tương tác qua Hiệu quả bài đã đăng)
+  if (prompt?.id && r.status === 'ok' && !r.dry) await recordPromptUse({ promptId: prompt.id, contentId: r.contentId, groupId: targets[0].id, at: body.scheduledAt || new Date().toISOString() });
   if (nudge?.userIds?.length && r.status === 'ok' && !r.dry) await recordNudge({ contentId: r.contentId, group: targets[0], at: body.scheduledAt || new Date().toISOString(), mentions: body.mentions, userIds: nudge.userIds });
   return finishCompose(r, { base, contentType: 'POST', state, log });
 }

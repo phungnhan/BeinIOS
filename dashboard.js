@@ -21,6 +21,7 @@ window.addEventListener('hashchange', () => {
   if (p.get('welcome')) openWelcome();
   if (p.get('monthly')) openMonthly();
   if (p.get('nudge')) openNudge();
+  if (p.get('prompt')) openPrompts();
 });
 
 // Thanh tab: bấm chuột hoặc phím mũi tên trái/phải
@@ -90,6 +91,7 @@ const TAB_RENDER = {
     renderCsv();
     renderWelcome();
     renderShoutout();
+    renderPrompts();
   },
   stats: () => {
     renderStatsHead();
@@ -124,7 +126,7 @@ function renderAll() {
 }
 
 async function loadAll() {
-  const { settings, rules, postRules, groupRules, recurring, state, log, templates, profiles, syncStatus, telegramStatus, telegramPoll, postStats, nudges, nudgeDraft, nudgeEffect } = await chrome.storage.local.get(['settings', 'rules', 'postRules', 'groupRules', 'recurring', 'state', 'log', 'templates', 'profiles', 'syncStatus', 'telegramStatus', 'telegramPoll', 'postStats', 'nudges', 'nudgeDraft', 'nudgeEffect']);
+  const { settings, rules, postRules, groupRules, recurring, state, log, templates, profiles, syncStatus, telegramStatus, telegramPoll, postStats, nudges, nudgeDraft, nudgeEffect, promptBank, promptDraft } = await chrome.storage.local.get(['settings', 'rules', 'postRules', 'groupRules', 'recurring', 'state', 'log', 'templates', 'profiles', 'syncStatus', 'telegramStatus', 'telegramPoll', 'postStats', 'nudges', 'nudgeDraft', 'nudgeEffect', 'promptBank', 'promptDraft']);
   data = {
     settings: { ...BG.DEFAULT_SETTINGS, ...settings },
     rules: { ...BG.DEFAULT_RULES, ...rules },
@@ -142,6 +144,8 @@ async function loadAll() {
     nudges: nudges || [],
     nudgeDraft: nudgeDraft || null,
     nudgeEffect: nudgeEffect || null,
+    promptBank: promptBank || null,
+    promptDraft: promptDraft || null,
   };
   renderAll();
   await loadDraftOnce();
@@ -152,7 +156,8 @@ async function loadAll() {
     if (p.get('welcome')) openWelcome(); // mở từ thông báo nhắc chào thành viên mới
     if (p.get('monthly')) openMonthly(); // mở từ thông báo đầu tháng
     if (p.get('nudge')) openNudge(); // mở từ thông báo bài nhắc người mới
-    checkWhatsNew(); // vừa cập nhật addon: hiện Có gì mới
+    if (p.get('prompt')) openPrompts(); // mở từ thông báo bài thảo luận
+    checkOnboarding().then((shown) => shown || checkWhatsNew()); // cài mới: Bắt đầu nhanh; vừa cập nhật: Có gì mới
   } else ensureTabData();
 }
 

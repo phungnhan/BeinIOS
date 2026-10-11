@@ -753,6 +753,45 @@
       </details>
     </section>
 
+    <section class="card span-3" id="prompts" data-tab="compose">
+      <div class="card-head">
+        <h2>Bài thảo luận hằng tuần</h2>
+        <div class="review-tools">
+          <select id="prompt-group" aria-label="Group"></select>
+          <button type="button" class="primary sm" id="btn-prompt-now">✍ Soạn ngay</button>
+        </div>
+      </div>
+      <div class="muted small review-note">Câu hỏi mồi để thành viên — nhất là người mới — có chủ đề trả lời. Addon xoay vòng các câu trong kho (câu đã dùng ở group không lặp lại trong 8 tuần), soạn vào ô Đăng bài kèm giờ gợi ý theo hiệu quả bài của bạn, và đo tương tác của từng câu.</div>
+      <div class="nudge-draft" id="prompt-draft" hidden>
+        <div>
+          <b id="prompt-draft-title"></b>
+          <div class="prompt-draft-text" id="prompt-draft-text"></div>
+          <div class="muted small" id="prompt-draft-sub"></div>
+        </div>
+        <div class="review-tools">
+          <button type="button" class="primary sm" id="btn-prompt-open">✍ Mở trong ô Đăng bài</button>
+          <button type="button" class="ghost sm" id="btn-prompt-other">Đổi câu khác</button>
+          <button type="button" class="ghost sm" id="btn-prompt-skip">Bỏ qua tuần này</button>
+        </div>
+      </div>
+      <label class="switch-row nudge-weekly"><input type="checkbox" id="prompt-weekly" /><span><b>Mỗi sáng thứ Hai soạn sẵn bài thảo luận</b> cho group đang chọn <span class="muted small" id="prompt-weekly-note"></span><br /><span class="muted small">Addon chỉ soạn và báo; bạn tự mở, sửa rồi hẹn giờ.</span></span></label>
+      <h3 class="sub-h">Hiệu quả từng câu</h3>
+      <div class="table-wrap">
+        <table class="requests posts">
+          <thead><tr><th>Câu hỏi</th><th>Group</th><th>Đăng lúc</th><th>Số liệu</th><th class="num">Điểm</th></tr></thead>
+          <tbody id="prompt-perf"></tbody>
+        </table>
+      </div>
+      <details class="stats-table prompt-bank">
+        <summary>Kho câu hỏi (<span id="prompt-count"></span> câu) — mỗi dòng một câu, <code>{group}</code> = tên group</summary>
+        <textarea id="prompt-bank" rows="10" aria-label="Kho câu hỏi"></textarea>
+        <div class="monthly-actions">
+          <button type="button" class="primary sm" id="btn-prompt-save">Lưu kho</button>
+          <button type="button" class="ghost sm" id="btn-prompt-reset">Khôi phục kho mặc định</button>
+        </div>
+      </details>
+    </section>
+
     <section class="card span-3" id="scheduled" data-tab="compose">
       <div class="card-head">
         <h2>Bài đã hẹn giờ</h2>
@@ -1275,6 +1314,7 @@
         </div>
       </div>
       <div class="muted small review-note" id="check-note"></div>
+      <label class="switch-row check-daily"><input type="checkbox" id="check-daily" /><span><b>Tự kiểm tra mỗi ngày</b> mọi community bạn quản trị <span class="muted small" id="check-daily-note"></span><br /><span class="muted small">Chạy ở lần quét tự động đầu tiên mỗi ngày (chỉ đọc). Chỉ báo khi một mục hôm trước dùng được nay bị lỗi — thường do Beincom vừa thay đổi.</span></span></label>
       <div class="table-wrap">
         <table class="requests check-table">
           <thead>
@@ -1321,6 +1361,41 @@
     </form>
   </dialog>
 
+  <dialog id="onboard" class="onboard">
+    <form method="dialog">
+      <div class="onb-head"><h3>Bắt đầu với BeinGroup</h3><span class="muted small" id="onb-progress"></span></div>
+      <section data-step="1">
+        <h4>1. Kết nối Beincom</h4>
+        <p class="small">Addon dùng chính phiên đăng nhập Beincom trên trình duyệt này — không hỏi mật khẩu.</p>
+        <p class="small" id="onb-login"></p>
+        <div class="onb-row">
+          <button type="button" class="ghost sm" id="onb-open">Mở Beincom</button>
+          <button type="button" class="ghost sm" id="onb-rescan">↻ Quét lại</button>
+        </div>
+      </section>
+      <section data-step="2" hidden>
+        <h4>2. Tự kiểm tra</h4>
+        <div class="onb-row">
+          <select id="onb-check-group" aria-label="Community cần kiểm tra"></select>
+          <button type="button" class="primary sm" id="onb-check-run">▶ Chạy kiểm tra</button>
+        </div>
+        <p class="small" id="onb-check-out"></p>
+      </section>
+      <section data-step="3" hidden>
+        <h4>3. Chọn tính năng</h4>
+        <label class="check onb-feature onb-dry"><input type="checkbox" id="onb-dry" /><span><b>Giữ Chạy thử</b> (khuyên dùng lúc đầu)<br /><span class="muted small">Mọi thao tác (duyệt, ẩn, xoá, đăng bài) chỉ ghi vào Nhật ký, chưa gửi lên Beincom.</span></span></label>
+        <div id="onb-features"></div>
+        <label class="onb-row small">Group cho bài nhắc / bài thảo luận: <select id="onb-group" aria-label="Group cho bài nhắc và bài thảo luận"></select></label>
+        <p class="muted small">Đổi lại bất cứ lúc nào ở tab Quy tắc &amp; cài đặt, Thống kê và Đăng bài.</p>
+      </section>
+      <div class="dialog-actions">
+        <button type="button" class="ghost" id="onb-skip">Bỏ qua hướng dẫn</button>
+        <button type="button" class="ghost" id="onb-back">← Quay lại</button>
+        <button type="button" class="primary" id="onb-next">Tiếp →</button>
+      </div>
+    </form>
+  </dialog>
+
   <dialog id="whatsnew" class="whatsnew">
     <form method="dialog">
       <h3 id="whatsnew-title">Có gì mới</h3>
@@ -1333,7 +1408,7 @@
   </dialog>
 
   <footer class="muted small">
-    Dữ liệu chỉ lưu trong trình duyệt này · <span id="version"></span> · <a href="#" id="btn-whatsnew">Có gì mới</a> · <a href="HUONG-DAN-CAI.html" target="_blank">Hướng dẫn cài</a> · Tác giả: <b>Kai | Crypto Life</b>
+    Dữ liệu chỉ lưu trong trình duyệt này · <span id="version"></span> · <a href="#" id="btn-whatsnew">Có gì mới</a> · <a href="#" id="btn-onboard">Bắt đầu nhanh</a> · <a href="HUONG-DAN-CAI.html" target="_blank">Hướng dẫn cài</a> · Tác giả: <b>Kai | Crypto Life</b>
   </footer>
 
   <script src="common.js"></script>
@@ -1360,6 +1435,7 @@
   <script src="dash/article.js"></script>
   <script src="dash/welcome.js"></script>
   <script src="dash/shoutout.js"></script>
+  <script src="dash/prompts.js"></script>
   <script src="dash/stats.js"></script>
   <script src="dash/insights.js"></script>
   <script src="dash/monthly.js"></script>
@@ -1369,6 +1445,7 @@
   <script src="dash/selfcheck.js"></script>
   <script src="dash/todo.js"></script>
   <script src="dash/whatsnew.js"></script>
+  <script src="dash/onboarding.js"></script>
   <script src="dashboard.js"></script>
 </body>
 </html>

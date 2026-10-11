@@ -378,6 +378,37 @@ export const scenarios = [
     },
   },
   {
+    name: 'Bắt đầu nhanh khi cài mới',
+    async run({ page, url, assert }) {
+      await page.open(url('dashboard', 'tab=overview&fresh=1'));
+      await page.until(() => document.getElementById('onboard').open);
+      assert.equal(await page.ev(`document.getElementById('whatsnew').open`), false);
+      assert.match(await page.ev(`document.getElementById('onb-login').textContent`), /^✓ Đã kết nối\. Addon thấy \d+ group bạn quản trị: Food Research, Crypto Life/);
+      assert.equal(await page.ev(`document.getElementById('onb-back').hidden`), true);
+      // Bước 2: tự kiểm tra
+      await page.ev(`document.getElementById('onb-next').click(); true`);
+      assert.equal(await page.ev(`document.getElementById('onb-progress').textContent`), 'Bước 2/3');
+      await page.ev(`document.getElementById('onb-check-group').value = 'gCL'; document.getElementById('onb-check-run').click(); true`);
+      await page.until(() => /^4 dùng được · 1 bỏ qua \(không có quyền\) · 1 lỗi: Bài ghim — xem chi tiết/.test(document.getElementById('onb-check-out').textContent));
+      assert.deepEqual(await page.ev(`window.__selfCheck`), { type: 'selfCheck', groupId: 'gCL' });
+      // Bước 3: chọn tính năng (giữ Chạy thử, bật bài nhắc và bài thảo luận cho Crypto Life)
+      await page.ev(`document.getElementById('onb-next').click(); true`);
+      const f = await page.call(() => [...document.querySelectorAll('#onb-features input')].map((x) => x.checked));
+      assert.deepEqual(f, [true, true, true, false, false, false, false]); // theo cài đặt đang có: báo cáo, tự kiểm tra, nhắc chào bật; tự động khác tắt
+      assert.equal(await page.ev(`document.getElementById('onb-dry').checked`), true);
+      await page.ev(`document.querySelector('#onb-features input[data-i="3"]').click(); document.querySelector('#onb-features input[data-i="4"]').click(); document.getElementById('onb-group').value = 'gCL'; document.getElementById('onb-next').click(); true`);
+      await page.until(() => !document.getElementById('onboard').open);
+      const st = await page.ev(`chrome.storage.local.get(['settings', 'onboarded', 'seenVersion']).then((o) => ({ ...o, version: chrome.runtime.getManifest().version }))`);
+      assert.deepEqual([st.settings.nudgeWeekly, st.settings.nudgeGroupId, st.settings.promptWeekly, st.settings.promptGroupId, st.settings.dryRun, st.onboarded, st.seenVersion], [true, 'gCL', true, 'gCL', true, true, st.version]);
+      assert.equal(await page.ev(`document.getElementById('whatsnew').open`), false);
+      // Mở lại ở chân trang, bỏ qua được
+      await page.ev(`document.getElementById('btn-onboard').click(); true`);
+      await page.until(() => document.getElementById('onboard').open && document.getElementById('onb-progress').textContent === 'Bước 1/3');
+      await page.ev(`document.getElementById('onb-skip').click(); true`);
+      await page.until(() => !document.getElementById('onboard').open);
+    },
+  },
+  {
     name: 'Có gì mới sau khi cập nhật',
     async run({ page, url, assert }) {
       // Đã xem tới v0.22.0: hiện các bản mới hơn, mới nhất trước
@@ -444,6 +475,49 @@ export const scenarios = [
     },
   },
   {
+    name: 'Bài thảo luận hằng tuần',
+    async run({ page, url, assert }) {
+      await page.open(url('dashboard', 'tab=compose&prompt=1'));
+      await page.until(() => !document.getElementById('prompt-draft').hidden);
+      const info = await page.call(() => ({
+        title: document.getElementById('prompt-draft-title').textContent,
+        text: document.getElementById('prompt-draft-text').textContent,
+        sub: document.getElementById('prompt-draft-sub').textContent,
+        perf: [...document.querySelectorAll('#prompt-perf tr')].map((tr) => tr.querySelector('td').textContent.slice(0, 20)),
+        count: document.getElementById('prompt-count').textContent,
+      }));
+      assert.equal(info.title, '📬 Bài thảo luận tuần này cho Crypto Life');
+      assert.match(info.sub, /^Gợi ý đăng lúc .* \(giờ có tương tác tốt nhất theo bài của bạn\)$/);
+      assert.equal(info.count, '4');
+      assert.equal(info.perf.length, 2); // câu đã dùng, điểm cao trước (bài ps1 > ps2)
+      assert.match(info.perf[0], /^Nếu chỉ được giữ/);
+      // Đổi câu khác: không lặp lại câu vừa bỏ, không chọn câu vừa dùng ở group
+      await page.ev(`document.getElementById('btn-prompt-other').click(); true`);
+      await page.until(() => /Người mới vào crypto nên học điều gì đầu tiên\? Góp ý cho các thành viên mới của Crypto Life/.test(document.getElementById('prompt-draft-text').textContent));
+      // Mở trong ô Đăng bài: hẹn giờ theo gợi ý, gửi kèm câu hỏi đã dùng
+      await page.ev(`document.getElementById('btn-prompt-open').click(); true`);
+      await page.until(() => /Người mới vào crypto/.test(document.getElementById('compose-text').value));
+      assert.deepEqual(await page.call(() => [document.querySelector('input[name=compose-when]:checked').value, !!document.getElementById('compose-at').value, compose.prompt, [...compose.groupIds]]), ['later', true, { id: 'd4' }, ['gCL']]);
+      await page.ev(`document.getElementById('btn-compose').click(); true`);
+      await confirmOk(page);
+      await page.until(() => (window.__composes || []).length === 1);
+      const m = await page.ev(`window.__composes[0]`);
+      assert.deepEqual([m.prompt, !!m.scheduledAt], [{ id: 'd4' }, true]);
+      // Soạn ngay cho group khác; sửa kho
+      await page.ev(`document.getElementById('prompt-group').value = 'gFood'; document.getElementById('prompt-group').dispatchEvent(new Event('change')); document.getElementById('btn-prompt-now').click(); true`);
+      await page.until(() => /Tuần này bạn đang theo dõi/.test(document.getElementById('compose-text').value));
+      await setValue(page, 'prompt-bank', 'Câu một\nCâu hai\n\nCâu một');
+      await page.ev(`document.getElementById('btn-prompt-save').click(); true`);
+      await page.until(() => chrome.storage.local.get('promptBank').then((o) => o.promptBank.items.length === 2));
+      // Bật soạn sẵn hằng tuần
+      await page.ev(`document.getElementById('prompt-weekly').click(); true`);
+      await page.until(() => chrome.storage.local.get('settings').then((o) => o.settings.promptWeekly === true && o.settings.promptGroupId === 'gFood'));
+      // Bỏ qua bản soạn sẵn
+      await page.ev(`document.getElementById('btn-prompt-skip').click(); true`);
+      await page.until(() => document.getElementById('prompt-draft').hidden);
+    },
+  },
+  {
     name: 'Mở từ thông báo việc đầu tuần',
     async run({ page, url }) {
       await page.open(url('dashboard', 'tab=compose&welcome=1'));
@@ -476,6 +550,11 @@ export const scenarios = [
     async run({ page, url, assert }) {
       await page.open(url('dashboard', 'tab=log'));
       await page.until(() => /Chưa chạy lần nào/.test(document.getElementById('check-body').textContent));
+      // Tự kiểm tra mỗi ngày: bật sẵn, ghi lần tự chạy gần nhất và mục ngừng chạy; tắt được
+      assert.equal(await page.ev(`document.getElementById('check-daily').checked`), true);
+      assert.match(await page.ev(`document.getElementById('check-daily-note').textContent`), /^\(lần gần nhất .* · 2 community · ngừng chạy: Food Research: Bài ghim\)$/);
+      await page.ev(`document.getElementById('check-daily').click(); true`);
+      await page.until(() => chrome.storage.local.get('settings').then((o) => o.settings.selfCheckDaily === false));
       await setValue(page, 'check-group', 'gCL');
       await page.ev(`document.getElementById('btn-check-run').click(); true`);
       await page.until(() => document.querySelectorAll('#check-body tr:not(.empty-row)').length === 6);

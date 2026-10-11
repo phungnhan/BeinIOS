@@ -1,7 +1,7 @@
 // Dashboard — tab Nhật ký: Tự kiểm tra. Service worker gọi thử (chỉ GET) các API đọc mà từng tính năng dùng
 // (bg/selfcheck.js), kết quả lần gần nhất lưu ở khoá `selfCheck`.
 
-const check = { groupId: null, running: false, result: null, stored: false, error: '' };
+const check = { groupId: null, running: false, result: null, auto: null, stored: false, error: '' };
 const CHECK_TAG = { ok: ['ok', '✓ Dùng được'], skip: ['info', 'Bỏ qua'], fail: ['err', '✗ Lỗi'] };
 
 function checkGroup() {
@@ -10,13 +10,20 @@ function checkGroup() {
 }
 
 async function renderCheck() {
-  if (!check.stored) {
-    check.stored = true;
+  // Kết quả lần gần nhất (bấm tay hoặc lượt tự chạy mỗi ngày vừa thấy mục ngừng chạy)
+  if (!check.running) {
     try {
-      check.result = (await chrome.storage.local.get('selfCheck')).selfCheck || null;
+      const o = await chrome.storage.local.get(['selfCheck', 'selfCheckAuto']);
+      check.result = o.selfCheck || check.result;
+      check.auto = o.selfCheckAuto || null;
     } catch {}
-    if (check.result && !check.groupId) check.groupId = check.result.group?.id || null;
+    if (check.result && !check.stored) check.groupId ||= check.result.group?.id || null;
+    check.stored = true;
   }
+  $('check-daily').checked = data.settings.selfCheckDaily !== false;
+  const a = check.auto;
+  const broke = (a?.regressions || []).flatMap((x) => x.items.map((i) => `${x.group}: ${i}`));
+  $('check-daily-note').textContent = a ? `(lần gần nhất ${fmtTime(a.at)} · ${Object.keys(a.groups || {}).length} community · ${broke.length ? 'ngừng chạy: ' + broke.join(', ') : 'không có mục ngừng chạy'})` : '';
   const gs = statsGroups();
   const g = checkGroup();
   $('check-group').replaceChildren(...gs.map((x) => el('option', { value: x.id, selected: x.id === g?.id, text: BG.groupIndent(x) + x.name + (x.isCommunity ? ' (cả community)' : '') })));
@@ -74,6 +81,11 @@ $('check-group').addEventListener('change', (e) => {
   renderCheck();
 });
 $('btn-check-run').addEventListener('click', runCheck);
+$('check-daily').addEventListener('change', async (e) => {
+  await saveTo('settings', BG.DEFAULT_SETTINGS, { selfCheckDaily: e.target.checked });
+  data.settings.selfCheckDaily = e.target.checked;
+  toast(e.target.checked ? 'Addon sẽ tự kiểm tra mỗi ngày và báo khi có tính năng ngừng chạy.' : 'Đã tắt tự kiểm tra mỗi ngày.');
+});
 $('btn-check-copy').addEventListener('click', async () => {
   if (!check.result) return;
   const ok = await copyText(BG.selfCheckText(check.result, { version: chrome.runtime.getManifest().version, ua: navigator.userAgent }));

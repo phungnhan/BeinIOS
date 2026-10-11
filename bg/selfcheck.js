@@ -64,9 +64,8 @@ function checkVerdict(r, probe) {
   return { status: 'fail', detail: BG.errMsg(r) };
 }
 
-async function doSelfCheck({ groupId }) {
-  const g = await findGroup(groupId);
-  if (!g) return { status: 'error', message: 'Không tìm thấy group — hãy quét lại' };
+// Chạy mọi mục kiểm tra cho group g; trả kết quả (không lưu)
+async function runSelfCheck(g) {
   const { state } = await load();
   const root = (state.snapshot?.groups || []).find((x) => x.communityId === g.communityId && x.isCommunity) || null;
   const tg = await loadTelegram();
@@ -102,6 +101,46 @@ async function doSelfCheck({ groupId }) {
     items: r.items,
     summary: { ok: r.items.filter((x) => x.status === 'ok').length, skip: r.items.filter((x) => x.status === 'skip').length, fail: r.items.filter((x) => x.status === 'fail').length },
   };
-  await chrome.storage.local.set({ selfCheck: result });
   return result;
+}
+
+async function doSelfCheck({ groupId }) {
+  const g = await findGroup(groupId);
+  if (!g) return { status: 'error', message: 'Không tìm thấy group — hãy quét lại' };
+  const result = await runSelfCheck(g);
+  if (result.status === 'ok') await chrome.storage.local.set({ selfCheck: result });
+  return result;
+}
+
+// ---------- Tự kiểm tra mỗi ngày ----------
+// Lần quét tự động đầu tiên mỗi ngày (cài đặt selfCheckDaily, mặc định bật): kiểm tra mọi community mình quản trị (tối đa 5),
+// so với lần trước ở khoá `selfCheckAuto`; chỉ báo khi một mục hôm trước dùng được nay lỗi (thường là Beincom vừa thay đổi).
+const DAILY_CHECK_MAX = 5;
+
+async function dailySelfCheck({ now = Date.now(), notifyAllowed = true } = {}) {
+  const { state } = await load();
+  const roots = (state.snapshot?.groups || []).filter((g) => g.isCommunity && !g.error).slice(0, DAILY_CHECK_MAX);
+  if (!roots.length) return { status: 'ok', regressions: [] };
+  const { selfCheckAuto: prev } = await chrome.storage.local.get('selfCheckAuto');
+  const groups = {};
+  const regressions = [];
+  let shown = null;
+  for (const g of roots) {
+    const r = await runSelfCheck(g);
+    if (r.status === 'need_login') return r;
+    if (r.status !== 'ok') continue;
+    groups[g.id] = { name: g.name, at: r.at, summary: r.summary, items: r.items.map(({ id, label, status, detail }) => ({ id, label, status, detail })) };
+    const broke = BG.selfCheckRegressions(prev?.groups?.[g.id]?.items, r.items);
+    if (broke.length) {
+      regressions.push({ groupId: g.id, group: g.name, items: broke.map((x) => x.label) });
+      shown ||= r;
+    }
+  }
+  // Có mục ngừng chạy: hiện luôn kết quả đó ở thẻ Tự kiểm tra
+  await chrome.storage.local.set({ selfCheckAuto: { at: now, groups, regressions }, ...(shown ? { selfCheck: shown } : {}) });
+  if (regressions.length && notifyAllowed) {
+    const n = regressions.reduce((s, x) => s + x.items.length, 0);
+    notify('bg-selfcheck', `BeinGroup: ${n} tính năng ngừng chạy`, regressions.map((x) => `${x.group}: ${x.items.join(', ')}`).join(' · ') + '. Có thể Beincom vừa thay đổi — bấm để xem Tự kiểm tra.');
+  }
+  return { status: 'ok', regressions };
 }

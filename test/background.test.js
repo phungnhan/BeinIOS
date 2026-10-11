@@ -397,7 +397,7 @@ function makeEnv({ data = fixture(), settings = {}, rules = {}, postRules = {}, 
   };
 
   // Nhắc bài chưa ai trả lời tắt sẵn (bài mẫu chưa có bình luận); test riêng bật lại
-  const storage = { settings: { ...BG.DEFAULT_SETTINGS, remindUnanswered: false, ...settings }, rules: { ...BG.DEFAULT_RULES, ...rules }, postRules: { ...BG.DEFAULT_POST_RULES, ...postRules } };
+  const storage = { settings: { ...BG.DEFAULT_SETTINGS, remindUnanswered: false, selfCheckDaily: false, ...settings }, rules: { ...BG.DEFAULT_RULES, ...rules }, postRules: { ...BG.DEFAULT_POST_RULES, ...postRules } };
   if (groupRules) storage.groupRules = groupRules;
   const syncStore = {};
   const syncWrites = [];
@@ -2872,4 +2872,91 @@ test('nhắc người mới: soạn sẵn sáng thứ Hai (chỉ đọc, không 
   await scan(off, 'popup');
   assert.equal(off.storage.nudgeDraft, undefined);
   assert.ok(!off.calls.some((c) => c.includes('objectType=MEMBER')));
+});
+
+test('Tự kiểm tra mỗi ngày: lần quét tự động đầu ngày kiểm tra mọi community; chỉ báo khi mục đang dùng được chuyển sang lỗi', async () => {
+  const day1 = Date.parse('2026-10-13T02:00:00Z'); // thứ Ba
+  const env = makeEnv({ now: day1, settings: { selfCheckDaily: true } });
+  await scan(env);
+  env.listeners.alarm({ name: 'beingroup-scan' });
+  await scan(env, 'popup');
+  const auto = env.storage.selfCheckAuto;
+  assert.deepEqual(Object.keys(auto.groups).sort(), ['gCL', 'gFood']); // chỉ group gốc của community
+  assert.equal(auto.groups.gFood.items.find((x) => x.id === 'tagPerm').status, 'ok');
+  assert.equal(env.notifications.filter((n) => n.id === 'bg-selfcheck').length, 0); // lần đầu chỉ ghi mốc
+  assert.equal(env.storage.state.selfCheckDay, '2026-10-13');
+  // Cùng ngày: không kiểm tra lại
+  const before = env.calls.filter((c) => c.includes('can-cud-tags')).length;
+  env.listeners.alarm({ name: 'beingroup-scan' });
+  await scan(env, 'popup');
+  assert.equal(env.calls.filter((c) => c.includes('can-cud-tags')).length, before);
+
+  // Hôm sau Beincom đổi dữ liệu quyền tag của Food Research: báo một lần, mở tab Nhật ký, thẻ Tự kiểm tra hiện kết quả đó
+  const env2 = makeEnv({ now: day1 + 864e5, settings: { selfCheckDaily: true } });
+  Object.assign(env2.storage, structuredClone(env.storage));
+  env2.data.tagPerm = { cFood: 'lạ' };
+  env2.listeners.alarm({ name: 'beingroup-scan' });
+  await scan(env2, 'popup');
+  const n = env2.notifications.filter((x) => x.id === 'bg-selfcheck');
+  assert.equal(n.length, 1);
+  assert.equal(n[0].title, 'BeinGroup: 1 tính năng ngừng chạy');
+  assert.match(n[0].message, /^Food Research: Quyền quản lý tag\. Có thể Beincom vừa thay đổi/);
+  assert.deepEqual(env2.storage.selfCheckAuto.regressions, [{ groupId: 'gFood', group: 'Food Research', items: ['Quyền quản lý tag'] }]);
+  assert.equal(env2.storage.selfCheck.group.id, 'gFood');
+  env2.listeners.notif('bg-selfcheck');
+  assert.match(env2.tabsCreated.at(-1), /#tab=log$/);
+  assert.ok(!(env2.storage.diagLog || []).some((e) => /can-cud-tags/.test(e.path)), 'không ghi Lỗi kỹ thuật');
+  assert.equal(BG.telegramKind('bg-selfcheck'), 'health');
+
+  // Tắt: không kiểm tra
+  const off = makeEnv({ now: day1, settings: { selfCheckDaily: false } });
+  await scan(off);
+  off.listeners.alarm({ name: 'beingroup-scan' });
+  await scan(off, 'popup');
+  assert.equal(off.storage.selfCheckAuto, undefined);
+});
+
+// ---------- Bài thảo luận hằng tuần ----------
+
+test('bài thảo luận: sáng thứ Hai soạn sẵn câu hỏi + giờ gợi ý (không tự đăng); đăng thật ghi lần dùng câu, chạy thử thì không', async () => {
+  const now = Date.parse('2026-10-12T02:00:00Z'); // 9 giờ sáng thứ Hai giờ VN
+  const env = makeEnv({ now, settings: { promptWeekly: true, promptGroupId: 'gCL', dryRun: false } });
+  await scan(env);
+  env.listeners.alarm({ name: 'beingroup-scan' });
+  await scan(env, 'popup');
+  const d = env.storage.promptDraft;
+  assert.deepEqual([d.promptId, d.groupId, d.groupName, d.basis, d.suggestAt], ['d1', 'gCL', 'Crypto Life', 'default', '2026-10-14T13:00:00.000Z']);
+  assert.equal(d.text, BG.DEFAULT_PROMPTS[0]);
+  const n = env.notifications.filter((x) => x.id === 'bg-prompt');
+  assert.equal(n.length, 1);
+  assert.equal(n[0].title, 'BeinGroup: bài thảo luận tuần này cho Crypto Life');
+  assert.match(n[0].message, /\(gợi ý Thứ Tư 20:00\)\.$/);
+  assert.ok(!writes(env).some((c) => c.startsWith('POST content/posts')), 'không tự đăng');
+  env.listeners.notif('bg-prompt');
+  assert.match(env.tabsCreated.at(-1), /#tab=compose&prompt=1$/);
+  // Cùng tuần: không soạn lại
+  env.listeners.alarm({ name: 'beingroup-scan' });
+  await scan(env, 'popup');
+  assert.equal(env.notifications.filter((x) => x.id === 'bg-prompt').length, 1);
+
+  // Chạy thử: không ghi lần dùng
+  env.storage.settings = { ...env.storage.settings, dryRun: true };
+  await env.send({ type: 'compose', groupIds: ['gCL'], content: d.text, setting: BG.DEFAULT_POST_SETTING, scheduledAt: d.suggestAt, prompt: { id: d.promptId } });
+  assert.equal(env.storage.promptBank, undefined);
+  // Hẹn giờ thật: ghi lần dùng (bài, group, giờ đăng), bỏ bản soạn sẵn; tuần sau sẽ chọn câu khác
+  env.storage.settings = { ...env.storage.settings, dryRun: false };
+  const r = await env.send({ type: 'compose', groupIds: ['gCL'], content: d.text, setting: BG.DEFAULT_POST_SETTING, scheduledAt: d.suggestAt, prompt: { id: d.promptId } });
+  assert.equal(r.status, 'ok', r.message);
+  const used = env.storage.promptBank.items.find((x) => x.id === 'd1').uses;
+  assert.deepEqual(used, [{ postId: r.contentId, groupId: 'gCL', at: d.suggestAt }]);
+  assert.equal(env.storage.promptDraft, undefined);
+  assert.equal(BG.pickPrompt(env.storage.promptBank, { groupId: 'gCL', now }).id, 'd2');
+  assert.ok(env.storage.postStats[r.contentId], 'bài được theo dõi ở Hiệu quả bài đã đăng');
+
+  // Tắt: không soạn
+  const off = makeEnv({ now, settings: { promptWeekly: false, promptGroupId: 'gCL' } });
+  await scan(off);
+  off.listeners.alarm({ name: 'beingroup-scan' });
+  await scan(off, 'popup');
+  assert.equal(off.storage.promptDraft, undefined);
 });

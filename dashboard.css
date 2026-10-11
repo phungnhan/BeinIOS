@@ -345,6 +345,8 @@ input[type="datetime-local"]:disabled { opacity: .5; }
 .ret-bar.ok .bar i { background: var(--ok); }
 .nudge-draft { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; padding: 10px 12px; margin-bottom: 10px; border-radius: 10px; background: var(--accent-soft); }
 .nudge-weekly { margin-bottom: 12px; }
+.prompt-draft-text { margin: 4px 0; white-space: pre-wrap; }
+.prompt-bank textarea { margin-top: 8px; font-size: 13.5px; }
 .ret-list-head { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; margin: 16px 0 8px; }
 .chart-card { margin: 0; border: 1px solid var(--border); border-radius: 10px; padding: 12px; min-width: 0; }
 .chart-card figcaption { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; margin-bottom: 6px; }
@@ -452,6 +454,7 @@ tr.csv-bad td { background: color-mix(in srgb, var(--err-soft) 50%, transparent)
 .list-q { width: 190px; }
 .diag-table td { vertical-align: top; }
 .check-table td { vertical-align: top; }
+.check-daily { margin-bottom: 10px; }
 .card-head .review-tools select { width: auto; max-width: min(300px, 100%); }
 .check-table td.small { color: var(--muted); }
 .diag-msg { white-space: pre-wrap; word-break: break-word; font-size: 12.5px; }
@@ -624,6 +627,15 @@ dialog ul { max-height: 180px; overflow: auto; margin: 6px 0; padding-left: 18px
 .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
 #confirm-ok.decline { background: var(--err); border-color: var(--err); }
 .whatsnew { max-width: 560px; }
+.onboard { max-width: 560px; }
+.onb-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.onboard h4 { margin: 8px 0 6px; font-size: 15px; }
+.onb-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 8px 0; }
+.onb-row select { width: auto; max-width: 100%; }
+.onb-feature { display: flex; gap: 8px; align-items: flex-start; margin: 8px 0; }
+.onb-feature input { margin-top: 3px; flex: none; }
+.onb-dry { padding: 8px 10px; border-radius: 8px; background: var(--warn-soft); }
+#onb-features { max-height: 42vh; overflow: auto; }
 .whatsnew-body { max-height: 60vh; overflow: auto; font-size: 14px; }
 .whatsnew-body h4 { margin: 12px 0 4px; font-size: 14px; }
 .whatsnew-body section:first-child h4 { margin-top: 0; }

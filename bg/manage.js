@@ -65,6 +65,7 @@ async function doRestore({ data, keepDry = false }) {
   if (d.postRules) set.postRules = { ...BG.DEFAULT_POST_RULES, ...d.postRules };
   if (d.groupRules) set.groupRules = d.groupRules;
   if (d.templates) set.templates = d.templates;
+  if (d.promptBank) set.promptBank = d.promptBank;
   if (d.profiles) set.profiles = BG.mergeProfiles(profiles, d.profiles);
   const restored = BG.backupSummary({ ...d, ...(set.settings ? { settings: set.settings } : {}) });
   pushLog(log, [{ time: Date.now(), kind: 'backup', source: 'manual', action: 'restore', status: 'ok', snippet: 'Bản sao lưu', message: restored.join(' · ') }]);

@@ -27,6 +27,9 @@
     monthlyReport: true, // đầu tháng nhắc xem báo cáo tháng trước
     nudgeWeekly: false, // sáng thứ Hai soạn sẵn bài nhắc người mới chưa hoạt động (người dùng tự xem rồi đăng)
     nudgeGroupId: '', // group soạn bài nhắc
+    selfCheckDaily: true, // mỗi ngày tự kiểm tra (chỉ đọc) mọi community, báo khi tính năng đang chạy bị lỗi
+    promptWeekly: false, // sáng thứ Hai soạn sẵn bài thảo luận (câu hỏi mồi) cho promptGroupId
+    promptGroupId: '',
     autoHideSpam: false, // tự ẩn bài / bình luận MỚI có link tới tên miền cấm (sau mỗi lần quét)
     spamWaves: true, // báo khi cùng một link / nội dung đến từ nhiều tài khoản trong thời gian ngắn
     welcomeReminder: true, // sáng thứ Hai nhắc soạn bài chào thành viên mới

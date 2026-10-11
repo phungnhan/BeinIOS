@@ -2,6 +2,11 @@
 
 Mỗi bản một mục, bản mới nhất ở trên. Dashboard tự hiện các mục mới sau khi cập nhật (bấm "Có gì mới" ở cuối trang để xem lại).
 
+## v0.27.0 — 11/10/2026
+- **Tự kiểm tra mỗi ngày** (mặc định bật, chỉ đọc): lần quét tự động đầu tiên mỗi ngày kiểm tra mọi community bạn quản trị và chỉ báo (kèm Telegram) khi một tính năng hôm trước còn chạy mà nay bị lỗi — thường do Beincom vừa thay đổi.
+- **Bài thảo luận hằng tuần** (Đăng bài): kho 20 câu hỏi mồi (sửa / thêm được, có trong bản sao lưu), xoay vòng không lặp lại ở một group trong 8 tuần, soạn vào ô Đăng bài kèm giờ gợi ý theo hiệu quả bài của bạn. Sáng thứ Hai có thể soạn sẵn và báo (mặc định tắt) — addon không tự đăng. Bảng **Hiệu quả từng câu** cho biết câu nào kéo được tương tác.
+- **Bắt đầu nhanh**: người mới cài được hướng dẫn 3 bước — kết nối Beincom, tự kiểm tra, chọn tính năng (Chạy thử bật sẵn). Mở lại ở cuối Dashboard.
+
 ## v0.26.0 — 11/10/2026
 - **Tự kiểm tra** (Nhật ký): bấm một nút, addon gọi thử (chỉ đọc) các API mà từng tính năng dùng với community / group đã chọn và báo mục nào dùng được, mục nào bỏ qua vì không có quyền, mục nào lỗi. **Sao chép kết quả** hoặc **Gửi về Telegram** để gửi người hỗ trợ.
 - **Nhắc người mới hằng tuần** (Thống kê → Thành viên mới có ở lại không, mặc định tắt): sáng thứ Hai addon soạn sẵn bài nhắc những người mới còn ở lại nhưng chưa đăng bài / bình luận và báo cho bạn; bạn tự mở, sửa rồi đăng hoặc hẹn giờ. Mỗi người được nhắc tối đa một lần trong 30 ngày.
