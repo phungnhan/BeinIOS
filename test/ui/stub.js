@@ -161,6 +161,7 @@
           Object.assign(store, structuredClone(o));
           listeners.forEach((fn) => fn(Object.fromEntries(Object.keys(o).map((k) => [k, {}])), 'local'));
         },
+        getBytesInUse: async () => JSON.stringify(store).length,
         remove: async (keys) => {
           for (const k of [].concat(keys)) delete store[k];
           listeners.forEach((fn) => fn(Object.fromEntries([].concat(keys).map((k) => [k, {}])), 'local'));
@@ -178,7 +179,7 @@
       },
     },
     runtime: {
-      getManifest: () => ({ version: '__VERSION__' }), // harness.mjs điền phiên bản trong manifest.json
+      getManifest: () => ({ version: '__VERSION__', permissions: ['storage', 'unlimitedStorage'] }), // harness.mjs điền phiên bản trong manifest.json
       getURL: (p) => p,
       openOptionsPage() {},
       sendMessage: async (m) => {
@@ -471,6 +472,13 @@
             months: { [cur.key]: { total: curPosts.length, posts: curPosts, truncated: false }, [prev.key]: { total: 4, posts: Array.from({ length: 4 }, (_, i) => mk(prev, i)), truncated: false } },
             actorPosts: { m1: [at(cur, 10)] },
             actorChecked: 5,
+            team: [
+              ...[1, 2, 3].map((i) => ({ id: 'tm' + i, time: at(cur, i), useCase: 'approve.join_request', col: 'approved', label: 'Duyệt vào', actor: { id: 'me1', username: 'kaicrypto', fullname: 'Kai Crypto', avatar: '' }, user: { id: 'm' + i, username: 'user_m' + i, fullname: 'Người m' + i, avatar: '' }, groupId: m.groupId, groupName: 'Crypto Life', change: '' })),
+              { id: 'tm4', time: at(cur, 4), useCase: 'remove.member', col: 'removed', label: 'Xoá thành viên', actor: { id: 'aHa', username: 'adminha', fullname: 'Admin Hà', avatar: '' }, user: { id: 'sp', username: 'spam', fullname: 'Spam', avatar: '' }, groupId: m.groupId, groupName: 'Crypto Life', change: '' },
+              { id: 'tm5', time: at(cur, 6), useCase: 'update.group.settings', col: 'settings', label: 'Đổi cài đặt', actor: { id: 'aHa', username: 'adminha', fullname: 'Admin Hà', avatar: '' }, user: null, groupId: m.groupId, groupName: 'Crypto Life', change: 'Duyệt thành viên: tắt → bật' },
+            ],
+            teamTruncated: false,
+            teamSkipped: [],
             errors: [],
           };
         }

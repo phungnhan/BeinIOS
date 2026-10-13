@@ -253,6 +253,7 @@ export const scenarios = [
     name: 'Bộ mẫu chống lừa đảo, xuất quy tắc',
     async run({ page, url, assert }) {
       await page.open(url('dashboard', 'tab=settings'));
+      await page.until(() => /^💽 Bộ nhớ addon đang dùng: [\d,]+ MB \(không giới hạn\)\. Chi tiết ở Nhật ký/.test(document.getElementById('storage-usage').textContent));
       await page.ev(`document.getElementById('btn-preset-scam').click(); true`);
       await page.until(() => document.getElementById('confirm').open);
       const checks = `[...document.querySelectorAll('#confirm-extra .preset-part > label input')]`;
@@ -406,6 +407,13 @@ export const scenarios = [
       assert.match(info.text, /^BeinGroup: báo cáo Tháng \d+\/\d{4} — Crypto Life\n• Thành viên: 12\.358 → 12\.362 \(\+4\)/);
       assert.match(info.text, /• Người mới trong tháng: 5 người · còn ở lại 4 \(80%\) · 1 tự rời · đã đăng bài 1/);
       assert.match(info.text, /• Bài viết: 6 bài \(tháng trước 4, \+50%\)/);
+      // Đội admin theo nhật ký Beincom
+      assert.equal(info.tiles[6], '2 admin');
+      assert.deepEqual(await page.ev(`[...document.querySelectorAll('#monthly-team tr')].map((tr) => [...tr.children].map((td) => td.textContent.trim()).slice(1, 8))`), [['3', '–', '–', '–', '–', '–', '–'], ['–', '–', '1', '–', '–', '–', '1']]);
+      assert.match(await page.ev(`document.getElementById('monthly-team').textContent`), /Kai Crypto[\s\S]*Bạn/);
+      assert.match(await page.ev(`document.getElementById('monthly-changes').textContent`), /Admin Hà — Đổi cài đặt — Duyệt thành viên: tắt → bật · Crypto Life/);
+      assert.match(info.text, /• Đội admin \(nhật ký Beincom, cả việc làm trên web\): Kai Crypto \(@kaicrypto\): 3 duyệt vào · Admin Hà \(@adminha\): 1 xoá, 1 đổi cài đặt/);
+      assert.match(info.text, /• Đổi cài đặt \/ quyền admin: \d\d\/\d\d Admin Hà — Đổi cài đặt — Duyệt thành viên: tắt → bật \(Crypto Life\)/);
       await page.ev(`navigator.clipboard.writeText = async (t) => { window.__clip = t; }; document.getElementById('btn-monthly-copy').click(); true`);
       await page.until(() => window.__clip && /Đã sao chép báo cáo/.test([...document.querySelectorAll('.toast')].map((t) => t.textContent).join()));
       assert.equal(await page.ev(`window.__clip`), info.text);

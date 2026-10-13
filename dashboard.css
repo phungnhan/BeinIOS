@@ -815,3 +815,7 @@ table.requests td.act-wrap button + button { margin-left: 0; }
 .preset-part.is-off { opacity: .6; }
 .preset-part textarea { width: 100%; font-size: 13px; }
 .preset-impact { margin: 0; padding: 8px 10px; border-radius: 8px; background: var(--accent-soft); }
+
+/* Báo cáo tháng: đội admin */
+.team-table td.num.muted { color: var(--muted); }
+.team-changes { margin: 0 0 10px; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; font-size: 13px; }

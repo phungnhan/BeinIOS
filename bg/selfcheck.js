@@ -21,6 +21,7 @@ function selfCheckProbes(g, { root, now, tg }) {
       : { id: 'members', label: 'Danh sách thành viên', uses: 'Thành viên', path: `group/groups/${g.id}/users?limit=1&offset=0`, shape: (d) => !!d && 'groupMember' in d },
     { id: 'activity', label: 'Nhật ký hoạt động', uses: 'vào / rời, hồ sơ vi phạm', path: `group/groups/${g.id}/activity-logs?limit=1&page=1&sort=desc`, shape: isArr },
     { id: 'memberLog', label: 'Nhật ký thành viên theo ngày', uses: 'báo cáo tháng, thành viên mới', path: `group/groups/${g.id}/activity-logs?limit=1&page=1&sort=desc&objectType=MEMBER&from=${Math.floor(from)}&to=${Math.ceil(now)}`, shape: isArr, detail: (d, b) => (b.meta?.total != null ? `${b.meta.total} sự kiện trong 30 ngày` : '') },
+    { id: 'teamLog', label: 'Nhật ký việc của admin', uses: 'báo cáo tháng → đội admin', path: `group/groups/${g.id}/activity-logs?limit=1&page=1&sort=desc&useCase=${encodeURIComponent(Object.keys(BG.TEAM_CASES).join(','))}&from=${Math.floor(from)}&to=${Math.ceil(now)}`, shape: isArr, detail: (d, b) => (b.meta?.total != null ? `${b.meta.total} việc trong 30 ngày` : '') },
     { id: 'timeline', label: 'Bài mới đăng', uses: 'quét bài, thống kê', path: `content/timeline/${g.id}?limit=1`, shape: isList },
     { id: 'search', label: 'Tìm bài theo thời gian', uses: 'báo cáo tháng, thành viên mới, Tìm & dọn bài, dọn tài khoản', path: `content/contents?groupId=${g.id}&isIncludedInnerGroups=true&startTime=${iso(from)}&endTime=${iso(now)}&limit=1`, shape: (d) => isList(d) && d.meta?.total != null, detail: (d) => `${d.meta.total} bài trong 30 ngày` },
     { id: 'comments', label: 'Bình luận', uses: 'quét bình luận', after: 'timeline', path: (ctx) => (ctx.timeline?.list?.[0]?.id ? `content/comments?postId=${ctx.timeline.list[0].id}&limit=1` : null), why: 'group chưa có bài nào để thử', shape: isList },
@@ -38,7 +39,17 @@ function selfCheckProbes(g, { root, now, tg }) {
     { id: 'banned', label: 'Danh sách bị cấm', uses: 'gỡ cấm, cấm ở mọi community', path: `group/communities/${g.communityId}/banned-members?limit=1&offset=0`, need: !!g.canBan, why: 'chỉ chủ / admin community', shape: (d) => d != null },
     { id: 'officialStats', label: 'Thống kê chính thức', uses: 'Thống kê', path: `group/manage/communities/${g.communityId}/stats/member-count?from=${iso(from)}&to=${iso(now)}`, need: !!(g.isCommunity && g.isCommunityAdmin), why: 'chỉ chủ / admin community — addon tự tính từ nhật ký', shape: isArr },
     { id: 'telegram', label: 'Bot Telegram', uses: 'gửi thông báo về Telegram', telegram: true, need: telegramOn(tg), why: 'chưa bật gửi về Telegram' },
+    { id: 'storage', label: 'Bộ nhớ của addon', uses: 'lưu kết quả quét, nhật ký, số liệu', local: true },
   ];
+}
+
+// Dung lượng addon đang dùng trong trình duyệt (không gọi Beincom)
+async function storageUsage() {
+  const all = await chrome.storage.local.get(null);
+  const sizes = BG.storageSizes(all);
+  const bytes = typeof chrome.storage.local.getBytesInUse === 'function' ? await chrome.storage.local.getBytesInUse(null) : sizes.reduce((s, x) => s + x.bytes, 0);
+  const unlimited = (chrome.runtime.getManifest?.().permissions || []).includes('unlimitedStorage');
+  return { bytes, unlimited, sizes };
 }
 
 // Kết luận một lần gọi
@@ -76,6 +87,7 @@ async function runSelfCheck(g) {
     const run = async (p) => {
       const t0 = Date.now();
       if (p.need === false) return { id: p.id, label: p.label, uses: p.uses, status: 'skip', detail: p.why, ms: 0 };
+      if (p.local) return { id: p.id, label: p.label, uses: p.uses, ...BG.storageVerdict(await storageUsage()), ms: Date.now() - t0 };
       if (p.telegram) {
         const t = await tgApi(tg.token, 'getMe');
         return { id: p.id, label: p.label, uses: p.uses, ...(t.ok ? { status: 'ok', detail: t.body?.result?.username ? '@' + t.body.result.username : '' } : { status: 'fail', detail: tgError(t) }), ms: Date.now() - t0 };

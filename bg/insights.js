@@ -92,6 +92,31 @@ async function readMemberEvents(client, g, from, to) {
   return { status: 'ok', events, truncated: true };
 }
 
+// Việc của admin (duyệt / từ chối / xoá / cấm / gán admin / đổi cài đặt) trong khoảng thời gian, ở từng group được truyền vào.
+// Một lần gọi lọc mọi loại việc (useCase cách nhau dấu phẩy). Group không có quyền đọc nhật ký (403) thì bỏ qua và ghi tên.
+const TEAM_PAGES = 5; // tối đa 500 việc mỗi group mỗi tháng
+
+async function readTeamEvents(client, groups, from, to) {
+  const useCase = Object.keys(BG.TEAM_CASES).join(',');
+  const events = [];
+  const skipped = [];
+  let truncated = false;
+  let needLogin = false;
+  await mapLimit(groups, PARALLEL, async (g) => {
+    for (let page = 1; page <= TEAM_PAGES; page++) {
+      const r = await client.call('GET', `group/groups/${g.id}/activity-logs?${qs({ limit: MEMBER_EVENT_LIMIT, page, sort: 'desc', useCase, from: Math.floor(from), to: Math.ceil(to) })}`);
+      if (r.status === 401) return (needLogin = true);
+      if (!BG.isOk(r)) return skipped.push(g.name);
+      const list = Array.isArray(r.body.data) ? r.body.data : [];
+      events.push(...list.map(BG.slimTeamEvent).filter(Boolean));
+      if (list.length < MEMBER_EVENT_LIMIT) return;
+      if (page === TEAM_PAGES) truncated = true;
+    }
+  });
+  if (needLogin) return { ...NEED_LOGIN };
+  return { status: 'ok', events, truncated, skipped };
+}
+
 const iso = (t) => new Date(t).toISOString();
 
 // Bài trong khoảng thời gian (mới nhất trước): tổng số do Beincom trả + tối đa maxPages trang để tính tương tác
@@ -172,6 +197,11 @@ async function doMonthly({ groupId, month }) {
     const cohort = BG.memberCohort(ev.events, cur);
     const ap = await readActorPosts(client, g, cohort.map((m) => m.user), cur.from);
     if (ap.status === 'need_login') return ap;
+    // Đội admin: cả community thì mọi group mình quản trị trong community, còn lại chỉ group đó
+    const { state } = await load();
+    const scope = g.isCommunity ? (state.snapshot?.groups || []).filter((x) => !x.error && x.communityId === g.communityId) : [g];
+    const team = await readTeamEvents(client, scope.length ? scope : [g], cur.from, Math.min(cur.to, now));
+    if (team.status === 'need_login') return team;
     const monthData = (x) => (x.status === 'ok' ? { total: x.total, posts: x.posts, truncated: x.truncated } : { total: null, posts: [], truncated: false, error: x.message });
     return {
       status: 'ok',
@@ -184,6 +214,9 @@ async function doMonthly({ groupId, month }) {
       months: { [cur.key]: monthData(a), [prev.key]: monthData(b) },
       actorPosts: ap.posts,
       actorChecked: ap.checked,
+      team: team.events,
+      teamTruncated: team.truncated,
+      teamSkipped: team.skipped,
       errors: [a, b, ap].filter((x) => x.status === 'error' && x.message).map((x) => x.message),
     };
   });

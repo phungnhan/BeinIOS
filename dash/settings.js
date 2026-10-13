@@ -166,6 +166,20 @@ function renderBackup() {
   const n = Object.keys(data.profiles?.users || {}).length;
   $('backup-profiles-n').textContent = n ? `(${n} người)` : '(chưa có)';
   $('backup-profiles').disabled = !n;
+  renderStorageUsage();
+}
+
+// Dung lượng addon đang dùng trong trình duyệt (chi tiết từng phần ở Nhật ký → Tự kiểm tra → Bộ nhớ của addon)
+async function renderStorageUsage() {
+  try {
+    const bytes = await chrome.storage.local.getBytesInUse(null);
+    const unlimited = (chrome.runtime.getManifest().permissions || []).includes('unlimitedStorage');
+    const v = BG.storageVerdict({ bytes, unlimited });
+    $('storage-usage').textContent = `💽 Bộ nhớ addon đang dùng: ${BG.mbText(bytes)}${unlimited ? ' (không giới hạn)' : ` / ${BG.mbText(BG.STORAGE_QUOTA)}`}.` + (v.status === 'fail' ? ' ' + v.detail : ' Chi tiết ở Nhật ký → Tự kiểm tra.');
+    $('storage-usage').classList.toggle('err-text', v.status === 'fail');
+  } catch {
+    $('storage-usage').textContent = '';
+  }
 }
 
 function fileStamp(d = new Date()) {

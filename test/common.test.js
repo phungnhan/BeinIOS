@@ -1664,3 +1664,17 @@ test('việc chờ lâu: quá số giờ, chờ lâu nhất trước, nhắc m�
   assert.equal(BG.readBackup({ app: 'BeinGroup', data: { settings: { pendingHours: 999, remindPending: false } } }).data.settings.pendingHours, 168);
 });
 
+test('bộ nhớ: dung lượng từng khoá (lớn nhất trước, có tên dễ đọc), báo khi sắp đầy 10 MB hoặc quá lớn dù không giới hạn; manifest xin unlimitedStorage', () => {
+  const sizes = BG.storageSizes({ log: [{ a: 'x'.repeat(1000) }], settings: { dryRun: true }, lạ: 'é' });
+  assert.deepEqual(sizes.map((x) => [x.key, x.label]), [['log', 'Nhật ký thao tác'], ['settings', 'Cài đặt'], ['lạ', 'lạ']]);
+  assert.equal(sizes[2].bytes, 2 + 4); // tên khoá + "é" (2 byte UTF-8 + 2 dấu ngoặc)
+  const MB = 1048576;
+  assert.deepEqual(BG.storageVerdict({ bytes: 2.5 * MB, sizes: [{ label: 'Nhật ký thao tác', bytes: 1.5 * MB }] }), { status: 'ok', detail: '2,5 MB / 10 MB · nhiều nhất: Nhật ký thao tác 1,5 MB' });
+  assert.equal(BG.storageVerdict({ bytes: 8.5 * MB }).status, 'fail');
+  assert.deepEqual(BG.storageVerdict({ bytes: 30 * MB, unlimited: true }), { status: 'ok', detail: '30 MB (không giới hạn)' });
+  assert.match(BG.storageVerdict({ bytes: 250 * MB, unlimited: true }).detail, /^Bộ nhớ quá lớn: 250 MB/);
+  assert.equal(BG.mbText(300 * 1024), '0,29 MB');
+  const manifest = JSON.parse(require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'manifest.json'), 'utf8'));
+  assert.ok(manifest.permissions.includes('unlimitedStorage'));
+});
+

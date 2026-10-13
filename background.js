@@ -147,6 +147,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     postStatsRefresh: () => measurePostStats({ refresh: true }),
     retention: () => doRetention(msg),
     selfCheck: () => doSelfCheck(msg),
+    storageUsage: () => storageUsage(),
     userPosts: () => doUserPosts(msg),
     sweepSearch: () => doSweepSearch(msg),
     nudgeEffect: () => doNudgeEffect(),

@@ -1011,6 +1011,18 @@
             </div>
           </div>
         </div>
+        <div id="monthly-team-box" hidden>
+          <h3 class="sub-h">Đội admin trong tháng</h3>
+          <p class="muted small" id="monthly-team-note"></p>
+          <div class="table-wrap">
+            <table class="team-table">
+              <thead id="monthly-team-head"></thead>
+              <tbody id="monthly-team"></tbody>
+            </table>
+          </div>
+          <h3 class="sub-h" id="monthly-changes-h">Đổi cài đặt / quyền admin</h3>
+          <ul class="team-changes" id="monthly-changes"></ul>
+        </div>
         <h3 class="sub-h">Bản chữ để gửi các admin khác</h3>
         <pre class="monthly-text" id="monthly-text"></pre>
         <div class="monthly-actions">
@@ -1343,6 +1355,7 @@
           <input type="file" id="restore-file" accept=".json,application/json" hidden />
         </div>
         <div class="muted small" id="backup-hint"></div>
+        <div class="muted small" id="storage-usage"></div>
       </div>
     </section>
 

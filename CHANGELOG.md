@@ -2,6 +2,11 @@
 
 Mỗi bản một mục, bản mới nhất ở trên. Dashboard tự hiện các mục mới sau khi cập nhật (bấm "Có gì mới" ở cuối trang để xem lại).
 
+## v0.30.0 — 13/10/2026
+- **Đội admin** trong Báo cáo tháng: mỗi admin đã duyệt vào, từ chối, xoá, cấm, gỡ cấm, gán / gỡ admin, đổi cài đặt bao nhiêu lần trong tháng — lấy từ nhật ký hoạt động của Beincom nên tính **cả việc làm thẳng trên web**, ở mọi group bạn quản trị trong community. Kèm danh sách ai đổi cài đặt / quyền admin gì, lúc nào. Có trong bản chữ để sao chép / gửi Telegram.
+- **Chống đầy bộ nhớ**: addon xin quyền lưu trữ không giới hạn (không hỏi thêm khi cài) — community đông, lịch sử dài cũng không bị mất dữ liệu vì đầy 10 MB. Tự kiểm tra có mục **Bộ nhớ của addon** (dung lượng, phần lớn nhất); phần Sao lưu ghi dung lượng đang dùng.
+- Tự kiểm tra có thêm mục **Nhật ký việc của admin**.
+
 ## v0.29.0 — 13/10/2026
 - **Dọn tài khoản triệt để**: hộp dọn tự tìm thêm **mọi bài cũ còn hiện** của người đó trong community (không chỉ bài addon đã quét); từng bài / bình luận có ô tick để bỏ những mục không muốn ẩn. Nút 🧹 Dọn có cả ở Hồ sơ vi phạm dù người đó không còn bài gần đây.
 - **Tìm & dọn bài** (Bài viết): tìm trong mọi bài còn hiện của community theo từ khoá hoặc link (vd `t.me/`, tên miền lừa đảo), 7 / 30 / 90 ngày hoặc mọi lúc; tick từng bài rồi ẩn. Không bài nào được chọn sẵn; bài của bạn, của admin và thành viên tin cậy được đánh dấu giữ. Có nút dọn nhanh người đăng nhiều bài khớp nhất.

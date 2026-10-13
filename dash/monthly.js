@@ -40,7 +40,7 @@ function renderMonthly() {
   if (monthly.loading) note.textContent = 'Đang đọc số liệu từ Beincom… (chỉ đọc; community đông người có thể mất vài chục giây)';
   else if (monthly.error) note.textContent = monthly.error;
   else if (!g) note.textContent = data.state.snapshot ? 'Không có group nào để báo cáo.' : 'Chưa quét lần nào.';
-  else if (!r) note.textContent = 'Chọn community / group và tháng rồi bấm Tạo báo cáo. Addon chỉ đọc: nhật ký vào / rời, bài đăng trong tháng và tháng trước, bài của người mới. Phần kiểm duyệt lấy từ nhật ký của addon.';
+  else if (!r) note.textContent = 'Chọn community / group và tháng rồi bấm Tạo báo cáo. Addon chỉ đọc: nhật ký vào / rời, bài đăng trong tháng và tháng trước, bài của người mới, việc của đội admin trong nhật ký Beincom. Phần kiểm duyệt qua addon lấy từ nhật ký của addon.';
   else {
     const parts = [`${r.group.name} · ${r.label}${r.partial ? ' (tới hôm nay)' : ''}, so với ${r.prevLabel}.`];
     parts.push(r.members.start == null ? 'Nhật ký vào / rời quá dài nên chưa tính được số thành viên đầu / cuối tháng.' : 'Số thành viên đầu / cuối tháng suy ra từ số hiện tại và nhật ký vào / rời.');
@@ -64,6 +64,7 @@ function renderMonthly() {
     tile('Bài viết', fmtN(c.posts), `${r.prevLabel}: ${fmtN(p.posts)}${changeText(c.posts, p.posts)}`),
     tile('Cảm xúc · bình luận', `${fmtN(c.reactions)} · ${fmtN(c.comments)}`, `👁 ${fmtN(c.views)} lượt xem${c.truncated ? ` · trên ${fmtN(c.read)} bài mới nhất` : ''}`),
     tile('Kiểm duyệt qua addon', fmtN(moderated), moderated ? `${fmtN(a.approved + a.autoApproved)} duyệt thành viên · ${fmtN(a.postsHidden + a.commentsHidden)} ẩn` : 'không có thao tác'),
+    ...(r.team ? [tile('Đội admin', `${fmtN(r.team.admins.length)} admin`, r.team.total ? `${fmtN(r.team.total)} việc theo nhật ký Beincom` : 'không có việc nào')] : []),
   );
 
   const tp = $('monthly-posts');
@@ -96,7 +97,41 @@ function renderMonthly() {
       ),
     ),
   );
+  renderMonthlyTeam(r);
   $('monthly-text').textContent = BG.monthlyText(r);
+}
+
+// Đội admin: việc của từng admin theo nhật ký Beincom (cả việc làm trên web) + các lần đổi cài đặt / quyền admin
+function renderMonthlyTeam(r) {
+  const t = r.team;
+  $('monthly-team-box').hidden = !t;
+  if (!t) return;
+  const cols = Object.entries(BG.TEAM_COLS);
+  const notes = ['Theo nhật ký hoạt động của Beincom: gồm cả việc làm thẳng trên web, không qua addon. Duyệt / ẩn bài và xử lý báo cáo không có trong nhật ký này (xem ô Kiểm duyệt qua addon).'];
+  if (t.skipped.length) notes.push(`Không đọc được nhật ký của: ${t.skipped.join(', ')} (tài khoản không có quyền).`);
+  if (t.truncated) notes.push('Có group quá nhiều việc trong tháng: mới tính 500 việc mới nhất mỗi group.');
+  $('monthly-team-note').textContent = notes.join(' ');
+  $('monthly-team-head').replaceChildren(el('tr', {}, el('th', { text: 'Admin' }), ...cols.map(([, l]) => el('th', { class: 'num', text: l })), el('th', { text: 'Gần nhất' })));
+  const body = $('monthly-team');
+  body.replaceChildren();
+  if (!t.admins.length) body.append(el('tr', { class: 'empty-row' }, el('td', { colspan: cols.length + 2, text: 'Không có việc nào của admin trong tháng (theo nhật ký Beincom)' })));
+  for (const a of t.admins) {
+    body.append(
+      el(
+        'tr',
+        {},
+        el('td', {}, el('div', { class: 'user' }, postAuthor(a.actor), a.isMe ? el('span', { class: 'tag accent', text: 'Bạn' }) : null)),
+        ...cols.map(([k]) => el('td', { class: 'num' + (a.counts[k] ? '' : ' muted'), text: a.counts[k] ? fmtN(a.counts[k]) : '–' })),
+        el('td', { class: 'small', title: fmtTime(a.last), text: ago(a.last) }),
+      ),
+    );
+  }
+  $('monthly-changes-h').hidden = !t.changes.length;
+  $('monthly-changes').replaceChildren(
+    ...t.changes.slice(0, 20).map((e) =>
+      el('li', {}, el('span', { class: 'muted small', text: fmtTime(e.time) + ' · ' }), el('b', { text: e.actor.fullname || e.actor.username || '?' }), ` — ${BG.teamChangeText(e)}`, e.groupName ? el('span', { class: 'muted small', text: ` · ${e.groupName}` }) : null),
+    ),
+  );
 }
 
 async function runMonthly() {
@@ -109,7 +144,7 @@ async function runMonthly() {
     if (raw?.status !== 'ok') monthly.error = raw?.status === 'need_login' ? 'Phiên đăng nhập Beincom đã hết hạn.' : raw?.message || 'Có lỗi';
     else {
       const scope = reportScope(g);
-      monthly.report = BG.monthlyReport(raw, { log: data.log, profiles: data.profiles, comments: data.state.recentComments || [], postStats: data.postStats, scopeIds: scope.map((x) => x.id), scopeNames: scope.map((x) => x.name) });
+      monthly.report = BG.monthlyReport(raw, { log: data.log, profiles: data.profiles, comments: data.state.recentComments || [], postStats: data.postStats, scopeIds: scope.map((x) => x.id), scopeNames: scope.map((x) => x.name), meId: data.state.me?.id });
     }
   } finally {
     monthly.loading = false;

@@ -255,6 +255,15 @@ function makeEnv({ data = fixture(), settings = {}, rules = {}, postRules = {}, 
       const pick = (admin) => ({ data: page.filter((u) => !!u.isAdmin === admin), userCount: all.filter((u) => !!u.isAdmin === admin).length });
       return reply(200, ok({ groupAdmin: pick(true), groupMember: pick(false) }, { total: all.length, limit, offset, hasNextPage: offset + limit < all.length }));
     }
+    // Việc của đội admin: useCase nhiều loại cách nhau dấu phẩy, from / to theo ms (data.teamEvents[groupId]); data.teamDenied: 403
+    if ((m = path.match(/^group\/groups\/(\w+)\/activity-logs$/)) && String(q.useCase || '').includes(',')) {
+      if ((data.teamDenied || []).includes(m[1])) return reply(403, { code: 'forbidden', meta: { message: "You don't have permission" } });
+      const cases = q.useCase.split(',');
+      const t = (e) => Date.parse(e.eventTime);
+      const all = (data.teamEvents?.[m[1]] || []).filter((e) => cases.includes(e.useCase) && (!q.from || t(e) >= Number(q.from)) && (!q.to || t(e) <= Number(q.to))).sort((a, b) => t(b) - t(a));
+      const [limit, page] = [Number(q.limit), Number(q.page || 1)];
+      return reply(200, ok(all.slice((page - 1) * limit, page * limit), { total: all.length }));
+    }
     // Nhật ký thành viên (objectType=MEMBER, from / to theo ms, trang tối đa 100): data.memberEvents[groupId] dạng API
     if ((m = path.match(/^group\/groups\/(\w+)\/activity-logs$/)) && q.objectType === 'MEMBER') {
       if (Number(q.limit) > 100) return reply(400, { code: 'api.validation_error', meta: { message: 'Bad Request Exception' } });
@@ -417,10 +426,14 @@ function makeEnv({ data = fixture(), settings = {}, rules = {}, postRules = {}, 
     storage: {
       local: {
         async get(keys) {
+          if (keys == null) return structuredClone(storage);
           return Object.fromEntries([].concat(keys).filter((k) => k in storage).map((k) => [k, structuredClone(storage[k])]));
         },
         async set(o) {
           Object.assign(storage, structuredClone(o));
+        },
+        async getBytesInUse() {
+          return data.bytesInUse ?? JSON.stringify(storage).length;
         },
         async remove(keys) {
           for (const k of [].concat(keys)) delete storage[k];
@@ -450,7 +463,7 @@ function makeEnv({ data = fixture(), settings = {}, rules = {}, postRules = {}, 
       onUpdated: ev('updated'),
     },
     scripting: { executeScript: async () => [{ result: { status: 401 } }] },
-    runtime: { onMessage: ev('message'), onStartup: ev('startup'), onInstalled: ev('installed'), getURL: (p) => 'chrome-extension://x/' + p, getManifest: () => ({ version: '0.0.0-test' }) },
+    runtime: { onMessage: ev('message'), onStartup: ev('startup'), onInstalled: ev('installed'), getURL: (p) => 'chrome-extension://x/' + p, getManifest: () => ({ version: '0.0.0-test', permissions: data.unlimited ? ['storage', 'unlimitedStorage'] : ['storage'] }) },
     permissions: { contains: async ({ origins }) => (origins.some((o) => o.includes('script.google')) ? data.usagePerm !== false : true) },
   };
   const ctx = vm.createContext({
@@ -2799,6 +2812,17 @@ test('báo cáo tháng: đọc nhật ký từ đầu tháng trước tới nay,
     sp('new1', cur, 10, { actor: user(213), reactionsCount: { like: 9 }, commentsCount: 6 }),
     ...Array.from({ length: 10 }, (_, i) => sp('p' + i, prev, 2 + i)),
   ];
+  // Đội admin: việc trong tháng ở group gốc và group con (cả việc làm trên web); việc ngoài tháng, sự kiện tự vào không tính
+  const teamEv = (id, useCase, actor, t, extra = {}) => ({ id, useCase, eventTime: new Date(t).toISOString(), groupId: 'gCL', data: { actor: user(actor), group: { id: 'gCL', name: 'Crypto Life' }, ...extra } });
+  data.teamEvents = {
+    gCL: [
+      ...Array.from({ length: 105 }, (_, i) => teamEv('ta' + i, 'approve.join_request', 41, at(cur, 1 + (i % 20)), { user: user(500 + i) })),
+      teamEv('tr1', 'remove.member', 42, at(cur, 7), { user: user(600) }),
+      teamEv('ts1', 'update.group.settings', 42, at(cur, 8), { changes: { isJoinApproval: { old: false, new: true } } }),
+      teamEv('tx1', 'remove.member', 42, at(prev, 7), { user: user(601) }), // tháng trước
+    ],
+    gCLsub: [teamEv('tg1', 'assign.group_admin', 9, at(cur, 9), { user: user(43), group: { id: 'gCLsub', name: 'Crypto Life - General' } })],
+  };
   const env = makeEnv({ data });
   await scan(env);
   const before = env.calls.length;
@@ -2812,6 +2836,10 @@ test('báo cáo tháng: đọc nhật ký từ đầu tháng trước tới nay,
   assert.equal(writes(env).length, 0);
   assert.deepEqual([raw.key, raw.prevKey, raw.group.userCount, raw.months[key].total, raw.months[key].posts.length, raw.months[prev.key].total], [key, prev.key, 12000, 31, 31, 10]);
   assert.deepEqual(Object.keys(raw.actorPosts), ['u213']);
+  const teamCalls = calls.filter((c) => c.includes('useCase='));
+  assert.ok(teamCalls.includes(`GET group/groups/gCL/activity-logs?limit=100&page=2&sort=desc&useCase=${encodeURIComponent(Object.keys(BG.TEAM_CASES).join(','))}&from=${cur.from}&to=${cur.to}`));
+  assert.deepEqual([...new Set(teamCalls.map((c) => c.match(/groups\/(\w+)\//)[1]))].sort(), ['gCL', 'gCLsub']);
+  assert.deepEqual([raw.team.length, raw.teamTruncated, raw.teamSkipped], [108, false, []]);
 
   const r = BG.monthlyReport(raw, {
     log: [
@@ -2835,6 +2863,13 @@ test('báo cáo tháng: đọc nhật ký từ đầu tháng trước tới nay,
   assert.match(text, /• Người mới trong tháng: 3 người · còn ở lại 2 \(67%\) · 1 tự rời · đã đăng bài 1/);
   assert.match(text, /• Bài viết: 31 bài \(tháng trước 10, \+210%\)/);
   assert.match(text, /• Kiểm duyệt qua addon: 1 duyệt thành viên$/m);
+  assert.deepEqual(r.team.admins.map((a) => [a.actor.id, a.total, a.counts.approved, a.counts.removed, a.counts.settings, a.counts.roles]), [['u41', 105, 105, 0, 0, 0], ['u42', 2, 0, 1, 1, 0], ['u9', 1, 0, 0, 0, 1]]);
+  assert.deepEqual(r.team.changes.map((e) => BG.teamChangeText(e)), ['Gán admin group: Người 43 (@user43)', 'Đổi cài đặt — Duyệt thành viên: tắt → bật']);
+  assert.match(text, /• Đội admin \(nhật ký Beincom, cả việc làm trên web\): Người 41 \(@user41\): 105 duyệt vào · Người 42 \(@user42\): 1 xoá, 1 đổi cài đặt · Người 9 \(@user9\): 1 gán \/ gỡ admin/);
+  // Group con không có quyền đọc nhật ký: bỏ qua, ghi tên
+  data.teamDenied = ['gCLsub'];
+  const denied = await env.send({ type: 'monthly', groupId: 'gCL', month: key });
+  assert.deepEqual([denied.status, denied.team.length, denied.teamSkipped], ['ok', 107, ['Crypto Life - General']]);
 
   // Tháng chưa tới / group lạ
   assert.match((await env.send({ type: 'monthly', groupId: 'gCL', month: BG.shiftMonth(BG.monthKey(now), 2) })).message, /chưa bắt đầu/);
@@ -2904,6 +2939,10 @@ test('Tự kiểm tra: gọi thử các API đọc (chỉ GET), báo dùng đư�
   assert.deepEqual(fails, []);
   assert.deepEqual([by.login.status, by.login.detail, by.members.status, by.approvals.status, by.reports.status, by.memberLog.status, by.search.status], ['ok', '@kai', 'ok', 'ok', 'ok', 'ok', 'ok']);
   assert.deepEqual([by.telegram.status, by.telegram.detail], ['skip', 'chưa bật gửi về Telegram']);
+  // Bộ nhớ (không gọi Beincom): dung lượng đang dùng, khoá lớn nhất
+  assert.equal(by.storage.status, 'ok');
+  assert.match(by.storage.detail, /^[\d,]+ MB \/ 10 MB · nhiều nhất: Kết quả quét/);
+  assert.equal(by.teamLog.status, 'ok');
   assert.equal(r.summary.ok + r.summary.skip + r.summary.fail, r.items.length);
   assert.ok(env.calls.slice(before).every((c) => c.startsWith('GET ')));
   assert.deepEqual(env.storage.selfCheck.items.length, r.items.length);
@@ -2928,6 +2967,14 @@ test('Tự kiểm tra: gọi thử các API đọc (chỉ GET), báo dùng đư�
   assert.equal(tgr.items.find((x) => x.id === 'telegram').status, 'ok');
   assert.equal(env.tg.at(-1).method, 'getMe');
   assert.ok(!env.tg.some((t) => t.method === 'sendMessage'));
+  // Bộ nhớ sắp đầy (giới hạn 10 MB): lỗi; có quyền không giới hạn thì vẫn dùng được
+  env.data.bytesInUse = 9 * 1048576;
+  const full = await env.send({ type: 'selfCheck', groupId: 'gFood' });
+  assert.deepEqual([full.items.find((x) => x.id === 'storage').status, full.items.find((x) => x.id === 'storage').detail.slice(0, 14)], ['fail', 'Bộ nhớ sắp đầy']);
+  env.data.unlimited = true;
+  const unl = await env.send({ type: 'selfCheck', groupId: 'gFood' });
+  assert.match(unl.items.find((x) => x.id === 'storage').detail, /^9 MB \(không giới hạn\)/);
+  assert.equal((await env.send({ type: 'storageUsage' })).bytes, 9 * 1048576);
   // Hết phiên đăng nhập
   const out = makeEnv({ loggedIn: false });
   out.storage.state = env.storage.state;
