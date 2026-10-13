@@ -22,6 +22,8 @@ window.addEventListener('hashchange', () => {
   if (p.get('monthly')) openMonthly();
   if (p.get('nudge')) openNudge();
   if (p.get('prompt')) openPrompts();
+  if (p.get('digest')) openDigest();
+  if (p.get('todo')) openTodo(p.get('todo'));
 });
 
 // Thanh tab: bấm chuột hoặc phím mũi tên trái/phải
@@ -56,6 +58,7 @@ syncTopbar();
 const TAB_RENDER = {
   overview: () => {
     renderKpis();
+    renderDigest();
     renderTodo();
     renderGroups();
     renderWeekly();
@@ -76,6 +79,7 @@ const TAB_RENDER = {
     renderApproval();
     renderRecent();
     renderComments();
+    renderSweep();
     renderPinned();
     renderTagAdmin();
   },
@@ -107,6 +111,7 @@ const TAB_RENDER = {
   log: () => {
     renderLog();
     renderCheck();
+    renderUsage();
     renderDiag();
   },
 };
@@ -126,7 +131,7 @@ function renderAll() {
 }
 
 async function loadAll() {
-  const { settings, rules, postRules, groupRules, recurring, state, log, templates, profiles, syncStatus, telegramStatus, telegramPoll, postStats, nudges, nudgeDraft, nudgeEffect, promptBank, promptDraft } = await chrome.storage.local.get(['settings', 'rules', 'postRules', 'groupRules', 'recurring', 'state', 'log', 'templates', 'profiles', 'syncStatus', 'telegramStatus', 'telegramPoll', 'postStats', 'nudges', 'nudgeDraft', 'nudgeEffect', 'promptBank', 'promptDraft']);
+  const { settings, rules, postRules, groupRules, recurring, state, log, templates, profiles, syncStatus, telegramStatus, telegramPoll, postStats, nudges, nudgeDraft, nudgeEffect, promptBank, promptDraft, periodicDigest } = await chrome.storage.local.get(['settings', 'rules', 'postRules', 'groupRules', 'recurring', 'state', 'log', 'templates', 'profiles', 'syncStatus', 'telegramStatus', 'telegramPoll', 'postStats', 'nudges', 'nudgeDraft', 'nudgeEffect', 'promptBank', 'promptDraft', 'periodicDigest']);
   data = {
     settings: { ...BG.DEFAULT_SETTINGS, ...settings },
     rules: { ...BG.DEFAULT_RULES, ...rules },
@@ -146,6 +151,7 @@ async function loadAll() {
     nudgeEffect: nudgeEffect || null,
     promptBank: promptBank || null,
     promptDraft: promptDraft || null,
+    periodicDigest: periodicDigest || null,
   };
   renderAll();
   await loadDraftOnce();
@@ -157,7 +163,12 @@ async function loadAll() {
     if (p.get('monthly')) openMonthly(); // mở từ thông báo đầu tháng
     if (p.get('nudge')) openNudge(); // mở từ thông báo bài nhắc người mới
     if (p.get('prompt')) openPrompts(); // mở từ thông báo bài thảo luận
-    checkOnboarding().then((shown) => shown || checkWhatsNew()); // cài mới: Bắt đầu nhanh; vừa cập nhật: Có gì mới
+    if (p.get('digest')) openDigest(); // mở từ thông báo việc đầu tuần
+    if (p.get('todo')) openTodo(p.get('todo')); // mở từ thông báo việc chờ lâu
+    // Cài mới: Bắt đầu nhanh; vừa cập nhật: Có gì mới; chưa hỏi ý: gửi báo cáo sử dụng (mỗi lần mở chỉ một hộp)
+    checkOnboarding()
+      .then((shown) => shown || checkWhatsNew())
+      .then((shown) => shown || checkUsageConsent());
   } else ensureTabData();
 }
 
@@ -165,7 +176,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== 'local') return;
   // Đánh dấu đã xem / lưu nháp: không cần vẽ lại cả trang
   // Nút Telegram: offset đọc nút bấm / danh sách việc đã gửi đổi thường xuyên, không cần vẽ lại (thao tác thật sẽ đổi state / log)
-  if (Object.keys(changes).every((k) => ['activitySeen', 'composeDraft', 'articleDraft', 'telegramPoll', 'tgActions', 'diagLog', 'seenVersion'].includes(k))) return;
+  if (Object.keys(changes).every((k) => ['activitySeen', 'composeDraft', 'articleDraft', 'telegramPoll', 'tgActions', 'diagLog', 'seenVersion', 'usage', 'usageNote', 'usageConsent', 'usageSent'].includes(k))) return;
   loadAll();
 });
 $('version').textContent = 'v' + chrome.runtime.getManifest().version;

@@ -1504,3 +1504,163 @@ test('bài thảo luận: chọn câu xoay vòng theo group, sửa kho giữ l�
   assert.ok(BG.backupSummary(back.data).includes('Kho câu hỏi thảo luận: 3 câu'));
   assert.equal(BG.cleanPromptBank({ items: [{ text: '  ' }, { text: 'x', uses: [{ postId: 1 }] }] }).items[0].uses.length, 0);
 });
+
+test('sao lưu kèm lịch sử số liệu: chỉ khi chọn, làm sạch khi đọc, gộp với dữ liệu đang có (trong máy được ưu tiên)', () => {
+  const store = {
+    settings: BG.DEFAULT_SETTINGS,
+    postStats: { p1: { id: 'p1', at: 2, snippet: 'A', d1: { views: 5, reactions: 1, comments: 0 } } },
+    nudges: [{ id: 'n1', groupId: 'g1', groupName: 'G', at: '2026-10-01T00:00:00Z', userIds: ['u1'] }],
+    state: { lastScan: 1, memberHistory: { g1: [{ day: '2026-10-01', count: 10 }] } },
+    log: [{ time: 100, kind: 'member', action: 'approve', status: 'ok', groupId: 'g1', userId: 'u1' }],
+  };
+  assert.equal(BG.makeBackup(store).data.history, undefined);
+  const file = JSON.parse(JSON.stringify(BG.makeBackup(store, { history: true })));
+  assert.deepEqual(Object.keys(file.data.history), ['postStats', 'nudges', 'memberHistory', 'log']);
+  // Dữ liệu lỗi trong tệp bị bỏ
+  file.data.history.postStats.bad = { id: 'khác' };
+  file.data.history.nudges.push({ id: 'n9' });
+  file.data.history.memberHistory.g1.push({ day: 'hôm qua', count: 3 });
+  file.data.history.log.push({ time: 'x' });
+  const back = BG.readBackup(file);
+  assert.deepEqual([Object.keys(back.data.history.postStats), back.data.history.nudges.length, back.data.history.memberHistory.g1.length, back.data.history.log.length], [['p1'], 1, 1, 1]);
+  assert.ok(BG.backupSummary(back.data).some((x) => /^Lịch sử số liệu: 1 bài theo dõi hiệu quả, 1 lần nhắc người mới, số thành viên của 1 group, 1 dòng nhật ký/.test(x)));
+  // Gộp vào máy khác: thêm cái chưa có, giữ cái đang có khi trùng
+  const cur = {
+    postStats: { p1: { id: 'p1', at: 5, snippet: 'A mới', d7: { views: 9, reactions: 2, comments: 1 } }, p2: { id: 'p2', at: 6 } },
+    nudges: [{ id: 'n2', groupId: 'g1', at: '2026-10-05T00:00:00Z', userIds: ['u2'] }],
+    memberHistory: { g1: [{ day: '2026-10-01', count: 11 }, { day: '2026-10-05', count: 12 }], g2: [{ day: '2026-10-05', count: 3 }] },
+    log: [{ time: 200, kind: 'post', action: 'hide', status: 'ok', contentId: 'c1' }, { time: 100, kind: 'member', action: 'approve', status: 'ok', groupId: 'g1', userId: 'u1' }],
+  };
+  const m = BG.mergeHistory(cur, back.data.history);
+  assert.deepEqual([m.postStats.p1.snippet, !!m.postStats.p1.d1, !!m.postStats.p1.d7, Object.keys(m.postStats).sort()], ['A mới', true, true, ['p1', 'p2']]);
+  assert.deepEqual(m.nudges.map((n) => n.id), ['n2', 'n1']);
+  assert.deepEqual(m.memberHistory.g1, [{ day: '2026-10-01', count: 11 }, { day: '2026-10-05', count: 12 }]);
+  assert.deepEqual(Object.keys(m.memberHistory).sort(), ['g1', 'g2']);
+  assert.deepEqual(m.log.map((e) => e.time), [200, 100]); // dòng trùng không nhân đôi
+});
+
+test('báo cáo sử dụng: đếm tính năng theo ngày (chỉ lệnh có tên), giữ 60 ngày; báo cáo ẩn danh — không tên group, tên người, nội dung, id', () => {
+  const now = Date.parse('2026-10-12T02:00:00Z');
+  let u = null;
+  for (const t of ['compose', 'compose', 'scan', 'diag', 'telegramPoll', 'monthly']) u = BG.recordUsage(u, t, now);
+  assert.deepEqual(u, { since: '2026-10-12', days: { '2026-10-12': { compose: 2, scan: 1, monthly: 1 } } });
+  let long = null;
+  for (let i = 0; i < 70; i++) long = BG.recordUsage(long, 'scan', now - i * 864e5);
+  assert.equal(Object.keys(long.days).length, 60);
+  assert.equal(long.since, '2026-10-12'); // lần ghi đầu tiên
+  u.days['2026-08-01'] = { compose: 9 }; // ngoài 30 ngày: không tính
+  const text = BG.usageReport({
+    usage: u,
+    settings: { dryRun: true, autoHideSpam: true },
+    telegram: { enabled: true, actions: true, token: 'bí mật' },
+    groups: [{ id: 'gCL', name: 'Crypto Life', isCommunity: true }, { id: 'gCLsub', name: 'Crypto Life - General', isCommunity: false }],
+    log: [
+      { time: now - 1000, kind: 'post', action: 'hide', source: 'auto', status: 'ok', groupName: 'Crypto Life', snippet: 'Kèo x100 tại abc.xyz', username: 'spammer' },
+      { time: now - 2000, kind: 'member', action: 'approve', source: 'telegram', status: 'ok', fullname: 'Trần Minh Anh' },
+      { time: now - 3000, kind: 'member', action: 'approve', source: 'manual', status: 'error' },
+      { time: now - 40 * 864e5, kind: 'member', source: 'manual', status: 'ok' },
+    ],
+    diagLog: [{ time: now - 5000, kind: 'api', method: 'GET', path: 'content/timeline/ed9e146a-04c7-4d62-bca5-5bbc5bc987d1?limit=20', status: 504, count: 2 }, { time: now - 6000, kind: 'js', message: 'TypeError: x', count: 1 }],
+    selfCheck: { summary: { ok: 20, skip: 3, fail: 1 }, items: [{ label: 'Bài ghim', status: 'fail' }] },
+    version: '0.28.0',
+    ua: 'Mozilla/5.0 Chrome/141.0.1.2 Safari/537.36',
+    note: 'Lan — admin',
+    now,
+  });
+  assert.equal(
+    text,
+    [
+      'BeinGroup v0.28.0 · Chrome/141.0.1.2 · báo cáo sử dụng 30 ngày (tới 2026-10-12) · Lan — admin',
+      '• Dùng từ 2026-10-12 · 1 ngày có dùng trong 30 ngày · quản trị 1 community, 2 group',
+      '• Đang bật: Chạy thử, Tự ẩn spam, Telegram (có nút)',
+      '• Tính năng dùng: Đăng / hẹn giờ bài 2 · Quét tay 1 · Báo cáo tháng 1',
+      '• Nhật ký 30 ngày: 3 thao tác (1 tự động, 1 từ Telegram, 1 bấm tay) · 1 lỗi',
+      '• Lỗi kỹ thuật 30 ngày: 2 — GET content/timeline/:id → 504 (×2); TypeError: x (×1)',
+      '• Tự kiểm tra gần nhất: 20 dùng được · 3 bỏ qua · 1 lỗi (Bài ghim)',
+    ].join('\n'),
+  );
+  for (const secret of ['Crypto Life', 'gCL', 'spammer', 'Trần Minh Anh', 'abc.xyz', 'bí mật', 'ed9e146a']) assert.ok(!text.includes(secret), secret);
+});
+
+test('Tìm & dọn: giữ bài của mình, admin, thành viên tin cậy; người đăng nhiều bài khớp nhất', () => {
+  const p = (id, actor) => ({ id, actor });
+  const me = { id: 'me1', username: 'kai' };
+  const admin = { id: 'ad1', username: 'ha' };
+  const trusted = { id: 't1', username: 'tin' };
+  const spam = { id: 's1', username: 'spam' };
+  const other = { id: 'o1', username: 'moi' };
+  const posts = [p('a', me), p('b', admin), p('c', trusted), p('d', spam), p('e', spam), p('f', other), p('g', spam)];
+  const trustOf = (a) => BG.trustReason(a, { trustedMembers: ['@TIN'] });
+  const rows = BG.sweepRows(posts, { meId: 'me1', adminIds: ['ad1'], trustOf });
+  assert.deepEqual(rows.map((r) => r.keep), ['Bài của bạn', 'Admin', 'Thành viên tin cậy', '', '', '', '']);
+  assert.deepEqual(BG.sweepRows(posts).map((r) => r.keep).filter(Boolean), []);
+  assert.deepEqual(BG.sweepAuthors(rows).map((a) => [a.actor.id, a.count]), [['s1', 3]]);
+  assert.deepEqual(BG.sweepAuthors(rows, 1).map((a) => a.actor.id), ['s1', 'o1']);
+  assert.deepEqual(BG.sweepAuthors([]), []);
+});
+
+test('liên hệ riêng: số điện thoại Việt Nam, link Zalo / Telegram / WhatsApp; không nhầm số tiền, mã dài, địa chỉ ví', () => {
+  assert.deepEqual(BG.contactHits('Gọi 0912 345 678 hoặc zalo.me/0912345678, t.me/kai'), ['số điện thoại', 'Zalo', 'Telegram']);
+  assert.deepEqual(BG.contactHits('+84 912.345.678'), ['số điện thoại']);
+  assert.deepEqual(BG.contactHits('https://wa.me/84912'), ['WhatsApp']);
+  assert.deepEqual(BG.contactHits('Giá 0.912345678 BTC, mã 10912345678, ví 0x0912345678abc, 0912 345 6789'), []);
+  assert.deepEqual(BG.contactHits('t.me/abc', ['t.me']), []); // đã là tên miền cấm: không nhắc lại
+});
+
+test('quy tắc bài viết: từ khoá cần xem và liên hệ riêng -> Cần xem; vi phạm vẫn nặng hơn', () => {
+  const ev = (text, r) => BG.evaluatePost({ text }, r);
+  const a = ev('Inbox mình vào NHÓM VIP, liên hệ 0987654321', { reviewKeywords: ['inbox', 'nhóm vip'], reviewContacts: true });
+  assert.deepEqual([a.verdict, a.reasons.map((x) => x.code)], ['review', ['review-keyword', 'contact']]);
+  assert.match(a.reasons[0].text, /inbox, nhóm vip/);
+  assert.equal(ev('Uỷ thác đầu tư', { reviewKeywords: ['ủy thác'] }).verdict, 'review'); // không phân biệt dấu
+  assert.equal(ev('liên hệ 0987654321', {}).verdict, 'ok'); // tắt mặc định
+  const b = ev('Cam kết lợi nhuận, inbox', { bannedKeywords: ['cam kết lợi nhuận'], reviewKeywords: ['inbox', 'cam kết lợi nhuận'] });
+  assert.deepEqual([b.verdict, b.reasons.map((x) => x.code)], ['bad', ['keyword', 'review-keyword']]);
+  assert.match(b.reasons[1].text, /: inbox$/); // từ đã tính vi phạm không nhắc lại
+  assert.equal(BG.tgHideReason([{ code: 'contact' }]), 'SPAM');
+});
+
+test('bộ quy tắc mẫu chống lừa đảo: phần hợp lệ, chỉ thêm mục mới, không trùng hoa thường / dấu / www', () => {
+  const preset = BG.RULE_PRESETS.scam;
+  assert.ok(preset.parts.every((p) => p.key in BG.DEFAULT_POST_RULES && p.label && p.note));
+  assert.deepEqual(preset.parts.map((p) => [p.key, p.on]), [['bannedKeywords', true], ['reviewKeywords', true], ['reviewContacts', true], ['blockedDomains', false]]);
+  const banned = preset.parts[0].items.map(BG.norm);
+  assert.ok(preset.parts[1].items.every((k) => !banned.includes(BG.norm(k)))); // một từ chỉ ở một mức
+  // Bài cảnh báo hay dùng các từ này: không để ở mức vi phạm
+  assert.ok(['seed phrase', 'private key', 'không rủi ro'].every((k) => !banned.includes(k)));
+  const { patch, added } = BG.presetPatch({ reviewKeywords: ['Inbox'], blockedDomains: ['bit.ly'] }, [
+    { key: 'reviewKeywords', items: ['inbox', 'kèo VIP', ' ', 'keo vip'] },
+    { key: 'reviewContacts', value: true },
+    { key: 'blockedDomains', items: ['https://www.bit.ly/x', 't.ly'] },
+    { key: 'bogus', items: ['x'] },
+  ]);
+  assert.deepEqual(patch, { reviewKeywords: ['Inbox', 'kèo VIP'], reviewContacts: true, blockedDomains: ['bit.ly', 't.ly'] });
+  assert.deepEqual(added.map((a) => [a.key, a.items]), [['reviewKeywords', ['kèo VIP']], ['reviewContacts', []], ['blockedDomains', ['t.ly']]]);
+  assert.deepEqual(BG.presetPatch({ reviewContacts: true }, [{ key: 'reviewContacts', value: true }]), { patch: {}, added: [] });
+  // Tệp quy tắc xuất ra đọc lại được, giữ các mục mới
+  const file = BG.makeBackup({ postRules: { ...BG.DEFAULT_POST_RULES, ...patch }, rules: BG.DEFAULT_RULES }, { version: '9.9.9' });
+  const back = BG.readBackup(JSON.parse(JSON.stringify(file)));
+  assert.deepEqual([back.data.postRules.reviewKeywords, back.data.postRules.reviewContacts, Object.keys(back.data).sort()], [['Inbox', 'kèo VIP'], true, ['postRules', 'rules']]);
+});
+
+test('việc chờ lâu: quá số giờ, chờ lâu nhất trước, nhắc mỗi việc một lần, câu thông báo', () => {
+  const now = Date.parse('2026-10-08T12:00:00Z');
+  const h = (n) => new Date(now - n * 3600e3).toISOString();
+  const groups = [
+    { id: 'gF', name: 'Food', canApprove: true, requests: [{ id: 'r1', createdAt: h(30) }, { id: 'r2', createdAt: h(5) }, { id: 'r3', createdAt: null }] },
+    { id: 'gX', name: 'Không duyệt được', canApprove: false, requests: [{ id: 'r4', createdAt: h(99) }] },
+    { id: 'gC', name: 'Crypto Life', communityName: 'Crypto Life', communityId: 'cC', approvals: [{ id: 'p1', submittedAt: h(80) }, { id: 'p2', submittedAt: h(2) }, { id: 'p3', submittedAt: null, publishedAt: h(25) }] },
+  ];
+  const o = BG.pendingOverdue(groups, { hours: 24, now });
+  assert.deepEqual(o.map((x) => x.key), ['appr:p1', 'req:r1', 'appr:p3']);
+  assert.deepEqual([o[0].kind, o[0].groupName, o[0].communityId, o[1].kind, o[1].groupId], ['post', 'Crypto Life', 'cC', 'request', 'gF']);
+  assert.deepEqual(BG.pendingOverdue(groups, { hours: 72, now }).map((x) => x.key), ['appr:p1']);
+  const first = BG.pendingReminder(o, ['req:r1', 'req:gone']);
+  assert.deepEqual([first.fresh.map((x) => x.key), first.reminded], [['appr:p1', 'appr:p3'], ['appr:p1', 'req:r1', 'appr:p3']]);
+  assert.deepEqual(BG.pendingReminder(o, first.reminded).fresh, []);
+  assert.deepEqual(BG.pendingText(o, { hours: 24, now }), { title: 'BeinGroup: 3 việc chờ quá 24 giờ', message: '1 yêu cầu tham gia (Food), 2 bài chờ duyệt (Crypto Life). Lâu nhất đã chờ 3 ngày. Bấm để xử lý.' });
+  assert.deepEqual([BG.waitText(26 * 3600e3), BG.waitText(47.9 * 3600e3), BG.waitText(50 * 3600e3)], ['26 giờ', '47 giờ', '2 ngày']);
+  assert.equal(BG.telegramKind('bg-pending'), 'queue');
+  assert.equal(BG.readBackup({ app: 'BeinGroup', data: { settings: { pendingHours: 999, remindPending: false } } }).data.settings.pendingHours, 168);
+});
+

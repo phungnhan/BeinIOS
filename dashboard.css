@@ -155,6 +155,19 @@ main {
   min-width: 0;
 }
 .card-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+.card-head h2 { margin-right: auto; }
+.card { scroll-margin-top: calc(var(--topbar-h, 61px) + 56px); }
+.card-fold { border: 0; background: none; padding: 0 4px; font-size: 14px; color: var(--muted); cursor: pointer; transition: transform .15s; }
+.card-fold:hover { color: var(--accent); }
+.card.folded > .card-head > .card-fold { transform: rotate(-90deg); }
+.card.folded > :not(.card-head) { display: none !important; }
+.card.folded > .card-head { margin-bottom: 0; }
+.card.folded > .card-head > .review-tools { display: none; }
+.tab-toc { display: flex; gap: 6px; overflow-x: auto; padding: 2px 0; scrollbar-width: thin; }
+.toc-chip { flex: none; border: 1px solid var(--border); background: var(--surface); border-radius: 99px; padding: 4px 12px; font-size: 12.5px; color: var(--fg); cursor: pointer; white-space: nowrap; }
+.toc-chip:hover { border-color: var(--accent); color: var(--accent); }
+.toc-chip.folded { color: var(--muted); border-style: dashed; }
+.toc-all { margin-left: auto; color: var(--muted); }
 
 .kpis { grid-column: span 3; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 16px; }
 @media (max-width: 1200px) {
@@ -345,6 +358,17 @@ input[type="datetime-local"]:disabled { opacity: .5; }
 .ret-bar.ok .bar i { background: var(--ok); }
 .nudge-draft { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; padding: 10px 12px; margin-bottom: 10px; border-radius: 10px; background: var(--accent-soft); }
 .nudge-weekly { margin-bottom: 12px; }
+.is-off { display: none !important; }
+.digest-card { border-color: var(--accent); }
+.usage-share { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
+.usage-share .switch-row { flex: 1; min-width: 260px; }
+.usage-consent-text { max-height: 40vh; overflow: auto; }
+.digest-list { list-style: none; margin: 0; padding: 0; }
+.digest-list li { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--border); }
+.digest-list li:first-child { border-top: 0; }
+.digest-list li.done .digest-line { color: var(--muted); text-decoration: line-through; }
+.digest-mark { width: 16px; text-align: center; color: var(--accent); font-weight: 700; }
+.digest-line { flex: 1; min-width: 0; }
 .prompt-draft-text { margin: 4px 0; white-space: pre-wrap; }
 .prompt-bank textarea { margin-top: 8px; font-size: 13.5px; }
 .ret-list-head { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; margin: 16px 0 8px; }
@@ -768,3 +792,26 @@ table.requests td.act-wrap button + button { margin-left: 0; }
 .gs-toggle:not(:disabled):hover { border-color: var(--accent); }
 #gsettings th.gs-col, #gsettings td.gs-col { text-align: center; }
 #gsettings-key { width: auto; }
+
+/* Tìm & dọn bài, hộp Dọn tài khoản */
+.sweep-form { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 10px 0 6px; }
+.sweep-form input[type='search'] { flex: 1 1 220px; min-width: 0; max-width: 420px; }
+.sweep-form select { width: auto; flex: 0 1 auto; min-width: 0; max-width: 100%; }
+.sweep-authors { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
+.sweep-authors:empty { display: none; }
+.pick-tools { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 4px; }
+.pick-tools span { flex: 1; }
+.pick-list { display: flex; flex-direction: column; gap: 2px; max-height: 260px; overflow: auto; border: 1px solid var(--border); border-radius: 10px; padding: 6px; margin: 6px 0; }
+.pick-list:empty { display: none; }
+.pick-list .pick { display: flex; gap: 8px; align-items: flex-start; padding: 4px 6px; border-radius: 6px; cursor: pointer; }
+.pick-list .pick:hover { background: var(--accent-soft); }
+.pick-list .pick-text { flex: 1; min-width: 0; overflow-wrap: anywhere; font-size: 13px; }
+
+/* Bộ quy tắc mẫu */
+.preset-row { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--border); }
+.preset-row .spacer { flex: 1; }
+.preset-box { display: flex; flex-direction: column; gap: 10px; max-height: 46vh; overflow: auto; margin: 6px 0 8px; }
+.preset-part { display: flex; flex-direction: column; gap: 4px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 10px; }
+.preset-part.is-off { opacity: .6; }
+.preset-part textarea { width: 100%; font-size: 13px; }
+.preset-impact { margin: 0; padding: 8px 10px; border-radius: 8px; background: var(--accent-soft); }

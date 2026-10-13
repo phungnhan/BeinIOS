@@ -250,6 +250,41 @@ export const scenarios = [
     },
   },
   {
+    name: 'Bộ mẫu chống lừa đảo, xuất quy tắc',
+    async run({ page, url, assert }) {
+      await page.open(url('dashboard', 'tab=settings'));
+      await page.ev(`document.getElementById('btn-preset-scam').click(); true`);
+      await page.until(() => document.getElementById('confirm').open);
+      const checks = `[...document.querySelectorAll('#confirm-extra .preset-part > label input')]`;
+      const impact = () => page.ev(`document.querySelector('#confirm-extra .preset-impact').textContent`);
+      assert.equal(await page.ev(`document.querySelectorAll('#confirm-extra .preset-part').length`), 4);
+      assert.deepEqual(await page.ev(`${checks}.map((c) => c.checked)`), [true, true, true, false]); // link rút gọn: mặc định không chọn
+      assert.match(await impact(), /Sẽ thêm: 13 từ khoá vi phạm, 25 từ khoá cần xem, cần xem khi có liên hệ riêng\./); // "cam kết lợi nhuận" đã có
+      // Bỏ phần từ khoá cần xem, sửa ô từ khoá vi phạm
+      await page.ev(`${checks}[1].click(); true`);
+      await page.ev(`(() => { const t = document.querySelector('#confirm-extra .preset-part textarea'); t.value = 'gửi trước nhận sau, Cam kết lợi nhuận, kèo lùa gà'; t.dispatchEvent(new Event('input')); return true; })()`);
+      assert.match(await impact(), /Sẽ thêm: 2 từ khoá vi phạm, cần xem khi có liên hệ riêng\./);
+      await confirmOk(page);
+      await page.until(() => chrome.storage.local.get('postRules').then((o) => o.postRules.reviewContacts === true));
+      const pr = await page.ev(`chrome.storage.local.get('postRules').then((o) => o.postRules)`);
+      assert.deepEqual([pr.bannedKeywords, pr.blockedDomains, pr.reviewKeywords || []], [['cam kết lợi nhuận', 'gửi trước nhận sau', 'kèo lùa gà'], ['t.me', 'bit.ly'], []]);
+      await page.until(() => document.getElementById('post-reviewContacts').checked && document.getElementById('post-bannedKeywords').value.includes('kèo lùa gà'));
+      // Lần hai: không còn gì mới ở phần đã thêm
+      await page.ev(`document.getElementById('btn-preset-scam').click(); true`);
+      await page.until(() => document.getElementById('confirm').open);
+      await page.ev(`${checks}[0].click(); ${checks}[1].click(); true`);
+      assert.match(await impact(), /đã có đủ/);
+      await page.ev(`document.querySelector('#confirm button[value=cancel]').click(); true`);
+      // Xuất quy tắc: tệp sao lưu chỉ có quy tắc
+      await page.ev(`window.__blobs = []; { const o = URL.createObjectURL; URL.createObjectURL = (b) => (window.__blobs.push(b), o(b)); } HTMLAnchorElement.prototype.click = function () {}; true`);
+      await page.ev(`document.getElementById('btn-rules-export').click(); true`);
+      await page.until(() => window.__blobs.length === 1);
+      const file = JSON.parse(await page.ev(`window.__blobs[0].text()`));
+      assert.equal(file.app, 'BeinGroup');
+      assert.deepEqual([Object.keys(file.data).filter((k) => !['rules', 'postRules', 'groupRules'].includes(k)), file.data.postRules.reviewContacts], [[], true]);
+    },
+  },
+  {
     name: 'Quản lý tag',
     async run({ page, url, assert }) {
       await page.open(url('dashboard', 'tab=content'));
@@ -281,13 +316,53 @@ export const scenarios = [
       assert.equal(await rows(), 1);
       await setValue(page, 'recent-q', '');
       await page.ev(`document.querySelector('#recent-body .cleanup-btn').click(); true`);
-      await page.until(() => document.querySelectorAll('#confirm-list li').length > 0);
-      await page.ev(`document.querySelector('#confirm-extra input[type=checkbox]').click(); true`);
+      // Hộp dọn: bài gần đây có sẵn, bài cũ tự tìm thêm; mọi mục được tick sẵn
+      await page.until(() => document.querySelectorAll('#confirm-extra .pick-list .pick').length === 3);
+      assert.equal(await page.ev(`document.querySelectorAll('#confirm-extra .pick-list input:checked').length`), 3);
+      assert.match(await page.ev(`document.querySelector('#confirm-extra .pick-list').textContent`), /Bài cũ/);
+      // Bỏ tick bài cũ thứ hai, bật cấm
+      await page.ev(`document.querySelectorAll('#confirm-extra .pick-list input')[2].click(); true`);
+      await page.ev(`document.querySelector('#confirm-extra label.check input').click(); true`);
+      assert.match(await page.ev(`document.querySelector('#confirm-extra .pick-tools').textContent`), /Đã chọn 2\/3/);
       await confirmOk(page);
       await page.until(() => !!window.__cleanup);
       const m = await page.ev(`window.__cleanup`);
-      assert.deepEqual([m.user.id, m.reasonType, m.ban], ['at1', 'SPAM', true]);
+      assert.deepEqual([m.user.id, m.reasonType, m.ban, m.postIds, m.commentIds, m.posts.map((p) => p.id)], ['at1', 'SPAM', true, ['t1', 'old1'], [], ['old1']]);
       await page.until(() => document.querySelectorAll('#recent-body tr:not(.empty-row)').length === 2);
+    },
+  },
+  {
+    name: 'Tìm & dọn bài',
+    async run({ page, url, assert }) {
+      await page.open(url('dashboard', 'tab=content'));
+      await setValue(page, 'sweep-q', 'a');
+      await page.ev(`document.getElementById('btn-sweep').click(); true`);
+      assert.equal(await page.ev(`!!window.__sweepSearch`), false); // ít hơn 2 ký tự: không tìm
+      await setValue(page, 'sweep-q', 'airdrop');
+      await page.ev(`document.getElementById('btn-sweep').click(); true`);
+      await page.until(() => document.querySelectorAll('#sweep-body tr').length === 5);
+      assert.deepEqual(await page.ev(`window.__sweepSearch`), { type: 'sweepSearch', keyword: 'airdrop', groupId: '', days: 30 });
+      // Không bài nào được chọn sẵn; bài của mình và của admin được đánh dấu giữ
+      assert.equal(await page.ev(`document.querySelectorAll('#sweep-body input:checked').length`), 0);
+      assert.equal(await page.ev(`document.querySelectorAll('#sweep-body tr.muted-row').length`), 2);
+      assert.match(await page.ev(`document.getElementById('sweep-body').textContent`), /Bài của bạn[\s\S]*Admin/);
+      assert.match(await page.ev(`document.getElementById('sweep-note').textContent`), /5 bài[\s\S]*2 bài .*được giữ/);
+      // Người đăng nhiều nhất: nút dọn tài khoản
+      assert.match(await page.ev(`document.getElementById('sweep-authors').textContent`), /Spam Bot \(2\)/);
+      // Chọn tất cả: chỉ 3 bài không được giữ; bỏ bài của người mới
+      await page.ev(`document.getElementById('sweep-check-all').click(); true`);
+      assert.equal(await page.ev(`document.getElementById('sweep-selected').textContent`), 'Đã chọn 3');
+      await page.ev(`[...document.querySelectorAll('#sweep-body tr')].find((r) => r.textContent.includes('testnet')).querySelector('input').click(); true`);
+      assert.equal(await page.ev(`document.getElementById('btn-sweep-hide').textContent`), 'Ẩn 2 bài đã chọn');
+      await page.ev(`document.getElementById('btn-sweep-hide').click(); true`);
+      await page.until(() => document.getElementById('confirm').open);
+      assert.match(await page.ev(`document.getElementById('confirm-dry').textContent`), /không hiện lại được/);
+      await confirmOk(page);
+      await page.until(() => !!window.__hidePosts);
+      const m = await page.ev(`window.__hidePosts`);
+      assert.deepEqual([m.posts.map((p) => p.id).sort(), m.reasonType], [['sw1', 'sw2'], 'SPAM']);
+      await page.until(() => document.querySelectorAll('#sweep-body tr').length === 3);
+      assert.equal(await page.ev(`document.getElementById('sweep-selected').textContent`), 'Đã chọn 0');
     },
   },
   {
@@ -378,6 +453,61 @@ export const scenarios = [
     },
   },
   {
+    name: 'Việc đầu tuần',
+    async run({ page, url, assert }) {
+      await page.open(url('dashboard', 'tab=overview&digest=1'));
+      await page.until(() => !document.getElementById('digest').classList.contains('is-off'));
+      assert.equal(await page.ev(`document.querySelectorAll('#digest-list li').length`), 4);
+      assert.match(await page.ev(`document.getElementById('digest-at').textContent`), /^4\/4 việc chưa làm/);
+      // Làm việc "bài thảo luận": mở thẻ ở tab Đăng bài, đánh dấu xong
+      await page.ev(`[...document.querySelectorAll('#digest-list button')].find((b) => b.textContent === 'Mở bài thảo luận').click(); true`);
+      await page.until(() => currentTab === 'compose');
+      await page.until(() => chrome.storage.local.get('periodicDigest').then((o) => o.periodicDigest.done.prompt === true));
+      await page.ev(`showTab('overview'); true`);
+      assert.match(await page.ev(`document.getElementById('digest-at').textContent`), /^3\/4 việc chưa làm/);
+      assert.equal(await page.ev(`document.querySelectorAll('#digest-list li.done').length`), 1);
+      // Xem tóm tắt: cuộn tới thẻ Tóm tắt hoạt động
+      await page.ev(`[...document.querySelectorAll('#digest-list button')].find((b) => b.textContent === 'Xem tóm tắt').click(); true`);
+      await page.until(() => document.querySelectorAll('#digest-list li.done').length === 2);
+      // Ẩn
+      await page.ev(`document.getElementById('btn-digest-hide').click(); true`);
+      await page.until(() => document.getElementById('digest').classList.contains('is-off'));
+      assert.equal(await page.ev(`chrome.storage.local.get('periodicDigest').then((o) => o.periodicDigest.dismissed)`), true);
+    },
+  },
+  {
+    name: 'Mục lục nhanh và thu gọn thẻ',
+    async run({ page, url, assert }) {
+      await page.open(url('dashboard', 'tab=stats'));
+      await page.ev(`localStorage.removeItem('beingroup-folded'); true`);
+      await page.open(url('dashboard', 'tab=stats'));
+      const chips = await page.ev(`[...document.querySelectorAll('#tab-toc .toc-chip')].map((b) => b.textContent)`);
+      assert.deepEqual(chips, ['Thống kê', 'Bài nổi bật', 'Người đăng tích cực', 'Giờ đăng tốt nhất', 'Báo cáo tháng', 'Thành viên mới có ở lại không?', 'Hiệu quả bài đã đăng qua addon', 'Thu gọn tất cả']);
+      // Thu gọn một thẻ: chỉ còn tiêu đề, nhớ sau khi mở lại trang
+      await page.ev(`document.querySelector('#monthly .card-fold').click(); true`);
+      assert.deepEqual(await page.call(() => [document.getElementById('monthly').classList.contains('folded'), getComputedStyle(document.getElementById('monthly-note')).display, JSON.parse(localStorage.getItem('beingroup-folded'))]), [true, 'none', ['monthly']]);
+      await page.open(url('dashboard', 'tab=stats'));
+      assert.equal(await page.ev(`document.getElementById('monthly').classList.contains('folded')`), true);
+      assert.equal(await page.ev(`[...document.querySelectorAll('#tab-toc .toc-chip.folded')].map((b) => b.textContent).join()`), 'Báo cáo tháng');
+      // Bấm mục lục: mở thẻ và tới thẻ
+      await page.ev(`[...document.querySelectorAll('#tab-toc .toc-chip')].find((b) => b.textContent === 'Báo cáo tháng').click(); true`);
+      assert.deepEqual(await page.call(() => [document.getElementById('monthly').classList.contains('folded'), localStorage.getItem('beingroup-folded')]), [false, '[]']);
+      // Thu gọn / mở tất cả
+      await page.ev(`document.querySelector('#tab-toc .toc-all').click(); true`);
+      assert.equal(await page.ev(`document.querySelectorAll('main section.card.folded').length`), 7);
+      assert.equal(await page.ev(`document.querySelector('#tab-toc .toc-all').textContent`), 'Mở tất cả');
+      await page.ev(`document.querySelector('#tab-toc .toc-all').click(); true`);
+      assert.equal(await page.ev(`document.querySelectorAll('main section.card.folded').length`), 0);
+      // Tiêu đề có huy hiệu số: mục lục chỉ lấy chữ
+      await page.ev(`showTab('overview'); true`);
+      assert.ok((await page.ev(`[...document.querySelectorAll('#tab-toc .toc-chip')].map((b) => b.textContent)`)).includes('Việc cần làm'));
+      // Tab ít thẻ (Thành viên: 2 thẻ): không có mục lục
+      await page.ev(`showTab('members'); true`);
+      assert.equal(await page.ev(`document.getElementById('tab-toc').hidden`), true);
+      await page.ev(`localStorage.removeItem('beingroup-folded'); true`);
+    },
+  },
+  {
     name: 'Bắt đầu nhanh khi cài mới',
     async run({ page, url, assert }) {
       await page.open(url('dashboard', 'tab=overview&fresh=1'));
@@ -406,6 +536,20 @@ export const scenarios = [
       await page.until(() => document.getElementById('onboard').open && document.getElementById('onb-progress').textContent === 'Bước 1/3');
       await page.ev(`document.getElementById('onb-skip').click(); true`);
       await page.until(() => !document.getElementById('onboard').open);
+    },
+  },
+  {
+    name: 'Bắt đầu nhanh: hỏi gửi báo cáo sử dụng (mặc định không)',
+    async run({ page, url, assert }) {
+      await page.open(url('dashboard', 'tab=overview&fresh=1&usage=1'));
+      await page.until(() => document.getElementById('onboard').open);
+      await page.ev(`document.getElementById('onb-next').click(); document.getElementById('onb-next').click(); true`);
+      await page.until(() => !document.getElementById('onb-usage-row').hidden);
+      assert.equal(await page.ev(`document.getElementById('onb-usage').checked`), false);
+      await page.ev(`window.__permRequests = 0; document.getElementById('onb-next').click(); true`);
+      await page.until(() => !document.getElementById('onboard').open);
+      await page.until(() => chrome.storage.local.get('usageConsent').then((o) => o.usageConsent?.choice === 'no'));
+      assert.deepEqual(await page.call(() => [window.__permRequests, window.__usageSends || 0, document.getElementById('usage-consent').open]), [0, 0, false]);
     },
   },
   {
@@ -546,6 +690,27 @@ export const scenarios = [
     },
   },
   {
+    name: 'Việc chờ lâu',
+    async run({ page, url, assert }) {
+      await page.open(url('dashboard', 'tab=settings'));
+      assert.deepEqual(await page.ev(`[document.getElementById('remindPending').checked, document.getElementById('pendingHours').value]`), [true, '24']);
+      // Yêu cầu tham gia gửi 30 giờ trước: quá 24 giờ
+      await page.ev(`chrome.storage.local.get('state').then(({ state }) => { state.snapshot.groups[0].requests[0].createdAt = new Date(Date.now() - 30 * 3600e3).toISOString(); return chrome.storage.local.set({ state }); }).then(() => true)`);
+      // Mở từ thông báo: Việc cần làm lọc sẵn Chờ lâu
+      await page.ev(`location.hash = 'tab=overview&todo=overdue'; true`);
+      await page.until(() => document.querySelector('#todo-filter button[data-f=overdue]').classList.contains('active'));
+      await page.until(() => document.querySelectorAll('#todo-list .todo-item').length === 1);
+      assert.match(await page.ev(`document.querySelector('#todo-list .todo-item').textContent`), /Xin vào group[\s\S]*⏳ chờ 30 giờ/);
+      assert.equal(await page.ev(`document.getElementById('tcnt-overdue').textContent`), '(1)');
+      // Đổi thành 48 giờ: không còn việc chờ lâu
+      await page.ev(`showTab('settings'); true`);
+      await setValue(page, 'pendingHours', '48');
+      await page.until(() => chrome.storage.local.get('settings').then((o) => o.settings.pendingHours === 48));
+      await page.ev(`showTab('overview'); true`);
+      await page.until(() => /chờ quá 48 giờ/.test(document.getElementById('todo-list').textContent));
+    },
+  },
+  {
     name: 'Tự kiểm tra',
     async run({ page, url, assert }) {
       await page.open(url('dashboard', 'tab=log'));
@@ -576,6 +741,61 @@ export const scenarios = [
       const tg = await page.ev(`window.__tgReport`);
       assert.deepEqual([tg.title, tg.text], ['BeinGroup: tự kiểm tra Crypto Life — 1 lỗi', clip]);
       await page.until(() => [...document.querySelectorAll('.toast')].some((t) => /Đã gửi kết quả kiểm tra về Telegram/.test(t.textContent)));
+    },
+  },
+  {
+    name: 'Báo cáo sử dụng',
+    async run({ page, url, assert }) {
+      await page.open(url('dashboard', 'tab=log'));
+      await page.until(() => /báo cáo sử dụng 30 ngày/.test(document.getElementById('usage-text').textContent));
+      assert.equal(await page.ev(`document.getElementById('usage-share').hidden`), true); // bản này chưa có nơi nhận
+      assert.equal(await page.ev(`document.getElementById('usage-consent').open`), false);
+      const t = await page.ev(`document.getElementById('usage-text').textContent`);
+      assert.match(t, /\n• Dùng từ 2026-09-20 · 2 ngày có dùng trong 30 ngày · quản trị 2 community, \d+ group\n/);
+      assert.match(t, /\n• Tính năng dùng: Duyệt \/ từ chối thành viên 5 · Đăng \/ hẹn giờ bài 4 · Xem thống kê 2\n/);
+      assert.match(t, /\n• Tự kiểm tra gần nhất: chưa chạy$/);
+      for (const name of ['Crypto Life', 'Food Research', 'keovip', 'airdrop']) assert.ok(!t.includes(name), 'lộ ' + name);
+      // Ghi chú: hiện ngay trong báo cáo và nhớ cho lần sau
+      await setValue(page, 'usage-note', 'Lan — admin thử');
+      await page.until(() => / · Lan — admin thử\n/.test(document.getElementById('usage-text').textContent));
+      await page.ev(`navigator.clipboard.writeText = async (x) => { window.__clip = x; }; document.getElementById('btn-usage-copy').click(); true`);
+      await page.until(() => !!window.__clip);
+      assert.equal(await page.ev(`window.__clip`), await page.ev(`document.getElementById('usage-text').textContent`));
+      await page.ev(`document.getElementById('btn-usage-tg').click(); true`);
+      await page.until(() => !!window.__tgReport);
+      assert.match((await page.ev(`window.__tgReport`)).title, /^BeinGroup v\d+\.\d+\.\d+ · .* · Lan — admin thử$/);
+      assert.equal(await page.ev(`chrome.storage.local.get('usageNote').then((o) => o.usageNote)`), 'Lan — admin thử');
+    },
+  },
+  {
+    name: 'Báo cáo sử dụng: hỏi ý rồi tự gửi mỗi tuần',
+    async run({ page, url, assert }) {
+      // Có nơi nhận, chưa hỏi: hiện hộp với đúng nội dung sẽ gửi
+      await page.open(url('dashboard', 'tab=log&usage=1'));
+      await page.until(() => document.getElementById('usage-consent').open);
+      await page.until(() => document.getElementById('usage-consent-text').textContent === document.getElementById('usage-text').textContent && /báo cáo sử dụng 30 ngày/.test(document.getElementById('usage-text').textContent));
+      // Đồng ý: xin quyền Google Script, lưu đồng ý + mã ngẫu nhiên, gửi lần đầu
+      await page.ev(`window.__permRequests = 0; document.getElementById('usage-yes').click(); true`);
+      await page.until(() => window.__usageSends === 1);
+      const c = await page.ev(`chrome.storage.local.get('usageConsent').then((o) => o.usageConsent)`);
+      assert.equal(c.choice, 'yes');
+      assert.match(c.installId, /^[0-9a-f-]{36}$/);
+      assert.equal(await page.ev(`window.__permRequests`), 1);
+      await page.until(() => !document.getElementById('usage-share').hidden && /lần gửi gần nhất/.test(document.getElementById('usage-auto-note').textContent));
+      assert.equal(await page.ev(`document.getElementById('usage-auto').checked`), true);
+      // Gửi ngay; tắt
+      await page.ev(`document.getElementById('btn-usage-send').click(); true`);
+      await page.until(() => window.__usageSends === 2);
+      await page.ev(`document.getElementById('usage-auto').click(); true`);
+      await page.until(() => chrome.storage.local.get('usageConsent').then((o) => o.usageConsent.choice === 'no' && o.usageConsent.installId.length === 36));
+      await page.until(() => document.getElementById('usage-auto-note').textContent === '(đang tắt)');
+      // Lần khác: không gửi
+      await page.open(url('dashboard', 'tab=log&usage=1'));
+      await page.until(() => document.getElementById('usage-consent').open);
+      await page.ev(`document.getElementById('usage-no').click(); true`);
+      await page.until(() => chrome.storage.local.get('usageConsent').then((o) => o.usageConsent?.choice === 'no'));
+      assert.equal(await page.ev(`window.__usageSends || 0`), 0);
+      assert.equal(await page.ev(`document.getElementById('usage-consent').open`), false);
     },
   },
   {

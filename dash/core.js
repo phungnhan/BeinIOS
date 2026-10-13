@@ -15,9 +15,9 @@ window.addEventListener('unhandledrejection', (e) => reportDiag(WHERE_PAGE, { me
 
 const RULE_BOOLS = ['requireAvatar', 'requireAnswers', 'requireVerified', 'declineDeactivated', 'reviewViolators'];
 const RULE_LISTS = { bannedKeywords: false, allowUsernames: true, blockUsernames: true }; // true = danh sách username
-const POST_RULE_LISTS = ['bannedKeywords', 'blockedDomains', 'allowedDomains'];
-const SETTING_BOOLS = ['active', 'dryRun', 'notify', 'scanPosts', 'scanComments', 'scanReports', 'trackViolations', 'spamWaves', 'welcomeReminder', 'remindUnanswered', 'weeklyReport', 'monthlyReport', 'autoApprove', 'autoDecline', 'autoHideSpam', 'autoApprovePosts'];
-const SETTING_NUMS = ['intervalMin', 'actionDelaySec', 'unansweredHours', 'trustAfterApproved'];
+const POST_RULE_LISTS = ['bannedKeywords', 'reviewKeywords', 'blockedDomains', 'allowedDomains'];
+const SETTING_BOOLS = ['active', 'dryRun', 'notify', 'scanPosts', 'scanComments', 'scanReports', 'trackViolations', 'spamWaves', 'welcomeReminder', 'remindUnanswered', 'remindPending', 'weeklyReport', 'monthlyReport', 'autoApprove', 'autoDecline', 'autoHideSpam', 'autoApprovePosts'];
+const SETTING_NUMS = ['intervalMin', 'actionDelaySec', 'unansweredHours', 'pendingHours', 'trustAfterApproved'];
 const LOG_PAGE = 50;
 const RECENT_PAGE = 30;
 
@@ -249,6 +249,7 @@ function showTab(t) {
   ensureTabData();
   // Biểu đồ cần chiều rộng thật: vẽ lại sau khi tab hiện
   if (t === 'stats') renderStats();
+  if (typeof renderToc === 'function') renderToc(); // dash/layout.js: mục lục nhanh của tab
 }
 
 // Mỗi tab chỉ tải dữ liệu khi mở lần đầu (đỡ gọi API thừa)

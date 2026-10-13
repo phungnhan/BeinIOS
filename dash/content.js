@@ -138,7 +138,7 @@ function renderRecent() {
   if (!data.settings.scanPosts) note.textContent = 'Đang tắt "Quét bài mới đăng" ở phần Cài đặt.';
   else if (!data.state.recentPosts) note.textContent = data.state.snapshot ? 'Chưa quét bài mới — bấm Quét ngay.' : '';
   else if (recentFilter === 'unanswered') note.textContent = `Bài đăng đã hơn ${data.settings.unansweredHours} giờ (trong 7 ngày) mà chưa có bình luận nào, theo số bình luận ở lần quét gần nhất (đổi số giờ ở Cài đặt → Theo dõi). Bấm 💬 Bình luận để trả lời ngay.`;
-  else note.textContent = 'Xoá bài: chỉ với bài của chính bạn (Beincom không cho admin xoá bài người khác). Ẩn bài: gỡ bài người khác khỏi các group bạn quản trị; addon chưa hiện lại được. Bỏ qua: chỉ ẩn khỏi danh sách này.';
+  else note.textContent = 'Xoá bài: chỉ với bài của chính bạn (Beincom không cho admin xoá bài người khác). Ẩn bài: gỡ bài người khác khỏi các group bạn quản trị; không hiện lại được (Beincom không có lệnh hiện lại). Bỏ qua: chỉ ẩn khỏi danh sách này.';
 
   pruneSelection(selectedRecent, new Set(rows.map((r) => r.p.id)));
   const filtered = rows.filter((r) => inFilter(r, recentFilter));
@@ -234,7 +234,7 @@ async function hidePosts(posts) {
     okText: 'Ẩn bài',
     danger: true,
     extra,
-    sendNote: 'Sẽ gửi lên Beincom ngay. Addon chưa hiện lại được bài đã ẩn.',
+    sendNote: 'Sẽ gửi lên Beincom ngay. Bài đã ẩn không hiện lại được (Beincom không có lệnh hiện lại).',
   });
   if (!ok) return;
   const r = await send({ type: 'postAct', action: 'hide', contentIds: posts.map((p) => p.id), reasonType: select.value }, (n) => `Đã ẩn ${n} bài.`);
@@ -320,7 +320,7 @@ async function hideWave(w) {
     okText: 'Ẩn cả đợt',
     danger: true,
     extra: el('label', { class: 'text-row' }, el('span', {}, el('b', { text: 'Lý do ẩn' })), select),
-    sendNote: `Sẽ gửi lên Beincom ngay${entries.length > 1 ? ` (nghỉ ${data.settings.actionDelaySec} giây giữa mỗi mục)` : ''}. Addon chưa hiện lại được nội dung đã ẩn.`,
+    sendNote: `Sẽ gửi lên Beincom ngay${entries.length > 1 ? ` (nghỉ ${data.settings.actionDelaySec} giây giữa mỗi mục)` : ''}. Nội dung đã ẩn không hiện lại được (Beincom không có lệnh hiện lại).`,
   });
   if (!ok) return;
   const ids = (kind) => w.items.filter((i) => i.kind === kind && !i.isHidden).map((i) => i.id);
@@ -362,17 +362,57 @@ function commentRows() {
 }
 
 // ---------- Dọn tài khoản ----------
-// Ẩn mọi bài / bình luận gần đây còn hiện của một người (trong các bài addon đã đọc), tuỳ chọn cấm ở mọi community
+// Ẩn bài / bình luận còn hiện của một người trong các group mình quản trị, tuỳ chọn cấm ở mọi community.
+// Hộp xác nhận liệt kê từng mục có ô tick: bài / bình luận addon đã đọc, rồi tự tìm thêm mọi bài cũ của người đó trong community.
+// Ẩn là một chiều (Beincom không có lệnh hiện lại) nên người dùng bỏ tick những mục không muốn ẩn.
 
 const footprintOf = (actor) => BG.userFootprint(actor?.id, data.state.recentPosts, data.state.recentComments);
 
-// Nút nhỏ dưới tên người đăng / người viết: chỉ khi người đó còn bài / bình luận hiện và không phải mình
-function cleanupBtn(actor) {
+// Nút nhỏ dưới tên người đăng / người viết: chỉ khi người đó còn bài / bình luận hiện và không phải mình (always: luôn hiện)
+function cleanupBtn(actor, { always = false } = {}) {
   if (!actor?.id || actor.id === data.state.me?.id) return null;
   const fp = footprintOf(actor);
   const n = fp.posts.length + fp.comments.length;
-  if (!n) return null;
-  return el('div', {}, el('button', { class: 'ghost sm cleanup-btn', disabled: busy, title: `Dọn tài khoản: ẩn ${fp.posts.length} bài, ${fp.comments.length} bình luận gần đây của người này (tuỳ chọn cấm)`, text: `🧹 Dọn (${n})`, onclick: () => cleanupUser(actor) }));
+  if (!n && !always) return null;
+  const title = n ? `Dọn tài khoản: ${fp.posts.length} bài, ${fp.comments.length} bình luận gần đây của người này + tìm bài cũ (chọn từng mục, tuỳ chọn cấm)` : 'Dọn tài khoản: tìm mọi bài còn hiện của người này, chọn rồi ẩn (tuỳ chọn cấm)';
+  return el('div', {}, el('button', { class: 'ghost sm cleanup-btn', disabled: busy, title, text: n ? `🧹 Dọn (${n})` : '🧹 Dọn', onclick: () => cleanupUser(actor) }));
+}
+
+const clip = (t, n = 90) => {
+  const s = String(t || '').replace(/\s+/g, ' ').trim();
+  return s.length > n ? s.slice(0, n) + '…' : s || '(không có chữ)';
+};
+
+// Danh sách ô tick trong hộp xác nhận: add([{ id, kind: 'post' | 'comment', label, url, old }]), picked(kind)
+function pickList(onChange) {
+  const box = el('div', { class: 'pick-list' });
+  const items = new Map();
+  const add = (list) => {
+    for (const it of list) {
+      if (items.has(it.id)) continue;
+      const cb = el('input', { type: 'checkbox', 'aria-label': 'Chọn ' + it.label });
+      cb.checked = true;
+      cb.addEventListener('change', onChange);
+      items.set(it.id, { ...it, cb });
+      box.append(
+        el(
+          'label',
+          { class: 'pick' },
+          cb,
+          el('span', { class: 'tag ' + (it.kind === 'comment' ? 'info' : it.old ? 'warn' : 'accent'), text: it.kind === 'comment' ? 'Bình luận' : it.old ? 'Bài cũ' : 'Bài' }),
+          el('span', { class: 'pick-text', text: it.label }),
+          it.url ? el('a', { href: it.url, target: '_blank', title: 'Mở trên Beincom', text: '↗' }) : null,
+        ),
+      );
+    }
+    onChange();
+  };
+  const all = () => [...items.values()];
+  const setAll = (v) => {
+    for (const x of all()) x.cb.checked = v;
+    onChange();
+  };
+  return { box, add, setAll, size: () => items.size, picked: (kind) => all().filter((x) => x.kind === kind && x.cb.checked).map((x) => x.id) };
 }
 
 async function cleanupUser(actor) {
@@ -384,25 +424,54 @@ async function cleanupUser(actor) {
   const ban = el('input', { type: 'checkbox' });
   const banReason = el('select', { 'aria-label': 'Lý do cấm' }, Object.entries(BG.BAN_REASONS).map(([k, label]) => el('option', { value: k, text: label })));
   banReason.value = 'SPAM';
-  const names = [...fp.posts.map((p) => 'Bài: ' + snippet(p)), ...fp.comments.map((c) => 'Bình luận: ' + String(c.text || '').replace(/\s+/g, ' ').slice(0, 80))];
+  const count = el('span', { class: 'muted small' });
+  const list = pickList(() => {
+    count.textContent = `Đã chọn ${list.picked('post').length + list.picked('comment').length}/${list.size()}`;
+  });
+  list.add([
+    ...fp.posts.map((p) => ({ id: p.id, kind: 'post', label: clip(p.title || p.text), url: BG.postUrl(p) })),
+    ...fp.comments.map((c) => ({ id: c.id, kind: 'comment', label: clip(c.text), url: BG.postUrl({ id: c.postId, type: c.postType }) })),
+  ]);
+  // Tìm mọi bài còn hiện của người này trong các community mình quản trị (chỉ đọc), thêm vào danh sách khi có kết quả
+  let found = [];
+  const status = el('div', { class: 'muted small', text: 'Đang tìm các bài cũ hơn của người này trong community…' });
+  chrome.runtime.sendMessage({ type: 'userPosts', userId: actor.id }).then(
+    (r) => {
+      if (r?.status !== 'ok') return (status.textContent = 'Không tìm được bài cũ: ' + (r?.message || 'lỗi'));
+      const known = new Set(fp.posts.map((p) => p.id));
+      found = (r.posts || []).filter((p) => !known.has(p.id));
+      list.add(found.map((p) => ({ id: p.id, kind: 'post', old: true, label: `${clip(p.title || p.text)} · ${fmtTime(p.publishedAt)}`, url: BG.postUrl(p) })));
+      status.textContent = (found.length ? `Tìm thêm ${found.length} bài cũ còn hiện.` : 'Không có bài cũ nào khác còn hiện.') + (r.truncated ? ' Mới xem 200 bài mới nhất mỗi community — dọn xong mở lại để tìm tiếp.' : '');
+    },
+    () => (status.textContent = 'Không tìm được bài cũ.'),
+  );
   const ok = await confirmDialog({
     title: `Dọn tài khoản ${personName(actor)}?`,
-    text: `Ẩn ${fp.posts.length} bài và ${fp.comments.length} bình luận gần đây còn hiện của người này trong các group bạn quản trị (chỉ những bài addon đã đọc).`,
-    names,
+    text: 'Ẩn các bài / bình luận đã chọn của người này trong các group bạn quản trị. Bỏ tick những mục không muốn ẩn.',
     okText: 'Dọn',
     danger: true,
     extra: el(
       'div',
       {},
+      el('div', { class: 'pick-tools' }, count, el('button', { type: 'button', class: 'ghost sm', text: 'Chọn hết', onclick: () => list.setAll(true) }), el('button', { type: 'button', class: 'ghost sm', text: 'Bỏ chọn hết', onclick: () => list.setAll(false) })),
+      list.box,
+      status,
       el('label', { class: 'text-row' }, el('span', {}, el('b', { text: 'Lý do ẩn' })), reason),
       targets.length
         ? el('label', { class: 'check' }, ban, el('span', {}, ` Cấm luôn ở ${targets.length} community bạn là chủ / admin `), banReason)
         : el('div', { class: 'muted small', text: 'Bạn không là chủ / admin community nào nên không cấm được.' }),
     ),
-    sendNote: `Sẽ gửi lên Beincom ngay (nghỉ ${data.settings.actionDelaySec} giây giữa mỗi thao tác). Ẩn bài chưa hiện lại được bằng addon.`,
+    sendNote: `Sẽ gửi lên Beincom ngay (nghỉ ${data.settings.actionDelaySec} giây giữa mỗi thao tác). Bài đã ẩn không hiện lại được — Beincom không có lệnh hiện lại.`,
   });
   if (!ok) return;
-  await send({ type: 'cleanupUser', user: { id: actor.id, username: actor.username, fullname: actor.fullname }, reasonType: reason.value, ban: ban.checked, banReason: banReason.value }, () => 'Đã dọn tài khoản.');
+  const postIds = list.picked('post');
+  const commentIds = list.picked('comment');
+  if (!postIds.length && !commentIds.length && !ban.checked) return toast('Chưa chọn bài / bình luận nào để ẩn.', 'warn');
+  const picked = new Set(postIds);
+  await send(
+    { type: 'cleanupUser', user: { id: actor.id, username: actor.username, fullname: actor.fullname }, reasonType: reason.value, ban: ban.checked, banReason: banReason.value, posts: found.filter((p) => picked.has(p.id)), postIds, commentIds },
+    () => 'Đã dọn tài khoản.',
+  );
 }
 
 function commentContent(c) {
@@ -531,7 +600,7 @@ async function hideComments(list) {
     okText: 'Ẩn bình luận',
     danger: true,
     extra,
-    sendNote: 'Sẽ gửi lên Beincom ngay. Addon chưa hiện lại được bình luận đã ẩn.',
+    sendNote: 'Sẽ gửi lên Beincom ngay. Bình luận đã ẩn không hiện lại được (Beincom không có lệnh hiện lại).',
   });
   if (!ok) return;
   const r = await send({ type: 'commentAct', action: 'hide', commentIds: list.map((c) => c.id), reasonType: select.value }, (n) => `Đã ẩn ${n} bình luận.`);

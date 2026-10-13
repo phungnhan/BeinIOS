@@ -394,7 +394,8 @@ async function doMemberAct({ action, groupId, users, reason = 'VIOLATE_RULE', so
 
 // Dọn tài khoản: ẩn mọi bài / bình luận gần đây (addon đã đọc, còn hiện) của một người trong các group mình quản trị,
 // tuỳ chọn cấm ở mọi community mình là chủ / admin. Một lần, chạy lần lượt như các thao tác hàng loạt khác.
-async function doCleanupUser({ user, reasonType = 'SPAM', ban = false, banReason = 'SPAM', source = 'manual' }) {
+// posts: bài cũ Dashboard vừa tìm được (Tìm mọi bài của người này), postIds / commentIds: những mục người dùng giữ tick
+async function doCleanupUser({ user, reasonType = 'SPAM', ban = false, banReason = 'SPAM', source = 'manual', posts = [], postIds = null, commentIds = null }) {
   if (!user?.id) return { status: 'error', message: 'Thiếu người cần dọn' };
   if (!BG.HIDE_REASONS[reasonType]) return { status: 'error', message: 'Lý do ẩn không hợp lệ' };
   if (ban && !BG.BAN_REASONS[banReason]) return { status: 'error', message: 'Lý do cấm không hợp lệ' };
@@ -402,14 +403,19 @@ async function doCleanupUser({ user, reasonType = 'SPAM', ban = false, banReason
   if (user.id === state.me?.id) return { status: 'error', message: 'Không dọn tài khoản của chính bạn' };
   const groups = state.snapshot?.groups || [];
   const fp = BG.userFootprint(user.id, state.recentPosts, state.recentComments);
+  // Bài gần đây + bài cũ tìm được (chỉ bài của chính người này, còn hiện), rồi lọc theo lựa chọn
+  const found = (posts || []).filter((p) => p?.id && p.actor?.id === user.id && !p.isHidden);
+  const allPosts = [...new Map([...fp.posts, ...found].map((p) => [p.id, p])).values()];
+  const pickPosts = Array.isArray(postIds) ? allPosts.filter((p) => postIds.includes(p.id)) : allPosts;
+  const pickComments = Array.isArray(commentIds) ? fp.comments.filter((c) => commentIds.includes(c.id)) : fp.comments;
   const extra = { autoReason: 'Dọn tài khoản' };
-  const items = [...fp.posts.map((p) => postHideItem(p, groups, reasonType, source, extra)), ...fp.comments.map((c) => commentHideItem(c, groups, reasonType, source, extra))].filter(Boolean);
+  const items = [...pickPosts.map((p) => postHideItem(p, groups, reasonType, source, extra)), ...pickComments.map((c) => commentHideItem(c, groups, reasonType, source, extra))].filter(Boolean);
   if (ban) {
     const targets = BG.banTargets(groups);
     if (!targets.length) return { status: 'error', message: 'Bạn không là chủ / admin community nào nên không cấm được' };
     items.push(...banItems(targets, user, banReason, source));
   }
-  if (!items.length) return { status: 'error', message: 'Không còn bài / bình luận nào của người này để ẩn (trong các bài addon đã đọc)' };
+  if (!items.length) return { status: 'error', message: 'Không còn bài / bình luận nào của người này để ẩn' };
   const r = await performActions(items, settings);
   pushLog(log, r.entries);
   const next = { ...state };
@@ -419,4 +425,90 @@ async function doCleanupUser({ user, reasonType = 'SPAM', ban = false, banReason
   await updateBadge();
   const ok = r.entries.filter((e) => e.status === 'ok');
   return { ...summary(r, settings), hidden: ok.filter((e) => e.action === 'hide').length, banned: ok.filter((e) => e.action === 'ban').length };
+}
+
+// ---------- Tìm & dọn bài (cả community, không chỉ bài addon đã đọc) ----------
+// API trang Tìm kiếm của web: GET content/contents?groupId=<group gốc>&isIncludedInnerGroups=true&limit=25&after
+// lọc theo người đăng (actors[]=id) hoặc từ khoá (keyword, khớp cả link trong bài), startTime (ISO). Chỉ đọc.
+// Bài đã ẩn thì Beincom không trả. Ẩn là một chiều (Beincom không có lệnh hiện lại) nên Dashboard luôn cho chọn từng bài.
+const SWEEP_PAGES = 8; // tối đa 200 bài mỗi community
+
+// Phạm vi tìm: mỗi community một lần — group gốc nếu mình quản trị, không thì từng group con mình quản trị
+function sweepScopes(groups, groupId = '') {
+  const managed = (groups || []).filter((g) => !g.error && (!groupId || g.id === groupId || g.communityId === groups.find((x) => x.id === groupId)?.communityId));
+  const out = [];
+  for (const cid of [...new Set(managed.map((g) => g.communityId))]) {
+    const inCom = managed.filter((g) => g.communityId === cid);
+    const root = inCom.find((g) => g.isCommunity);
+    out.push(...(root ? [root] : inCom));
+  }
+  return out;
+}
+
+async function sweepSearch({ actorId = '', keyword = '', groupId = '', days = 0 }) {
+  const { state } = await load();
+  const scopes = sweepScopes(state.snapshot?.groups || [], groupId);
+  if (!scopes.length) return { status: 'error', message: 'Không có group nào để tìm — hãy quét lại' };
+  const startTime = Number(days) > 0 ? new Date(Date.now() - Number(days) * 864e5).toISOString() : '';
+  return withClient(async (client) => {
+    const posts = new Map();
+    const adminIds = new Set();
+    let truncated = false;
+    let needLogin = false;
+    let error = '';
+    await mapLimit(scopes, PARALLEL, async (g) => {
+      // Tìm theo từ khoá: lấy thêm admin group (trang đầu) để Dashboard mặc định không chọn bài của admin
+      if (!actorId) {
+        const a = await client.call('GET', `group/groups/${g.id}/users?limit=100&offset=0`);
+        if (a.status === 401) return (needLogin = true);
+        if (BG.isOk(a)) for (const u of a.body.data?.groupAdmin?.data || []) adminIds.add(u.id);
+      }
+      let after = '';
+      for (let page = 0; page < SWEEP_PAGES; page++) {
+        const who = actorId ? 'actors[]=' + encodeURIComponent(actorId) + '&' : '';
+        const r = await client.call('GET', `content/contents?${who}${qs({ keyword: keyword || '', groupId: g.id, isIncludedInnerGroups: true, startTime, limit: SEARCH_LIMIT, after })}`);
+        if (r.status === 401) return (needLogin = true);
+        if (!BG.isOk(r)) return (error = `${g.name}: ${BG.errMsg(r)}`);
+        const d = r.body.data || {};
+        for (const p of d.list || []) if (!posts.has(p.id)) posts.set(p.id, { ...BG.slimPost(p), seenIn: (p.audience?.groups || []).map((x) => x.id) });
+        after = d.meta?.endCursor || '';
+        if (!d.meta?.hasNextPage || !after) return;
+        if (page === SWEEP_PAGES - 1) truncated = true;
+      }
+    });
+    if (needLogin) return { ...NEED_LOGIN };
+    const list = [...posts.values()].filter((p) => !p.isHidden && (!actorId || p.actor?.id === actorId)).sort((a, b) => String(b.publishedAt).localeCompare(String(a.publishedAt)));
+    return { status: 'ok', posts: list, adminIds: [...adminIds], truncated, errors: error ? [error] : [] };
+  });
+}
+
+// Mọi bài còn hiện của một người trong các community mình quản trị (cho Dọn tài khoản)
+async function doUserPosts({ userId }) {
+  if (!userId) return { status: 'error', message: 'Thiếu người cần tìm' };
+  return sweepSearch({ actorId: userId });
+}
+
+// Tìm bài theo từ khoá / link
+async function doSweepSearch({ keyword, groupId = '', days = 0 }) {
+  const k = String(keyword || '').trim();
+  if (k.length < 2) return { status: 'error', message: 'Gõ ít nhất 2 ký tự để tìm' };
+  return sweepSearch({ keyword: k.slice(0, 100), groupId, days });
+}
+
+// Ẩn các bài đã chọn (kết quả Tìm & dọn): chỉ ở group mình quản trị, bỏ bài của chính mình
+async function doHidePosts({ posts = [], reasonType = 'SPAM', source = 'manual' }) {
+  if (!BG.HIDE_REASONS[reasonType]) return { status: 'error', message: 'Lý do ẩn không hợp lệ' };
+  const { settings, state, log } = await load();
+  const groups = state.snapshot?.groups || [];
+  const list = (posts || []).filter((p) => p?.id && p.actor?.id !== state.me?.id).slice(0, 200);
+  const items = list.map((p) => postHideItem(p, groups, reasonType, source, { autoReason: 'Tìm & dọn' })).filter(Boolean);
+  if (!items.length) return { status: 'error', message: 'Không có bài nào ẩn được (bài của bạn, hoặc ở group bạn không quản trị)' };
+  const r = await performActions(items, settings);
+  pushLog(log, r.entries);
+  const next = { ...state };
+  markHidden(next, r.entries);
+  if (r.status === 'need_login') next.lastResult = { status: 'need_login', message: NEED_LOGIN.message, mode: r.mode || '' };
+  await chrome.storage.local.set({ state: next, log });
+  await updateBadge();
+  return { ...summary(r, settings), hidden: r.entries.filter((e) => e.status === 'ok').map((e) => e.contentId), skipped: (posts || []).length - items.length };
 }

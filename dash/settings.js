@@ -69,6 +69,8 @@ function renderRules() {
   const pr = sr.postRules;
   for (const k of POST_RULE_LISTS) fillList('post-' + k, pr[k]);
   $('post-reviewExternalLinks').checked = !!pr.reviewExternalLinks;
+  $('post-reviewContacts').checked = !!pr.reviewContacts;
+  $('btn-preset-scam').disabled = locked;
   for (const [card, src] of [['#rules', r], ['#post-rules', pr]]) {
     for (const i of document.querySelectorAll(card + ' .rules-grid input, ' + card + ' .rules-grid textarea')) i.disabled = locked;
     document.querySelector(card).classList.toggle('rules-locked', locked);
@@ -156,6 +158,7 @@ $('minAnswerLength').addEventListener('change', () => saveRules({ minAnswerLengt
 for (const [k, isUser] of Object.entries(RULE_LISTS)) $(k).addEventListener('change', () => saveRules({ [k]: BG.parseList($(k).value, { username: isUser }) }));
 for (const k of POST_RULE_LISTS) $('post-' + k).addEventListener('change', () => savePostRules({ [k]: BG.parseList($('post-' + k).value) }));
 $('post-reviewExternalLinks').addEventListener('change', () => savePostRules({ reviewExternalLinks: $('post-reviewExternalLinks').checked }));
+$('post-reviewContacts').addEventListener('change', () => savePostRules({ reviewContacts: $('post-reviewContacts').checked }));
 
 // ---------- Sao lưu & khôi phục ----------
 
@@ -171,8 +174,8 @@ function fileStamp(d = new Date()) {
 }
 
 $('btn-backup').addEventListener('click', async () => {
-  const store = await chrome.storage.local.get(['settings', 'rules', 'postRules', 'groupRules', 'templates', 'promptBank', 'profiles']);
-  const backup = BG.makeBackup(store, { profiles: $('backup-profiles').checked, version: chrome.runtime.getManifest().version });
+  const store = await chrome.storage.local.get(['settings', 'rules', 'postRules', 'groupRules', 'templates', 'promptBank', 'profiles', 'postStats', 'nudges', 'log', 'state']);
+  const backup = BG.makeBackup(store, { profiles: $('backup-profiles').checked, history: $('backup-history').checked, version: chrome.runtime.getManifest().version });
   const url = URL.createObjectURL(new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' }));
   const a = el('a', { href: url, download: `beingroup-sao-luu-${fileStamp()}.json` });
   document.body.append(a);
@@ -245,6 +248,7 @@ function renderSettings() {
   renderTelegramStatus();
   const watchHours = document.querySelector('[data-requires="remindUnanswered"]');
   watchHours.classList.toggle('is-disabled', !s.remindUnanswered);
+  document.querySelector('[data-requires="remindPending"]').classList.toggle('is-disabled', !s.remindPending);
 }
 
 const saveSettings = (patch) => saveTo('settings', BG.DEFAULT_SETTINGS, patch, 'saved-hint');

@@ -26,13 +26,17 @@ function showWhatsNew(sections, title) {
 async function checkWhatsNew() {
   const version = chrome.runtime.getManifest().version;
   const { seenVersion, state } = await chrome.storage.local.get(['seenVersion', 'state']);
-  if (seenVersion && BG.cmpVersion(version, seenVersion) <= 0) return;
+  if (seenVersion && BG.cmpVersion(version, seenVersion) <= 0) return false;
   const sections = await loadChangelog();
   // Chưa ghi bản đã xem: cài mới thì thôi; đã dùng từ bản trước (có dữ liệu quét) thì hiện mục của bản này
   const seen = seenVersion || (state?.lastScan ? sections.find((x) => BG.cmpVersion(x.version, version) < 0)?.version : null);
   const list = BG.whatsNew(sections, seen, version);
-  if (!list.length) return chrome.storage.local.set({ seenVersion: version });
+  if (!list.length) {
+    await chrome.storage.local.set({ seenVersion: version });
+    return false;
+  }
   showWhatsNew(list, `BeinGroup đã cập nhật lên v${version}`);
+  return true;
 }
 
 $('whatsnew').addEventListener('close', () => chrome.storage.local.set({ seenVersion: chrome.runtime.getManifest().version }));

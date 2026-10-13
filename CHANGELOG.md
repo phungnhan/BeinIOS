@@ -2,6 +2,21 @@
 
 Mỗi bản một mục, bản mới nhất ở trên. Dashboard tự hiện các mục mới sau khi cập nhật (bấm "Có gì mới" ở cuối trang để xem lại).
 
+## v0.29.0 — 13/10/2026
+- **Dọn tài khoản triệt để**: hộp dọn tự tìm thêm **mọi bài cũ còn hiện** của người đó trong community (không chỉ bài addon đã quét); từng bài / bình luận có ô tick để bỏ những mục không muốn ẩn. Nút 🧹 Dọn có cả ở Hồ sơ vi phạm dù người đó không còn bài gần đây.
+- **Tìm & dọn bài** (Bài viết): tìm trong mọi bài còn hiện của community theo từ khoá hoặc link (vd `t.me/`, tên miền lừa đảo), 7 / 30 / 90 ngày hoặc mọi lúc; tick từng bài rồi ẩn. Không bài nào được chọn sẵn; bài của bạn, của admin và thành viên tin cậy được đánh dấu giữ. Có nút dọn nhanh người đăng nhiều bài khớp nhất.
+- Lưu ý: **bài đã ẩn không hiện lại được** — Beincom không có lệnh hiện lại (kể cả trên web), nên mọi chỗ ẩn hàng loạt đều cho xem trước và chọn từng mục; Chạy thử vẫn chặn mọi thao tác.
+- **Bộ quy tắc mẫu chống lừa đảo** (Quy tắc & cài đặt): từ khoá vi phạm, từ khoá cần xem, phát hiện liên hệ riêng; link rút gọn là tuỳ chọn. Xem trước, sửa danh sách, thấy ngay bao nhiêu bài / bình luận gần đây đổi đánh giá rồi mới thêm.
+- Quy tắc bài viết mới: **Từ khoá cần xem** và **Có liên hệ riêng** (số điện thoại, link Zalo / Telegram / WhatsApp) — đánh dấu Cần xem, không tự ẩn.
+- **Xuất / Nhập quy tắc**: tải tệp chỉ có quy tắc (chung và riêng từng group) để gửi admin khác dùng.
+- **Nhắc việc chờ lâu** (mặc định bật, 24 giờ): yêu cầu tham gia và bài chờ duyệt chờ quá số giờ chọn được thì thông báo (và Telegram), mỗi việc một lần; Việc cần làm có nhãn ⏳ và bộ lọc **Chờ lâu**.
+
+## v0.28.0 — 11/10/2026
+- **Việc đầu tuần gộp lại**: sáng thứ Hai (và đầu tháng) có nhiều việc cùng lúc thì chỉ một thông báo và một tin Telegram; ô **Việc đầu tuần** ở Tổng quan liệt kê từng việc với nút mở thẳng, đánh dấu việc đã làm.
+- **Gọn Dashboard**: tab có từ 4 thẻ có **mục lục nhanh** ở đầu (bấm là tới thẻ); mỗi thẻ có nút **thu gọn** (nhớ trên máy này), **Thu gọn / Mở tất cả**.
+- **Sao lưu kèm lịch sử số liệu** (tuỳ chọn): hiệu quả bài, các lần nhắc người mới, số thành viên theo ngày, nhật ký thao tác — khôi phục thì gộp với dữ liệu đang có, đổi máy không mất số liệu.
+- **Báo cáo sử dụng** (Nhật ký): addon tự đếm tính năng nào được dùng, cài đặt đang bật, lỗi, kết quả tự kiểm tra — ẩn danh (không tên group, thành viên, nội dung). Sao chép / Gửi về Telegram để gửi tác giả, hoặc — nếu bạn **đồng ý** (hỏi một lần, xem trước đúng nội dung) — addon tự gửi mỗi tuần về bảng tính của tác giả. Tắt bất cứ lúc nào.
+
 ## v0.27.0 — 11/10/2026
 - **Tự kiểm tra mỗi ngày** (mặc định bật, chỉ đọc): lần quét tự động đầu tiên mỗi ngày kiểm tra mọi community bạn quản trị và chỉ báo (kèm Telegram) khi một tính năng hôm trước còn chạy mà nay bị lỗi — thường do Beincom vừa thay đổi.
 - **Bài thảo luận hằng tuần** (Đăng bài): kho 20 câu hỏi mồi (sửa / thêm được, có trong bản sao lưu), xoay vòng không lặp lại ở một group trong 8 tuần, soạn vào ô Đăng bài kèm giờ gợi ý theo hiệu quả bài của bạn. Sáng thứ Hai có thể soạn sẵn và báo (mặc định tắt) — addon không tự đăng. Bảng **Hiệu quả từng câu** cho biết câu nào kéo được tương tác.

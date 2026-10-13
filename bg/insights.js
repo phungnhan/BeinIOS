@@ -275,3 +275,51 @@ async function recordPromptUse({ promptId, contentId, groupId, at }) {
   await chrome.storage.local.set({ promptBank: bank });
   if (promptDraft?.promptId === promptId) await chrome.storage.local.remove('promptDraft');
 }
+
+// ---------- Tự gửi báo cáo sử dụng cho tác giả ----------
+// Chỉ khi: bản addon có nơi nhận (BG.USAGE_ENDPOINT, hoặc khoá `usageEndpoint` khi phát triển), admin đã đồng ý
+// (`usageConsent.choice === 'yes'`, kèm mã cài đặt ngẫu nhiên), đã cấp quyền gọi Google Script. Mỗi 7 ngày một lần,
+// sau lần quét tự động; nội dung đúng như thẻ Báo cáo sử dụng (ẩn danh). Kết quả lần gửi ở `usageSent`.
+async function usageEndpoint() {
+  const { usageEndpoint: dev } = await chrome.storage.local.get('usageEndpoint');
+  const url = dev || BG.USAGE_ENDPOINT;
+  return BG.isUsageEndpoint(url) ? url : '';
+}
+
+async function doUsageSend({ force = false, now = Date.now() } = {}) {
+  const url = await usageEndpoint();
+  if (!url) return { status: 'error', message: 'Bản addon này chưa có nơi nhận báo cáo' };
+  const o = await chrome.storage.local.get(['usageConsent', 'usageSent', 'usage', 'settings', 'telegram', 'state', 'log', 'diagLog', 'selfCheck', 'usageNote']);
+  if (o.usageConsent?.choice !== 'yes' || !o.usageConsent.installId) return { status: 'error', message: 'Chưa đồng ý gửi báo cáo sử dụng' };
+  if (!force && !BG.usageSendDue(o.usageSent, now)) return { status: 'ok', skipped: true };
+  let res;
+  if (!(await chrome.permissions?.contains?.({ origins: BG.USAGE_ORIGINS }).catch(() => false))) res = { ok: false, error: 'chưa cấp quyền gửi tới Google Script' };
+  else {
+    const body = BG.usagePayload(o.usageConsent.installId, {
+      usage: o.usage,
+      settings: { ...BG.DEFAULT_SETTINGS, ...o.settings },
+      telegram: o.telegram,
+      groups: (o.state?.snapshot?.groups || []).filter((g) => !g.error),
+      log: o.log,
+      diagLog: o.diagLog,
+      selfCheck: o.selfCheck,
+      version: chrome.runtime.getManifest?.().version || '',
+      ua: globalThis.navigator?.userAgent || '',
+      note: o.usageNote,
+      now,
+    });
+    try {
+      const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(body) });
+      let j = null;
+      try {
+        j = await r.json();
+      } catch {}
+      res = { ok: r.ok && j?.ok !== false, error: j?.error || (r.ok ? '' : 'HTTP ' + r.status) };
+    } catch (e) {
+      res = { ok: false, error: 'không kết nối được (' + (e?.message || e) + ')' };
+    }
+  }
+  const sent = { at: now, ok: res.ok, error: res.ok ? '' : res.error };
+  await chrome.storage.local.set({ usageSent: sent });
+  return res.ok ? { status: 'ok', sent } : { status: 'error', message: 'Không gửi được: ' + sent.error, sent };
+}

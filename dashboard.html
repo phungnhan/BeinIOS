@@ -40,6 +40,7 @@
   <div id="banner" class="banner" hidden></div>
 
   <main>
+    <nav class="tab-toc span-3" id="tab-toc" aria-label="Các thẻ trong tab" hidden></nav>
     <section class="kpis" data-tab="overview">
       <div class="kpi">
         <div class="kpi-label">Group đang quản trị</div>
@@ -73,6 +74,17 @@
       </div>
     </section>
 
+    <section class="card span-3 digest-card is-off" id="digest" data-tab="overview">
+      <div class="card-head">
+        <h2>Việc đầu tuần</h2>
+        <div class="review-tools">
+          <span class="muted small" id="digest-at"></span>
+          <button type="button" class="ghost sm" id="btn-digest-hide">Ẩn</button>
+        </div>
+      </div>
+      <ul class="digest-list" id="digest-list"></ul>
+    </section>
+
     <section class="card span-3 todo-card" id="todo" data-tab="overview">
       <div class="card-head">
         <h2>Việc cần làm <span class="tag accent" id="todo-count"></span></h2>
@@ -82,6 +94,7 @@
           <button data-f="members">Thành viên <span id="tcnt-members"></span></button>
           <button data-f="posts">Bài viết <span id="tcnt-posts"></span></button>
           <button data-f="comments">Bình luận <span id="tcnt-comments"></span></button>
+          <button data-f="overdue">Chờ lâu <span id="tcnt-overdue"></span></button>
         </div>
       </div>
       <p class="muted small intro" id="todo-note"></p>
@@ -388,6 +401,41 @@
         </table>
       </div>
       <button id="btn-comments-more" class="ghost more" hidden>Xem thêm</button>
+    </section>
+
+    <section class="card span-3" id="sweep" data-tab="content">
+      <div class="card-head">
+        <h2>Tìm &amp; dọn bài</h2>
+      </div>
+      <p class="muted small">Tìm trong <b>mọi bài còn hiện</b> của community (không chỉ bài addon đã quét) theo từ khoá hoặc link — vd <code>t.me/</code>, <code>airdrop</code>, một tên miền lừa đảo — rồi tick từng bài cần ẩn. Ẩn là một chiều: Beincom không có lệnh hiện lại, nên không bài nào được chọn sẵn; bài của bạn, admin và thành viên tin cậy được đánh dấu giữ.</p>
+      <form id="sweep-form" class="sweep-form">
+        <input type="search" id="sweep-q" maxlength="100" placeholder="Từ khoá hoặc link…" aria-label="Từ khoá hoặc link cần tìm" />
+        <select id="sweep-group" aria-label="Tìm trong community"></select>
+        <select id="sweep-days" aria-label="Khoảng thời gian">
+          <option value="7">7 ngày qua</option>
+          <option value="30" selected>30 ngày qua</option>
+          <option value="90">90 ngày qua</option>
+          <option value="0">Mọi lúc</option>
+        </select>
+        <button type="submit" class="primary" id="btn-sweep">Tìm</button>
+      </form>
+      <div id="sweep-note" class="muted small review-note"></div>
+      <div id="sweep-authors" class="sweep-authors"></div>
+      <div class="bulk-bar" id="sweep-bar" hidden>
+        <label class="check"><input type="checkbox" id="sweep-check-all" /> Chọn tất cả (trừ bài được giữ)</label>
+        <span class="muted small" id="sweep-selected">Đã chọn 0</span>
+        <span class="spacer"></span>
+        <button id="btn-sweep-hide" class="danger" disabled>Ẩn đã chọn</button>
+      </div>
+      <div class="table-wrap" id="sweep-table" hidden>
+        <table class="requests posts">
+          <thead>
+            <tr><th class="cb"></th><th>Người đăng</th><th>Nội dung</th><th>Group</th><th>Đăng lúc</th></tr>
+          </thead>
+          <tbody id="sweep-body"></tbody>
+        </table>
+      </div>
+      <button id="btn-sweep-more" class="ghost more" hidden>Xem thêm</button>
     </section>
 
     <section class="card span-3" id="pinned" data-tab="content">
@@ -1077,6 +1125,12 @@
           <button class="danger" id="scope-drop">Bỏ quy tắc riêng</button>
         </div>
         <p class="muted small scope-note" id="scope-note"></p>
+        <div class="scope-row preset-row">
+          <button class="ghost sm" id="btn-preset-scam" title="Thêm bộ từ khoá / dấu hiệu lừa đảo hay gặp ở community crypto vào quy tắc bài viết đang sửa — xem trước rồi mới thêm">🛡 Bộ mẫu chống lừa đảo…</button>
+          <span class="spacer"></span>
+          <button class="ghost sm" id="btn-rules-export" title="Tải tệp chỉ có quy tắc (chung và riêng từng group) để gửi cho admin khác">Xuất quy tắc</button>
+          <button class="ghost sm" id="btn-rules-import" title="Dùng tệp quy tắc admin khác gửi (thay quy tắc hiện tại, có xem trước)">Nhập quy tắc…</button>
+        </div>
       </section>
       <section class="card" id="rules">
         <div class="card-head">
@@ -1124,7 +1178,7 @@
           <h2>Quy tắc bài viết <span class="scope-tag" id="post-rules-scope-tag"></span></h2>
           <span class="muted small" id="post-rules-saved"></span>
         </div>
-        <p class="muted small intro">Dùng cho cả <b>Duyệt bài</b> và <b>Bài mới đăng</b>: vi phạm → <b>Gợi ý từ chối</b> / <b>Vi phạm</b>; có link ngoài (nếu bật) → <b>Cần xem</b>. Không vi phạm gì → <b>Gợi ý duyệt</b>. Addon không tự duyệt hay ẩn bài.</p>
+        <p class="muted small intro">Dùng cho <b>Duyệt bài</b>, <b>Bài mới đăng</b> và <b>Bình luận</b>: vi phạm → <b>Gợi ý từ chối</b> / <b>Vi phạm</b>; từ khoá cần xem, liên hệ riêng, link ngoài (nếu bật) → <b>Cần xem</b>. Không vi phạm gì → <b>Gợi ý duyệt</b>. Addon chỉ tự duyệt / tự ẩn khi bạn bật ở Cài đặt → Tự xử lý.</p>
         <div class="rules-grid">
           <div class="group">
             <div class="group-title">✕ Vi phạm khi có</div>
@@ -1142,6 +1196,11 @@
           </div>
           <div class="group">
             <div class="group-title">⚠ Cần xem khi</div>
+            <label class="text-row">
+              <span><b>Từ khoá cần xem</b><br /><span class="muted small">Đáng ngờ nhưng chưa chắc vi phạm (vd có trong bài cảnh báo).</span></span>
+              <textarea id="post-reviewKeywords" rows="2" placeholder="vd: inbox, kèo vip, x100, seed phrase"></textarea>
+            </label>
+            <label class="switch-row"><input type="checkbox" id="post-reviewContacts" /><span><b>Có liên hệ riêng</b><br /><span class="muted small">Số điện thoại, link Zalo / Telegram / WhatsApp — dấu hiệu kéo người ra ngoài nói chuyện riêng</span></span></label>
             <label class="switch-row"><input type="checkbox" id="post-reviewExternalLinks" /><span><b>Có link ra ngoài</b><br /><span class="muted small">Trừ các tên miền cho phép bên dưới</span></span></label>
             <label class="text-row" data-requires="reviewExternalLinks">
               <span><b>Tên miền cho phép</b></span>
@@ -1226,6 +1285,16 @@
             <option value="24">24 giờ</option>
           </select>
         </label>
+        <label class="switch-row"><input type="checkbox" id="remindPending" /><span><b>Nhắc việc chờ lâu</b><br /><span class="muted small">Yêu cầu tham gia và bài chờ duyệt đã chờ quá số giờ dưới đây: thông báo (và Telegram nếu bật), mỗi việc một lần; hiện ở Việc cần làm → Chờ lâu.</span></span></label>
+        <label class="select-row" data-requires="remindPending">
+          <span><b>Coi là chờ lâu sau</b></span>
+          <select id="pendingHours">
+            <option value="6">6 giờ</option>
+            <option value="12">12 giờ</option>
+            <option value="24">24 giờ</option>
+            <option value="48">48 giờ</option>
+          </select>
+        </label>
       </div>
       <div class="group tg-group">
         <div class="group-title">📱 Gửi thông báo về Telegram</div>
@@ -1267,6 +1336,7 @@
         <div class="group-title">💾 Sao lưu cài đặt</div>
         <div class="muted small">Cài đặt, quy tắc (chung và riêng từng group), mẫu bài — để chuyển sang máy / trình duyệt khác hoặc giữ lại khi cài lại addon. Không chứa mật khẩu hay phiên đăng nhập.</div>
         <label class="check small"><input type="checkbox" id="backup-profiles" /> Kèm hồ sơ vi phạm <span class="muted" id="backup-profiles-n"></span></label>
+        <label class="check small"><input type="checkbox" id="backup-history" /> Kèm lịch sử số liệu <span class="muted">(hiệu quả bài, các lần nhắc người mới, số thành viên theo ngày, nhật ký thao tác — để đổi máy / cài lại không mất số liệu)</span></label>
         <div class="backup-actions">
           <button class="ghost" id="btn-backup">Tải bản sao lưu</button>
           <button class="ghost" id="btn-restore">Khôi phục từ tệp…</button>
@@ -1323,6 +1393,24 @@
           <tbody id="check-body"></tbody>
         </table>
       </div>
+    </section>
+
+    <section class="card span-3" id="usage-card" data-tab="log">
+      <div class="card-head">
+        <h2>Báo cáo sử dụng</h2>
+        <div class="review-tools">
+          <button type="button" class="primary sm" id="btn-usage-copy">📋 Sao chép</button>
+          <button type="button" class="ghost sm" id="btn-usage-tg" title="Gửi vào chat Telegram đã cài, rồi chuyển tiếp cho tác giả">Gửi về Telegram</button>
+          <button type="button" class="ghost sm" id="btn-usage-file">Tải tệp .txt</button>
+        </div>
+      </div>
+      <div class="muted small review-note">Giúp tác giả biết addon được dùng thế nào và chỗ nào hay lỗi. Addon chỉ đếm trong máy (tính năng nào dùng bao nhiêu lần, cài đặt nào đang bật, lỗi kỹ thuật, kết quả tự kiểm tra) — <b>không có tên group, tên thành viên hay nội dung bài, và không tự gửi đi đâu</b>. Xem bên dưới rồi tự gửi cho tác giả (Kai | Crypto Life).</div>
+      <div class="usage-share" id="usage-share" hidden>
+        <label class="switch-row"><input type="checkbox" id="usage-auto" /><span><b>Tự gửi mỗi tuần cho tác giả</b> <span class="muted small" id="usage-auto-note"></span><br /><span class="muted small">Gửi đúng nội dung bên dưới (ẩn danh, kèm một mã cài đặt ngẫu nhiên) tới bảng tính của tác giả qua Google Script. Tắt bất cứ lúc nào.</span></span></label>
+        <button type="button" class="ghost sm" id="btn-usage-send">Gửi ngay</button>
+      </div>
+      <label class="text-row small usage-note"><span>Tên / ghi chú của bạn (không bắt buộc)</span><input type="text" id="usage-note" maxlength="80" placeholder="vd. Lan — admin Crypto Life" /></label>
+      <pre class="monthly-text" id="usage-text"></pre>
     </section>
 
     <section class="card span-3" id="diag-card" data-tab="log">
@@ -1385,6 +1473,7 @@
         <h4>3. Chọn tính năng</h4>
         <label class="check onb-feature onb-dry"><input type="checkbox" id="onb-dry" /><span><b>Giữ Chạy thử</b> (khuyên dùng lúc đầu)<br /><span class="muted small">Mọi thao tác (duyệt, ẩn, xoá, đăng bài) chỉ ghi vào Nhật ký, chưa gửi lên Beincom.</span></span></label>
         <div id="onb-features"></div>
+        <label class="check onb-feature" id="onb-usage-row" hidden><input type="checkbox" id="onb-usage" /><span><b>Gửi báo cáo sử dụng ẩn danh cho tác giả</b> mỗi tuần<br /><span class="muted small">Chỉ số đếm tính năng, cài đặt đang bật, lỗi — không tên group, thành viên hay nội dung. Xem trước ở Nhật ký → Báo cáo sử dụng.</span></span></label>
         <label class="onb-row small">Group cho bài nhắc / bài thảo luận: <select id="onb-group" aria-label="Group cho bài nhắc và bài thảo luận"></select></label>
         <p class="muted small">Đổi lại bất cứ lúc nào ở tab Quy tắc &amp; cài đặt, Thống kê và Đăng bài.</p>
       </section>
@@ -1392,6 +1481,18 @@
         <button type="button" class="ghost" id="onb-skip">Bỏ qua hướng dẫn</button>
         <button type="button" class="ghost" id="onb-back">← Quay lại</button>
         <button type="button" class="primary" id="onb-next">Tiếp →</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="usage-consent" class="whatsnew">
+    <form method="dialog">
+      <h3>Gửi báo cáo sử dụng ẩn danh cho tác giả?</h3>
+      <p class="small">Mỗi tuần một lần, addon gửi <b>đúng nội dung bên dưới</b> tới bảng tính của tác giả (Kai | Crypto Life) để biết tính năng nào được dùng và chỗ nào hay lỗi. Không có tên group, tên thành viên, nội dung bài, mật khẩu hay token. Tắt bất cứ lúc nào ở Nhật ký → Báo cáo sử dụng.</p>
+      <pre class="monthly-text usage-consent-text" id="usage-consent-text"></pre>
+      <div class="dialog-actions">
+        <button type="button" class="ghost" id="usage-no">Không gửi</button>
+        <button type="button" class="primary" id="usage-yes">Đồng ý, gửi mỗi tuần</button>
       </div>
     </form>
   </dialog>
@@ -1408,7 +1509,7 @@
   </dialog>
 
   <footer class="muted small">
-    Dữ liệu chỉ lưu trong trình duyệt này · <span id="version"></span> · <a href="#" id="btn-whatsnew">Có gì mới</a> · <a href="#" id="btn-onboard">Bắt đầu nhanh</a> · <a href="HUONG-DAN-CAI.html" target="_blank">Hướng dẫn cài</a> · Tác giả: <b>Kai | Crypto Life</b>
+    Dữ liệu lưu trong trình duyệt này · <span id="version"></span> · <a href="#" id="btn-whatsnew">Có gì mới</a> · <a href="#" id="btn-onboard">Bắt đầu nhanh</a> · <a href="HUONG-DAN-CAI.html" target="_blank">Hướng dẫn cài</a> · Tác giả: <b>Kai | Crypto Life</b>
   </footer>
 
   <script src="common.js"></script>
@@ -1427,6 +1528,7 @@
   <script src="dash/overview.js"></script>
   <script src="dash/members.js"></script>
   <script src="dash/content.js"></script>
+  <script src="dash/sweep.js"></script>
   <script src="dash/tags.js"></script>
   <script src="dash/reports.js"></script>
   <script src="dash/compose.js"></script>
@@ -1441,11 +1543,15 @@
   <script src="dash/monthly.js"></script>
   <script src="dash/retention.js"></script>
   <script src="dash/settings.js"></script>
+  <script src="dash/presets.js"></script>
   <script src="dash/log.js"></script>
   <script src="dash/selfcheck.js"></script>
+  <script src="dash/usage.js"></script>
   <script src="dash/todo.js"></script>
+  <script src="dash/digest.js"></script>
   <script src="dash/whatsnew.js"></script>
   <script src="dash/onboarding.js"></script>
+  <script src="dash/layout.js"></script>
   <script src="dashboard.js"></script>
 </body>
 </html>

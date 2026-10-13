@@ -121,6 +121,17 @@
     ],
   };
   store.promptDraft = { id: 'pr1', promptId: 'd3', groupId: 'gCL', groupName: 'Crypto Life', text: 'Sai lầm lớn nhất bạn từng mắc khi đầu tư crypto là gì?', suggestAt: new Date(now + 2 * 864e5).toISOString(), basis: 'own', at: now - 3600e3 };
+  // Nơi nhận báo cáo sử dụng (#…&usage=1): addon hỏi ý gửi
+  if (new URLSearchParams(location.hash.slice(1)).get('usage')) store.usageEndpoint = 'https://script.google.com/macros/s/AKfycbx_mau_thu_nghiem_123456/exec';
+  // Báo cáo sử dụng: số đếm 2 ngày
+  store.usage = { since: '2026-09-20', days: { [new Date(now + 7 * 3600e3 - 864e5).toISOString().slice(0, 10)]: { compose: 3, stats: 2 }, [new Date(now + 7 * 3600e3).toISOString().slice(0, 10)]: { act: 5, compose: 1 } } };
+  // Việc đầu tuần sáng nay: 4 việc gộp một thông báo
+  store.periodicDigest = { at: now - 3 * 3600e3, done: {}, dismissed: false, items: [
+    { kind: 'welcome', line: 'Chào thành viên mới và vinh danh thành viên tích cực' },
+    { kind: 'weekly', line: 'Tóm tắt tuần: 2 thành viên được duyệt · 1 báo cáo đã xử lý' },
+    { kind: 'nudge', line: 'Bài nhắc 3 người mới chưa hoạt động (Crypto Life)' },
+    { kind: 'prompt', line: 'Bài thảo luận cho Crypto Life (gợi ý Thứ Tư 20:00)' },
+  ] };
   // Tự kiểm tra mỗi ngày: lần tự chạy sáng nay thấy một mục ngừng chạy
   store.selfCheckAuto = { at: now - 5 * 3600e3, groups: { gFood: { name: 'Food Research' }, gCL: { name: 'Crypto Life' } }, regressions: [{ groupId: 'gFood', group: 'Food Research', items: ['Bài ghim'] }] };
   store.nudges = [
@@ -248,6 +259,33 @@
         if (m.type === 'diag') {
           store.diagLog = BG.pushDiag(store.diagLog || [], m.entry);
           return { status: 'ok' };
+        }
+        // Tìm mọi bài của một người: bài gần đây + 2 bài cũ
+        if (m.type === 'userPosts') {
+          await new Promise((res) => setTimeout(res, 120));
+          const own = store.state.recentPosts.filter((p) => p.actor.id === m.userId && !p.isHidden);
+          const actor = own[0]?.actor || { id: m.userId, username: 'x', fullname: 'X', avatar: '' };
+          return { status: 'ok', posts: [...own, { ...P('old1', 'X', 'Bài cũ: kèo x100 inbox mình', 24 * 20), actor }, { ...P('old2', 'X', 'Bài cũ: claim airdrop tại t.me/free', 24 * 40), actor }], truncated: false, errors: [] };
+        }
+        // Tìm & dọn: bài khớp từ khoá, gồm bài của spam bot, của mình và của admin
+        if (m.type === 'sweepSearch') {
+          await new Promise((res) => setTimeout(res, 120));
+          window.__sweepSearch = m;
+          const spam = { id: 'aspam', username: 'spambot', fullname: 'Spam Bot', avatar: '' };
+          const pool = [
+            { ...P('sw1', 'Spam Bot', 'Nhận airdrop miễn phí tại t.me/freeairdrop', 50), actor: spam },
+            { ...P('sw2', 'Spam Bot', 'Claim airdrop x100 t.me/freeairdrop nhanh', 80), actor: spam },
+            { ...P('sw3', 'Kai Crypto', 'Tổng hợp airdrop tuần này', 30), actor: { id: 'me1', username: 'kaicrypto', fullname: 'Kai Crypto', avatar: '' } },
+            { ...P('sw4', 'Admin Hà', 'Cảnh báo: airdrop giả mạo đang lan truyền', 20), actor: { id: 'aAdmin', username: 'adminha', fullname: 'Admin Hà', avatar: '' } },
+            { ...P('sw5', 'Người Mới', 'Hỏi về airdrop testnet', 10), actor: { id: 'anew', username: 'nguoimoi', fullname: 'Người Mới', avatar: '' } },
+          ].filter((p) => !(window.__sweepHidden || []).includes(p.id));
+          const k = m.keyword.toLowerCase();
+          return { status: 'ok', posts: pool.filter((p) => p.text.toLowerCase().includes(k)), adminIds: ['aAdmin'], truncated: false, errors: [] };
+        }
+        if (m.type === 'hidePosts') {
+          window.__hidePosts = m;
+          (window.__sweepHidden = window.__sweepHidden || []).push(...m.posts.map((p) => p.id));
+          return { status: 'ok', dryRun: false, ok: m.posts.length, dry: 0, failed: 0, errors: [], hidden: m.posts.map((p) => p.id), skipped: 0 };
         }
         if (m.type === 'cleanupUser') {
           window.__cleanup = m;
@@ -460,6 +498,12 @@
           ];
           store.nudgeEffect = { at: Date.now(), items };
           return { status: 'ok', at: store.nudgeEffect.at, items };
+        }
+        if (m.type === 'usageSend') {
+          window.__usageSends = (window.__usageSends || 0) + 1;
+          if (store.usageConsent?.choice !== 'yes') return { status: 'error', message: 'Chưa đồng ý gửi báo cáo sử dụng' };
+          store.usageSent = { at: Date.now(), ok: true, error: '' };
+          return { status: 'ok', sent: store.usageSent };
         }
         if (m.type === 'telegramReport') {
           window.__tgReport = m;

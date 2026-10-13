@@ -95,6 +95,8 @@ function notificationTab(id) {
   if (id === 'bg-nudge') return 'stats&nudge=1';
   if (id === 'bg-selfcheck') return 'log';
   if (id === 'bg-prompt') return 'compose&prompt=1';
+  if (id === 'bg-digest') return 'overview&digest=1';
+  if (id === 'bg-pending') return 'overview&todo=overdue';
   if (id === 'bg-reports' || id === 'bg-autoflag') return 'reports';
   return '';
 }
@@ -112,6 +114,7 @@ function handlerError(msg, e) {
 }
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+  noteUsage(msg?.type); // Báo cáo sử dụng: chỉ đếm loại lệnh
   // Đọc danh sách thành viên / nhật ký không cần chờ lần quét đang chạy
   const reads = {
     members: () => doMembers(msg),
@@ -144,7 +147,10 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     postStatsRefresh: () => measurePostStats({ refresh: true }),
     retention: () => doRetention(msg),
     selfCheck: () => doSelfCheck(msg),
+    userPosts: () => doUserPosts(msg),
+    sweepSearch: () => doSweepSearch(msg),
     nudgeEffect: () => doNudgeEffect(),
+    usageSend: () => doUsageSend({ force: true }),
     monthly: () => doMonthly(msg),
     linkPreview: () => doLinkPreview(msg),
   };
@@ -162,6 +168,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     spamAct: () => doSpamAct(msg),
     banEverywhere: () => doBanEverywhere(msg),
     cleanupUser: () => doCleanupUser(msg),
+    hidePosts: () => doHidePosts(msg),
     commentWrite: () => doCommentWrite(msg),
     syncNow: () => doSyncNow(msg),
     memberAct: () => doMemberAct(msg),

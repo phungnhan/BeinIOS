@@ -58,7 +58,7 @@ async function doRestore({ data, keepDry = false }) {
     return { status: 'error', message: e.message };
   }
   const d = parsed.data;
-  const { profiles, log = [], settings: current } = await chrome.storage.local.get(['profiles', 'log', 'settings']);
+  const { profiles, log = [], settings: current, postStats, nudges, state } = await chrome.storage.local.get(['profiles', 'log', 'settings', 'postStats', 'nudges', 'state']);
   const set = {};
   if (d.settings) set.settings = { ...BG.DEFAULT_SETTINGS, ...d.settings, ...(keepDry ? { dryRun: true } : {}), syncSettings: !!current?.syncSettings };
   if (d.rules) set.rules = { ...BG.DEFAULT_RULES, ...d.rules };
@@ -66,6 +66,15 @@ async function doRestore({ data, keepDry = false }) {
   if (d.groupRules) set.groupRules = d.groupRules;
   if (d.templates) set.templates = d.templates;
   if (d.promptBank) set.promptBank = d.promptBank;
+  // Lịch sử số liệu: gộp với dữ liệu đang có (trong máy được ưu tiên khi trùng)
+  let merged = null;
+  if (d.history) {
+    merged = BG.mergeHistory({ postStats, nudges, memberHistory: state?.memberHistory, log }, d.history);
+    Object.assign(set, { postStats: merged.postStats, nudges: merged.nudges });
+    set.state = { ...(state || {}), memberHistory: merged.memberHistory };
+    log.length = 0;
+    log.push(...merged.log);
+  }
   if (d.profiles) set.profiles = BG.mergeProfiles(profiles, d.profiles);
   const restored = BG.backupSummary({ ...d, ...(set.settings ? { settings: set.settings } : {}) });
   pushLog(log, [{ time: Date.now(), kind: 'backup', source: 'manual', action: 'restore', status: 'ok', snippet: 'Bản sao lưu', message: restored.join(' · ') }]);

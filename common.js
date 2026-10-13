@@ -36,6 +36,8 @@
     watchKeywords: [], // bài / bình luận mới nhắc tới thì báo (không phải vi phạm)
     remindUnanswered: true, // nhắc bài chưa ai trả lời quá unansweredHours giờ
     unansweredHours: 6,
+    remindPending: true, // nhắc yêu cầu tham gia / bài chờ duyệt đã chờ quá pendingHours giờ (mỗi việc một lần)
+    pendingHours: 24,
     syncSettings: false, // đồng bộ cài đặt, quy tắc qua tài khoản Chrome / Edge (chrome.storage.sync)
     autoApprovePosts: false, // tự duyệt bài chờ duyệt đạt mọi quy tắc của thành viên tin cậy
     trustedMembers: [], // username thành viên tin cậy
@@ -45,6 +47,8 @@
   // Quy tắc cho bài viết (bài chờ duyệt và bài mới đăng)
   const DEFAULT_POST_RULES = {
     bannedKeywords: [], // có trong bài -> vi phạm
+    reviewKeywords: [], // có trong bài -> cần xem
+    reviewContacts: false, // có số điện thoại / link Zalo, Telegram, WhatsApp -> cần xem
     blockedDomains: [], // có link tới tên miền này -> vi phạm
     reviewExternalLinks: false, // có link ngoài danh sách cho phép -> cần xem
     allowedDomains: ['beincom.com'],

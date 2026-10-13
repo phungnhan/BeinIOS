@@ -55,9 +55,13 @@ function renderOnboarding() {
     ...ONB_FEATURES.map((f, i) => el('label', { class: 'check onb-feature' }, el('input', { type: 'checkbox', 'data-i': i, checked: f.keys.every((k) => !!st[k]) }), el('span', {}, el('b', { text: f.label }), el('br'), el('span', { class: 'muted small', text: f.note })))),
   );
   $('onb-dry').checked = st.dryRun !== false;
+  usageEndpointUrl().then((url) => ($('onb-usage-row').hidden = !url));
 }
 
 async function finishOnboarding() {
+  // Gửi báo cáo sử dụng: xin quyền ngay trong lúc bấm (trước mọi việc khác)
+  const share = !$('onb-usage-row').hidden && $('onb-usage').checked;
+  const shareDone = share ? acceptUsage() : !$('onb-usage-row').hidden ? declineUsage() : null;
   const patch = { dryRun: $('onb-dry').checked };
   const gid = $('onb-group').value;
   for (const box of document.querySelectorAll('#onb-features input[data-i]')) {
@@ -68,6 +72,7 @@ async function finishOnboarding() {
   await saveTo('settings', BG.DEFAULT_SETTINGS, patch);
   Object.assign(data.settings, patch);
   await chrome.storage.local.set({ onboarded: true, seenVersion: chrome.runtime.getManifest().version });
+  await shareDone;
   $('onboard').close();
   renderAll();
   toast(patch.dryRun ? 'Xong! Addon đang Chạy thử: mọi thao tác chỉ ghi Nhật ký. Tắt ở Quy tắc & cài đặt khi đã quen.' : 'Xong! Chạy thử đã tắt — thao tác sẽ gửi thật lên Beincom (luôn hỏi lại trước).');

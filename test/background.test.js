@@ -156,6 +156,11 @@ function makeEnv({ data = fixture(), settings = {}, rules = {}, postRules = {}, 
       if (data.tgNoChat) return res(400, { ok: false, error_code: 400, description: 'Bad Request: chat not found' });
       return res(200, { ok: true, result: { message_id: tg.length } });
     }
+    // Nơi nhận báo cáo sử dụng (Google Apps Script giả lập)
+    if (url.startsWith('https://script.google.com/')) {
+      (data.usagePosts ||= []).push({ url, method, headers: opts.headers, body: JSON.parse(opts.body) });
+      return { status: data.usageDown ? 500 : 200, ok: !data.usageDown, json: async () => (data.usageDown ? { ok: false, error: 'down' } : { ok: true }) };
+    }
     const p = url.replace(API, '');
     calls.push(`${method} ${p}`);
     if (opts.body) bodies.push([`${method} ${p}`, JSON.parse(opts.body)]);
@@ -258,12 +263,14 @@ function makeEnv({ data = fixture(), settings = {}, rules = {}, postRules = {}, 
       const [limit, page] = [Number(q.limit), Number(q.page || 1)];
       return reply(200, ok(all.slice((page - 1) * limit, page * limit), { total: all.length, hasNextPage: page * limit < all.length }));
     }
-    // Tìm bài như trang Tìm kiếm của web: groupId, startTime / endTime (ISO), actors[] — data.search, mới nhất trước
+    // Tìm bài như trang Tìm kiếm của web: groupId, startTime / endTime (ISO), actors[], keyword — data.search, mới nhất trước, không có bài đã ẩn
     if (path === 'content/contents' && method === 'GET') {
       const actors = new URLSearchParams(query).getAll('actors[]');
       data.searchActorsMax = Math.max(data.searchActorsMax || 0, actors.length);
       if (actors.length > 20) return reply(400, { code: 'api.validation_error', meta: { message: 'URL quá dài' } });
+      const kw = String(q.keyword || '').toLowerCase();
       const all = (data.search || [])
+        .filter((x) => !x.isHidden && (!kw || String(x.content || '').toLowerCase().includes(kw)))
         .filter((x) => (!q.startTime || x.publishedAt >= q.startTime) && (!q.endTime || x.publishedAt < q.endTime) && (!actors.length || actors.includes(x.actor.id)))
         .sort((a, b) => b.publishedAt.localeCompare(a.publishedAt));
       const start = Number(q.after || 0);
@@ -397,7 +404,7 @@ function makeEnv({ data = fixture(), settings = {}, rules = {}, postRules = {}, 
   };
 
   // Nhắc bài chưa ai trả lời tắt sẵn (bài mẫu chưa có bình luận); test riêng bật lại
-  const storage = { settings: { ...BG.DEFAULT_SETTINGS, remindUnanswered: false, selfCheckDaily: false, ...settings }, rules: { ...BG.DEFAULT_RULES, ...rules }, postRules: { ...BG.DEFAULT_POST_RULES, ...postRules } };
+  const storage = { settings: { ...BG.DEFAULT_SETTINGS, remindUnanswered: false, remindPending: false, selfCheckDaily: false, ...settings }, rules: { ...BG.DEFAULT_RULES, ...rules }, postRules: { ...BG.DEFAULT_POST_RULES, ...postRules } };
   if (groupRules) storage.groupRules = groupRules;
   const syncStore = {};
   const syncWrites = [];
@@ -443,7 +450,8 @@ function makeEnv({ data = fixture(), settings = {}, rules = {}, postRules = {}, 
       onUpdated: ev('updated'),
     },
     scripting: { executeScript: async () => [{ result: { status: 401 } }] },
-    runtime: { onMessage: ev('message'), onStartup: ev('startup'), onInstalled: ev('installed'), getURL: (p) => 'chrome-extension://x/' + p },
+    runtime: { onMessage: ev('message'), onStartup: ev('startup'), onInstalled: ev('installed'), getURL: (p) => 'chrome-extension://x/' + p, getManifest: () => ({ version: '0.0.0-test' }) },
+    permissions: { contains: async ({ origins }) => (origins.some((o) => o.includes('script.google')) ? data.usagePerm !== false : true) },
   };
   const ctx = vm.createContext({
     chrome,
@@ -1961,6 +1969,41 @@ test('nhắc bài chưa ai trả lời: quá số giờ trong cài đặt, mỗi
   assert.ok(!manual.notifications.some((n) => n.id === 'bg-unanswered'));
 });
 
+test('nhắc việc chờ lâu: yêu cầu tham gia / bài chờ duyệt quá số giờ, mỗi việc một lần; việc đã xong rơi khỏi danh sách; quét bấm tay không nhắc', async () => {
+  const now = Date.parse('2026-10-08T12:00:00Z'); // yêu cầu gửi lúc 07/10 10:00 (26 giờ), bài p1 gửi lúc 07/10 08:00 (28 giờ)
+  const data = fixture();
+  const env = makeEnv({ data, now, settings: { remindPending: true, pendingHours: 24 } });
+  env.listeners.alarm({ name: 'beingroup-scan' });
+  await scan(env, 'popup');
+  let r = env.notifications.filter((n) => n.id === 'bg-pending');
+  assert.equal(r.length, 1);
+  assert.equal(r[0].title, 'BeinGroup: 4 việc chờ quá 24 giờ');
+  assert.equal(r[0].message, '3 yêu cầu tham gia (Food Research), 1 bài chờ duyệt (Crypto Life). Lâu nhất đã chờ 28 giờ. Bấm để xử lý.');
+  assert.deepEqual(env.storage.state.pendingReminded, ['appr:p1', 'req:jr1', 'req:jr2', 'req:jr3']);
+  // Lần sau: không nhắc lại; một yêu cầu đã xử lý trên web thì rơi khỏi danh sách; yêu cầu cũ mới thấy thì nhắc riêng
+  data.requests.gFood = data.requests.gFood.filter((x) => x.id !== 'jr2');
+  env.listeners.alarm({ name: 'beingroup-scan' });
+  await scan(env, 'popup');
+  assert.equal(env.notifications.filter((n) => n.id === 'bg-pending').length, 1);
+  assert.deepEqual(env.storage.state.pendingReminded, ['appr:p1', 'req:jr1', 'req:jr3']);
+  data.requests.gFood.push(jr(9, { createdAt: '2026-10-05T12:00:00Z' }));
+  env.listeners.alarm({ name: 'beingroup-scan' });
+  await scan(env, 'popup');
+  r = env.notifications.filter((n) => n.id === 'bg-pending');
+  assert.equal(r.length, 2);
+  assert.equal(r[1].title, 'BeinGroup: 1 việc chờ quá 24 giờ');
+  assert.match(r[1].message, /^1 yêu cầu tham gia \(Food Research\)\. Lâu nhất đã chờ 3 ngày/);
+  // Chưa đủ giờ: không nhắc; quét bấm tay: không nhắc; tắt: không nhắc
+  const early = makeEnv({ data: fixture(), now, settings: { remindPending: true, pendingHours: 48 } });
+  early.listeners.alarm({ name: 'beingroup-scan' });
+  await scan(early, 'popup');
+  assert.ok(!early.notifications.some((n) => n.id === 'bg-pending'));
+  const manual = makeEnv({ data: fixture(), now, settings: { remindPending: true } });
+  await scan(manual);
+  assert.ok(!manual.notifications.some((n) => n.id === 'bg-pending'));
+  assert.equal(manual.storage.state.pendingReminded, undefined);
+});
+
 // ---------- Đồng bộ cài đặt giữa các máy ----------
 
 const tick = () => new Promise((r) => setTimeout(r, 10));
@@ -2515,6 +2558,93 @@ test('Dọn tài khoản: ẩn mọi bài và bình luận gần đây còn hi�
   assert.equal(writes(env).length, before);
 });
 
+test('Dọn tài khoản: thêm bài cũ tìm được và chỉ ẩn những mục được chọn; bỏ bài cũ không phải của người này', async () => {
+  const data = fixture();
+  data.timeline.gCL[0].commentsCount = 1;
+  const spam = { id: 'x9', username: 'spammer', fullname: 'Spam Bot', avatar: '' };
+  data.timeline.gCL.unshift(post('t7', 'Kèo x100', { publishedAt: nowIso(30), actor: spam }), post('t8', 'Lại kèo', { publishedAt: nowIso(20), actor: spam }));
+  data.comments = { t1: [cmt('k1', 'Vào abc.xyz', { createdAt: nowIso(10), actor: spam })] };
+  const env = makeEnv({ data, settings: { dryRun: false } });
+  await scan(env);
+  const old = BG.slimPost(post('o1', 'Bài cũ của spam', { actor: spam }));
+  const other = BG.slimPost(post('o2', 'Bài người khác')); // không phải của x9: bị bỏ
+  const r = await env.send({ type: 'cleanupUser', user: { id: 'x9' }, reasonType: 'SPAM', posts: [old, other], postIds: ['t7', 'o1', 'o2'], commentIds: [] });
+  assert.deepEqual([r.status, r.hidden], ['ok', 2]);
+  assert.deepEqual(writes(env).sort(), ['POST content/contents/o1/hide', 'POST content/contents/t7/hide']);
+  assert.deepEqual(env.bodies.find(([c]) => c.endsWith('o1/hide'))[1], { reasonType: 'SPAM', groupIds: ['gCL'] });
+  // Không chọn gì và không cấm: báo lỗi, không gọi API
+  assert.match((await env.send({ type: 'cleanupUser', user: { id: 'x9' }, postIds: [], commentIds: [] })).message, /Không còn bài/);
+  assert.equal(writes(env).length, 2);
+});
+
+// ---------- Tìm & dọn bài ----------
+
+test('Tìm & dọn: tìm theo từ khoá ở mỗi community một lần (group gốc), kèm admin group; tìm mọi bài của một người; chỉ đọc', async () => {
+  const data = fixture();
+  const spam = { id: 'x9', username: 'spammer', fullname: 'Spam Bot', avatar: '' };
+  data.search = [
+    post('s1', 'Nhận AIRDROP tại t.me/free', { publishedAt: nowIso(60), actor: spam }),
+    post('s2', 'Claim airdrop x100', { publishedAt: nowIso(30), actor: spam }),
+    post('s3', 'Hỏi về airdrop testnet', { publishedAt: nowIso(10) }),
+    post('s4', 'Airdrop đã ẩn', { publishedAt: nowIso(5), actor: spam, isHidden: true }),
+    post('s5', 'Bitcoin hôm nay', { publishedAt: nowIso(3), actor: spam }),
+    ...Array.from({ length: 230 }, (_, i) => post('b' + i, 'Spam số ' + i, { publishedAt: nowIso(1000 + i), actor: spam })),
+  ];
+  data.users.gCL = [{ ...user(61), isAdmin: true }, { ...user(62) }];
+  const env = makeEnv({ data });
+  await scan(env);
+  const before = env.calls.length;
+  const r = await env.send({ type: 'sweepSearch', keyword: '  airdrop ', days: 7 });
+  assert.equal(r.status, 'ok');
+  assert.deepEqual(r.posts.map((p) => p.id), ['s3', 's2', 's1']); // mới nhất trước, không có bài đã ẩn
+  assert.deepEqual(r.posts[0].seenIn, ['gCL']);
+  assert.deepEqual([r.adminIds.includes('u61'), r.adminIds.includes('u62'), r.truncated], [true, false, false]);
+  const calls = env.calls.slice(before);
+  const search = calls.filter((c) => c.startsWith('GET content/contents?'));
+  assert.deepEqual(search.map((c) => c.match(/groupId=(\w+)/)[1]).sort(), ['gCL', 'gFood']); // mỗi community một lần, group gốc
+  assert.ok(search.every((c) => /^GET content\/contents\?keyword=airdrop&groupId=\w+&isIncludedInnerGroups=true&startTime=\d{4}-[^&]+&limit=25$/.test(c)));
+  assert.ok(calls.includes('GET group/groups/gCL/users?limit=100&offset=0'));
+  // Chỉ trong một community
+  const one = env.calls.length;
+  await env.send({ type: 'sweepSearch', keyword: 'airdrop', groupId: 'gCLsub' });
+  assert.deepEqual(env.calls.slice(one).filter((c) => c.startsWith('GET content/contents?')).map((c) => c.match(/groupId=(\w+)/)[1]), ['gCL']);
+  // Từ khoá quá ngắn: không gọi API
+  const n = env.calls.length;
+  assert.match((await env.send({ type: 'sweepSearch', keyword: ' a ' })).message, /ít nhất 2/);
+  assert.equal(env.calls.length, n);
+  // Mọi bài của một người: lọc actors[], tối đa 8 trang mỗi community
+  const u0 = env.calls.length;
+  const up = await env.send({ type: 'userPosts', userId: 'x9' });
+  assert.equal(up.status, 'ok');
+  assert.ok(up.posts.every((p) => p.actor.id === 'x9' && !p.isHidden));
+  assert.equal(up.truncated, true);
+  const ucalls = env.calls.slice(u0);
+  assert.ok(ucalls.every((c) => c.startsWith('GET content/contents?actors[]=x9&groupId=')));
+  assert.equal(ucalls.length, 16); // 2 community × 8 trang
+  assert.equal(writes(env).length, 0);
+  assert.match((await env.send({ type: 'userPosts' })).message, /Thiếu/);
+});
+
+test('Tìm & dọn: ẩn các bài đã chọn ở group mình quản trị (lý do, nhật ký), bỏ bài của mình và bài ở group không quản trị; Chạy thử không gửi', async () => {
+  const data = fixture();
+  const env = makeEnv({ data, settings: { dryRun: false } });
+  await scan(env);
+  const a = BG.slimPost(post('h1', 'Airdrop lừa đảo'));
+  const mine = BG.slimPost(post('h2', 'Bài của mình', { actor: { id: 'me1', username: 'me', fullname: 'Tôi', avatar: '' } }));
+  const outside = BG.slimPost(post('h3', 'Ở group khác', { audience: { groups: [{ id: 'gOther', name: 'Khác' }] } }));
+  const r = await env.send({ type: 'hidePosts', posts: [a, mine, outside], reasonType: 'SPAM' });
+  assert.deepEqual([r.status, r.ok, r.hidden, r.skipped], ['ok', 1, ['h1'], 2]);
+  assert.deepEqual(writes(env), ['POST content/contents/h1/hide']);
+  assert.deepEqual(env.bodies.at(-1)[1], { reasonType: 'SPAM', groupIds: ['gCL'] });
+  assert.deepEqual([env.storage.log[0].action, env.storage.log[0].contentId, env.storage.log[0].autoReason, env.storage.log[0].source], ['hide', 'h1', 'Tìm & dọn', 'manual']);
+  assert.match((await env.send({ type: 'hidePosts', posts: [mine, outside] })).message, /Không có bài nào ẩn được/);
+  assert.match((await env.send({ type: 'hidePosts', posts: [a], reasonType: 'XX' })).message, /không hợp lệ/);
+  // Chạy thử
+  env.storage.settings = { ...env.storage.settings, dryRun: true };
+  const dry = await env.send({ type: 'hidePosts', posts: [BG.slimPost(post('h4', 'Spam nữa'))] });
+  assert.deepEqual([dry.dryRun, writes(env).length, env.storage.log[0].status, dry.hidden], [true, 1, 'dry', []]);
+});
+
 // ---------- Hiệu quả bài đã đăng ----------
 
 test('hiệu quả bài: đăng thật qua addon thì ghi lại; quét tự động đọc số liệu khi tới mốc 24 giờ / 7 ngày; bài đã xoá đánh dấu; Cập nhật đọc số hiện tại; chạy thử không ghi', async () => {
@@ -2822,7 +2952,7 @@ test('nhắc người mới: soạn sẵn sáng thứ Hai (chỉ đọc, không 
     ],
   };
   data.search = [post('n1', 'Chào mọi người', { publishedAt: new Date(ago(5)).toISOString(), actor: user(502) })];
-  const env = makeEnv({ data, now, settings: { nudgeWeekly: true, nudgeGroupId: 'gCL', dryRun: false } });
+  const env = makeEnv({ data, now, settings: { nudgeWeekly: true, nudgeGroupId: 'gCL', dryRun: false, welcomeReminder: false, weeklyReport: false } });
   env.storage.nudges = [{ id: 'old1', groupId: 'gCL', groupName: 'Crypto Life', at: new Date(ago(5)).toISOString(), userIds: ['u506'] }];
   await scan(env);
   env.listeners.alarm({ name: 'beingroup-scan' });
@@ -2920,7 +3050,7 @@ test('Tự kiểm tra mỗi ngày: lần quét tự động đầu ngày kiểm 
 
 test('bài thảo luận: sáng thứ Hai soạn sẵn câu hỏi + giờ gợi ý (không tự đăng); đăng thật ghi lần dùng câu, chạy thử thì không', async () => {
   const now = Date.parse('2026-10-12T02:00:00Z'); // 9 giờ sáng thứ Hai giờ VN
-  const env = makeEnv({ now, settings: { promptWeekly: true, promptGroupId: 'gCL', dryRun: false } });
+  const env = makeEnv({ now, settings: { promptWeekly: true, promptGroupId: 'gCL', dryRun: false, welcomeReminder: false, weeklyReport: false } });
   await scan(env);
   env.listeners.alarm({ name: 'beingroup-scan' });
   await scan(env, 'popup');
@@ -2959,4 +3089,125 @@ test('bài thảo luận: sáng thứ Hai soạn sẵn câu hỏi + giờ gợi 
   off.listeners.alarm({ name: 'beingroup-scan' });
   await scan(off, 'popup');
   assert.equal(off.storage.promptDraft, undefined);
+});
+
+// ---------- Việc đầu tuần ----------
+
+test('việc đầu tuần: nhiều việc định kỳ cùng lần quét thì gộp một thông báo / một tin Telegram, lưu ô Việc đầu tuần; một việc thì như cũ', async () => {
+  const now = Date.parse('2026-10-12T02:00:00Z'); // thứ Hai
+  const env = makeEnv({ now, settings: { promptWeekly: true, promptGroupId: 'gCL' } });
+  env.storage.telegram = { enabled: true, token: '123456789:' + 'A'.repeat(35), chatId: '42', kinds: { weekly: true } };
+  await scan(env);
+  env.listeners.alarm({ name: 'beingroup-scan' });
+  await scan(env, 'popup');
+  const ids = env.notifications.map((n) => n.id);
+  assert.ok(!ids.some((id) => ['bg-welcome', 'bg-weekly', 'bg-prompt'].includes(id)), 'không thông báo riêng từng việc');
+  const dg = env.notifications.filter((n) => n.id === 'bg-digest');
+  assert.equal(dg.length, 1);
+  assert.equal(dg[0].title, 'BeinGroup: việc đầu tuần (3 việc)');
+  assert.match(dg[0].message, /^• Chào thành viên mới và vinh danh thành viên tích cực\n• Tóm tắt tuần: .+\n• Bài thảo luận cho Crypto Life \(gợi ý Thứ Tư 20:00\)\nBấm để làm lần lượt\.$/);
+  assert.deepEqual(env.storage.periodicDigest.items.map((x) => x.kind), ['welcome', 'weekly', 'prompt']);
+  assert.equal(env.tg.filter((t) => t.method === 'sendMessage' && /việc đầu tuần/.test(t.body.text)).length, 1);
+  env.listeners.notif('bg-digest');
+  assert.match(env.tabsCreated.at(-1), /#tab=overview&digest=1$/);
+  // Cùng tuần: không gộp lại
+  env.listeners.alarm({ name: 'beingroup-scan' });
+  await scan(env, 'popup');
+  assert.equal(env.notifications.filter((n) => n.id === 'bg-digest').length, 1);
+  // Chỉ một việc: thông báo riêng như cũ, không tạo ô Việc đầu tuần
+  const one = makeEnv({ now, settings: { weeklyReport: false } });
+  await scan(one);
+  one.listeners.alarm({ name: 'beingroup-scan' });
+  await scan(one, 'popup');
+  assert.deepEqual(one.notifications.filter((n) => /^bg-(welcome|digest)$/.test(n.id)).map((n) => n.id), ['bg-welcome']);
+  assert.equal(one.storage.periodicDigest, undefined);
+});
+
+test('khôi phục sao lưu kèm lịch sử số liệu: gộp hiệu quả bài, lần nhắc, số thành viên, nhật ký với dữ liệu trong máy; không gọi Beincom', async () => {
+  const env = makeEnv();
+  await scan(env);
+  const before = env.calls.length;
+  env.storage.postStats = { p2: { id: 'p2', at: 9 } };
+  const old = { postStats: { p1: { id: 'p1', at: 1, snippet: 'Bài cũ' } }, nudges: [{ id: 'n1', groupId: 'gCL', groupName: 'Crypto Life', at: '2026-09-01T00:00:00Z', userIds: ['u1'] }], memberHistory: { gCL: [{ day: '2026-09-01', count: 11000 }] }, log: [{ time: 1000, kind: 'member', action: 'approve', status: 'ok', groupId: 'gCL', userId: 'u1' }] };
+  const r = await env.send({ type: 'restoreBackup', data: { history: old } });
+  assert.equal(r.status, 'ok');
+  assert.ok(r.restored.some((x) => /^Lịch sử số liệu: 1 bài/.test(x)));
+  assert.deepEqual(Object.keys(env.storage.postStats).sort(), ['p1', 'p2']);
+  assert.deepEqual(env.storage.nudges.map((n) => n.id), ['n1']);
+  assert.deepEqual(env.storage.state.memberHistory.gCL[0], { day: '2026-09-01', count: 11000 });
+  assert.ok(env.storage.state.memberHistory.gCL.length >= 2, 'giữ số thành viên đã ghi khi quét');
+  assert.equal(env.storage.log[0].kind, 'backup'); // dòng ghi việc khôi phục ở đầu
+  assert.ok(env.storage.log.some((e) => e.time === 1000 && e.userId === 'u1'));
+  assert.equal(env.calls.length, before);
+});
+
+test('báo cáo sử dụng: service worker đếm lệnh Dashboard gửi theo ngày (chỉ loại lệnh)', async () => {
+  const env = makeEnv();
+  await scan(env);
+  await env.send({ type: 'monthly', groupId: 'gCL', month: '2026-09' });
+  await env.send({ type: 'selfCheck', groupId: 'gFood' });
+  await env.send({ type: 'diag', entry: { where: 'dashboard', message: 'x' } });
+  await new Promise((r) => setImmediate(r));
+  await new Promise((r) => setImmediate(r));
+  const day = Object.values(env.storage.usage.days)[0];
+  assert.deepEqual(day, { scan: 1, monthly: 1, selfCheck: 1 });
+});
+
+// ---------- Tự gửi báo cáo sử dụng ----------
+
+test('báo cáo sử dụng tự gửi: chỉ khi có nơi nhận, admin đồng ý, đã cấp quyền; 7 ngày một lần (lỗi thì thử lại sau 1 ngày); nội dung ẩn danh', async () => {
+  const URL = 'https://script.google.com/macros/s/AKfycbx_thu_nghiem_1234567890/exec';
+  const now = Date.parse('2026-10-13T02:00:00Z');
+  const env = makeEnv({ now });
+  const auto = async () => {
+    env.listeners.alarm({ name: 'beingroup-scan' });
+    await scan(env, 'popup');
+  };
+  await scan(env);
+  await new Promise((r) => setImmediate(r)); // số đếm sử dụng ghi gộp ở lượt sau (setTimeout giả = setImmediate)
+  // Chưa có nơi nhận / chưa đồng ý: không gửi
+  await auto();
+  env.storage.usageEndpoint = URL;
+  await auto();
+  assert.equal(env.data.usagePosts, undefined);
+  assert.match((await env.send({ type: 'usageSend' })).message, /Chưa đồng ý/);
+  // Đồng ý: lần quét tự động gửi một lần
+  env.storage.usageConsent = { choice: 'yes', at: now, installId: 'id-ngau-nhien-01' };
+  env.storage.usageNote = 'Lan';
+  await auto();
+  assert.equal(env.data.usagePosts.length, 1);
+  const p = env.data.usagePosts[0];
+  assert.deepEqual([p.url, p.method, p.headers['Content-Type']], [URL, 'POST', 'text/plain;charset=utf-8']);
+  assert.deepEqual([p.body.app, p.body.v, p.body.installId, p.body.version, p.body.note, p.body.communities], ['BeinGroup', 1, 'id-ngau-nhien-01', '0.0.0-test', 'Lan', 2]);
+  assert.ok(p.body.features['Quét tay'] >= 1);
+  const raw = JSON.stringify(p.body);
+  for (const secret of ['Crypto Life', 'Food Research', 'gCL', 'gFood', 'user1', 'Người 1']) assert.ok(!raw.includes(secret), 'lộ ' + secret);
+  assert.deepEqual(env.storage.usageSent, { at: now, ok: true, error: '' });
+  // Trong 7 ngày: không gửi lại; bấm Gửi ngay thì gửi
+  await auto();
+  assert.equal(env.data.usagePosts.length, 1);
+  assert.equal((await env.send({ type: 'usageSend' })).status, 'ok');
+  assert.equal(env.data.usagePosts.length, 2);
+  // Nơi nhận lỗi: ghi lỗi, ngày sau thử lại
+  env.data.usageDown = true;
+  env.storage.usageSent = { at: now - 8 * 864e5, ok: true };
+  await auto();
+  assert.deepEqual([env.data.usagePosts.length, env.storage.usageSent.ok, env.storage.usageSent.error], [3, false, 'down']);
+  assert.equal(BG.usageSendDue(env.storage.usageSent, now + 23 * 3600e3), false);
+  assert.equal(BG.usageSendDue(env.storage.usageSent, now + 25 * 3600e3), true);
+  // Chưa cấp quyền: không gọi mạng, báo rõ
+  env.data.usageDown = false;
+  env.data.usagePerm = false;
+  const r = await env.send({ type: 'usageSend' });
+  assert.match(r.message, /chưa cấp quyền/);
+  assert.equal(env.data.usagePosts.length, 3);
+  // Rút lại đồng ý: không gửi nữa
+  env.data.usagePerm = true;
+  env.storage.usageConsent = { choice: 'no', at: now, installId: 'id-ngau-nhien-01' };
+  env.storage.usageSent = null;
+  await auto();
+  assert.equal(env.data.usagePosts.length, 3);
+  // Link nơi nhận sai dạng: coi như không có
+  assert.equal(BG.isUsageEndpoint('https://evil.example/exec'), false);
+  assert.equal(BG.isUsageEndpoint(URL), true);
 });

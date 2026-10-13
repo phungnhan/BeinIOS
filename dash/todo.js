@@ -3,7 +3,7 @@
 // Nạp sau các tệp tab (dùng hàm của chúng khi bấm, không gọi lúc nạp).
 
 const TODO_PAGE = 25;
-const TODO_FILTERS = { all: 'Tất cả', urgent: 'Gấp', members: 'Thành viên', posts: 'Bài viết', comments: 'Bình luận' };
+const TODO_FILTERS = { all: 'Tất cả', urgent: 'Gấp', members: 'Thành viên', posts: 'Bài viết', comments: 'Bình luận', overdue: 'Chờ lâu' };
 const todo = { filter: 'all', limit: TODO_PAGE, sel: '', lastIndex: -1 };
 
 function openReports(g, kind) {
@@ -206,6 +206,13 @@ function todoItems() {
     }
   }
 
+  // Yêu cầu tham gia / bài chờ duyệt đã chờ quá số giờ ở Cài đặt → Theo dõi: thêm nhãn "chờ X"
+  const overdue = new Map(BG.pendingOverdue(gs, { hours: data.settings.pendingHours }).map((x) => [x.key, x]));
+  for (const it of out) {
+    const o = overdue.get(it.key);
+    if (o) Object.assign(it, { overdue: true, wait: '⏳ chờ ' + BG.waitText(Date.now() - o.at) });
+  }
+
   // Gấp: mới nhất trước; hàng chờ và câu hỏi: cũ nhất trước (đã chờ lâu nhất)
   const t = (x) => Date.parse(x.time) || 0;
   return out.sort((a, b) => a.pri - b.pri || (a.pri === 0 ? t(b) - t(a) : t(a) - t(b)));
@@ -214,6 +221,7 @@ function todoItems() {
 function todoInFilter(it, f) {
   if (f === 'all') return true;
   if (f === 'urgent') return it.pri === 0;
+  if (f === 'overdue') return !!it.overdue;
   return it.cat === f;
 }
 
@@ -236,7 +244,7 @@ function renderTodo() {
       const row = el(
         'div',
         { class: 'todo-item' + (it.key === todo.sel ? ' sel' : '') + (it.pri === 0 ? ' urgent' : ''), 'data-key': it.key, onclick: () => selectTodo(it.key, false) },
-        el('div', { class: 'todo-tags' }, el('span', { class: 'tag ' + it.tag[0], text: it.tag[1] }), it.verdict?.[1] ? el('span', { class: 'tag ' + (it.verdict[0] || 'info'), text: it.verdict[1] }) : null),
+        el('div', { class: 'todo-tags' }, el('span', { class: 'tag ' + it.tag[0], text: it.tag[1] }), it.verdict?.[1] ? el('span', { class: 'tag ' + (it.verdict[0] || 'info'), text: it.verdict[1] }) : null, it.wait ? el('span', { class: 'tag warn', text: it.wait }) : null),
         el(
           'div',
           { class: 'todo-main' },
@@ -267,7 +275,7 @@ function renderTodo() {
     }),
   );
   if (!shown.length) {
-    const msg = !data.state.snapshot ? 'Chưa quét — bấm Quét ngay.' : todo.filter === 'all' ? 'Không còn việc gì cần làm 🎉' : 'Không có việc nào trong mục này.';
+    const msg = !data.state.snapshot ? 'Chưa quét — bấm Quét ngay.' : todo.filter === 'all' ? 'Không còn việc gì cần làm 🎉' : todo.filter === 'overdue' ? `Không có yêu cầu tham gia / bài chờ duyệt nào chờ quá ${data.settings.pendingHours} giờ 🎉` : 'Không có việc nào trong mục này.';
     box.append(el('div', { class: 'todo-empty', text: msg }));
   }
   $('btn-todo-more').hidden = list.length <= todo.limit;
@@ -280,6 +288,16 @@ function selectTodo(key, scroll = true) {
   todo.lastIndex = -1;
   for (const r of document.querySelectorAll('#todo-list .todo-item')) r.classList.toggle('sel', r.dataset.key === key);
   if (scroll) document.querySelector(`#todo-list .todo-item[data-key="${CSS.escape(key)}"]`)?.scrollIntoView({ block: 'nearest' });
+}
+
+// Mở từ thông báo (vd việc chờ lâu): chọn bộ lọc, chuyển tới hộp Việc cần làm
+function openTodo(f) {
+  if (!TODO_FILTERS[f]) return;
+  todo.filter = f;
+  todo.limit = TODO_PAGE;
+  showTab('overview');
+  renderTodo();
+  $('todo').scrollIntoView({ block: 'start' });
 }
 
 onSeg('todo-filter', (f) => {

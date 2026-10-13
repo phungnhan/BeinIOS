@@ -373,6 +373,19 @@ function remindUnanswered(state, next, settings, notifyAllowed) {
   next.remindedIds = [...due.map((p) => p.id), ...(state.remindedIds || [])].slice(0, 500);
 }
 
+// Nhắc việc tồn đọng: yêu cầu tham gia / bài chờ duyệt đã chờ quá pendingHours giờ, mỗi việc nhắc một lần
+function remindPending(state, next, settings, notifyAllowed, now) {
+  if (!settings.remindPending || !notifyAllowed) return;
+  const overdue = BG.pendingOverdue(next.snapshot?.groups, { hours: settings.pendingHours, now });
+  const { fresh, reminded } = BG.pendingReminder(overdue, state.pendingReminded);
+  next.pendingReminded = reminded;
+  if (!fresh.length) return;
+  const t = BG.pendingText(fresh, { hours: settings.pendingHours, now });
+  const first = fresh[0];
+  const g = (next.snapshot?.groups || []).find((x) => x.id === first.groupId);
+  notify('bg-pending', t.title, t.message, first.kind === 'post' ? BG.contentApprovalUrl(first.communityId) : g ? BG.memberRequestsUrl(g) : '');
+}
+
 // ---------- Spam: tự ẩn, đợt spam ----------
 
 // Lệnh ẩn một bài: chỉ ẩn ở những group bài được đăng mà mình quản trị
@@ -610,6 +623,7 @@ async function doScan({ source = 'alarm' } = {}) {
       remindUnanswered(state, next, settings, notifyAllowed);
       Object.assign(fresh, { posts: p.bad, comments: c.bad, waves });
     }
+    remindPending(state, next, settings, notifyAllowed, now);
     // Telegram có nút xử lý: mỗi việc mới một tin (gửi cuối lần quét)
     if (notifyAllowed && BG.telegramActionsOn(tg)) {
       const { profiles } = settings.trackViolations ? await chrome.storage.local.get('profiles') : {};
@@ -620,11 +634,15 @@ async function doScan({ source = 'alarm' } = {}) {
     notify('bg-login', 'BeinGroup: cần đăng nhập', 'Bấm để mở Beincom và đăng nhập lại.', BG.SITE + '/login');
   }
 
+  // Việc định kỳ (đầu tuần / đầu tháng) trong lần quét này: gom lại, nhiều việc thì gộp một thông báo (cuối khối)
+  const periodic = [];
+  const due = (item) => notifyAllowed && periodic.push(item);
+
   // Sáng thứ Hai: nhắc chào thành viên mới và vinh danh thành viên tích cực (mở thẳng hai công cụ ở tab Đăng bài)
   const welcomeKey = settings.welcomeReminder && notifyAllowed && result.status === 'ok' ? BG.weeklyDue(state.welcomeKey, now) : null;
   if (welcomeKey) {
     next.welcomeKey = welcomeKey;
-    notify('bg-welcome', 'BeinGroup: việc đầu tuần', 'Chào thành viên mới và vinh danh thành viên tích cực tuần qua. Bấm để addon tìm sẵn người và soạn bài.');
+    due({ id: 'bg-welcome', kind: 'welcome', title: 'BeinGroup: việc đầu tuần', message: 'Chào thành viên mới và vinh danh thành viên tích cực tuần qua. Bấm để addon tìm sẵn người và soạn bài.', line: 'Chào thành viên mới và vinh danh thành viên tích cực' });
   }
 
   // Sáng thứ Hai: thông báo tóm tắt tuần trước (một lần mỗi tuần, chỉ khi quét tự động thành công)
@@ -640,7 +658,7 @@ async function doScan({ source = 'alarm' } = {}) {
       a.reportsHandled && `${a.reportsHandled} báo cáo đã xử lý`,
       a.removed + a.banned && `${a.removed + a.banned} người bị xoá / cấm`,
     ].filter(Boolean);
-    notify('bg-weekly', 'BeinGroup: tóm tắt tuần qua', parts.length ? parts.join(' · ') : 'Tuần qua yên ả, không có việc gì cần xử lý. Bấm để xem chi tiết.');
+    due({ id: 'bg-weekly', kind: 'weekly', title: 'BeinGroup: tóm tắt tuần qua', message: parts.length ? parts.join(' · ') : 'Tuần qua yên ả, không có việc gì cần xử lý. Bấm để xem chi tiết.', line: 'Tóm tắt tuần: ' + (parts.length ? parts.join(' · ') : 'tuần qua yên ả') });
   }
 
   // Sáng thứ Hai: soạn sẵn danh sách nhắc người mới chưa hoạt động (chỉ đọc; người dùng tự xem rồi đăng)
@@ -650,7 +668,7 @@ async function doScan({ source = 'alarm' } = {}) {
     const nd = await prepareNudge({ groupId: settings.nudgeGroupId, now }).catch(() => null);
     if (nd?.status === 'ok' && nd.users.length) {
       await chrome.storage.local.set({ nudgeDraft: { id: 'nd' + now, groupId: nd.group.id, groupName: nd.group.name, at: now, users: nd.users, joined: nd.joined } });
-      if (notifyAllowed) notify('bg-nudge', `BeinGroup: soạn sẵn bài nhắc ${nd.users.length} người mới`, `${nd.group.name}: ${nd.users.length} người mới vào chưa thấy đăng bài hay bình luận. Bấm để xem bài nhắc, sửa rồi tự đăng hoặc hẹn giờ.`);
+      due({ id: 'bg-nudge', kind: 'nudge', title: `BeinGroup: soạn sẵn bài nhắc ${nd.users.length} người mới`, message: `${nd.group.name}: ${nd.users.length} người mới vào chưa thấy đăng bài hay bình luận. Bấm để xem bài nhắc, sửa rồi tự đăng hoặc hẹn giờ.`, line: `Bài nhắc ${nd.users.length} người mới chưa hoạt động (${nd.group.name})` });
     }
   }
 
@@ -669,7 +687,7 @@ async function doScan({ source = 'alarm' } = {}) {
       a.reportsHandled && `${a.reportsHandled} báo cáo đã xử lý`,
       a.removed + a.banned && `${a.removed + a.banned} người bị xoá / cấm`,
     ].filter(Boolean);
-    notify('bg-monthly', `BeinGroup: báo cáo ${range.label}`, (parts.length ? parts.join(' · ') + '. ' : '') + 'Bấm để xem báo cáo từng community: thành viên, người mới có ở lại không, bài viết, tương tác.');
+    due({ id: 'bg-monthly', kind: 'monthly', title: `BeinGroup: báo cáo ${range.label}`, message: (parts.length ? parts.join(' · ') + '. ' : '') + 'Bấm để xem báo cáo từng community: thành viên, người mới có ở lại không, bài viết, tương tác.', line: `Báo cáo ${range.label}` });
   }
 
   // Sáng thứ Hai: soạn sẵn bài thảo luận (câu hỏi mồi + giờ gợi ý); người dùng tự xem rồi hẹn giờ
@@ -679,8 +697,15 @@ async function doScan({ source = 'alarm' } = {}) {
     const draft = await preparePrompt({ groupId: settings.promptGroupId, now }).catch(() => null);
     if (draft) {
       await chrome.storage.local.set({ promptDraft: draft });
-      if (notifyAllowed) notify('bg-prompt', `BeinGroup: bài thảo luận tuần này cho ${draft.groupName}`, `"${draft.text.slice(0, 120)}" — bấm để xem, sửa rồi hẹn giờ${draft.suggestAt ? ` (gợi ý ${BG.slotLabel(draft.suggestAt)})` : ''}.`);
+      due({ id: 'bg-prompt', kind: 'prompt', title: `BeinGroup: bài thảo luận tuần này cho ${draft.groupName}`, message: `"${draft.text.slice(0, 120)}" — bấm để xem, sửa rồi hẹn giờ${draft.suggestAt ? ` (gợi ý ${BG.slotLabel(draft.suggestAt)})` : ''}.`, line: `Bài thảo luận cho ${draft.groupName}${draft.suggestAt ? ` (gợi ý ${BG.slotLabel(draft.suggestAt)})` : ''}` });
     }
+  }
+
+  // Một việc: thông báo như cũ. Nhiều việc: một thông báo (và một tin Telegram) "việc đầu tuần", ô Việc đầu tuần ở Tổng quan
+  if (periodic.length === 1) notify(periodic[0].id, periodic[0].title, periodic[0].message);
+  else if (periodic.length > 1) {
+    await chrome.storage.local.set({ periodicDigest: { at: now, items: periodic.map(({ kind, line }) => ({ kind, line })), done: {}, dismissed: false } });
+    notify('bg-digest', `BeinGroup: việc đầu tuần (${periodic.length} việc)`, periodic.map((x) => '• ' + x.line).join('\n') + '\nBấm để làm lần lượt.');
   }
 
   // Tự kiểm tra mỗi ngày: lần quét tự động thành công đầu tiên trong ngày (chạy sau khi lưu, cần danh sách group mới)
@@ -693,5 +718,7 @@ async function doScan({ source = 'alarm' } = {}) {
   // Hiệu quả bài đã đăng: đọc số liệu các bài tới mốc 24 giờ / 7 ngày (chỉ khi quét tự động thành công)
   if (auto && result.status === 'ok') await measurePostStats({ now }).catch(() => {});
   if (dailyCheck) await dailySelfCheck({ now, notifyAllowed }).catch(() => {});
+  // Báo cáo sử dụng (chỉ khi admin đã đồng ý, 7 ngày một lần)
+  if (auto && result.status === 'ok') await doUsageSend({ now }).catch(() => {});
   return next;
 }

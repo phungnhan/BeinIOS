@@ -2,7 +2,9 @@
 // kèm CHANGELOG.md và HUONG-DAN-CAI.html; trong zip là thư mục BeinGroup/ (giải nén ra là tải được ngay).
 // Trước khi ghi, kiểm tra mọi tệp mà manifest, các trang HTML và service worker nhắc tới đều có trong gói.
 //
-// Chạy: node tools/pack.mjs
+// Chạy: node tools/pack.mjs [--usage-url <link Google Apps Script>]
+// Nơi nhận báo cáo sử dụng (tools/usage-collector.gs): truyền --usage-url, hoặc lưu link vào tools/usage-url.txt.
+// Không có thì gói không hỏi admin gửi báo cáo, không gửi gì.
 import { mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
@@ -114,8 +116,32 @@ function zip(entries) {
   return Buffer.concat([...locals, cd, end]);
 }
 
+// Link nơi nhận báo cáo sử dụng
+const argv = process.argv.slice(2);
+const urlArg = argv.find((a) => a.startsWith('--usage-url='))?.split('=').slice(1).join('=') || (argv.includes('--usage-url') ? argv[argv.indexOf('--usage-url') + 1] : '');
+let usageUrl = urlArg;
+if (!usageUrl) {
+  try {
+    usageUrl = readFileSync(path.join(ROOT, 'tools', 'usage-url.txt'), 'utf8').trim();
+  } catch {}
+}
+
 const files = walk(ROOT);
 const { manifest, need } = required(files);
+const BG = createRequire(import.meta.url)(path.join(ROOT, 'common.js'));
+if (usageUrl && !BG.isUsageEndpoint(usageUrl)) {
+  console.error('Link nơi nhận báo cáo sử dụng sai dạng (cần https://script.google.com/macros/s/…/exec): ' + usageUrl);
+  process.exit(1);
+}
+// Gắn link vào lib/diag.js của gói (mã nguồn giữ nguyên)
+function packed(f) {
+  const data = readFileSync(path.join(ROOT, f));
+  if (f !== 'lib/diag.js' || !usageUrl) return data;
+  const src = data.toString('utf8');
+  const marker = "const USAGE_ENDPOINT = '';";
+  if (src.split(marker).length !== 2) throw new Error('lib/diag.js: không thấy ' + marker);
+  return Buffer.from(src.replace(marker, `const USAGE_ENDPOINT = '${usageUrl}';`), 'utf8');
+}
 const missing = [...need].filter(([f]) => !files.includes(f));
 if (missing.length) {
   console.error('Thiếu tệp addon cần:\n' + missing.map(([f, from]) => `  ${f} (nhắc ở ${from})`).join('\n'));
@@ -128,9 +154,10 @@ if (!new RegExp(`^## v${version.replace(/\./g, '\\.')}\\b`, 'm').test(readFileSy
   process.exit(1);
 }
 const unused = files.filter((f) => !need.has(f) && !['CHANGELOG.md', 'HUONG-DAN-CAI.html'].includes(f));
-const buf = zip(files.map((f) => ({ name: `${FOLDER}/${f}`, data: readFileSync(path.join(ROOT, f)) })));
+const buf = zip(files.map((f) => ({ name: `${FOLDER}/${f}`, data: packed(f) })));
 mkdirSync(path.join(ROOT, 'dist'), { recursive: true });
 const out = path.join(ROOT, 'dist', `BeinGroup-v${version}.zip`);
 writeFileSync(out, buf);
 console.log(`Đã tạo ${path.relative(ROOT, out)}: ${files.length} tệp, ${(buf.length / 1024).toFixed(0)} KB`);
+console.log(usageUrl ? 'Báo cáo sử dụng: gửi về ' + usageUrl + ' (khi admin đồng ý)' : 'Báo cáo sử dụng: gói chưa có nơi nhận — admin không được hỏi gửi (thêm --usage-url <link> hoặc tools/usage-url.txt)');
 if (unused.length) console.log('Có trong gói nhưng không trang nào nhắc tới (kiểm tra lại có cần không): ' + unused.join(', '));

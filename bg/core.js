@@ -151,6 +151,27 @@ function recordDiag(entry) {
   if (!diagTimer) diagTimer = setTimeout(() => flushDiag().catch(() => {}), 500);
 }
 
+// ---------- Báo cáo sử dụng ----------
+// Đếm lần dùng từng tính năng mỗi ngày (khoá `usage`, chỉ số đếm); ghi gộp sau 1 giây
+let usageQueue = [];
+let usageTimer = 0;
+function noteUsage(type) {
+  if (!BG.USAGE_LABELS[type]) return;
+  usageQueue.push({ type, time: Date.now() });
+  if (!usageTimer) usageTimer = setTimeout(() => flushUsage().catch(() => {}), 1000);
+}
+
+async function flushUsage() {
+  usageTimer = 0;
+  const q = usageQueue;
+  usageQueue = [];
+  if (!q.length) return;
+  const { usage } = await chrome.storage.local.get('usage');
+  let u = usage;
+  for (const x of q) u = BG.recordUsage(u, x.type, x.time);
+  await chrome.storage.local.set({ usage: u });
+}
+
 async function flushDiag() {
   diagTimer = 0;
   const q = diagQueue;

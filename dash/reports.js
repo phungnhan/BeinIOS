@@ -125,7 +125,7 @@ function renderReports() {
   else if (d?.timedOut) note.textContent = 'Beincom không phản hồi sau 25 giây. Thường gặp khi community chưa có báo cáo nào — bấm Tải lại để thử lại.';
   else if (rep.kind === 'reported') note.textContent = 'Bỏ qua: đánh dấu nội dung không vi phạm. Ẩn: ẩn nội dung bị báo cáo khỏi community (bình luận bị ẩn cũng biến mất khỏi bài).';
   else if (rep.kind === 'flagged') note.textContent = 'Bài do hệ thống kiểm duyệt tự động của Beincom phát hiện có dấu hiệu vi phạm. Ẩn bài: gỡ bài khỏi các group bạn quản trị mà bài được đăng vào.';
-  else note.textContent = 'Bài đã bị ẩn trong group (do admin hoặc do xử lý báo cáo). Addon chưa hiện lại được bài đã ẩn.';
+  else note.textContent = 'Bài đã bị ẩn trong group (do admin hoặc do xử lý báo cáo). Bài đã ẩn không hiện lại được (Beincom không có lệnh hiện lại).';
 
   const ncol = reportHead();
   const rows = reportRows();
@@ -207,8 +207,8 @@ async function actReports(action, rows) {
   }
   const T = {
     ignore: { title: `Bỏ qua ${rows.length} báo cáo?`, text: 'Nội dung được giữ nguyên, báo cáo được đánh dấu là không vi phạm.', ok: 'Bỏ qua', danger: false },
-    hide: { title: `Ẩn ${rows.length} nội dung bị báo cáo?`, text: 'Nội dung bị ẩn khỏi community. Addon chưa hiện lại được nội dung đã ẩn.', ok: 'Ẩn', danger: true },
-    hidePost: { title: `Ẩn ${rows.length} bài bị gắn cờ?`, text: 'Bài bị gỡ khỏi các group bạn quản trị mà bài được đăng vào. Addon chưa hiện lại được bài đã ẩn.', ok: 'Ẩn bài', danger: true },
+    hide: { title: `Ẩn ${rows.length} nội dung bị báo cáo?`, text: 'Nội dung bị ẩn khỏi community. Nội dung đã ẩn không hiện lại được (Beincom không có lệnh hiện lại).', ok: 'Ẩn', danger: true },
+    hidePost: { title: `Ẩn ${rows.length} bài bị gắn cờ?`, text: 'Bài bị gỡ khỏi các group bạn quản trị mà bài được đăng vào. Bài đã ẩn không hiện lại được (Beincom không có lệnh hiện lại).', ok: 'Ẩn bài', danger: true },
   }[action];
   const ok = await confirmDialog({
     title: T.title,
