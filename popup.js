@@ -16,9 +16,9 @@ function fmtTime(t) {
   return new Date(t).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' });
 }
 
-function renderStatus(state, flagged = 0, reports = 0) {
+function renderStatus(info, flagged = 0, reports = 0) {
   const el = $('status');
-  const r = state.lastResult;
+  const r = info.lastResult;
   el.className = 'status';
   if (!r) {
     el.textContent = 'Chưa quét lần nào';
@@ -30,12 +30,12 @@ function renderStatus(state, flagged = 0, reports = 0) {
     el.textContent = 'Lỗi: ' + r.message;
     el.classList.add('err');
   } else {
-    const t = BG.totals(state.snapshot?.groups);
+    const t = info.totals;
     const busy = t.requests || t.posts || flagged || reports;
     el.textContent = busy ? 'Có việc cần xử lý' : '✓ Không có gì đang chờ';
     el.classList.add(busy ? 'warn' : 'ok');
   }
-  $('last-scan').textContent = state.lastScan ? 'Lần quét gần nhất: ' + fmtTime(state.lastScan) : '';
+  $('last-scan').textContent = info.lastScan ? 'Lần quét gần nhất: ' + fmtTime(info.lastScan) : '';
 }
 
 $('open-todo').href = chrome.runtime.getURL('dashboard.html') + '#tab=overview';
@@ -77,10 +77,31 @@ function renderTodo(groups, flagged, reports, comments = 0) {
   }
 }
 
-async function refresh() {
-  const { settings, rules, postRules, groupRules, state } = await chrome.storage.local.get(['settings', 'rules', 'postRules', 'groupRules', 'state']);
-  const s = { ...BG.DEFAULT_SETTINGS, ...settings };
+// Số đếm cho popup: nền ghi sẵn gói nhỏ popupInfo (bg/core.js savePopupInfo) nên popup không phải đọc cả kết quả quét
+// rồi chấm lại từng bài. Chưa có gói (vừa nâng cấp addon): tính tại chỗ một lần và nhờ nền ghi gói cho lần sau.
+async function countsFromState() {
+  const { rules, postRules, groupRules, state } = await chrome.storage.local.get(['rules', 'postRules', 'groupRules', 'state']);
   const st = state || {};
+  const groups = st.snapshot?.groups || [];
+  const ctx = { rules, postRules, groupRules: groupRules || {}, groups };
+  const bad = (list) => (list || []).filter((p) => !p.dismissed && !p.isHidden && BG.evaluatePostIn(p, ctx).verdict === 'bad').length;
+  chrome.runtime.sendMessage({ type: 'refreshBadge' }).catch(() => {});
+  return {
+    hasSnapshot: !!st.snapshot,
+    hasRecent: !!st.recentPosts,
+    lastScan: st.lastScan || 0,
+    lastResult: st.lastResult || null,
+    totals: BG.totals(groups),
+    flaggedPosts: bad(st.recentPosts),
+    flaggedComments: bad(st.recentComments),
+    todo: groups.filter((g) => g.pendingTotal || g.approvalCount).slice(0, 5),
+  };
+}
+
+async function refresh() {
+  const { settings, popupInfo } = await chrome.storage.local.get(['settings', 'popupInfo']);
+  const s = { ...BG.DEFAULT_SETTINGS, ...settings };
+  const info = popupInfo || (await countsFromState());
   for (const key of POPUP_SETTINGS) $(key).checked = !!s[key];
   $('master').classList.toggle('off', !s.active);
   $('master-text').textContent = s.active ? 'Addon đang hoạt động' : 'Đã tắt tất cả chức năng';
@@ -88,24 +109,21 @@ async function refresh() {
   for (const key of POPUP_SETTINGS) if (key !== 'active') $(key).disabled = !s.active;
   $('dry-note').hidden = !s.dryRun;
 
-  const groups = st.snapshot?.groups || [];
-  const t = BG.totals(groups);
-  const ctx = { rules, postRules, groupRules: groupRules || {}, groups };
-  const bad = (list) => (list || []).filter((p) => !p.dismissed && !p.isHidden && BG.evaluatePostIn(p, ctx).verdict === 'bad').length;
-  const flaggedPosts = bad(st.recentPosts);
-  const flaggedComments = s.scanComments ? bad(st.recentComments) : 0;
+  const t = info.totals;
+  const flaggedPosts = info.flaggedPosts || 0;
+  const flaggedComments = s.scanComments ? info.flaggedComments || 0 : 0;
   const flagged = flaggedPosts + flaggedComments;
-  $('requests').textContent = st.snapshot ? t.requests : '–';
-  $('posts').textContent = st.snapshot ? t.posts : '–';
-  $('flagged').textContent = st.recentPosts && s.scanPosts ? flagged : '–';
+  $('requests').textContent = info.hasSnapshot ? t.requests : '–';
+  $('posts').textContent = info.hasSnapshot ? t.posts : '–';
+  $('flagged').textContent = info.hasRecent && s.scanPosts ? flagged : '–';
   const reports = t.reports + t.autoFlagged;
-  $('reports').textContent = st.snapshot && s.scanReports ? reports : '–';
+  $('reports').textContent = info.hasSnapshot && s.scanReports ? reports : '–';
   $('reports').classList.toggle('hot', reports > 0);
   $('requests').classList.toggle('hot', t.requests > 0);
   $('posts').classList.toggle('hot', t.posts > 0);
   $('flagged').classList.toggle('hot', flagged > 0);
-  renderStatus(st, flagged, reports);
-  renderTodo(groups, flaggedPosts, reports, flaggedComments);
+  renderStatus(info, flagged, reports);
+  renderTodo(info.todo || [], flaggedPosts, reports, flaggedComments);
 }
 
 for (const key of POPUP_SETTINGS) {
@@ -133,6 +151,9 @@ $('open-dashboard').addEventListener('click', (e) => {
   chrome.runtime.openOptionsPage();
 });
 
-chrome.storage.onChanged.addListener(refresh);
+// Chỉ vẽ lại khi cài đặt hoặc gói số đếm đổi (không phải mỗi lần nền ghi kết quả quét, nhật ký…)
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === 'local' && (changes.settings || changes.popupInfo)) refresh();
+});
 $('version').textContent = 'v' + chrome.runtime.getManifest().version;
 refresh();

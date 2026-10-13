@@ -4,7 +4,8 @@
 // Giống web: POST content/posts (tạo nháp, nhận id) -> PUT content/posts/{id}/publish | schedule.
 // Bước 2 lỗi thì xoá bản nháp vừa tạo (Beincom giới hạn số bản nháp).
 
-async function doCompose({ groupIds, content, setting, scheduledAt = null, media = null, mentions = null, linkPreview = null, tags = [], series = [], recur = '', asGroup = false, source = 'manual', nudge = null, prompt = null }) {
+// chat: { text } — gửi kèm vào kênh chat của các group (chỉ khi đăng ngay)
+async function doCompose({ groupIds, content, setting, scheduledAt = null, media = null, mentions = null, linkPreview = null, tags = [], series = [], recur = '', asGroup = false, source = 'manual', nudge = null, prompt = null, chat = null }) {
   const err = BG.validateCompose({ groupIds, content, setting, scheduledAt, media, tags, series, asGroup });
   if (err) return { status: 'error', message: err };
   const { settings, state, log } = await load();
@@ -58,7 +59,16 @@ async function doCompose({ groupIds, content, setting, scheduledAt = null, media
   // Bài thảo luận hằng tuần: ghi lần dùng câu hỏi (đo tương tác qua Hiệu quả bài đã đăng)
   if (prompt?.id && r.status === 'ok' && !r.dry) await recordPromptUse({ promptId: prompt.id, contentId: r.contentId, groupId: targets[0].id, at: body.scheduledAt || new Date().toISOString() });
   if (nudge?.userIds?.length && r.status === 'ok' && !r.dry) await recordNudge({ contentId: r.contentId, group: targets[0], at: body.scheduledAt || new Date().toISOString(), mentions: body.mentions, userIds: nudge.userIds });
-  return finishCompose(r, { base, contentType: 'POST', state, log });
+  // Gửi kèm vào kênh chat (bg/chat.js): sau khi đăng ngay thành công; Chạy thử thì chỉ ghi nhật ký
+  let shared = null;
+  if (chat && !body.scheduledAt && r.status === 'ok' && settings.chatEnabled) {
+    shared = await shareToChat({ settings, state, targets, content: body.content, contentId: r.contentId, custom: chat.text });
+    pushLog(log, shared.entries);
+  }
+  const res = await finishCompose(r, { base, contentType: 'POST', state, log });
+  if (!shared) return res;
+  const c = (s) => shared.entries.filter((e) => e.status === s).length;
+  return { ...res, chat: { ok: c('ok'), dry: c('dry'), failed: c('error'), missing: shared.missing, errors: [...new Set(shared.entries.filter((e) => e.status === 'error').map((e) => e.message))] } };
 }
 
 // Ghi nhật ký một lần đăng (bài / Article / Series) và trả kết quả cho Dashboard

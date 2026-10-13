@@ -84,7 +84,7 @@ async function actMembers(action, g, reqs) {
     sendNote: `Sẽ gửi lên Beincom ngay và không hoàn tác được${reqs.length > 1 ? ` (nghỉ ${data.settings.actionDelaySec} giây giữa mỗi người)` : ''}.`,
   });
   if (!ok) return;
-  const r = await send({ type: 'act', action, groupId: g.id, requestIds: reqs.map((x) => x.id) }, (n) => `${action === 'approve' ? 'Đã duyệt' : 'Đã từ chối'} ${n} yêu cầu.`);
+  const r = await send({ type: 'act', action, groupId: g.id, requestIds: reqs.map((x) => x.id) }, (n) => `${action === 'approve' ? 'Đã duyệt' : 'Đã từ chối'} ${n} yêu cầu.`, { chunk: ['requestIds'] });
   if (!r?.dryRun) for (const x of reqs) selected.delete(x.id);
   renderReview();
 }
@@ -340,7 +340,7 @@ async function banEverywhere(u) {
     sendNote: `Sẽ gửi lên Beincom ngay${targets.length > 1 ? ` (nghỉ ${data.settings.actionDelaySec} giây giữa mỗi community)` : ''}.`,
   });
   if (!ok) return;
-  await send({ type: 'banEverywhere', user: { id: u.id, username: u.username, fullname: u.fullname }, reason: select.value }, (n) => `Đã cấm ở ${n} community.`);
+  return send({ type: 'banEverywhere', user: { id: u.id, username: u.username, fullname: u.fullname }, reason: select.value }, (n) => `Đã cấm ở ${n} community.`);
 }
 
 async function forgetProfile(p) {
@@ -449,6 +449,7 @@ async function actMembersManage(action, g, users) {
   const r = await send(
     { type: 'memberAct', action, groupId: g.id, users: users.map((u) => ({ id: u.id, username: u.username, fullname: u.fullname })), reason: select?.value },
     (n) => `${t.done} ${n} người.`,
+    { chunk: ['users'] },
   );
   const done = new Set(r?.done || []);
   if (action === 'unban') {
@@ -467,6 +468,7 @@ async function actMembersManage(action, g, users) {
     }
   }
   renderMembers();
+  return r;
 }
 
 // Xuất CSV: tải lần lượt từng trang 100 người, có thể dừng giữa chừng

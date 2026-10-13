@@ -15,7 +15,7 @@ export function buildPreview() {
   const { version } = JSON.parse(readFileSync(path.join(ROOT, 'manifest.json'), 'utf8'));
   writeFileSync(path.join(PREVIEW, 'stub.js'), readFileSync(path.join(ROOT, 'test', 'ui', 'stub.js'), 'utf8').replaceAll('__VERSION__', version));
   const base = pathToFileURL(ROOT + path.sep).href;
-  for (const f of ['dashboard', 'popup']) {
+  for (const f of ['dashboard', 'popup', 'chat']) {
     const html = readFileSync(path.join(ROOT, f + '.html'), 'utf8')
       .replace('<head>', `<head>\n  <base href="${base}" />`)
       .replace('<script src="common.js"></script>', '<script src="test/preview/stub.js"></script>\n  <script src="common.js"></script>');

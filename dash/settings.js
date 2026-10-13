@@ -263,6 +263,11 @@ function renderSettings() {
   const watchHours = document.querySelector('[data-requires="remindUnanswered"]');
   watchHours.classList.toggle('is-disabled', !s.remindUnanswered);
   document.querySelector('[data-requires="remindPending"]').classList.toggle('is-disabled', !s.remindPending);
+  document.querySelector('[data-requires="guardJoins"]').classList.toggle('is-disabled', !s.guardJoins);
+  for (const row of document.querySelectorAll('[data-requires="chatEnabled"]')) {
+    row.classList.toggle('is-disabled', !s.chatEnabled);
+    row.querySelector('input').disabled = !s.chatEnabled;
+  }
 }
 
 const saveSettings = (patch) => saveTo('settings', BG.DEFAULT_SETTINGS, patch, 'saved-hint');
@@ -297,6 +302,19 @@ for (const k of SETTING_BOOLS) {
         $(k).checked = true;
         return;
       }
+    }
+    // Chat Beincom: xin quyền kết nối chat.beincom.com ngay lúc bấm, rồi đọc chat lần đầu
+    if (on && k === 'chatEnabled') {
+      let granted = false;
+      try {
+        granted = (await chrome.permissions.contains({ origins: [BG.CHAT_ORIGIN] })) || (await chrome.permissions.request({ origins: [BG.CHAT_ORIGIN] }));
+      } catch {}
+      if (!granted) {
+        $(k).checked = false;
+        return toast('Cần cho phép addon kết nối chat.beincom.com', 'err');
+      }
+      await saveSettings({ [k]: on });
+      return chatRefresh();
     }
     saveSettings({ [k]: on });
   });

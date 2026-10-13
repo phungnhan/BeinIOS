@@ -206,6 +206,7 @@ function updateCompose() {
   btn.disabled = busy || !c.groupIds.length || (!len && !compose.media.length);
   loadTagsSeries();
   renderPreview();
+  if (typeof renderComposeChat === 'function') renderComposeChat(); // dash/chat.js: ô gửi kèm vào kênh chat
 }
 
 function draftValue() {
@@ -419,6 +420,7 @@ async function submitCompose() {
     lp && 'Xem trước link ' + (lp.domain || lp.url),
     compose.tags.length && 'Tag ' + compose.tags.map((x) => '#' + x.name).join(' '),
     compose.series.length && 'Series ' + compose.series.map((x) => x.title).join(', '),
+    !later && composeChat() && 'Gửi kèm vào kênh chat',
   ].filter(Boolean);
   const recurring = times.length > 1;
   const asName = c.asGroup ? ` dưới tên ${targets[0]?.name}` : '';
@@ -442,7 +444,10 @@ async function submitCompose() {
     media = data.settings.dryRun ? mediaByField(compose.media, (m) => ({ name: m.name })) : await uploadMedia();
     if (!media) return;
   }
-  const r = await send({ type: 'compose', ...c, media, mentions, linkPreview: lp, tags: compose.tags, series: compose.series, nudge: compose.nudge || null, prompt: compose.prompt || null }, () => (later ? `Đã hẹn giờ đăng lúc ${fmtTime(c.scheduledAt)}.` : 'Đã đăng bài.'));
+  const chat = later ? null : composeChat();
+  const r = await send({ type: 'compose', ...c, media, mentions, linkPreview: lp, tags: compose.tags, series: compose.series, nudge: compose.nudge || null, prompt: compose.prompt || null, chat }, () => (later ? `Đã hẹn giờ đăng lúc ${fmtTime(c.scheduledAt)}.` : 'Đã đăng bài.'));
+  // Gửi kèm vào kênh chat: báo riêng nếu có kênh không gửi được
+  if (r?.chat && (r.chat.failed || r.chat.missing.length)) toast(`Gửi vào kênh chat: ${r.chat.ok + r.chat.dry} kênh được${r.chat.failed ? `, lỗi ${r.chat.failed} (${r.chat.errors.join('; ')})` : ''}${r.chat.missing.length ? `, không có kênh chat: ${r.chat.missing.join(', ')}` : ''}.`, 'warn');
   if (r?.status === 'ok' && !r.dryRun) await resetCompose(later);
   updateCompose();
 }
@@ -831,7 +836,7 @@ async function cancelSeries(seriesId) {
     sendNote: `Các bài sẽ bị xoá và không được đăng${left.length > 1 ? ` (nghỉ ${data.settings.actionDelaySec} giây giữa mỗi bài)` : ''}. Bài đã đăng rồi không bị ảnh hưởng.`,
   });
   if (!ok) return;
-  const r = await send({ type: 'scheduleAct', action: 'cancel', contentIds: left.map((p) => p.id), snippet: '🔁 ' + rec.snippet, groupName: left[0].groups.map((g) => g.name).join(', ') }, (n) => `Đã huỷ ${n} bài của chuỗi định kỳ.`);
+  const r = await send({ type: 'scheduleAct', action: 'cancel', contentIds: left.map((p) => p.id), snippet: '🔁 ' + rec.snippet, groupName: left[0].groups.map((g) => g.name).join(', ') }, (n) => `Đã huỷ ${n} bài của chuỗi định kỳ.`, { chunk: ['contentIds'] });
   if (r?.status === 'ok' && !r.dryRun) {
     if (!r.failed) {
       const { recurring = [] } = await chrome.storage.local.get('recurring');

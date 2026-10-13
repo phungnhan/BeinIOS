@@ -89,3 +89,27 @@ function renderToc() {
     if (folded.has(card.id)) setFolded(card, true, { save: false });
   }
 })();
+
+// Nút ↑ lên đầu trang (mọi tab): hiện khi đã cuộn xuống gần một màn hình; bấm thì về đầu tab, đưa phím Tab về thanh tab
+(function initToTop() {
+  const btn = $('to-top');
+  const update = () => (btn.hidden = window.scrollY < Math.max(400, window.innerHeight * 0.8));
+  let frame = 0;
+  window.addEventListener(
+    'scroll',
+    () => {
+      if (!frame)
+        frame = requestAnimationFrame(() => {
+          frame = 0;
+          update();
+        });
+    },
+    { passive: true },
+  );
+  btn.addEventListener('click', () => {
+    const smooth = !window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    window.scrollTo({ top: 0, behavior: smooth ? 'smooth' : 'auto' });
+    document.querySelector('#tabs [aria-selected="true"]')?.focus({ preventScroll: true });
+  });
+  update();
+})();

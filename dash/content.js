@@ -108,7 +108,7 @@ async function actApproval(action, g, posts) {
     extra,
   });
   if (!ok) return;
-  const r = await send({ type: 'approvalAct', action, groupId: g.id, contentIds: posts.map((p) => p.id), reason: reasonBox?.value || '' }, (n) => `${reject ? 'Đã từ chối' : 'Đã duyệt'} ${n} bài.`);
+  const r = await send({ type: 'approvalAct', action, groupId: g.id, contentIds: posts.map((p) => p.id), reason: reasonBox?.value || '' }, (n) => `${reject ? 'Đã từ chối' : 'Đã duyệt'} ${n} bài.`, { chunk: ['contentIds'] });
   if (!r?.dryRun) for (const p of posts) selectedPosts.delete(p.id);
   renderApproval();
 }
@@ -209,7 +209,7 @@ async function deletePosts(posts) {
     sendNote: 'Sẽ gửi lên Beincom ngay và không hoàn tác được.',
   });
   if (!ok) return;
-  const r = await send({ type: 'postAct', action: 'delete', contentIds: posts.map((p) => p.id) }, (n) => `Đã xoá ${n} bài.`);
+  const r = await send({ type: 'postAct', action: 'delete', contentIds: posts.map((p) => p.id) }, (n) => `Đã xoá ${n} bài.`, { chunk: ['contentIds'] });
   if (!r?.dryRun) for (const p of posts) selectedRecent.delete(p.id);
   renderRecent();
 }
@@ -237,7 +237,7 @@ async function hidePosts(posts) {
     sendNote: 'Sẽ gửi lên Beincom ngay. Bài đã ẩn không hiện lại được (Beincom không có lệnh hiện lại).',
   });
   if (!ok) return;
-  const r = await send({ type: 'postAct', action: 'hide', contentIds: posts.map((p) => p.id), reasonType: select.value }, (n) => `Đã ẩn ${n} bài.`);
+  const r = await send({ type: 'postAct', action: 'hide', contentIds: posts.map((p) => p.id), reasonType: select.value }, (n) => `Đã ẩn ${n} bài.`, { chunk: ['contentIds'] });
   if (!r?.dryRun) for (const p of posts) selectedRecent.delete(p.id);
   renderRecent();
 }
@@ -324,7 +324,7 @@ async function hideWave(w) {
   });
   if (!ok) return;
   const ids = (kind) => w.items.filter((i) => i.kind === kind && !i.isHidden).map((i) => i.id);
-  await send({ type: 'spamAct', action: 'hide', key: w.key, postIds: ids('post'), commentIds: ids('comment'), reasonType: select.value }, (n) => `Đã ẩn ${n} bài / bình luận.`);
+  await send({ type: 'spamAct', action: 'hide', key: w.key, postIds: ids('post'), commentIds: ids('comment'), reasonType: select.value }, (n) => `Đã ẩn ${n} bài / bình luận.`, { chunk: ['postIds', 'commentIds'] });
 }
 
 async function blockWaveDomain(w) {
@@ -467,10 +467,11 @@ async function cleanupUser(actor) {
   const postIds = list.picked('post');
   const commentIds = list.picked('comment');
   if (!postIds.length && !commentIds.length && !ban.checked) return toast('Chưa chọn bài / bình luận nào để ẩn.', 'warn');
-  const picked = new Set(postIds);
+  // Nhiều mục thì chia đợt: mỗi đợt gửi kèm bài cũ của đợt đó, cấm (nếu chọn) ở đợt cuối
   await send(
-    { type: 'cleanupUser', user: { id: actor.id, username: actor.username, fullname: actor.fullname }, reasonType: reason.value, ban: ban.checked, banReason: banReason.value, posts: found.filter((p) => picked.has(p.id)), postIds, commentIds },
+    { type: 'cleanupUser', user: { id: actor.id, username: actor.username, fullname: actor.fullname }, reasonType: reason.value, ban: ban.checked, banReason: banReason.value, posts: [], postIds, commentIds },
     () => 'Đã dọn tài khoản.',
+    { chunk: ['postIds', 'commentIds'], last: (m, isLast) => ({ ...m, posts: found.filter((p) => m.postIds.includes(p.id)), ban: isLast && m.ban }) },
   );
 }
 
@@ -603,7 +604,7 @@ async function hideComments(list) {
     sendNote: 'Sẽ gửi lên Beincom ngay. Bình luận đã ẩn không hiện lại được (Beincom không có lệnh hiện lại).',
   });
   if (!ok) return;
-  const r = await send({ type: 'commentAct', action: 'hide', commentIds: list.map((c) => c.id), reasonType: select.value }, (n) => `Đã ẩn ${n} bình luận.`);
+  const r = await send({ type: 'commentAct', action: 'hide', commentIds: list.map((c) => c.id), reasonType: select.value }, (n) => `Đã ẩn ${n} bình luận.`, { chunk: ['commentIds'] });
   if (!r?.dryRun) for (const c of list) selectedComments.delete(c.id);
   renderComments();
 }

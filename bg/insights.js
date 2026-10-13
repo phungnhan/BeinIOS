@@ -202,6 +202,11 @@ async function doMonthly({ groupId, month }) {
     const scope = g.isCommunity ? (state.snapshot?.groups || []).filter((x) => !x.error && x.communityId === g.communityId) : [g];
     const team = await readTeamEvents(client, scope.length ? scope : [g], cur.from, Math.min(cur.to, now));
     if (team.status === 'need_login') return team;
+    // Chat (bg/chat.js): tin trong kênh chat của các group trong phạm vi, tháng này và tháng trước
+    const { settings } = await load();
+    const scopeIds = new Set((scope.length ? scope : [g]).map((x) => x.id));
+    const chatChannels = settings.chatEnabled ? (state.chatMap?.channels || []).filter((c) => scopeIds.has(c.groupId)) : [];
+    const chat = chatChannels.length ? await readChatMonth(client, chatChannels, prev.from) : null;
     const monthData = (x) => (x.status === 'ok' ? { total: x.total, posts: x.posts, truncated: x.truncated } : { total: null, posts: [], truncated: false, error: x.message });
     return {
       status: 'ok',
@@ -217,6 +222,7 @@ async function doMonthly({ groupId, month }) {
       team: team.events,
       teamTruncated: team.truncated,
       teamSkipped: team.skipped,
+      chat: chat ? { channels: chatChannels.map((c) => ({ id: c.id, name: c.name })), messages: chat.messages, truncated: chat.truncated } : null,
       errors: [a, b, ap].filter((x) => x.status === 'error' && x.message).map((x) => x.message),
     };
   });

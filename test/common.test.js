@@ -1403,6 +1403,7 @@ test('BG chia thành common.js + lib/*.js: mọi nơi nạp đúng thứ tự BG
   const tags = (f) => [...fs.readFileSync(path.join(root, f), 'utf8').matchAll(/<script src="((?:common|lib\/[\w-]+)\.js)"><\/script>/g)].map((m) => m[1]);
   assert.deepEqual(tags('dashboard.html'), expected);
   assert.deepEqual(tags('popup.html'), expected);
+  assert.deepEqual(tags('chat.html'), expected);
   assert.match(fs.readFileSync(path.join(root, 'background.js'), 'utf8'), /importScripts\('common\.js'\);\nimportScripts\(\.\.\.BG\.PARTS\.map\(\(p\) => `lib\/\$\{p\}\.js`\)\);/);
   assert.deepEqual(fs.readdirSync(path.join(root, 'lib')).sort(), BG.PARTS.map((p) => p + '.js').sort());
   for (const f of ['norm', 'slimPerson', 'evaluateRequest', 'evaluatePostIn', 'validateCompose', 'mdToPlate', 'readBackup', 'monthlyReport', 'tgKeyboard', 'pushDiag']) assert.equal(typeof BG[f], 'function', f);
@@ -1676,5 +1677,77 @@ test('bộ nhớ: dung lượng từng khoá (lớn nhất trước, có tên d�
   assert.equal(BG.mbText(300 * 1024), '0,29 MB');
   const manifest = JSON.parse(require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'manifest.json'), 'utf8'));
   assert.ok(manifest.permissions.includes('unlimitedStorage'));
+});
+
+test('mạo danh admin: tên / username giống admin (viết lách, chữ Kirin), tự nhận admin / hỗ trợ; không nhầm tên thường', () => {
+  const admins = [{ id: 'a1', username: 'kaicrypto', fullname: 'Kai Crypto' }, { id: 'a2', username: 'minhanh', fullname: 'Minh Anh' }];
+  const lv = (fullname, username) => BG.impersonation({ id: 'x', fullname, username }, admins)?.level || null;
+  assert.equal(lv('Kai Crypto', 'kai_vn'), 'bad'); // trùng tên hiển thị
+  assert.equal(lv('Kaı Crypt0', 'zz'), 'bad'); // i không chấm, số 0
+  assert.equal(lv('Каі Сrурtо', 'zz'), 'bad'); // chữ Kirin
+  assert.equal(lv('Tuấn', 'kaicryptoo'), 'bad'); // username gần giống
+  assert.equal(lv('Minh Anh', 'minhanh99'), 'review'); // tên ngắn, dễ trùng tên thật
+  assert.equal(lv('Kai Cryptos Fan', 'abc'), null);
+  assert.equal(lv('Admin Crypto Life', 'x'), 'bad');
+  assert.equal(lv('4dm1n Bic', 'x'), 'bad');
+  assert.equal(lv('Hỗ trợ khách hàng', 'x'), 'bad');
+  assert.equal(lv('Quản trị viên', 'x'), 'bad');
+  assert.equal(lv('Crypto', 'cryptolifeadmin'), 'review'); // dính liền
+  assert.equal(lv('Lan Mod', 'lanmod'), 'review');
+  for (const [f, u] of [['Badminton Club', 'badminton'], ['Modern Art', 'modernart'], ['Nguyễn Văn Bình', 'binh.nguyen'], ['Hoàng Lâm', 'hoanglam']]) assert.equal(lv(f, u), null, f);
+  assert.equal(BG.impersonation({ id: 'a1', fullname: 'Kai Crypto', username: 'kaicrypto' }, admins), null); // chính admin
+  assert.match(BG.impersonation({ id: 'x', fullname: 'Kai Crypto', username: 'k' }, admins).text, /^Tên giống hệt admin Kai Crypto \(@kaicrypto\)$/);
+  assert.notEqual(BG.nameKey('Trader 99'), BG.nameKey('Trader 66'));
+  // Admin của cả community; yêu cầu tham gia giống admin -> gợi ý từ chối (tắt quy tắc thì không)
+  const groups = [{ id: 'g1', communityId: 'c1' }, { id: 'g2', communityId: 'c1' }, { id: 'g3', communityId: 'c2' }];
+  const by = { g1: [admins[0]], g2: [admins[1], admins[0]], g3: [{ id: 'a9', fullname: 'Khác', username: 'khac' }] };
+  assert.deepEqual(BG.adminsOf(by, groups[1], groups).map((a) => a.id).sort(), ['a1', 'a2']);
+  assert.deepEqual(BG.adminsOf(null, groups[0], groups), []);
+  const req = { id: 'r1', user: { id: 'u5', fullname: 'Kai Crypto', username: 'kai.crypto.support', avatar: 'https://x/a.jpg', isVerified: true } };
+  const ev = BG.evaluateRequest(req, { ...BG.DEFAULT_RULES, requireAnswers: false }, [], null, admins);
+  assert.deepEqual([ev.verdict, ev.reasons[0].text], ['decline', 'Tên giống hệt admin Kai Crypto (@kaicrypto)']);
+  assert.equal(BG.evaluateRequest(req, { ...BG.DEFAULT_RULES, requireAnswers: false, reviewImpersonation: false }, [], null, admins).verdict, 'approve');
+});
+
+test('đợt vào ồ ạt: đếm người vào trong 60 phút, người không có ảnh; Telegram loại riêng', () => {
+  const now = Date.parse('2026-10-14T10:00:00Z');
+  const j = (min, avatar = '') => ({ time: new Date(now - min * 60e3).toISOString(), user: { id: 'u' + min, avatar } });
+  const b = BG.joinBurst([j(5), j(20, 'https://x/a.jpg'), j(59), j(61), j(200)], { minutes: 60, now });
+  assert.deepEqual([b.count, b.noAvatar, b.userIds], [3, 2, ['u5', 'u20', 'u59']]);
+  assert.equal(b.from, now - 59 * 60e3);
+  assert.deepEqual([BG.telegramKind('bg-impostor'), BG.telegramKind('bg-burst-g1'), BG.DEFAULT_TELEGRAM.kinds.security], ['security', 'security', true]);
+});
+
+test('chat Beincom: người dùng chat -> người Beincom, quyền kênh, thu gọn tin, gộp tin, tin nhắn riêng chưa đọc, lời nhắn kèm bài, số liệu', () => {
+  const u = { id: 'c1', username: 'kai', first_name: 'Kai', last_name: 'Crypto', props: { bic_user_id: 'b1' } };
+  assert.deepEqual(BG.chatPerson(u), { id: 'b1', chatId: 'c1', username: 'kai', fullname: 'Kai Crypto', avatar: '' });
+  const perms = { rA: ['create_post', 'delete_others_posts'], rU: ['read_channel'], team_admin: ['delete_others_posts', 'create_post'] };
+  const team = { id: 't1', name: 'cl', props: { bic_group_team_id: 'cCL' } };
+  const ch = BG.chatChannel({ id: 'k1', display_name: 'Crypto Life', props: { bic_group_id: 'g1' }, type: 'O', last_post_at: 5 }, team, { channelRoles: 'channel_user rU', teamRoles: 'team_user', perms });
+  assert.deepEqual([ch.groupId, ch.communityId, ch.canDelete, ch.canPost, ch.teamName], ['g1', 'cCL', false, false, 'cl']);
+  assert.equal(BG.chatChannel({ id: 'k1', props: {} }, team, { channelRoles: 'rU', teamRoles: 'team_admin', perms }).canDelete, true); // quyền từ vai trò team
+  const p = { id: 'p1', channel_id: 'k1', create_at: Date.parse('2026-10-14T01:00:00Z'), delete_at: 0, type: '', message: 'Xem t.me/abc', file_ids: ['f'], metadata: { embeds: [{ type: 'opengraph', url: 'https://t.me/abc' }] }, author: u };
+  const m = BG.slimChatPost(p, ch);
+  assert.deepEqual([m.groupId, m.groupName, m.link, m.files, m.user.id, m.createdAt], ['g1', 'Crypto Life', 'https://t.me/abc', 1, 'b1', '2026-10-14T01:00:00.000Z']);
+  assert.equal(BG.slimChatPost({ ...p, type: 'system_join_channel' }, ch), null);
+  assert.equal(BG.slimChatPost({ ...p, delete_at: 1 }, ch), null);
+  assert.deepEqual(BG.evaluatePost(BG.chatAsPost(m), { blockedDomains: ['t.me'] }).verdict, 'bad');
+  // Gộp: giữ Bỏ qua / Đã xoá, mới nhất trước, bỏ tin quá 7 ngày
+  const now = Date.parse('2026-10-14T02:00:00Z');
+  const old = [{ ...m, dismissed: true }, { id: 'p0', createdAt: '2026-10-01T00:00:00Z' }];
+  const merged = BG.mergeChatMessages(old, [m, { ...m, id: 'p2', createdAt: '2026-10-14T01:30:00Z' }], { now });
+  assert.deepEqual(merged.map((x) => [x.id, !!x.dismissed]), [['p2', false], ['p1', true]]);
+  assert.equal(BG.markChatDeleted(merged, ['p1'])[1].deleted, true);
+  // Tin nhắn riêng chưa đọc (D: người kia lấy từ tên kênh)
+  const dms = BG.dmUnread([{ id: 'd1', type: 'D', name: 'me__c9', total_msg_count: 4, last_post_at: 9 }, { id: 'd2', type: 'D', name: 'c8__me', total_msg_count: 2 }, { id: 'd3', type: 'G', display_name: 'Nhóm', total_msg_count: 3, last_post_at: 10 }], [{ channel_id: 'd1', msg_count: 1 }, { channel_id: 'd2', msg_count: 2 }, { channel_id: 'd3', msg_count: 0, mention_count: 1 }], 'me');
+  assert.deepEqual(dms.map((d) => [d.channelId, d.otherId, d.unread, d.mentions]), [['d3', '', 3, 1], ['d1', 'c9', 3, 0]]);
+  assert.equal(BG.chatUrl('direct', 'd1'), 'https://group.beincom.com/chat-home?teamName=direct&channel=d1');
+  assert.equal(BG.chatShareText('## Tiêu đề **đậm**\nThân bài', 'https://x/p/1'), '📢 Tiêu đề đậm\nhttps://x/p/1');
+  assert.equal(BG.chatShareText('a', 'https://x/p/1', ' Lời nhắn '), '📢 Lời nhắn\nhttps://x/p/1');
+  const st = BG.chatStats([{ t: 5, ch: 'k1', u: { id: 'a' } }, { t: 6, ch: 'k1', u: { id: 'a' } }, { t: 7, ch: 'k2', u: { id: 'b' } }, { t: 50, ch: 'k1', u: { id: 'a' } }], { from: 0, to: 10 }, [{ id: 'k1', name: 'A' }, { id: 'k2', name: 'B' }]);
+  assert.deepEqual([st.messages, st.people, st.top.map((x) => [x.user.id, x.count]), st.channels.map((x) => [x.id, x.count])], [3, 2, [['a', 2], ['b', 1]], [['k1', 2], ['k2', 1]]]);
+  // Lỗi của chat (Mattermost) có câu báo
+  assert.equal(BG.errMsg({ status: 403, body: { id: 'api.context.permissions.app_error', message: 'You do not have the appropriate permissions.', status_code: 403 } }), 'You do not have the appropriate permissions.');
+  assert.deepEqual([BG.telegramKind('bg-chat'), BG.telegramKind('bg-chat-dm'), BG.telegramKind('bg-chat-mention'), BG.DEFAULT_TELEGRAM.kinds.chat], ['violations', 'chat', 'chat', true]);
 });
 

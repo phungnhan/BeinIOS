@@ -106,6 +106,25 @@ function todoItems() {
     });
   }
 
+  // Chat Beincom (dash/chat.js): tin vi phạm trong kênh chat group, tin nhắn riêng chưa đọc
+  if (data.settings.chatEnabled) {
+    for (const { m, ev } of chatRows().filter((r) => chatInFilter(r, 'flagged') && r.ev.verdict === 'bad')) {
+      const ch = chatChannel(m.channelId);
+      out.push({ key: 'chat:' + m.id, cat: 'comments', pri: 0, time: m.createdAt, tag: ['err', 'Chat vi phạm'], who: m.user, text: m.text, meta: [m.groupName, reasonsText(ev)].filter(Boolean).join(' · '), url: BG.chatUrl(ch?.teamName || m.teamName, m.channelId), actions: [...(ch?.canDelete ? [['Xoá tin', 'danger', () => chatDelete([m.id])]] : []), ['Bỏ qua', 'ghost', () => chatAct('dismiss', [m.id])]] });
+    }
+    for (const d of data.settings.chatUnread ? data.state.chatUnread?.dms || [] : []) {
+      out.push({ key: 'dm:' + d.channelId, cat: 'comments', pri: 1, time: new Date(d.lastPostAt).toISOString(), tag: ['info', 'Tin nhắn riêng'], who: d.user || null, title: d.user ? '' : d.title || 'Nhóm chat', meta: `${d.unread} tin chưa đọc`, url: 'chat.html#c=' + encodeURIComponent(d.channelId), actions: [['Mở chat', 'primary', () => window.open('chat.html#c=' + encodeURIComponent(d.channelId), '_blank')]] });
+    }
+  }
+
+  // Bảo vệ community: đợt vào ồ ạt, tài khoản giống admin (dash/guard.js)
+  for (const b of activeBursts()) {
+    out.push({ key: 'burst:' + b.groupId, cat: 'members', pri: 0, time: new Date(b.at).toISOString(), tag: ['err', 'Đợt vào ồ ạt'], title: `${b.count} người vào ${b.groupName} trong ${b.minutes} phút`, meta: `${b.noAvatar} người không có ảnh đại diện`, actions: [['Xem', 'primary', openGuard], ['Bỏ qua', 'ghost', () => guardAct({ action: 'dismissBurst', groupId: b.groupId })]] });
+  }
+  for (const x of impostorList()) {
+    out.push({ key: 'imp:' + x.key, cat: 'members', pri: x.level === 'bad' ? 0 : 1, time: x.at, tag: ['err', 'Giống admin'], who: x.user, meta: `${x.reason} · ${x.groupName}`, url: x.user?.username ? BG.userUrl(x.user.username) : '', actions: [['Xem', 'primary', openGuard], ['Không phải', 'ghost', () => guardAct({ action: 'notImpostor', userIds: [x.user.id] })]] });
+  }
+
   // Bài chờ duyệt (bài dính quy tắc lên nhóm gấp)
   for (const g of gs) {
     for (const p of g.approvals || []) {

@@ -24,6 +24,8 @@ window.addEventListener('hashchange', () => {
   if (p.get('prompt')) openPrompts();
   if (p.get('digest')) openDigest();
   if (p.get('todo')) openTodo(p.get('todo'));
+  if (p.get('guard')) openGuard();
+  if (p.get('chat')) openChat();
 });
 
 // Thanh tab: bấm chuột hoặc phím mũi tên trái/phải
@@ -65,6 +67,7 @@ const TAB_RENDER = {
     renderGroupSettings();
   },
   members: () => {
+    renderGuard();
     renderReview();
     if (mem.tab === 'list') renderMembers();
     else if (mem.tab === 'activity') renderActivity();
@@ -79,6 +82,7 @@ const TAB_RENDER = {
     renderApproval();
     renderRecent();
     renderComments();
+    renderChat();
     renderSweep();
     renderPinned();
     renderTagAdmin();
@@ -165,6 +169,8 @@ async function loadAll() {
     if (p.get('prompt')) openPrompts(); // mở từ thông báo bài thảo luận
     if (p.get('digest')) openDigest(); // mở từ thông báo việc đầu tuần
     if (p.get('todo')) openTodo(p.get('todo')); // mở từ thông báo việc chờ lâu
+    if (p.get('guard')) openGuard(); // mở từ thông báo tài khoản giống admin / đợt vào ồ ạt
+    if (p.get('chat')) openChat(); // mở từ thông báo tin nhắn chat vi phạm
     // Cài mới: Bắt đầu nhanh; vừa cập nhật: Có gì mới; chưa hỏi ý: gửi báo cáo sử dụng (mỗi lần mở chỉ một hộp)
     checkOnboarding()
       .then((shown) => shown || checkWhatsNew())
@@ -176,7 +182,9 @@ chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== 'local') return;
   // Đánh dấu đã xem / lưu nháp: không cần vẽ lại cả trang
   // Nút Telegram: offset đọc nút bấm / danh sách việc đã gửi đổi thường xuyên, không cần vẽ lại (thao tác thật sẽ đổi state / log)
-  if (Object.keys(changes).every((k) => ['activitySeen', 'composeDraft', 'articleDraft', 'telegramPoll', 'tgActions', 'diagLog', 'seenVersion', 'usage', 'usageNote', 'usageConsent', 'usageSent'].includes(k))) return;
+  // Tiến độ thao tác hàng loạt (bg/core.js ghi sau mỗi mục): chỉ cập nhật thanh tiến độ
+  if (changes.actionJournal && run) renderRun(changes.actionJournal.newValue?.entries?.length || 0);
+  if (Object.keys(changes).every((k) => ['activitySeen', 'composeDraft', 'articleDraft', 'telegramPoll', 'tgActions', 'diagLog', 'seenVersion', 'usage', 'usageNote', 'usageConsent', 'usageSent', 'actionJournal', 'popupInfo', 'chatRoles', 'chatPeople', 'chatPins'].includes(k))) return;
   loadAll();
 });
 $('version').textContent = 'v' + chrome.runtime.getManifest().version;

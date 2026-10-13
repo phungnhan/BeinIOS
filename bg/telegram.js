@@ -109,7 +109,7 @@ function queueScanItems({ state, next, ctx, profiles, freshRequestIds = [], post
   for (const g of groups) {
     for (const req of g.requests || []) {
       if (!freshReq.has(req.id)) continue;
-      const ev = BG.evaluateRequest(req, BG.effectiveRules(g, ctx).rules, g.questions, profiles?.users?.[req.user?.id || req.userId]);
+      const ev = BG.evaluateRequest(req, BG.effectiveRules(g, ctx).rules, g.questions, profiles?.users?.[req.user?.id || req.userId], BG.adminsOf(ctx.admins, g, ctx.groups));
       const qa = (req.answers || [])
         .slice(0, 3)
         .map((a) => `❓ ${(g.questions || []).find((q) => q.id === a.questionId)?.question || 'Câu hỏi'}\n→ ${String(a.answer || '').slice(0, 200) || '(bỏ trống)'}`)

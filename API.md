@@ -29,6 +29,7 @@ Ký hiệu cột **Thử**: ✅ đã gọi, trả 200 · ⏱ gọi nhưng không
 | GET | `group/me/permissions` | `data.communities[communityId]` và `data.groups[groupId]` là danh sách quyền | ✅ |
 | GET | `group/communities/{communityId}` | `groupId`, `name`, `privacy`, `userCount`, `totalPendingMembers`, `settings`, `ownerId` | ✅ |
 | GET | `group/manage/communities/{communityId}/groups` | Cây group con | ✅ |
+| GET | `group/me/communities/pins` | Cộng đồng tài khoản đã ghim (mảng theo thứ tự ghim): `id` (communityId), `groupId`, `name`, `slug`, `teamName` (= tên team trên chat.beincom.com), `rank`, `isPinned`. Trả lời chậm (~2,5 giây, 14/10/2026) | ✅ |
 
 Các quyền cần biết:
 - Vai trò: `role_OWNER`, `role_COMMUNITY_ADMIN`, `role_GROUP_ADMIN`

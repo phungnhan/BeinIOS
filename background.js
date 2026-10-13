@@ -31,7 +31,10 @@ globalThis.addEventListener?.('unhandledrejection', (e) => recordDiag({ where: '
 // common.js tạo BG, lib/*.js (theo BG.PARTS) gắn thêm phần còn lại, rồi tới các tệp của service worker
 importScripts('common.js');
 importScripts(...BG.PARTS.map((p) => `lib/${p}.js`));
-importScripts('bg/core.js', 'bg/scan.js', 'bg/actions.js', 'bg/compose.js', 'bg/article.js', 'bg/manage.js', 'bg/sync.js', 'bg/telegram.js', 'bg/insights.js', 'bg/selfcheck.js');
+importScripts('bg/core.js', 'bg/scan.js', 'bg/actions.js', 'bg/compose.js', 'bg/article.js', 'bg/manage.js', 'bg/sync.js', 'bg/telegram.js', 'bg/insights.js', 'bg/selfcheck.js', 'bg/guard.js', 'bg/chat.js');
+
+// Thao tác hàng loạt lần trước bị tắt giữa chừng: ghi bù vào Nhật ký (bg/core.js)
+recoverJournal().catch(() => {});
 
 // ---------- Lịch chạy ----------
 
@@ -68,12 +71,21 @@ chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === TG_POLL_ALARM) pollTelegram().catch(() => {}); // nút bấm trong tin Telegram (bg/telegram.js)
 });
 
+// Kết quả quét / quy tắc đổi ở bất kỳ đâu (Dashboard, khôi phục bản sao lưu…): tính lại huy hiệu và gói số đếm của popup,
+// gộp các lần ghi liền nhau
+let badgeTimer = 0;
+function badgeSoon() {
+  clearTimeout(badgeTimer);
+  badgeTimer = setTimeout(() => updateBadge().catch(() => {}), 1500);
+}
+
 chrome.storage.onChanged.addListener((changes, area) => {
   // Máy khác ghi lên bản đồng bộ -> nhận về; máy này đổi cài đặt -> gửi lên (bg/sync.js, chỉ khi bật đồng bộ)
   if (area === 'sync') return void onSyncChanged(changes).catch(() => {});
   if (area !== 'local') return;
   queueSyncPush(changes);
   if (changes.postRules || changes.groupRules) updateBadge(); // đổi quy tắc bài viết -> đếm lại bài vi phạm
+  else if (changes.state || changes.rules) badgeSoon();
   if (changes.telegram) scheduleTelegramPoll(); // bật / tắt nút xử lý trong tin Telegram
   if (!changes.settings) return;
   const { oldValue = {}, newValue = {} } = changes.settings;
@@ -97,13 +109,17 @@ function notificationTab(id) {
   if (id === 'bg-prompt') return 'compose&prompt=1';
   if (id === 'bg-digest') return 'overview&digest=1';
   if (id === 'bg-pending') return 'overview&todo=overdue';
+  if (id === 'bg-impostor' || id.startsWith('bg-burst-')) return 'members&guard=1';
+  if (id === 'bg-chat') return 'content&chat=1';
   if (id === 'bg-reports' || id === 'bg-autoflag') return 'reports';
   return '';
 }
 
 chrome.notifications.onClicked.addListener((id) => {
   const tab = notificationTab(id);
-  chrome.tabs.create({ url: id === 'bg-login' ? BG.SITE + '/' : chrome.runtime.getURL(DASHBOARD + (tab ? '#tab=' + tab : '')) });
+  // Tin nhắn riêng / nhắc tên: mở trang Chat của addon
+  const chat = id === 'bg-chat-dm' || id === 'bg-chat-mention';
+  chrome.tabs.create({ url: id === 'bg-login' ? BG.SITE + '/' : chat ? chrome.runtime.getURL('chat.html') : chrome.runtime.getURL(DASHBOARD + (tab ? '#tab=' + tab : '')) });
   chrome.notifications.clear(id);
 });
 
@@ -148,6 +164,16 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     retention: () => doRetention(msg),
     selfCheck: () => doSelfCheck(msg),
     storageUsage: () => storageUsage(),
+    // Trang Chat: đọc / gửi khi người dùng đang xem, không chờ lần quét đang chạy
+    chatOverview: () => doChatOverview(msg),
+    // Popup: tính lại số đếm (popupInfo) khi chưa có
+    refreshBadge: async () => (await updateBadge(), { status: 'ok' }),
+    chatPosts: () => doChatPosts(msg),
+    chatSend: () => doChatSend(msg),
+    chatView: () => doChatView(msg),
+    chatDeleteMsg: () => doChatDeleteMsg(msg),
+    // Nút Dừng khi đang làm hàng loạt: không chờ (lệnh đang chạy giữ hàng đợi)
+    cancelActions: async () => cancelActions(),
     userPosts: () => doUserPosts(msg),
     sweepSearch: () => doSweepSearch(msg),
     nudgeEffect: () => doNudgeEffect(),
@@ -170,6 +196,10 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     banEverywhere: () => doBanEverywhere(msg),
     cleanupUser: () => doCleanupUser(msg),
     hidePosts: () => doHidePosts(msg),
+    guardSearch: () => doGuardSearch(msg),
+    guardAct: () => doGuardAct(msg),
+    chatAct: () => doChatAct(msg),
+    chatRefresh: () => doChatRefresh(),
     commentWrite: () => doCommentWrite(msg),
     syncNow: () => doSyncNow(msg),
     memberAct: () => doMemberAct(msg),

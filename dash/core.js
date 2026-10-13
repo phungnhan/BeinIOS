@@ -13,11 +13,11 @@ function reportDiag(where, e) {
 window.addEventListener('error', (e) => reportDiag(WHERE_PAGE, { message: e.message, stack: e.error?.stack || `${e.filename}:${e.lineno}:${e.colno}` }));
 window.addEventListener('unhandledrejection', (e) => reportDiag(WHERE_PAGE, { message: String(e.reason?.message || e.reason), stack: e.reason?.stack || '' }));
 
-const RULE_BOOLS = ['requireAvatar', 'requireAnswers', 'requireVerified', 'declineDeactivated', 'reviewViolators'];
+const RULE_BOOLS = ['requireAvatar', 'requireAnswers', 'requireVerified', 'declineDeactivated', 'reviewViolators', 'reviewImpersonation'];
 const RULE_LISTS = { bannedKeywords: false, allowUsernames: true, blockUsernames: true }; // true = danh sách username
 const POST_RULE_LISTS = ['bannedKeywords', 'reviewKeywords', 'blockedDomains', 'allowedDomains'];
-const SETTING_BOOLS = ['active', 'dryRun', 'notify', 'scanPosts', 'scanComments', 'scanReports', 'trackViolations', 'spamWaves', 'welcomeReminder', 'remindUnanswered', 'remindPending', 'weeklyReport', 'monthlyReport', 'autoApprove', 'autoDecline', 'autoHideSpam', 'autoApprovePosts'];
-const SETTING_NUMS = ['intervalMin', 'actionDelaySec', 'unansweredHours', 'pendingHours', 'trustAfterApproved'];
+const SETTING_BOOLS = ['active', 'dryRun', 'notify', 'scanPosts', 'scanComments', 'scanReports', 'trackViolations', 'spamWaves', 'welcomeReminder', 'remindUnanswered', 'remindPending', 'guardJoins', 'chatEnabled', 'chatScan', 'chatUnread', 'weeklyReport', 'monthlyReport', 'autoApprove', 'autoDecline', 'autoHideSpam', 'autoApprovePosts'];
+const SETTING_NUMS = ['intervalMin', 'actionDelaySec', 'unansweredHours', 'pendingHours', 'burstJoins', 'trustAfterApproved'];
 const LOG_PAGE = 50;
 const RECENT_PAGE = 30;
 
@@ -78,7 +78,7 @@ function groups() {
 
 // Chấm theo quy tắc chung + quy tắc riêng từng group
 function rulesCtx() {
-  return { rules: data.rules, postRules: data.postRules, groupRules: data.groupRules, groups: groups() };
+  return { rules: data.rules, postRules: data.postRules, groupRules: data.groupRules, groups: groups(), admins: data.state.admins?.byGroup || null };
 }
 const evalPost = (p, fallback = null) => BG.evaluatePostIn(p, rulesCtx(), fallback);
 
@@ -202,23 +202,104 @@ function confirmDialog({ title, text, names = [], okText, danger = false, extra 
   return new Promise((resolve) => d.addEventListener('close', () => resolve(d.returnValue === 'ok'), { once: true }));
 }
 
-// Gửi thao tác cho service worker và báo kết quả
-async function send(msg, doneText) {
+// ---------- Gửi thao tác ----------
+// chunk: tên các danh sách trong lệnh có thể chia (vd ['contentIds']). Loạt lớn được chia thành nhiều lệnh nhỏ, mỗi lệnh
+// khoảng 2 phút kể cả thời gian nghỉ giữa hai thao tác — trình duyệt tắt service worker nếu một lệnh chạy quá 5 phút.
+// last(msg, isLast): sửa lệnh của từng đợt (vd chỉ cấm ở đợt cuối). Khi đang làm: thanh tiến độ với nút Dừng.
+const CHUNK_SECONDS = 120;
+let run = null; // { total, offset, stop }
+
+function chunkSize() {
+  return Math.max(1, Math.floor(CHUNK_SECONDS / ((Number(data.settings.actionDelaySec) || 0) + 1)));
+}
+
+// Gộp kết quả các đợt: số cộng dồn, danh sách nối, lỗi bỏ trùng
+function mergeResults(a, b) {
+  if (!a) return b;
+  const out = { ...a, ...b };
+  for (const [k, v] of Object.entries(b || {})) {
+    if (typeof v === 'number' && typeof a[k] === 'number') out[k] = a[k] + v;
+    else if (Array.isArray(v) && Array.isArray(a[k])) out[k] = k === 'errors' ? [...new Set([...a[k], ...v])] : [...a[k], ...v];
+  }
+  return out;
+}
+
+function renderRun(doneInChunk = 0) {
+  const bar = $('bulk-run');
+  bar.hidden = !run || run.total < 2;
+  if (bar.hidden) return;
+  const done = Math.min(run.total, run.offset + doneInChunk);
+  $('bulk-run-text').textContent = run.stop ? `Đang dừng… (đã làm ${done}/${run.total})` : `Đang gửi lên Beincom: ${done}/${run.total}`;
+  $('bulk-run-bar').max = run.total;
+  $('bulk-run-bar').value = done;
+  $('btn-bulk-stop').disabled = run.stop;
+}
+
+async function send(msg, doneText, { chunk = null, last = (m) => m } = {}) {
   busy = true;
   renderAll();
+  const keys = chunk || [];
+  const flat = keys.flatMap((k, ki) => (msg[k] || []).map((x) => [ki, x]));
+  // Chạy thử: không nghỉ giữa các thao tác nên không cần chia
+  const size = data.settings.dryRun ? Infinity : chunkSize();
+  const parts = [];
+  for (let i = 0; i < Math.max(flat.length, 1); i += size === Infinity ? Math.max(flat.length, 1) : size) parts.push(flat.slice(i, i + size));
+  run = keys.length ? { total: flat.length, offset: 0, stop: false } : null;
+  renderRun();
+  let r = null;
   try {
-    const r = await chrome.runtime.sendMessage(msg);
+    for (let c = 0; c < parts.length; c++) {
+      let part = msg;
+      if (keys.length) {
+        part = { ...msg };
+        keys.forEach((k, ki) => (part[k] = parts[c].filter(([j]) => j === ki).map(([, x]) => x)));
+      }
+      const res = await chrome.runtime.sendMessage(last(part, c === parts.length - 1));
+      r = mergeResults(r, res);
+      if (!res || res.status === 'need_login' || (res.status === 'error' && !res.failed) || res.cancelled) break;
+      if (run) {
+        run.offset += parts[c].length;
+        renderRun();
+      }
+      if (c < parts.length - 1) {
+        if (run?.stop) {
+          r = { ...r, cancelled: true, left: (r.left || 0) + flat.length - run.offset };
+          break;
+        }
+        // Nghỉ như giữa hai thao tác (bấm Dừng thì thôi chờ)
+        const end = Date.now() + (Number(data.settings.actionDelaySec) || 0) * 1000;
+        while (Date.now() < end && !run?.stop) await new Promise((ok) => setTimeout(ok, 200));
+        if (run?.stop) {
+          r = { ...r, cancelled: true, left: (r.left || 0) + flat.length - run.offset };
+          break;
+        }
+      }
+    }
     if (r?.status === 'need_login') toast('Phiên đăng nhập Beincom đã hết hạn — hãy đăng nhập lại.', 'err');
     else if (r?.status === 'error' && !r.failed) toast(r.message || 'Có lỗi', 'err');
     else if (r?.dryRun) toast(`Chạy thử: đã ghi ${r.dry} thao tác vào nhật ký, chưa gửi lên Beincom.`, 'warn');
+    else if (r?.cancelled) toast(`Đã dừng: xong ${r.ok ?? 0}${r.failed ? `, lỗi ${r.failed}` : ''}, còn ${r.left} mục chưa làm. Nhật ký ghi đủ những mục đã làm.`, 'warn');
     else if (r?.failed) toast(`Xong ${r.ok}, lỗi ${r.failed}: ${r.errors.join('; ')}`, 'err');
     else toast(doneText(r?.ok ?? 0) + (r?.gone ? ` (${r.gone} bài đã bị xoá trên Beincom từ trước, đã bỏ khỏi danh sách)` : ''));
     return r;
+  } catch (e) {
+    // Service worker bị tắt giữa chừng: những mục đã làm được ghi bù vào Nhật ký khi nó chạy lại
+    toast('Thao tác bị ngắt giữa chừng: ' + (e?.message || e) + '. Những mục đã làm được ghi trong Nhật ký — xem lại trước khi làm tiếp.', 'err');
+    return null;
   } finally {
     busy = false;
+    run = null;
+    renderRun();
     await loadAll();
   }
 }
+
+$('btn-bulk-stop').addEventListener('click', () => {
+  if (!run) return;
+  run.stop = true;
+  renderRun();
+  chrome.runtime.sendMessage({ type: 'cancelActions' }).catch(() => {});
+});
 
 function personName(u) {
   return `${u.fullname || '(không tên)'}${u.username ? ' (@' + u.username + ')' : ''}`;
@@ -237,8 +318,10 @@ function writeHash() {
 
 function showTab(t) {
   if (!TABS.includes(t)) t = 'overview';
+  const changed = t !== currentTab;
   currentTab = t;
   for (const s of document.querySelectorAll('main > [data-tab]')) s.hidden = s.dataset.tab !== t;
+  if (changed) window.scrollTo(0, 0); // tab mới mở từ đầu trang (nơi gọi muốn tới một thẻ thì tự cuộn sau đó)
   for (const b of document.querySelectorAll('#tabs [data-tab]')) {
     b.setAttribute('aria-selected', String(b.dataset.tab === t));
     b.tabIndex = b.dataset.tab === t ? 0 : -1;
@@ -343,7 +426,8 @@ function renderBadges() {
 
 function evaluated(g) {
   const rules = BG.effectiveRules(g, rulesCtx()).rules;
-  return (g?.requests || []).map((req) => ({ req, ev: BG.evaluateRequest(req, rules, g.questions, profileOf(req.user?.id || req.userId)) }));
+  const admins = BG.adminsOf(data.state.admins?.byGroup, g, groups());
+  return (g?.requests || []).map((req) => ({ req, ev: BG.evaluateRequest(req, rules, g.questions, profileOf(req.user?.id || req.userId), admins) }));
 }
 
 function avatarOf(u) {

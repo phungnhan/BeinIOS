@@ -35,6 +35,8 @@ async function beincomRequest(method, url, body, version = '2.0.0', timeoutMs = 
         'x-application': 'BIC_GROUP',
         'x-platform': 'WEB',
         ...(version ? { 'x-version-id': version } : {}),
+        // Chat Beincom (Mattermost) nhận phiên đăng nhập bằng cookie khi có header này (như web)
+        ...(url.startsWith('https://chat.beincom.com/') ? { 'X-Requested-With': 'XMLHttpRequest' } : {}),
         ...(body ? { 'Content-Type': 'application/json' } : {}),
       },
       body: body ? JSON.stringify(body) : undefined,
@@ -83,8 +85,9 @@ async function load() {
 }
 
 // Ngữ cảnh chấm theo quy tắc (chung + riêng từng group)
-function rulesCtx({ rules, postRules, groupRules }, groups) {
-  return { rules, postRules, groupRules, groups: groups || [] };
+// admins: admin từng group (đọc mỗi ngày, bg/guard.js) để nhận ra tài khoản mạo danh
+function rulesCtx({ rules, postRules, groupRules, state }, groups) {
+  return { rules, postRules, groupRules, groups: groups || [], admins: state?.admins?.byGroup || null };
 }
 
 // ---------- Client: gọi trực tiếp, nếu bị chặn cookie thì chạy qua tab Beincom ----------
@@ -185,7 +188,7 @@ async function flushDiag() {
 
 function directClient() {
   const call = async (m, p, b, v, t) => {
-    const r = await beincomRequest(m, BG.API + p, b, v, t);
+    const r = await beincomRequest(m, /^https:\/\//.test(p) ? p : BG.API + p, b, v, t);
     if (r.status === 401 || (r.status === 0 && !r.timeout)) directUntil = 0; // API treo không phải do bị chặn
     return r;
   };
@@ -206,7 +209,7 @@ async function createClient() {
       const [res] = await chrome.scripting.executeScript({
         target: { tabId },
         func: beincomRequest,
-        args: [method, BG.API + path, body ?? null, version, timeoutMs],
+        args: [method, /^https:\/\//.test(path) ? path : BG.API + path, body ?? null, version, timeoutMs],
       });
       return res?.result ?? { status: 0, error: 'Không chạy được script trong tab' };
     } catch (e) {
@@ -275,6 +278,57 @@ function postLog(source, action, post, g) {
 
 // items: [{ log, call(client), gone? }]. Chạy thử thì không gọi API.
 // gone: thao tác trên một bài; Beincom báo bài không còn thì tính là xong (entry có gone: true) để bỏ bài khỏi danh sách.
+// ---------- Thao tác thật: bền khi service worker bị tắt giữa chừng ----------
+// Trình duyệt tắt service worker khi 30 giây không có hoạt động, hoặc một lệnh chạy quá 5 phút. Vì vậy:
+//  - mỗi mục xong là ghi ngay vào khoá `actionJournal` (Dashboard đọc để hiện tiến độ); bị tắt giữa chừng thì lần
+//    service worker chạy lại sau (recoverJournal) ghi bù vào Nhật ký và đánh dấu bài đã ẩn — Beincom không có lệnh hiện lại,
+//    nên phải biết chắc bài nào đã ẩn;
+//  - trong lúc chạy (kể cả lúc nghỉ giữa hai thao tác) gọi nhẹ một API của trình duyệt mỗi 20 giây để không bị coi là rảnh;
+//  - Dashboard chia loạt lớn thành nhiều lệnh nhỏ (dash/core.js send với chunk) và có nút Dừng (lệnh cancelActions).
+const JOURNAL_KEY = 'actionJournal';
+const SW_RUN = Math.random().toString(36).slice(2); // mã lần chạy service worker này: nhật ký dở của lần chạy khác mới cần ghi bù
+let cancelAt = 0;
+let lastPing = 0;
+
+async function keepAlive() {
+  if (Date.now() - lastPing < 20e3) return;
+  lastPing = Date.now();
+  try {
+    await chrome.runtime.getPlatformInfo?.();
+  } catch {}
+}
+
+// Nghỉ giữa hai thao tác, vẫn giữ service worker sống
+async function nap(ms) {
+  for (let left = ms; left > 0; left -= 10e3) {
+    await keepAlive();
+    await sleep(Math.min(10e3, left));
+  }
+}
+
+// Dừng thao tác đang chạy (nút Dừng ở Dashboard): chỉ tác dụng với lần chạy đã bắt đầu trước lúc bấm
+function cancelActions() {
+  cancelAt = Date.now();
+  return { status: 'ok' };
+}
+
+// Lần chạy trước (service worker khác) bị tắt giữa chừng: ghi bù những mục đã làm vào Nhật ký, đánh dấu bài đã ẩn
+async function recoverJournal() {
+  const { [JOURNAL_KEY]: j } = await chrome.storage.local.get(JOURNAL_KEY);
+  if (!j || j.run === SW_RUN) return 0;
+  const done = Array.isArray(j.entries) ? j.entries : [];
+  if (done.length) {
+    const { state, log } = await load();
+    pushLog(log, done);
+    const next = { ...state };
+    markHidden(next, done);
+    await chrome.storage.local.set({ state: next, log });
+    recordDiag({ where: 'sw', kind: 'js', message: `Thao tác hàng loạt lúc ${new Date(j.at).toLocaleString('vi-VN')} bị dừng giữa chừng (trình duyệt tắt phần chạy nền): đã làm ${done.length}/${j.total} mục, đã ghi bù vào Nhật ký` });
+  }
+  await chrome.storage.local.remove(JOURNAL_KEY);
+  return done.length;
+}
+
 async function performActions(items, settings) {
   const entries = [];
   const entry = (it, status, message = '', extra = {}) => entries.push({ time: Date.now(), ...it.log, status, message, ...extra });
@@ -285,22 +339,41 @@ async function performActions(items, settings) {
     return { status: 'ok', entries };
   }
 
-  const result = await withClient(async (client) => {
-    const delay = Math.max(0, Number(settings.actionDelaySec) || 0) * 1000;
-    for (let i = 0; i < items.length; i++) {
-      if (i > 0 && delay) await sleep(delay * (0.75 + Math.random() * 0.5));
-      const r = await items[i].call(client);
-      if (r.status === 401) {
-        entry(items[i], 'error', NEED_LOGIN.message);
-        return { ...NEED_LOGIN };
+  const startedAt = Date.now();
+  const journal = { run: SW_RUN, at: startedAt, total: items.length, entries: [] };
+  let cancelled = false;
+  try {
+    await chrome.storage.local.set({ [JOURNAL_KEY]: journal });
+    const result = await withClient(async (client) => {
+      const delay = Math.max(0, Number(settings.actionDelaySec) || 0) * 1000;
+      for (let i = 0; i < items.length; i++) {
+        if (cancelAt >= startedAt) {
+          cancelled = true;
+          break;
+        }
+        if (i > 0 && delay) await nap(delay * (0.75 + Math.random() * 0.5));
+        if (cancelAt >= startedAt) {
+          cancelled = true;
+          break;
+        }
+        await keepAlive();
+        const r = await items[i].call(client);
+        // ok / goneIf: thao tác chat (trả JSON thường, 404 = tin đã bị xoá)
+        if (r.status === 401) entry(items[i], 'error', NEED_LOGIN.message);
+        else if (items[i].ok ? items[i].ok(r) : BG.isOk(r)) entry(items[i], 'ok');
+        else if (items[i].gone && (items[i].goneIf ? items[i].goneIf(r) : BG.isContentGone(r))) entry(items[i], 'ok', GONE_MSG, { gone: true });
+        else entry(items[i], 'error', BG.errMsg(r));
+        journal.entries.push(entries.at(-1));
+        await chrome.storage.local.set({ [JOURNAL_KEY]: journal });
+        if (r.status === 401) return { ...NEED_LOGIN };
       }
-      if (BG.isOk(r)) entry(items[i], 'ok');
-      else if (items[i].gone && BG.isContentGone(r)) entry(items[i], 'ok', GONE_MSG, { gone: true });
-      else entry(items[i], 'error', BG.errMsg(r));
-    }
-    return { status: 'ok' };
-  });
-  return { ...result, entries };
+      return { status: 'ok' };
+    });
+    return { ...result, entries, ...(cancelled ? { cancelled: true, left: items.length - entries.length } : {}) };
+  } finally {
+    // Người gọi ghi nhật ký ngay sau khi nhận kết quả
+    await chrome.storage.local.remove(JOURNAL_KEY);
+  }
 }
 
 function memberItem(source, action, g, req) {
@@ -342,7 +415,7 @@ function autoItems(groups, settings, ctx, skipIds, profiles = null) {
     if (!g.canApprove) continue;
     for (const req of g.requests) {
       if (skip.has(req.id)) continue;
-      const { verdict } = BG.evaluateRequest(req, BG.effectiveRules(g, ctx).rules, g.questions, profiles?.users?.[req.user?.id || req.userId]);
+      const { verdict } = BG.evaluateRequest(req, BG.effectiveRules(g, ctx).rules, g.questions, profiles?.users?.[req.user?.id || req.userId], BG.adminsOf(ctx.admins, g, ctx.groups));
       if (verdict === 'approve' && settings.autoApprove) items.push(memberItem('auto', 'approve', g, req));
       if (verdict === 'decline' && settings.autoDecline) items.push(memberItem('auto', 'decline', g, req));
     }
@@ -381,6 +454,12 @@ async function updateBadge() {
   const { settings, state } = loaded;
   let text = '';
   let color = '#6c3cf0';
+  const groups = state.snapshot?.groups;
+  const t = BG.totals(groups);
+  // Bài vi phạm quy tắc và bài Beincom gắn cờ có thể trùng nhau: đếm một lần
+  const badPosts = flaggedPosts(state.recentPosts, rulesCtx(loaded, groups));
+  const badComments = settings.scanComments ? flaggedComments(state.recentComments, rulesCtx(loaded, groups)).length : 0;
+  const info = { totals: t, flaggedPosts: badPosts.length, flaggedComments: badComments };
   if (!settings.active) {
     text = 'OFF';
     color = '#c62828';
@@ -388,16 +467,37 @@ async function updateBadge() {
     text = '!';
     color = '#c62828';
   } else {
-    const groups = state.snapshot?.groups;
-    const t = BG.totals(groups);
-    // Bài vi phạm quy tắc và bài Beincom gắn cờ có thể trùng nhau: đếm một lần
-    const flagged = new Set([...flaggedPosts(state.recentPosts, rulesCtx(loaded, groups)).map((p) => p.id), ...BG.autoFlaggedIds(groups)]);
-    const badComments = settings.scanComments ? flaggedComments(state.recentComments, rulesCtx(loaded, groups)).length : 0;
+    const flagged = new Set([...badPosts.map((p) => p.id), ...BG.autoFlaggedIds(groups)]);
     const n = t.requests + t.posts + t.reports + flagged.size + badComments;
     text = n > 999 ? '999+' : n ? String(n) : '';
   }
   await chrome.action.setBadgeText({ text });
   await chrome.action.setBadgeBackgroundColor({ color });
+  await savePopupInfo(state, info);
+}
+
+// Popup chỉ đọc gói nhỏ này (không đọc cả kết quả quét rồi chấm lại từng bài): số đếm, trạng thái, việc theo group
+let popupInfoLast = '';
+async function savePopupInfo(state, info) {
+  const groups = state.snapshot?.groups || [];
+  const t = info.totals;
+  const popupInfo = {
+    hasSnapshot: !!state.snapshot,
+    hasRecent: !!state.recentPosts,
+    lastScan: state.lastScan || 0,
+    lastResult: state.lastResult ? { status: state.lastResult.status, message: state.lastResult.message || '' } : null,
+    totals: { requests: t.requests, posts: t.posts, reports: t.reports, autoFlagged: t.autoFlagged },
+    flaggedPosts: info.flaggedPosts,
+    flaggedComments: info.flaggedComments,
+    todo: groups
+      .filter((g) => g.pendingTotal || g.approvalCount)
+      .slice(0, 5)
+      .map((g) => ({ id: g.id, name: g.name, isCommunity: !!g.isCommunity, communityName: g.communityName || '', pendingTotal: g.pendingTotal || 0, approvalCount: g.approvalCount || 0 })),
+  };
+  const key = JSON.stringify(popupInfo);
+  if (key === popupInfoLast) return;
+  popupInfoLast = key;
+  await chrome.storage.local.set({ popupInfo });
 }
 
 function pushLog(log, entries) {
@@ -447,6 +547,7 @@ function summary(r, settings) {
   return {
     status: r.status,
     message: r.message || '',
+    ...(r.cancelled ? { cancelled: true, left: r.left } : {}),
     dryRun: !!settings.dryRun,
     ok: r.entries.filter((e) => e.status === 'ok').length,
     dry: r.entries.filter((e) => e.status === 'dry').length,

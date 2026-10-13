@@ -64,6 +64,7 @@ function renderMonthly() {
     tile('Bài viết', fmtN(c.posts), `${r.prevLabel}: ${fmtN(p.posts)}${changeText(c.posts, p.posts)}`),
     tile('Cảm xúc · bình luận', `${fmtN(c.reactions)} · ${fmtN(c.comments)}`, `👁 ${fmtN(c.views)} lượt xem${c.truncated ? ` · trên ${fmtN(c.read)} bài mới nhất` : ''}`),
     tile('Kiểm duyệt qua addon', fmtN(moderated), moderated ? `${fmtN(a.approved + a.autoApproved)} duyệt thành viên · ${fmtN(a.postsHidden + a.commentsHidden)} ẩn` : 'không có thao tác'),
+    ...(r.chat ? [tile('Chat', `${fmtN(r.chat.cur.messages)} tin`, `${fmtN(r.chat.cur.people)} người nhắn · ${r.prevLabel}: ${fmtN(r.chat.prev.messages)}${changeText(r.chat.cur.messages, r.chat.prev.messages)}`)] : []),
     ...(r.team ? [tile('Đội admin', `${fmtN(r.team.admins.length)} admin`, r.team.total ? `${fmtN(r.team.total)} việc theo nhật ký Beincom` : 'không có việc nào')] : []),
   );
 

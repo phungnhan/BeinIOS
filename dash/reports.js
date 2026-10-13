@@ -219,7 +219,7 @@ async function actReports(action, rows) {
     extra: select ? el('label', { class: 'text-row' }, el('span', {}, el('b', { text: 'Lý do ẩn' })), select) : null,
   });
   if (!ok) return;
-  const r = await send({ type: 'reportAct', action, groupId: g.id, items, reasonType: select?.value }, (n) => (action === 'ignore' ? `Đã bỏ qua ${n} báo cáo.` : `Đã ẩn ${n} nội dung.`));
+  const r = await send({ type: 'reportAct', action, groupId: g.id, items, reasonType: select?.value }, (n) => (action === 'ignore' ? `Đã bỏ qua ${n} báo cáo.` : `Đã ẩn ${n} nội dung.`), { chunk: ['items'] });
   const done = new Set(r?.done || []);
   if (done.size) {
     const d = rep.data[repKey(g)];

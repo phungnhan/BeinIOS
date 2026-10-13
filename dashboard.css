@@ -819,3 +819,64 @@ table.requests td.act-wrap button + button { margin-left: 0; }
 /* Báo cáo tháng: đội admin */
 .team-table td.num.muted { color: var(--muted); }
 .team-changes { margin: 0 0 10px; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+
+/* Nút lên đầu trang */
+.to-top {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 9;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: #fff;
+  font-size: 20px;
+  line-height: 1;
+  box-shadow: 0 6px 20px rgba(20, 16, 50, .22);
+  cursor: pointer;
+}
+.to-top:hover { filter: brightness(1.08); }
+.to-top:focus-visible { outline: 3px solid var(--accent-soft); outline-offset: 2px; }
+@media (max-width: 600px) { .to-top { right: 16px; bottom: 16px; } }
+
+/* Tiến độ thao tác hàng loạt */
+.bulk-run {
+  position: fixed;
+  left: 50%;
+  bottom: 20px;
+  transform: translateX(-50%);
+  z-index: 11;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  max-width: calc(100% - 32px);
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: 0 8px 28px rgba(20, 16, 50, .22);
+  font-weight: 600;
+}
+.bulk-run progress { width: 180px; max-width: 30vw; accent-color: var(--accent); }
+@media (max-width: 600px) { .bulk-run { left: 16px; right: 16px; transform: none; bottom: 16px; } .bulk-run progress { flex: 1; } }
+
+/* Bảo vệ community */
+.guard-card.has-urgent { border-color: var(--err); }
+.guard-burst { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; margin-bottom: 10px; border-radius: 10px; background: var(--err-soft); }
+.guard-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.guard-joiners { background: var(--surface); border-radius: 8px; padding: 6px; }
+.guard-joiners .tag { margin-left: 6px; }
+
+/* Chat Beincom */
+.chat-unread { margin: 4px 0 8px; }
+.chat-unread:empty { display: none; }
+.chat-row input[type='text'] { flex: 1 1 100%; }
+
+/* Nút mở trang Chat (thanh trên) */
+.chat-link { display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--fg); font-weight: 600; text-decoration: none; }
+.chat-link:hover { border-color: var(--accent); color: var(--accent); text-decoration: none; }
+.chat-link .badge:empty { display: none; }
+.ghost-link { align-self: center; }

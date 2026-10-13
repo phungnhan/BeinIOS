@@ -19,6 +19,7 @@
     <div class="actions">
       <span class="pill" id="scan-pill">–</span>
       <span class="pill warn" id="dry-pill" hidden>Chạy thử</span>
+      <a class="chat-link" href="chat.html" target="_blank" id="btn-chat-page" title="Mở trang Chat: tin nhắn riêng và kênh chat của các group">💬 Chat <span class="badge" id="badge-chat"></span></a>
       <button id="btn-scan" class="primary" title="Quét toàn bộ: group, yêu cầu tham gia, bài chờ duyệt, bài mới đăng. Chỉ cần tải lại tab đang xem thì dùng nút Tải lại trên thanh tab.">↻ Quét ngay</button>
     </div>
   </header>
@@ -153,6 +154,23 @@
         </table>
       </div>
       <p class="muted small">Bấm một ô để đổi riêng group đó. ⚠ Tắt <b>Duyệt thành viên</b>: Beincom tự <b>duyệt</b> mọi yêu cầu đang chờ của group. <b>Duyệt bài</b> cần quyền chủ / admin community.</p>
+    </section>
+
+    <section class="card span-3 guard-card" id="guard" data-tab="members">
+      <div class="card-head">
+        <h2>🛡 Bảo vệ community</h2>
+        <button type="button" class="ghost sm" id="btn-guard-search" title="Tìm (chỉ đọc) thành viên có tên / username giống admin hoặc tự nhận Admin, Hỗ trợ, CSKH">🔍 Tìm trong toàn bộ thành viên</button>
+      </div>
+      <p class="muted small" id="guard-note"></p>
+      <div id="guard-bursts"></div>
+      <h3 class="sub-h">Tài khoản giống admin</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Tài khoản</th><th>Vì sao</th><th>Ở đâu, lúc nào</th><th class="act">Thao tác</th></tr></thead>
+          <tbody id="guard-imps"></tbody>
+        </table>
+      </div>
+      <p class="muted small" id="guard-search-note"></p>
     </section>
 
     <section class="card span-3" id="review" data-tab="members">
@@ -369,6 +387,41 @@
         </table>
       </div>
       <button id="btn-recent-more" class="ghost more" hidden>Xem thêm</button>
+    </section>
+
+    <section class="card span-3" id="chat-card" data-tab="content">
+      <div class="card-head">
+        <h2>💬 Tin nhắn chat</h2>
+        <div class="review-tools">
+          <div class="seg" id="chat-filter">
+            <button data-f="flagged" class="active">Cần xử lý <span id="chcnt-flagged"></span></button>
+            <button data-f="all">Tất cả <span id="chcnt-all"></span></button>
+            <button data-f="dismissed">Đã bỏ qua <span id="chcnt-dismissed"></span></button>
+            <button data-f="deleted">Đã xoá <span id="chcnt-deleted"></span></button>
+          </div>
+          <button type="button" class="ghost sm" id="btn-chat-refresh">↻ Đọc chat</button>
+          <a class="ghost-link small" href="chat.html" target="_blank">Mở trang Chat ↗</a>
+        </div>
+      </div>
+      <div id="chat-note" class="muted small review-note"></div>
+      <div id="chat-unread" class="small chat-unread"></div>
+      <div id="chat-waves"></div>
+      <div class="bulk-bar">
+        <label class="check"><input type="checkbox" id="chat-check-all" /> Chọn tất cả đang hiện</label>
+        <span class="muted small" id="chat-selected">Đã chọn 0</span>
+        <span class="spacer"></span>
+        <button id="btn-chat-dismiss" class="ghost" disabled>Bỏ qua đã chọn</button>
+        <button id="btn-chat-delete" class="danger" disabled>Xoá đã chọn</button>
+      </div>
+      <div class="table-wrap">
+        <table class="requests posts">
+          <thead>
+            <tr><th class="cb"></th><th>Người gửi</th><th>Tin nhắn</th><th>Kênh</th><th>Lúc</th><th>Đánh giá theo quy tắc</th><th class="act">Thao tác</th></tr>
+          </thead>
+          <tbody id="chat-body"></tbody>
+        </table>
+      </div>
+      <button id="btn-chat-more" class="ghost more" hidden>Xem thêm</button>
     </section>
 
     <section class="card span-3" id="comments" data-tab="content">
@@ -590,6 +643,11 @@
             <span id="compose-check" class="small"></span>
             <span class="spacer"></span>
             <span id="compose-saved" class="muted small"></span>
+          </div>
+          <div class="compose-options chat-row" id="compose-chat-row" hidden>
+            <label class="check"><input type="checkbox" id="compose-chat" /> 💬 Gửi kèm vào kênh chat của group</label>
+            <span class="muted small" id="compose-chat-hint"></span>
+            <input type="text" id="compose-chat-text" maxlength="500" placeholder="Lời nhắn kèm (để trống: dùng câu đầu của bài) — addon tự thêm link bài" aria-label="Lời nhắn gửi kèm vào kênh chat" hidden />
           </div>
           <div class="compose-options as-group-row" id="compose-as-group-row">
             <label class="check"><input type="checkbox" id="compose-as-group" /> Đăng dưới tên group</label>
@@ -1165,6 +1223,7 @@
           <div class="group">
             <div class="group-title">✕ Gợi ý từ chối khi</div>
             <label class="switch-row"><input type="checkbox" id="declineDeactivated" /><span><b>Tài khoản đã bị vô hiệu hoá</b></span></label>
+            <label class="switch-row"><input type="checkbox" id="reviewImpersonation" /><span><b>Mạo danh admin</b><br /><span class="muted small">Tên / username giống admin của community (kể cả viết lách: 0→o, chữ Kirin…), hoặc tự nhận "Admin", "Hỗ trợ", "CSKH". Tên ngắn trùng tên admin, tên gần giống: chỉ Cần xem.</span></span></label>
             <label class="text-row">
               <span><b>Từ khoá cấm</b><br /><span class="muted small">Trong tên, username hoặc câu trả lời. Cách nhau dấu phẩy, không phân biệt hoa thường và dấu.</span></span>
               <textarea id="bannedKeywords" rows="3" placeholder="vd: kiếm tiền nhanh, sex, t.me/"></textarea>
@@ -1307,6 +1366,22 @@
             <option value="48">48 giờ</option>
           </select>
         </label>
+        <label class="switch-row"><input type="checkbox" id="guardJoins" /><span><b>Bảo vệ: theo dõi người mới vào</b><br /><span class="muted small">Sau mỗi lần quét xem ai vừa vào community (chỉ đọc): báo tài khoản giống admin và đợt vào ồ ạt (thường là tài khoản ảo trước một đợt spam). Xem ở Thành viên → Bảo vệ community; Telegram loại "Tài khoản giống admin, đợt vào ồ ạt".</span></span></label>
+        <label class="select-row" data-requires="guardJoins">
+          <span><b>Báo đợt vào ồ ạt khi</b><br /><span class="muted small">Số người vào trong 60 phút</span></span>
+          <select id="burstJoins">
+            <option value="20">từ 20 người</option>
+            <option value="30">từ 30 người</option>
+            <option value="50">từ 50 người</option>
+            <option value="100">từ 100 người</option>
+          </select>
+        </label>
+      </div>
+      <div class="group chat-group">
+        <div class="group-title">💬 Chat Beincom</div>
+        <label class="switch-row"><input type="checkbox" id="chatEnabled" /><span><b>Kết nối chat Beincom</b><br /><span class="muted small">Addon xin quyền kết nối <code>chat.beincom.com</code> và dùng chính phiên đăng nhập của bạn (như web). Đọc tin mới trong kênh chat của các group bạn quản trị, báo tin nhắn riêng chưa đọc, gửi tin kèm bài khi bạn chọn. Không đọc nội dung tin nhắn riêng.</span></span></label>
+        <label class="switch-row" data-requires="chatEnabled"><input type="checkbox" id="chatScan" /><span><b>Quét tin nhắn kênh chat</b><br /><span class="muted small">Sau mỗi lần quét: chấm tin mới theo quy tắc bài viết, tìm tài khoản giống admin và đợt spam. Xem ở Bài viết → Tin nhắn chat.</span></span></label>
+        <label class="switch-row" data-requires="chatEnabled"><input type="checkbox" id="chatUnread" /><span><b>Báo tin nhắn riêng và nhắc tên</b><br /><span class="muted small">Thông báo (và Telegram loại "Tin nhắn riêng, nhắc tên trong chat") khi có tin nhắn riêng mới hoặc bạn được nhắc tên — chỉ tên người gửi, không kèm nội dung.</span></span></label>
       </div>
       <div class="group tg-group">
         <div class="group-title">📱 Gửi thông báo về Telegram</div>
@@ -1521,6 +1596,14 @@
     </form>
   </dialog>
 
+  <button type="button" id="to-top" class="to-top" hidden aria-label="Lên đầu trang" title="Lên đầu trang">↑</button>
+
+  <div id="bulk-run" class="bulk-run" hidden role="status" aria-live="polite">
+    <span id="bulk-run-text"></span>
+    <progress id="bulk-run-bar" max="1" value="0"></progress>
+    <button type="button" class="danger sm" id="btn-bulk-stop" title="Dừng sau thao tác đang làm — những mục đã làm vẫn ghi đủ trong Nhật ký">Dừng</button>
+  </div>
+
   <footer class="muted small">
     Dữ liệu lưu trong trình duyệt này · <span id="version"></span> · <a href="#" id="btn-whatsnew">Có gì mới</a> · <a href="#" id="btn-onboard">Bắt đầu nhanh</a> · <a href="HUONG-DAN-CAI.html" target="_blank">Hướng dẫn cài</a> · Tác giả: <b>Kai | Crypto Life</b>
   </footer>
@@ -1534,17 +1617,20 @@
   <script src="lib/reports.js"></script>
   <script src="lib/telegram.js"></script>
   <script src="lib/diag.js"></script>
+  <script src="lib/chat.js"></script>
   <script src="upload.js"></script>
   <script src="charts.js"></script>
   <script src="dash/core.js"></script>
   <script src="dash/ui.js"></script>
   <script src="dash/overview.js"></script>
   <script src="dash/members.js"></script>
+  <script src="dash/guard.js"></script>
   <script src="dash/content.js"></script>
   <script src="dash/sweep.js"></script>
   <script src="dash/tags.js"></script>
   <script src="dash/reports.js"></script>
   <script src="dash/compose.js"></script>
+  <script src="dash/chat.js"></script>
   <script src="dash/attach.js"></script>
   <script src="dash/calendar.js"></script>
   <script src="dash/article.js"></script>

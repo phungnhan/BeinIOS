@@ -624,6 +624,10 @@ async function doScan({ source = 'alarm' } = {}) {
       Object.assign(fresh, { posts: p.bad, comments: c.bad, waves });
     }
     remindPending(state, next, settings, notifyAllowed, now);
+    // Bảo vệ community (bg/guard.js, chỉ đọc): người mới vào giống admin, đợt vào ồ ạt
+    if (settings.guardJoins) await withClient((client) => guardJoins(client, { settings, state, next, notifyAllowed, now })).catch((e) => recordDiag({ where: 'sw', kind: 'js', message: 'Bảo vệ community lỗi: ' + (e?.message || e) }));
+    // Chat Beincom (bg/chat.js): tin mới trong kênh chat group, tin nhắn riêng chưa đọc
+    if (settings.chatEnabled) await withClient((client) => syncChat(client, { settings, state, next, notifyAllowed, ctx: rulesCtx(loaded, next.snapshot.groups), now })).catch((e) => recordDiag({ where: 'sw', kind: 'js', message: 'Chat lỗi: ' + (e?.message || e) }));
     // Telegram có nút xử lý: mỗi việc mới một tin (gửi cuối lần quét)
     if (notifyAllowed && BG.telegramActionsOn(tg)) {
       const { profiles } = settings.trackViolations ? await chrome.storage.local.get('profiles') : {};

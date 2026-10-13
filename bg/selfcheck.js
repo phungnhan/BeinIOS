@@ -7,7 +7,7 @@ const isList = (d) => Array.isArray(d?.list);
 const isArr = (d) => Array.isArray(d);
 
 // Các mục kiểm tra cho group g. need = false: bỏ qua, ghi lý do (why). path có thể là hàm của kết quả mục trước (ctx).
-function selfCheckProbes(g, { root, now, tg }) {
+function selfCheckProbes(g, { root, now, tg, settings = null }) {
   const iso = (t) => encodeURIComponent(new Date(t).toISOString());
   const from = now - 30 * 864e5;
   const rootId = root?.id || g.id;
@@ -22,6 +22,7 @@ function selfCheckProbes(g, { root, now, tg }) {
     { id: 'activity', label: 'Nhật ký hoạt động', uses: 'vào / rời, hồ sơ vi phạm', path: `group/groups/${g.id}/activity-logs?limit=1&page=1&sort=desc`, shape: isArr },
     { id: 'memberLog', label: 'Nhật ký thành viên theo ngày', uses: 'báo cáo tháng, thành viên mới', path: `group/groups/${g.id}/activity-logs?limit=1&page=1&sort=desc&objectType=MEMBER&from=${Math.floor(from)}&to=${Math.ceil(now)}`, shape: isArr, detail: (d, b) => (b.meta?.total != null ? `${b.meta.total} sự kiện trong 30 ngày` : '') },
     { id: 'teamLog', label: 'Nhật ký việc của admin', uses: 'báo cáo tháng → đội admin', path: `group/groups/${g.id}/activity-logs?limit=1&page=1&sort=desc&useCase=${encodeURIComponent(Object.keys(BG.TEAM_CASES).join(','))}&from=${Math.floor(from)}&to=${Math.ceil(now)}`, shape: isArr, detail: (d, b) => (b.meta?.total != null ? `${b.meta.total} việc trong 30 ngày` : '') },
+    { id: 'joinLog', label: 'Nhật ký người vào', uses: 'tài khoản giống admin, đợt vào ồ ạt', path: `group/groups/${g.id}/activity-logs?limit=1&page=1&sort=desc&useCase=${encodeURIComponent(JOIN_CASES)}&from=${Math.floor(now - 864e5)}&to=${Math.ceil(now)}`, shape: isArr, detail: (d, b) => (b.meta?.total != null ? `${b.meta.total} người vào trong 24 giờ` : '') },
     { id: 'timeline', label: 'Bài mới đăng', uses: 'quét bài, thống kê', path: `content/timeline/${g.id}?limit=1`, shape: isList },
     { id: 'search', label: 'Tìm bài theo thời gian', uses: 'báo cáo tháng, thành viên mới, Tìm & dọn bài, dọn tài khoản', path: `content/contents?groupId=${g.id}&isIncludedInnerGroups=true&startTime=${iso(from)}&endTime=${iso(now)}&limit=1`, shape: (d) => isList(d) && d.meta?.total != null, detail: (d) => `${d.meta.total} bài trong 30 ngày` },
     { id: 'comments', label: 'Bình luận', uses: 'quét bình luận', after: 'timeline', path: (ctx) => (ctx.timeline?.list?.[0]?.id ? `content/comments?postId=${ctx.timeline.list[0].id}&limit=1` : null), why: 'group chưa có bài nào để thử', shape: isList },
@@ -39,6 +40,7 @@ function selfCheckProbes(g, { root, now, tg }) {
     { id: 'banned', label: 'Danh sách bị cấm', uses: 'gỡ cấm, cấm ở mọi community', path: `group/communities/${g.communityId}/banned-members?limit=1&offset=0`, need: !!g.canBan, why: 'chỉ chủ / admin community', shape: (d) => d != null },
     { id: 'officialStats', label: 'Thống kê chính thức', uses: 'Thống kê', path: `group/manage/communities/${g.communityId}/stats/member-count?from=${iso(from)}&to=${iso(now)}`, need: !!(g.isCommunity && g.isCommunityAdmin), why: 'chỉ chủ / admin community — addon tự tính từ nhật ký', shape: isArr },
     { id: 'telegram', label: 'Bot Telegram', uses: 'gửi thông báo về Telegram', telegram: true, need: telegramOn(tg), why: 'chưa bật gửi về Telegram' },
+    { id: 'chat', label: 'Chat Beincom', uses: 'quét tin nhắn kênh chat, tin nhắn riêng, gửi tin kèm bài', chat: true, path: BG.CHAT_API + 'v4/users/me', need: !!settings?.chatEnabled, why: 'chưa bật chat Beincom ở Cài đặt', shape: (d) => !!d?.id, detail: (d) => (d.username ? '@' + d.username : '') },
     { id: 'storage', label: 'Bộ nhớ của addon', uses: 'lưu kết quả quét, nhật ký, số liệu', local: true },
   ];
 }
@@ -81,7 +83,8 @@ async function runSelfCheck(g) {
   const root = (state.snapshot?.groups || []).find((x) => x.communityId === g.communityId && x.isCommunity) || null;
   const tg = await loadTelegram();
   const now = Date.now();
-  const probes = selfCheckProbes(g, { root, now, tg });
+  const { settings } = await load();
+  const probes = selfCheckProbes(g, { root, now, tg, settings });
   const r = await withClient(async (client) => {
     const ctx = {};
     const run = async (p) => {
@@ -94,6 +97,12 @@ async function runSelfCheck(g) {
       }
       const path = typeof p.path === 'function' ? p.path(ctx) : p.path;
       if (!path) return { id: p.id, label: p.label, uses: p.uses, status: 'skip', detail: p.why, ms: 0 };
+      // Chat Beincom: trả JSON thường (không có code api.ok)
+      if (p.chat) {
+        const res = await client.call('GET', path, null, '', CHECK_TIMEOUT, { quiet: true });
+        const good = BG.chatOk(res) && p.shape(res.body);
+        return { id: p.id, label: p.label, uses: p.uses, path: path.split('?')[0], status: res.status === 401 ? 'fail' : good ? 'ok' : 'fail', detail: good ? p.detail(res.body) : res.status === 401 ? 'Chat chưa nhận phiên đăng nhập — mở chat trên web một lần rồi thử lại' : BG.errMsg(res), httpStatus: res.status, ms: Date.now() - t0 };
+      }
       const res = await client.call('GET', path, null, p.version ?? '2.0.0', p.timeout || CHECK_TIMEOUT, { quiet: true });
       if (BG.isOk(res)) ctx[p.id] = res.body.data;
       return { id: p.id, label: p.label, uses: p.uses, path: path.split('?')[0], ...checkVerdict(res, p), httpStatus: res.status, ms: Date.now() - t0 };

@@ -121,6 +121,12 @@
     ],
   };
   store.promptDraft = { id: 'pr1', promptId: 'd3', groupId: 'gCL', groupName: 'Crypto Life', text: 'Sai lầm lớn nhất bạn từng mắc khi đầu tư crypto là gì?', suggestAt: new Date(now + 2 * 864e5).toISOString(), basis: 'own', at: now - 3600e3 };
+  // Popup (#…&pinfo=1): nền đã ghi sẵn gói số đếm (số khác hẳn kết quả quét mẫu để thấy popup đọc gói này)
+  if (new URLSearchParams(location.hash.slice(1)).get('pinfo')) {
+    store.popupInfo = { hasSnapshot: true, hasRecent: true, lastScan: now - 5 * 60e3, lastResult: { status: 'ok', message: '' }, totals: { requests: 17, posts: 4, reports: 1, autoFlagged: 0 }, flaggedPosts: 3, flaggedComments: 0, todo: [{ id: 'gCL', name: 'Crypto Life', isCommunity: true, communityName: '', pendingTotal: 17, approvalCount: 4 }] };
+  }
+  // Trang Chat (#…&chat=1): đã bật chat Beincom
+  if (new URLSearchParams(location.hash.slice(1)).get('chat')) store.settings = { ...store.settings, chatEnabled: true };
   // Nơi nhận báo cáo sử dụng (#…&usage=1): addon hỏi ý gửi
   if (new URLSearchParams(location.hash.slice(1)).get('usage')) store.usageEndpoint = 'https://script.google.com/macros/s/AKfycbx_mau_thu_nghiem_123456/exec';
   // Báo cáo sử dụng: số đếm 2 ngày
@@ -159,7 +165,7 @@
         get: async (keys) => Object.fromEntries([].concat(keys).filter((k) => k in store).map((k) => [k, structuredClone(store[k])])),
         set: async (o) => {
           Object.assign(store, structuredClone(o));
-          listeners.forEach((fn) => fn(Object.fromEntries(Object.keys(o).map((k) => [k, {}])), 'local'));
+          listeners.forEach((fn) => fn(Object.fromEntries(Object.keys(o).map((k) => [k, { newValue: structuredClone(o[k]) }])), 'local'));
         },
         getBytesInUse: async () => JSON.stringify(store).length,
         remove: async (keys) => {
@@ -283,8 +289,109 @@
           const k = m.keyword.toLowerCase();
           return { status: 'ok', posts: pool.filter((p) => p.text.toLowerCase().includes(k)), adminIds: ['aAdmin'], truncated: false, errors: [] };
         }
+        if (m.type === 'cancelActions') return { status: 'ok' };
+        // Trang Chat: 2 kênh Crypto Life (xoá được tin ở kênh chính), 2 tin nhắn riêng; tin của kênh chính qua 2 ngày
+        if (m.type === 'chatOverview') {
+          if (!store.settings.chatEnabled) return { status: 'off', message: 'Chưa bật' };
+          const cu = (n, name, un) => ({ id: 'u' + n, chatId: 'cu' + n, username: un, fullname: name, pictureAt: 0 });
+          const ch = (id, title, type, extra = {}) => ({ id, teamId: 'tCL', teamName: 'crypto-life', communityId: 'cCL', groupId: 'g' + id, name: title, title, type, purpose: '', canDelete: false, canPost: true, lastPostAt: now - 60e3, total: 10, other: null, unread: 0, mentions: 0, ...extra });
+          // Nhiều cuộc trò chuyện (#…&many=1): 12 tin nhắn riêng, 7 cộng đồng (2 đã ghim). Lần đọc nhanh chậm hơn chút (để thấy
+          // khung chờ), chưa có tên 4 tin nhắn riêng cũ nhất, chưa rõ quyền gửi tin
+          if (new URLSearchParams(location.hash.slice(1)).get('many')) {
+            window.__chatQuick = (window.__chatQuick || 0) + (m.quick ? 1 : 0);
+            window.__chatFull = (window.__chatFull || 0) + (m.quick ? 0 : 1);
+            if (m.quick) await new Promise((res) => setTimeout(res, 600));
+            const names = ['Lan Anh', 'Minh Quân', 'Hoa Mai', 'Tuấn', 'Bảo Ngọc', 'Thu Trang', 'Đức Huy', 'Ngọc Hân', 'Quốc Bảo', 'Thanh Tâm', 'Gia Hưng', 'Khánh Linh'];
+            const dms = names.map((name, i) => {
+              const unnamed = m.quick && i >= 8;
+              return { ...ch('dm' + i, unnamed ? '' : name, 'D'), teamId: 'tDM', teamName: 'direct', groupId: '', other: unnamed ? { id: '', chatId: 'cu' + (80 + i), username: '', fullname: '', pictureAt: 0 } : cu(80 + i, name, 'user' + i), unread: i === 0 ? 2 : 0, lastPostAt: now - (i + 1) * 600e3 };
+            });
+            const teams = Array.from({ length: 7 }, (_, i) => ({ id: 'tc' + i, name: 'cong-dong-' + i, title: 'Cộng đồng ' + (i + 1), communityId: 'cc' + i, pinned: i < 2, pinRank: i < 2 ? i : null, channels: [ch('chc' + i, 'Cộng đồng ' + (i + 1), 'O', { canPost: m.quick ? null : i !== 1, lastPostAt: now - i * 3600e3 })] }));
+            return { status: 'ok', quick: !!m.quick, me: cu(1, 'Kai Crypto', 'kaicrypto'), dmTeam: { id: 'tDM', name: 'direct' }, teams, dms };
+          }
+          return {
+            status: 'ok',
+            me: cu(1, 'Kai Crypto', 'kaicrypto'),
+            dmTeam: { id: 'tDM', name: 'direct' },
+            teams: [{ id: 'tCL', name: 'crypto-life', title: 'Crypto Life', communityId: 'cCL', channels: [ch('chMain', 'Crypto Life', 'O', { canDelete: true, unread: window.__chatRead ? 0 : 2, lastPostAt: now - 30e3 }), ch('chSub', 'Hỏi đáp', 'P', { canPost: false, purpose: 'Kênh hỏi đáp', lastPostAt: now - 3600e3 })] }],
+            dms: [
+              { ...ch('dm1', 'Lan Anh', 'D'), teamId: 'tDM', teamName: 'direct', groupId: '', other: cu(50, 'Lan Anh', 'lananh'), unread: 1, lastPostAt: now - 120e3 },
+              { ...ch('dm2', 'Minh Quân', 'D'), teamId: 'tDM', teamName: 'direct', groupId: '', other: cu(51, 'Minh Quân', 'minhquan'), lastPostAt: now - 3 * 864e5 },
+            ],
+          };
+        }
+        if (m.type === 'chatPosts') {
+          const cp = (id, n, name, un, text, min, extra = {}) => ({ id, channelId: m.channelId, user: { id: 'u' + n, chatId: 'cu' + n, username: un, fullname: name, pictureAt: 0 }, createAt: now - min * 60e3, updateAt: now - min * 60e3, editAt: 0, deleted: false, system: false, message: text, rootId: '', replyCount: 0, pinned: false, files: [], ...extra });
+          const base = [
+            cp('o1', 60, 'Hoa Mai', 'hoamai', 'Tin hôm qua', 26 * 60),
+            cp('o2', 1, 'Kai Crypto', 'kaicrypto', 'Chào cả nhà, tối nay có AMA nhé', 25 * 60),
+            cp('sys1', 61, 'Tuấn', 'tuan', 'tuan đã vào kênh', 40, { system: true }),
+            cp('n1', 62, 'Lan Anh', 'lananh', 'Mọi người xem bài này https://group.beincom.com/posts/abc nhé', 30),
+            cp('n2', 62, 'Lan Anh', 'lananh', '@kaicrypto ơi cho em hỏi **ví lạnh** nào tốt?', 29),
+            cp('n3', 1, 'Kai Crypto', 'kaicrypto', 'Ledger hoặc Trezor đều ổn', 5, { rootId: 'n2' }),
+            cp('n4', 63, 'Minh', 'minh', '', 2, { files: [{ id: 'f1', name: 'bieu-do.png', mime: 'image/png', size: 120000, url: '', mini: '', width: 400, height: 300 }, { id: 'f2', name: 'bao-cao.pdf', mime: 'application/pdf', size: 2400000, url: '', mini: '' }] }),
+          ];
+          // Ảnh trong tin (#…&imgs=1): một tin 3 ảnh + một tin 1 ảnh (ảnh SVG 1600×1000, lớn hơn khung để bấm xem đúng cỡ)
+          // và một ảnh chỉ có bản xem trước
+          const imgs = new URLSearchParams(location.hash.slice(1)).get('imgs');
+          if (imgs) {
+            const pic = (id, n, color) => ({ id, name: `anh-${n}.png`, mime: 'image/png', size: 300000, url: 'data:image/svg+xml,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1000"><rect width="1600" height="1000" fill="${color}"/><text x="800" y="560" font-size="220" text-anchor="middle" fill="#fff" font-family="sans-serif">${n}</text></svg>`), mini: '', width: 1600, height: 1000 });
+            // #…&imgs=6: thêm một tin 6 ảnh (lưới hiện 4, ô cuối "+2")
+            if (imgs === '6') base.push(cp('im6', 65, 'Thu Trang', 'thutrang', 'Album sự kiện', 6, { files: Array.from({ length: 6 }, (_, k) => pic('f6' + k, 'A' + (k + 1), ['#5f3dc4', '#2b8a3e', '#e67700', '#1971c2', '#c2255c', '#495057'][k])) }));
+            base.push(
+              cp('im1', 63, 'Minh', 'minh', 'Ảnh buổi AMA tối qua', 4, { files: [pic('f11', 1, '#6c3cf0'), pic('f12', 2, '#0f9d76'), pic('f13', 3, '#d9480f')] }),
+              cp('im2', 62, 'Lan Anh', 'lananh', 'Thêm một ảnh nữa', 3, { files: [pic('f21', 4, '#1c7ed6')] }),
+              cp('im3', 64, 'Bảo Ngọc', 'baongoc', '', 1, { files: [{ id: 'f31', name: 'xem-truoc.jpg', mime: 'image/jpeg', size: 90000, url: '', mini: '/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgICAgMCAgIDAwMDBAYEBAQEBAgGBgUGCQgKCgkICQkKDA8MCgsOCwkJDRENDg8QEBEQCgwSExIQEw8QEBD/wAALCAABAAEBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AKp//2Q==' }] }),
+            );
+          }
+          if (m.since) return { status: 'ok', posts: window.__chatIncoming || [], hasMore: false };
+          if (m.before) return { status: 'ok', posts: [cp('x1', 64, 'Bảo Ngọc', 'baongoc', 'Tin cũ hơn nữa', 50 * 60), cp('x2', 64, 'Bảo Ngọc', 'baongoc', 'Tin cũ thứ hai', 49 * 60)], hasMore: false };
+          if (m.channelId !== 'chMain') return { status: 'ok', posts: [cp('d1', 50, 'Lan Anh', 'lananh', 'Chào anh!', 3)], hasMore: false };
+          return { status: 'ok', posts: base, hasMore: true };
+        }
+        if (m.type === 'chatSend') {
+          (window.__chatSends = window.__chatSends || []).push(m);
+          return { status: 'ok', post: { id: 'new' + window.__chatSends.length, channelId: m.channelId, user: { id: 'me1', chatId: 'cu1', username: 'kaicrypto', fullname: 'Kai Crypto', pictureAt: 0 }, createAt: Date.now(), updateAt: Date.now(), editAt: 0, deleted: false, system: false, message: m.message, rootId: m.rootId || '', replyCount: 0, pinned: false, files: [] } };
+        }
+        if (m.type === 'chatView') {
+          window.__chatRead = (window.__chatRead || 0) + 1;
+          return { status: 'ok' };
+        }
+        if (m.type === 'chatDeleteMsg') {
+          (window.__chatDeletes = window.__chatDeletes || []).push(m);
+          return { status: 'ok', ok: 1, dry: 0, failed: 0, errors: [], dryRun: false };
+        }
+        if (m.type === 'chatRefresh') {
+          window.__chatRefresh = (window.__chatRefresh || 0) + 1;
+          return { status: 'ok', channels: (store.state.chatMap?.channels || []).length };
+        }
+        if (m.type === 'chatAct') {
+          (window.__chatActs = window.__chatActs || []).push(m);
+          const ids = new Set(m.ids);
+          store.state.chatMessages = (store.state.chatMessages || []).map((x) => (!ids.has(x.id) ? x : m.action === 'delete' ? { ...x, deleted: true } : { ...x, dismissed: m.action === 'dismiss' }));
+          fire();
+          return { status: 'ok', dryRun: false, ok: m.ids.length, dry: 0, failed: 0, errors: [], deleted: m.action === 'delete' ? m.ids : [] };
+        }
+        if (m.type === 'guardAct') {
+          (window.__guardActs = window.__guardActs || []).push(m);
+          if (m.action === 'notImpostor') store.state.impostors = store.state.impostors.filter((x) => !m.userIds.includes(x.user.id));
+          if (m.action === 'dismissBurst') store.state.bursts[m.groupId].dismissed = true;
+          fire();
+          return { status: 'ok' };
+        }
+        if (m.type === 'guardSearch') {
+          await new Promise((res) => setTimeout(res, 150));
+          return { status: 'ok', checked: 42, found: 1, added: 0, admins: 2 };
+        }
         if (m.type === 'hidePosts') {
           window.__hidePosts = m;
+          (window.__hideCalls = window.__hideCalls || []).push(m.posts.map((p) => p.id));
+          // Nhật ký dở dang như service worker ghi sau mỗi mục (Dashboard hiện tiến độ)
+          for (let i = 1; i <= m.posts.length; i++) {
+            await chrome.storage.local.set({ actionJournal: { run: 'x', at: Date.now(), total: m.posts.length, entries: m.posts.slice(0, i).map((p) => ({ contentId: p.id, status: 'ok' })) } });
+            await new Promise((res) => setTimeout(res, 120));
+          }
+          await chrome.storage.local.remove('actionJournal');
           (window.__sweepHidden = window.__sweepHidden || []).push(...m.posts.map((p) => p.id));
           return { status: 'ok', dryRun: false, ok: m.posts.length, dry: 0, failed: 0, errors: [], hidden: m.posts.map((p) => p.id), skipped: 0 };
         }
@@ -479,6 +586,12 @@
             ],
             teamTruncated: false,
             teamSkipped: [],
+            // Chat: 7 tin tháng này (3 người), 4 tin tháng trước
+            chat: {
+              channels: [{ id: 'chMain', name: 'Crypto Life' }],
+              messages: [...[0, 1, 2, 3, 4, 5, 6].map((i) => ({ t: Date.parse(at(cur, 1 + i)), ch: 'chMain', u: { id: 'u' + (i % 3), username: 'user' + (i % 3), fullname: 'Người ' + (i % 3) } })), ...[0, 1, 2, 3].map((i) => ({ t: Date.parse(at(prev, 2 + i)), ch: 'chMain', u: { id: 'u9', username: 'user9', fullname: 'Người 9' } }))],
+              truncated: false,
+            },
             errors: [],
           };
         }

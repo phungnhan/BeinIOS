@@ -121,7 +121,7 @@ try {
   if (!sw) throw new Error('Service worker không khởi động');
   const swSid = await attach(sw.targetId, 'service worker');
   result.version = await evalIn(swSid, 'chrome.runtime.getManifest().version');
-  const missing = await evalIn(swSid, `['doScan','doRefresh','doCompose','doComposeArticle','doComposeSeries','doCategories','doStats','doSyncNow','doTelegramTest','pollTelegram','scheduleTelegramPoll','doEditScheduled','postAutoItems','doTags','doTagAct','doCleanupUser','measurePostStats','trackPostStat','doRetention','doMonthly','doTelegramReport','readMemberEvents','searchPosts','readActorPosts','doSelfCheck','runSelfCheck','dailySelfCheck','prepareNudge','recordNudge','doNudgeEffect','preparePrompt','recordPromptUse','noteUsage','flushUsage','readTeamEvents','storageUsage','doUserPosts','doSweepSearch','doHidePosts','sweepSearch','remindPending','exclusive','notify'].filter((f) => typeof globalThis[f] !== 'function')`);
+  const missing = await evalIn(swSid, `['doScan','doRefresh','doCompose','doComposeArticle','doComposeSeries','doCategories','doStats','doSyncNow','doTelegramTest','pollTelegram','scheduleTelegramPoll','doEditScheduled','postAutoItems','doTags','doTagAct','doCleanupUser','measurePostStats','trackPostStat','doRetention','doMonthly','doTelegramReport','readMemberEvents','searchPosts','readActorPosts','doSelfCheck','runSelfCheck','dailySelfCheck','prepareNudge','recordNudge','doNudgeEffect','preparePrompt','recordPromptUse','noteUsage','flushUsage','readTeamEvents','syncChat','doChatOverview','doChatPosts','doChatSend','doChatView','doChatDeleteMsg','readChatMap','doChatAct','doChatRefresh','shareToChat','readChatMonth','guardJoins','doGuardSearch','doGuardAct','refreshAdmins','recoverJournal','cancelActions','storageUsage','doUserPosts','doSweepSearch','doHidePosts','sweepSearch','remindPending','exclusive','notify'].filter((f) => typeof globalThis[f] !== 'function')`);
   if (missing.length) fail('Service worker thiếu hàm: ' + missing.join(', '));
   // Nạp dữ liệu mẫu qua hàng đợi của service worker: chạy sau lần quét lúc cài (đang chờ hoặc đang chạy),
   // và dữ liệu mẫu tắt addon (active: false) nên không có lần quét tự động nào ghi đè sau đó.
@@ -158,6 +158,13 @@ try {
   await sleep(1200);
   result.popup = await evalIn(pSid, `({ requests: document.getElementById('requests').textContent, flagged: document.getElementById('flagged').textContent, todo: document.getElementById('todo').children.length })`);
   if (result.popup.requests !== '1') fail('Popup: số yêu cầu sai ' + result.popup.requests);
+
+  // Trang Chat (chưa bật chat): hiện nút Kết nối, không lỗi JavaScript
+  const { targetId: chatId } = await send('Target.createTarget', { url: `chrome-extension://${extId}/chat.html` });
+  const cSid = await attach(chatId, 'chat');
+  await sleep(1500);
+  result.chat = await evalIn(cSid, `({ title: document.getElementById('empty-title').textContent, enable: !document.getElementById('btn-enable').hidden })`);
+  if (result.chat.title !== 'Kết nối Chat Beincom' || !result.chat.enable) fail('Trang Chat: không hiện nút Kết nối Chat Beincom');
 } catch (e) {
   fail(e.message);
 }
@@ -165,7 +172,7 @@ try {
 result.problems = problems;
 if (problems.length) fail(`${problems.length} lỗi JavaScript`);
 console.log(JSON.stringify(result, null, 2));
-console.log(failed ? '✖ Có lỗi' : '✔ Addon thật chạy được: service worker, Dashboard (8 tab), popup');
+console.log(failed ? '✖ Có lỗi' : '✔ Addon thật chạy được: service worker, Dashboard (8 tab), popup, trang Chat');
 chrome.kill();
 await sleep(300);
 try {

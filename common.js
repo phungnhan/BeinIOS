@@ -38,6 +38,11 @@
     unansweredHours: 6,
     remindPending: true, // nhắc yêu cầu tham gia / bài chờ duyệt đã chờ quá pendingHours giờ (mỗi việc một lần)
     pendingHours: 24,
+    guardJoins: true, // theo dõi người mới vào: tài khoản giống admin, đợt vào ồ ạt (mỗi lần quét đọc nhật ký vào)
+    burstJoins: 30, // từ bấy nhiêu người vào trong 60 phút thì báo đợt vào ồ ạt
+    chatEnabled: false, // kết nối chat Beincom (cần cho phép addon kết nối chat.beincom.com)
+    chatScan: true, // quét tin nhắn mới trong kênh chat của group sau mỗi lần quét
+    chatUnread: true, // báo tin nhắn riêng chưa đọc / nhắc tên mình trong chat
     syncSettings: false, // đồng bộ cài đặt, quy tắc qua tài khoản Chrome / Edge (chrome.storage.sync)
     autoApprovePosts: false, // tự duyệt bài chờ duyệt đạt mọi quy tắc của thành viên tin cậy
     trustedMembers: [], // username thành viên tin cậy
@@ -117,6 +122,7 @@
     allowUsernames: [], // luôn gợi ý duyệt
     blockUsernames: [], // luôn gợi ý từ chối
     reviewViolators: true, // có hồ sơ vi phạm (bị cấm, xoá, ẩn bài…) -> cần xem
+    reviewImpersonation: true, // tên giống admin / tự nhận "admin, hỗ trợ, cskh" -> từ chối hoặc cần xem
   };
 
   // Quyền cho biết tài khoản quản trị group (lấy từ GET group/me/permissions)
@@ -180,6 +186,8 @@
       const more = errDetails(r.body.meta?.errors);
       return more && !base.includes(more) ? `${base}: ${more}` : base;
     }
+    // Lỗi của chat Beincom (Mattermost): { id, message, status_code }
+    if (r.body?.status_code && typeof r.body.message === 'string') return r.body.message;
     if (r.status === 0) return 'Không kết nối được API Beincom' + (r.error ? ` — ${r.error}` : '');
     if ([502, 503, 504].includes(r.status)) return `Máy chủ Beincom không phản hồi kịp (HTTP ${r.status}), thường tự hết — lần quét sau sẽ thử lại`;
     if (r.status === 401) return 'Phiên đăng nhập hết hạn';
@@ -281,7 +289,7 @@
   }
 
   // Các phần của BG trong lib/, theo thứ tự nạp
-  const PARTS = ['content', 'members', 'compose', 'article', 'manage', 'reports', 'telegram', 'diag'];
+  const PARTS = ['content', 'members', 'compose', 'article', 'manage', 'reports', 'telegram', 'diag', 'chat'];
 
   return {
     PARTS,

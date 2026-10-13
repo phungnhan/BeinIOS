@@ -2,6 +2,51 @@
 
 Mỗi bản một mục, bản mới nhất ở trên. Dashboard tự hiện các mục mới sau khi cập nhật (bấm "Có gì mới" ở cuối trang để xem lại).
 
+## v0.35.0 — 14/10/2026
+- **Xem ảnh phóng to trong trang Chat**: bấm ảnh trong tin nhắn thì ảnh phóng to ngay trong trang, không mở tab mới.
+  - Muốn mở tab thì bấm nút **Mở tab mới** trong khung xem. Ctrl + bấm vẫn mở tab như trước.
+  - Nhiều ảnh thì xem **như playlist**: dải ảnh nhỏ phía dưới, nút ‹ ›, phím ← → (Home / End về đầu / cuối), vuốt ngang trên điện thoại. Gồm mọi ảnh của cuộc trò chuyện, cũ đến mới.
+  - Ảnh lớn hơn màn hình: bấm vào ảnh để xem đúng cỡ, bấm lại để thu về.
+  - **Tới tin nhắn**: đóng khung và nhảy tới tin có ảnh đó. Esc hoặc ✕ để đóng.
+- **Tin có nhiều ảnh** hiện gọn thành lưới: tối đa 4 ô, ô cuối ghi "+N" nếu còn ảnh.
+- Sửa: ảnh chỉ có bản xem trước (không có link ảnh gốc) trước đây không hiện trong tin.
+
+## v0.34.0 — 14/10/2026
+- **Mở nhanh hơn**:
+  - **Popup** (bấm nút addon trên trình duyệt) hiện số liệu ngay: nền ghi sẵn một gói số đếm nhỏ sau mỗi lần quét / xử lý, popup chỉ đọc gói này thay vì đọc cả kết quả quét rồi chấm lại từng bài.
+  - **Trang Chat**: đọc mọi thứ trong một lượt song song. Lần đầu chỉ lấy tên người của 8 tin nhắn riêng gần nhất (và tin nhắn riêng còn chưa đọc), quyền dùng bản đã nhớ. Phần còn lại đọc ngay sau mà không bắt trang chờ. Các lệnh của trang Chat không còn đọc cả kết quả quét / nhật ký mỗi lần.
+- **Bên trái trang Chat gọn hơn**:
+  - Hiện trước **8 tin nhắn riêng** gần nhất (biết ngay ai đang nhắn).
+  - Hiện **5 cộng đồng**: cộng đồng bạn đã **ghim** trên Beincom lên đầu (có biểu tượng ghim, theo thứ tự ghim), rồi cộng đồng có tin mới nhất.
+  - Còn lại sau nút **Xem thêm** / **Thu gọn**. Khi tìm hoặc lọc thì hiện đủ.
+  - Khung chờ lúc mới mở.
+
+## v0.33.0 — 14/10/2026
+- **💬 Trang Chat** (nút 💬 Chat trên Dashboard và popup; bấm thông báo tin nhắn riêng cũng mở trang này): đọc và nhắn tin ngay trong addon.
+  - Bên trái: tìm, lọc Tất cả / Chưa đọc / Tin nhắn riêng; tin nhắn riêng và kênh chat theo từng community, số tin chưa đọc, số lần nhắc tên.
+  - Cuộc trò chuyện: bong bóng tin (tin của bạn bên phải), ảnh đại diện, chia theo ngày, vạch "Tin chưa đọc", link, @nhắc tên (tô sáng khi nhắc bạn), ảnh / tệp đính kèm, trích dẫn tin được trả lời.
+  - Gõ tin (Enter gửi, Shift + Enter xuống dòng), **Trả lời**, **Sao chép**, **Xoá** (tin của bạn; tin người khác nếu bạn là admin kênh — theo Chạy thử, ghi Nhật ký). Tải tin cũ hơn khi cuộn lên; tin mới tự hiện khi trang đang mở. Kênh chỉ xem thì không gõ được.
+  - Mở nhanh: hiện ngay danh sách lần trước, đọc mọi kênh trong một lượt, ghi nhớ quyền và tên người.
+  - Giao diện sáng / tối theo máy, dùng được trên điện thoại. Nội dung tin chỉ hiện trong trang, addon không lưu lại.
+
+## v0.32.0 — 14/10/2026
+- **💬 Chat Beincom** (bật ở Quy tắc & cài đặt → Chat Beincom; addon xin quyền kết nối chat.beincom.com lúc bật, dùng chính phiên đăng nhập của bạn):
+  - **Tin nhắn chat** (tab Bài viết): sau mỗi lần quét, tin mới trong kênh chat của các group bạn quản trị được chấm theo quy tắc bài viết (từ khoá, link cấm, liên hệ riêng, bộ mẫu chống lừa đảo); báo **đợt spam trong chat** (cùng link từ nhiều tài khoản) và người nhắn có **tên giống admin**. Nút **Xoá tin** (ở kênh bạn là admin — xoá là mất hẳn, có xác nhận, theo Chạy thử), **Bỏ qua**, **Cấm** người gửi.
+  - **Tin nhắn riêng chưa đọc, nhắc tên**: thông báo / Telegram khi có tin nhắn riêng mới hoặc bạn được nhắc tên trong kênh — chỉ tên người gửi, addon không đọc nội dung tin nhắn riêng. Có ở Việc cần làm.
+  - **Đăng bài: Gửi kèm vào kênh chat** — đăng ngay thì gửi thêm một tin (lời nhắn hoặc câu đầu của bài + link bài) vào kênh chat của từng group.
+  - **Báo cáo tháng** có số tin chat tháng này / tháng trước, số người nhắn, người nhắn nhiều nhất.
+
+## v0.31.0 — 14/10/2026
+- **Thao tác hàng loạt không bị đứt giữa chừng**: ẩn / duyệt / xoá / cấm nhiều mục được chia thành nhiều đợt nhỏ (trình duyệt dừng phần chạy nền nếu một lệnh quá 5 phút); có **thanh tiến độ** (vd "Đang gửi lên Beincom: 37/120") và nút **Dừng**. Mỗi mục làm xong được ghi ngay — nếu trình duyệt vẫn tắt giữa chừng, lần sau addon ghi bù vào Nhật ký và đánh dấu bài đã ẩn.
+- **🛡 Bảo vệ community** (tab Thành viên, mặc định bật): sau mỗi lần quét addon xem ai vừa vào (chỉ đọc) và báo ngay (kèm Telegram):
+  - **Tài khoản giống admin**: tên / username giống admin của community (kể cả viết lách 0→o, 1→i, chữ Kirin…) hoặc tự nhận "Admin", "Hỗ trợ", "CSKH" — nút Cấm ở mọi community, Xoá khỏi group, Không phải. Nút **Tìm trong toàn bộ thành viên** để tìm cả người đã vào từ trước.
+  - **Đợt vào ồ ạt**: từ 30 người vào trong 60 phút (đổi được) — thường là tài khoản ảo trước một đợt spam. Nút **Bật Duyệt thành viên**, xem danh sách người vừa vào, chọn người không có ảnh rồi xoá / cấm.
+- Quy tắc lọc thành viên mới: **Mạo danh admin** — yêu cầu tham gia có tên giống admin thì Gợi ý từ chối (tên ngắn trùng tên admin, tên gần giống: Cần xem).
+
+## v0.30.1 — 13/10/2026
+- Nút **↑ Lên đầu trang** ở góc dưới phải mọi tab (hiện khi đã cuộn xuống).
+- Đổi tab giờ mở tab mới từ đầu trang (trước đây giữ vị trí cuộn của tab cũ).
+
 ## v0.30.0 — 13/10/2026
 - **Đội admin** trong Báo cáo tháng: mỗi admin đã duyệt vào, từ chối, xoá, cấm, gỡ cấm, gán / gỡ admin, đổi cài đặt bao nhiêu lần trong tháng — lấy từ nhật ký hoạt động của Beincom nên tính **cả việc làm thẳng trên web**, ở mọi group bạn quản trị trong community. Kèm danh sách ai đổi cài đặt / quyền admin gì, lúc nào. Có trong bản chữ để sao chép / gửi Telegram.
 - **Chống đầy bộ nhớ**: addon xin quyền lưu trữ không giới hạn (không hỏi thêm khi cài) — community đông, lịch sử dài cũng không bị mất dữ liệu vì đầy 10 MB. Tự kiểm tra có mục **Bộ nhớ của addon** (dung lượng, phần lớn nhất); phần Sao lưu ghi dung lượng đang dùng.

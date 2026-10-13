@@ -120,7 +120,7 @@ async function sweepHide() {
     sendNote: `Sẽ gửi lên Beincom ngay (nghỉ ${data.settings.actionDelaySec} giây giữa mỗi bài). Bài đã ẩn không hiện lại được — Beincom không có lệnh hiện lại.`,
   });
   if (!ok) return;
-  const r = await send({ type: 'hidePosts', posts, reasonType: reason.value }, (n) => `Đã ẩn ${n} bài.`);
+  const r = await send({ type: 'hidePosts', posts, reasonType: reason.value }, (n) => `Đã ẩn ${n} bài.`, { chunk: ['posts'] });
   if (r && !r.dryRun && r.hidden?.length) {
     const gone = new Set(r.hidden);
     sweep.posts = (sweep.posts || []).filter((p) => !gone.has(p.id));
