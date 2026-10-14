@@ -170,6 +170,11 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     refreshBadge: async () => (await updateBadge(), { status: 'ok' }),
     chatPosts: () => doChatPosts(msg),
     chatSend: () => doChatSend(msg),
+    chatContact: () => doChatContact(msg),
+    chatUpload: () => doChatUpload(msg),
+    chatThread: () => doChatThread(msg),
+    chatFollow: () => doChatFollow(msg),
+    chatThreadRead: () => doChatThreadRead(msg),
     chatView: () => doChatView(msg),
     chatDeleteMsg: () => doChatDeleteMsg(msg),
     // Nút Dừng khi đang làm hàng loạt: không chờ (lệnh đang chạy giữ hàng đợi)

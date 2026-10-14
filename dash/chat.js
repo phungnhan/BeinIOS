@@ -36,9 +36,11 @@ function renderChatUnread() {
   const u = data.state.chatUnread;
   const box = $('chat-unread');
   if (!data.settings.chatEnabled || !data.settings.chatUnread || !u) return box.replaceChildren();
-  const dms = u.dms || [];
   const parts = [];
-  if (dms.length) parts.push(el('span', {}, `✉ ${dms.reduce((s, d) => s + d.unread, 0)} tin nhắn riêng chưa đọc từ `, ...dms.slice(0, 5).flatMap((d, i) => [i ? ', ' : '', el('a', { href: 'chat.html#c=' + encodeURIComponent(d.channelId), target: '_blank', text: d.user?.fullname || d.user?.username || d.title || 'người dùng' })]), dms.length > 5 ? ` và ${dms.length - 5} người khác` : ''));
+  // Tin nhắn riêng và lời mời trò chuyện (người chưa kết nối nhắn cho bạn) tách riêng
+  for (const [list, icon, what] of [[(u.dms || []).filter((d) => !d.request), '✉', 'tin nhắn riêng chưa đọc'], [(u.dms || []).filter((d) => d.request), '👋', 'lời mời trò chuyện chưa đọc']]) {
+    if (list.length) parts.push(el('span', {}, `${icon} ${list.reduce((s, d) => s + d.unread, 0)} ${what} từ `, ...list.slice(0, 5).flatMap((d, i) => [i ? ', ' : '', el('a', { href: 'chat.html#c=' + encodeURIComponent(d.channelId), target: '_blank', text: d.user?.fullname || d.user?.username || d.title || 'người dùng' })]), list.length > 5 ? ` và ${list.length - 5} người khác` : ''));
+  }
   if (u.mentions) parts.push(el('span', { text: `🔔 Bạn được nhắc tên ${u.mentions} lần trong kênh chat` }));
   box.replaceChildren(...(parts.length ? [...parts.flatMap((p, i) => (i ? [' · ', p] : [p])), ' · ', el('a', { href: 'chat.html', target: '_blank', text: 'Mở trang Chat ↗' })] : [el('span', { class: 'muted', text: `Không có tin nhắn riêng chưa đọc (lúc ${fmtTime(u.at)}).` })]));
 }

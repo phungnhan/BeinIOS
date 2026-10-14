@@ -1742,6 +1742,64 @@ test('chat Beincom: người dùng chat -> người Beincom, quyền kênh, thu 
   const dms = BG.dmUnread([{ id: 'd1', type: 'D', name: 'me__c9', total_msg_count: 4, last_post_at: 9 }, { id: 'd2', type: 'D', name: 'c8__me', total_msg_count: 2 }, { id: 'd3', type: 'G', display_name: 'Nhóm', total_msg_count: 3, last_post_at: 10 }], [{ channel_id: 'd1', msg_count: 1 }, { channel_id: 'd2', msg_count: 2 }, { channel_id: 'd3', msg_count: 0, mention_count: 1 }], 'me');
   assert.deepEqual(dms.map((d) => [d.channelId, d.otherId, d.unread, d.mentions]), [['d3', '', 3, 1], ['d1', 'c9', 3, 0]]);
   assert.equal(BG.chatUrl('direct', 'd1'), 'https://group.beincom.com/chat-home?teamName=direct&channel=d1');
+  // Markdown của chat: khối và chữ trong dòng; link chỉ http(s) / mailto
+  const md = BG.chatMarkdown('> trích\n\n- **a** ~~b~~ *c* _d_\n- [x](https://a.b) `m`\n\n2. một\n3. hai\n\n```js\nlet x = 1;\n```\n# Đề\n---\nhết @kai www.x.vn.');
+  assert.deepEqual(md.map((b) => b.t), ['quote', 'ul', 'ol', 'pre', 'h', 'hr', 'p']);
+  assert.deepEqual(md[1].items[0].map((n) => n.t), ['b', 'text', 's', 'text', 'i', 'text', 'i']);
+  assert.deepEqual([md[1].items[1][0], md[2].start, md[3].v, md[3].lang], [{ t: 'a', href: 'https://a.b', c: [{ t: 'text', v: 'x' }] }, 2, 'let x = 1;', 'js']);
+  assert.deepEqual(md[6].c.filter((n) => n.t !== 'text'), [{ t: 'at', v: '@kai' }, { t: 'a', href: 'https://www.x.vn', c: [{ t: 'text', v: 'www.x.vn' }] }]);
+  assert.deepEqual(BG.chatMarkdown('[bấm](javascript:alert(1)) a@b.com')[0].c, [{ t: 'text', v: '[bấm](javascript:alert(1)) a@b.com' }]); // không nhận link lạ, email không là @tên
+  assert.deepEqual(BG.chatMarkdown('***đậm nghiêng*** 2*3*4')[0].c.slice(0, 1), [{ t: 'b', c: [{ t: 'i', c: [{ t: 'text', v: 'đậm nghiêng' }] }] }]);
+  assert.equal(BG.chatMarkdown('2*3*4 snake_case_name')[0].c.length, 1); // dấu * / _ giữa chữ không phải định dạng
+  assert.deepEqual(BG.chatMarkdown('a\nb')[0].c.map((n) => n.t), ['text', 'br', 'text']);
+  assert.deepEqual(BG.chatMarkdown('```url```')[0].c, [{ t: 'code', v: 'url' }]);
+  assert.equal(BG.chatPlain('**Đậm** và [link](https://x.y) `m`\n- a\n- b'), 'Đậm và link m a b');
+  // Bộ gõ: định dạng chữ đang chọn, bấm lại thì bỏ; danh sách; link
+  const ed = (v, s, e, k) => {
+    const r = BG.mdEdit(v, s, e, k);
+    const out = v.slice(0, r.from) + r.text + v.slice(r.to);
+    return [out, out.slice(r.selStart, r.selEnd)];
+  };
+  assert.deepEqual(ed('xin chào', 4, 8, 'bold'), ['xin **chào**', 'chào']);
+  assert.deepEqual(ed('xin **chào**', 6, 10, 'bold'), ['xin chào', 'chào']);
+  assert.deepEqual(ed('xin **chào**', 4, 12, 'bold'), ['xin chào', 'chào']);
+  assert.deepEqual(ed('xin chào ', 4, 9, 'italic'), ['xin *chào* ', 'chào']); // khoảng trắng để ngoài
+  assert.deepEqual(ed('**chào**', 2, 6, 'italic'), ['***chào***', 'chào']); // không nhầm ** là *
+  assert.deepEqual(ed('ab', 2, 2, 'strike'), ['ab~~chữ gạch~~', 'chữ gạch']);
+  assert.deepEqual(ed('a\nb', 0, 3, 'code'), ['```\na\nb\n```', 'a\nb']);
+  assert.deepEqual(ed('xem', 0, 3, 'link'), ['[xem](url)', 'url']);
+  assert.deepEqual(ed('https://a.b', 0, 11, 'link'), ['[](https://a.b)', '']);
+  assert.deepEqual(ed('mua\nbán', 0, 7, 'ol'), ['1. mua\n2. bán', '1. mua\n2. bán']);
+  assert.deepEqual(ed('1. mua\n2. bán', 0, 13, 'ol'), ['mua\nbán', 'mua\nbán']);
+  assert.deepEqual(ed('1. mua\n2. bán', 0, 13, 'ul'), ['- mua\n- bán', '- mua\n- bán']); // đổi kiểu danh sách
+  assert.deepEqual(ed('dòng một\ndòng hai', 3, 3, 'quote'), ['> dòng một\ndòng hai', '']);
+  assert.equal(BG.mdEdit('a', 0, 1, 'lạ'), null);
+  // Shift + Enter trong danh sách
+  const nl = (v, pos) => {
+    const r = BG.mdNewline(v, pos);
+    return r && v.slice(0, r.from) + r.text + v.slice(r.to);
+  };
+  assert.deepEqual([nl('- a', 3), nl('9. a', 4), nl('x\n- ', 4), nl('chữ', 3)], ['- a\n- ', '9. a\n10. ', 'x\n', null]);
+  // Huy hiệu cạnh tên: xác minh (hồ sơ phụ), Premium theo năm / trọn đời; không có thì không thêm khoá
+  const per = (x) => BG.chatPerson({ id: 'c1', username: 'u', first_name: 'A', last_name: 'B', props: { bic_user_id: 'b1' }, extra_data: x });
+  assert.deepEqual(per({ is_verified: true, is_primary: true, subscriptions: [{ type: 'premium', term: 'lifetime' }] }), { id: 'b1', chatId: 'c1', username: 'u', fullname: 'A B', avatar: '', verified: true, premium: 'lifetime' });
+  assert.deepEqual([per({ is_verified: true, is_primary: false }).subProfile, per({ subscriptions: [{ type: 'premium', term: 'annual' }] }).premium, Object.keys(per({ subscriptions: [{ type: 'basic' }] })).length], [true, 'annual', 5]);
+  // Thread của tin: số bình luận, đang theo dõi, người tham gia
+  const tp = BG.chatPagePost({ id: 'p1', channel_id: 'k', user_id: 'c1', message: 'x', reply_count: 3, last_reply_at: 9, is_following: true, participants: [{ id: 'c2', username: 'v', last_picture_update: 5 }] });
+  assert.deepEqual([tp.replyCount, tp.lastReplyAt, tp.following, tp.participants.map((u) => [u.chatId, u.pictureAt])], [3, 9, true, [['c2', 5]]]);
+  // Độ ưu tiên của tin
+  assert.deepEqual([BG.chatPriority({ metadata: { priority: { priority: 'urgent' } } }), BG.chatPriority({ metadata: { priority: { priority: 'lạ' } } }), BG.chatPriority({})], ['urgent', '', '']);
+  // Lời mời trò chuyện: người kia gửi (contact_requester_id, không có thì creator_id) và chưa chấp nhận
+  const ct = (props, extra = {}) => BG.chatContact({ type: 'D', name: 'me__c9', creator_id: 'me', props, ...extra }, 'me');
+  assert.deepEqual(ct({ contact_id: 'k1', contact_requester_id: 'c9', contact_status: 'pending' }), { id: 'k1', status: 'pending', incoming: true, sent: false, ignoredByOther: false });
+  assert.equal(ct({ contact_requester_id: 'c9', contact_status: 'spammed' }).incoming, true);
+  assert.equal(ct({ contact_requester_id: 'c9', contact_status: 'ignored' }).incoming, true); // mình đã bỏ qua: vẫn là lời mời, không lẫn vào tin nhắn riêng
+  assert.equal(ct({ contact_requester_id: 'c9', contact_status: 'accepted' }).incoming, false);
+  assert.deepEqual([ct({ contact_requester_id: 'me', contact_status: 'pending' }).sent, ct({ contact_requester_id: 'me', contact_status: 'ignored' }).ignoredByOther], [true, true]);
+  assert.equal(ct({ contact_status: 'pending' }, { creator_id: 'c9' }).incoming, true); // không có người gửi: lấy người tạo kênh
+  assert.equal(ct({}), null); // tin nhắn riêng cũ (không có trạng thái)
+  assert.equal(BG.chatContact({ type: 'G', props: { contact_status: 'pending' } }, 'me'), null);
+  assert.deepEqual(BG.dmUnread([{ id: 'r1', type: 'D', name: 'me__c9', total_msg_count: 1, props: { contact_requester_id: 'c9', contact_status: 'pending' } }], [], 'me').map((d) => [d.channelId, d.request]), [['r1', true]]);
   assert.equal(BG.chatShareText('## Tiêu đề **đậm**\nThân bài', 'https://x/p/1'), '📢 Tiêu đề đậm\nhttps://x/p/1');
   assert.equal(BG.chatShareText('a', 'https://x/p/1', ' Lời nhắn '), '📢 Lời nhắn\nhttps://x/p/1');
   const st = BG.chatStats([{ t: 5, ch: 'k1', u: { id: 'a' } }, { t: 6, ch: 'k1', u: { id: 'a' } }, { t: 7, ch: 'k2', u: { id: 'b' } }, { t: 50, ch: 'k1', u: { id: 'a' } }], { from: 0, to: 10 }, [{ id: 'k1', name: 'A' }, { id: 'k2', name: 'B' }]);

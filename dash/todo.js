@@ -113,7 +113,7 @@ function todoItems() {
       out.push({ key: 'chat:' + m.id, cat: 'comments', pri: 0, time: m.createdAt, tag: ['err', 'Chat vi phạm'], who: m.user, text: m.text, meta: [m.groupName, reasonsText(ev)].filter(Boolean).join(' · '), url: BG.chatUrl(ch?.teamName || m.teamName, m.channelId), actions: [...(ch?.canDelete ? [['Xoá tin', 'danger', () => chatDelete([m.id])]] : []), ['Bỏ qua', 'ghost', () => chatAct('dismiss', [m.id])]] });
     }
     for (const d of data.settings.chatUnread ? data.state.chatUnread?.dms || [] : []) {
-      out.push({ key: 'dm:' + d.channelId, cat: 'comments', pri: 1, time: new Date(d.lastPostAt).toISOString(), tag: ['info', 'Tin nhắn riêng'], who: d.user || null, title: d.user ? '' : d.title || 'Nhóm chat', meta: `${d.unread} tin chưa đọc`, url: 'chat.html#c=' + encodeURIComponent(d.channelId), actions: [['Mở chat', 'primary', () => window.open('chat.html#c=' + encodeURIComponent(d.channelId), '_blank')]] });
+      out.push({ key: 'dm:' + d.channelId, cat: 'comments', pri: 1, time: new Date(d.lastPostAt).toISOString(), tag: ['info', d.request ? 'Lời mời trò chuyện' : 'Tin nhắn riêng'], who: d.user || null, title: d.user ? '' : d.title || 'Nhóm chat', meta: `${d.unread} tin chưa đọc`, url: 'chat.html#c=' + encodeURIComponent(d.channelId), actions: [['Mở chat', 'primary', () => window.open('chat.html#c=' + encodeURIComponent(d.channelId), '_blank')]] });
     }
   }
 

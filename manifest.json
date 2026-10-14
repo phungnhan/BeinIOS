@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "BeinGroup — Quản lý Group Beincom",
-  "version": "0.35.0",
+  "version": "0.38.0",
   "description": "Quản lý các Group Beincom bạn quản trị: duyệt thành viên và bài viết theo quy tắc, ẩn bài vi phạm, quản lý thành viên, soạn và hẹn giờ đăng bài, thống kê thành viên và bài viết. Tác giả: Kai | Crypto Life.",
   "permissions": ["alarms", "storage", "unlimitedStorage", "notifications", "scripting"],
   "host_permissions": [

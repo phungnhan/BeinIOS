@@ -887,9 +887,9 @@ export const scenarios = [
       assert.ok((await page.ev(`window.__permRequests || 0`)) >= 1);
       // Đã bật, mở thẳng kênh trong địa chỉ
       await page.open(url('chat', 'chat=1&c=chMain'));
-      await page.until(() => document.querySelectorAll('#msg-list .msg').length === 6);
+      await page.until(() => document.querySelectorAll('#msg-list .msg').length === 5); // bình luận (n3) nằm trong thread
       const info = await page.call(() => ({
-        sections: [...document.querySelectorAll('.sec-head')].map((x) => x.textContent),
+        sections: [...document.querySelectorAll('.sec-title')].map((x) => x.textContent),
         sel: document.querySelector('.item.sel .item-title')?.textContent,
         title: document.getElementById('conv-title').textContent,
         sub: document.getElementById('conv-sub').textContent,
@@ -910,26 +910,26 @@ export const scenarios = [
       assert.match(info.sub, /Crypto Life · kênh chung · bạn là admin kênh/);
       assert.deepEqual(info.days, ['Hôm qua', 'Hôm nay']);
       assert.ok(info.divider);
-      assert.equal(info.mine, 2);
+      assert.equal(info.mine, 1);
       assert.deepEqual(info.sys, ['tuan đã vào kênh']);
       assert.ok(info.mention);
       assert.equal(info.bold, 'ví lạnh');
       assert.equal(info.link, 'https://group.beincom.com/posts/abc');
-      assert.match(info.quote, /^Lan Anh: @kaicrypto ơi cho em hỏi ví lạnh nào tốt\?$/);
+      assert.equal(await page.ev(`document.querySelector('#m-n2 .tbar-n').textContent`), '1 bình luận');
       assert.deepEqual(info.files, ['bieu-do.png', 'bao-cao.pdf']);
       await page.until(() => (window.__chatRead || 0) >= 1); // mở kênh: đánh dấu đã đọc
       // Gửi tin: Enter
       await page.ev(`(() => { const t = document.getElementById('text'); t.value = 'Tối nay 20h nhé'; t.dispatchEvent(new Event('input')); t.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); return true; })()`);
-      await page.until(() => (window.__chatSends || []).length === 1 && document.querySelectorAll('#msg-list .msg').length === 7);
+      await page.until(() => (window.__chatSends || []).length === 1 && document.querySelectorAll('#msg-list .msg').length === 6);
       assert.deepEqual(await page.ev(`window.__chatSends[0]`), { type: 'chatSend', channelId: 'chMain', message: 'Tối nay 20h nhé', rootId: '' });
       assert.equal(await page.ev(`document.getElementById('text').value`), '');
-      // Trả lời một tin: gửi kèm mã tin gốc
-      await page.ev(`[...document.querySelectorAll('.msg')].find((x) => x.textContent.includes('Mọi người xem bài')).querySelector('.tools button').click(); true`);
-      await page.until(() => !document.getElementById('reply').hidden);
-      assert.match(await page.ev(`document.getElementById('reply-text').textContent`), /^Trả lời Lan Anh: Mọi người xem bài/);
-      await page.ev(`(() => { const t = document.getElementById('text'); t.value = 'Cảm ơn em'; t.dispatchEvent(new Event('input')); document.getElementById('send').click(); return true; })()`);
-      await page.until(() => (window.__chatSends || []).length === 2);
+      // Bình luận một tin: mở thread, gửi kèm mã tin gốc; tin hiện "1 bình luận"
+      await page.ev(`[...document.querySelectorAll('#msg-list .msg')].find((x) => x.textContent.includes('Mọi người xem bài')).querySelector('.tools button').click(); true`);
+      await page.until(() => !document.getElementById('thread').hidden);
+      await page.ev(`(() => { const t = document.getElementById('t-text'); t.value = 'Cảm ơn em'; t.dispatchEvent(new Event('input')); document.getElementById('t-send').click(); return true; })()`);
+      await page.until(() => (window.__chatSends || []).length === 2 && document.querySelector('#m-n1 .tbar-n')?.textContent === '1 bình luận');
       assert.equal(await page.ev(`window.__chatSends[1].rootId`), 'n1');
+      await page.ev(`document.getElementById('t-close').click(); true`);
       // Tin mới của người khác hiện sau lần đọc lại (4 giây)
       await page.ev(`window.__chatIncoming = [{ id: 'in1', channelId: 'chMain', user: { id: 'u70', chatId: 'cu70', username: 'moi', fullname: 'Người mới', pictureAt: 0 }, createAt: Date.now(), updateAt: Date.now() + 1, editAt: 0, deleted: false, system: false, message: 'Xin chào cả nhà!', rootId: '', replyCount: 0, pinned: false, files: [] }]; true`);
       await page.until(() => [...document.querySelectorAll('.bubble')].some((b) => b.textContent.includes('Xin chào cả nhà!')), 9000);
@@ -937,12 +937,12 @@ export const scenarios = [
       await page.ev(`document.getElementById('older').click(); true`);
       await page.until(() => [...document.querySelectorAll('.bubble')].some((b) => b.textContent.includes('Tin cũ hơn nữa')));
       // Xoá tin của mình: hộp hỏi
-      await page.ev(`[...document.querySelectorAll('.msg.me')].find((x) => x.textContent.includes('Ledger')).querySelector('.tools .del').click(); true`);
+      await page.ev(`[...document.querySelectorAll('#msg-list .msg.me')].find((x) => x.textContent.includes('AMA')).querySelector('.tools .del').click(); true`);
       await page.until(() => document.getElementById('ask').open);
       assert.equal(await page.ev(`document.getElementById('ask-title').textContent`), 'Xoá tin nhắn của bạn?');
       await page.ev(`document.getElementById('ask-ok').click(); true`);
       await page.until(() => (window.__chatDeletes || []).length === 1 && document.querySelectorAll('.msg.deleted').length === 1);
-      assert.deepEqual(await page.ev(`[window.__chatDeletes[0].postId, window.__chatDeletes[0].own]`), ['n3', true]);
+      assert.deepEqual(await page.ev(`[window.__chatDeletes[0].postId, window.__chatDeletes[0].own]`), ['o2', true]);
       // Kênh chỉ xem: không gõ được
       await page.ev(`[...document.querySelectorAll('#list .item')].find((x) => x.textContent.includes('Hỏi đáp')).click(); true`);
       await page.until(() => document.getElementById('text').disabled && /chỉ xem/.test(document.getElementById('text').placeholder));
@@ -959,6 +959,208 @@ export const scenarios = [
       await page.ev(`document.getElementById('back').click(); true`);
       await page.until(() => getComputedStyle(document.getElementById('side')).display !== 'none');
       assert.equal(await page.ev(`document.documentElement.scrollWidth > innerWidth`), false);
+    },
+  },
+  {
+    name: 'Trang Chat: lời mời trò chuyện',
+    async run({ page, url, assert }) {
+      await page.open(url('chat', 'chat=1&req=1'), { width: 1280, height: 820 });
+      await page.ev(`localStorage.removeItem('beingroup-chat-dmtab'); true`);
+      await page.open(url('chat', 'chat=1&req=1'), { width: 1280, height: 820 });
+      await page.until(() => !!document.querySelector('.sec-tabs'));
+      const secs = () => [...document.querySelectorAll('.sec')].map((x) => [x.querySelector('.sec-title').textContent, [...x.querySelectorAll('.item-title')].map((t) => t.textContent)]);
+      const tabs = () => [...document.querySelectorAll('.sec-tabs .tab')].map((t) => [t.textContent, t.classList.contains('on')]);
+      // Lời mời là tab cạnh Tin nhắn riêng (lời mình gửi đi vẫn ở Tin nhắn riêng)
+      assert.deepEqual(await page.call(tabs), [['Tin nhắn riêng', true], ['Lời mời3', false]]);
+      assert.deepEqual(await page.call(secs), [['Tin nhắn riêng', ['Lan Anh', 'Hải Yến', 'Minh Quân']], ['Crypto Life', ['Crypto Life', 'Hỏi đáp']]]);
+      assert.equal(await page.ev(`document.querySelectorAll('.sec-tabs .tab')[1].classList.contains('hot')`), true); // có lời mời chưa đọc
+      await page.ev(`document.querySelectorAll('.sec-tabs .tab')[1].click(); true`);
+      await page.until(() => document.querySelectorAll('.sec-tabs .tab')[1].classList.contains('on'));
+      assert.deepEqual((await page.call(secs))[0], ['Lời mời3', ['Người Lạ', 'Tặng Quà', 'Bạn Mới']]);
+      assert.deepEqual(await page.ev(`[...document.querySelectorAll('.sec')[0].querySelectorAll('.item-sub')].map((x) => x.textContent)`), ['@nguoila · Lời mời đang chờ', '@tangqua · Lời mời bị xếp vào Spam', '@banmoi · Lời mời đang chờ']);
+      // Mở lời mời: thanh Chấp nhận / Bỏ qua; Chấp nhận -> chuyển sang Tin nhắn riêng
+      const open = (name) => page.ev(`[...document.querySelectorAll('#list .item')].find((x) => x.querySelector('.item-title').textContent === ${JSON.stringify(name)}).click(); true`);
+      await open('Người Lạ');
+      await page.until(() => !document.getElementById('req-bar').hidden && document.querySelectorAll('#msg-list .msg').length === 1);
+      assert.match(await page.ev(`document.getElementById('req-text').textContent`), /^Người Lạ chưa kết nối với bạn và đã gửi lời mời trò chuyện\. Nếu bạn trả lời, bạn cũng chấp nhận/);
+      assert.match(await page.ev(`document.getElementById('conv-sub').textContent`), /lời mời trò chuyện/);
+      assert.equal(await page.ev(`document.getElementById('text').disabled`), false);
+      await page.ev(`document.getElementById('req-accept').click(); true`);
+      // Chấp nhận: chuyển sang Tin nhắn riêng (tab Tin nhắn riêng mở để thấy cuộc trò chuyện), tab Lời mời còn 2
+      await page.until(() => document.getElementById('req-bar').hidden && document.querySelectorAll('.sec-tabs .tab')[0].classList.contains('on'));
+      assert.deepEqual(await page.ev(`window.__chatContacts`), [{ type: 'chatContact', contactId: 'ct1', action: 'accept' }]);
+      assert.deepEqual((await page.call(secs))[0], ['Tin nhắn riêng', ['Lan Anh', 'Người Lạ', 'Hải Yến', 'Minh Quân']]);
+      assert.equal(await page.ev(`document.querySelectorAll('.sec-tabs .tab')[1].textContent`), 'Lời mời2');
+      await page.ev(`document.querySelectorAll('.sec-tabs .tab')[1].click(); true`);
+      await page.until(() => document.querySelectorAll('.sec')[0].querySelectorAll('.item').length === 2);
+      assert.match(await page.ev(`document.getElementById('conv-sub').textContent`), /tin nhắn riêng/);
+      // Spam: ghi rõ; Bỏ qua có hỏi lại
+      await open('Tặng Quà');
+      await page.until(() => /Spam/.test(document.getElementById('req-text').textContent));
+      await page.ev(`document.getElementById('req-ignore').click(); true`);
+      await page.until(() => document.getElementById('ask').open);
+      assert.equal(await page.ev(`document.getElementById('ask-title').textContent`), 'Bỏ qua lời mời trò chuyện?');
+      await page.ev(`document.getElementById('ask-ok').click(); true`);
+      await page.until(() => /Bạn đã bỏ qua/.test(document.getElementById('req-text').textContent) && document.getElementById('req-ignore').hidden);
+      assert.deepEqual(await page.ev(`window.__chatContacts[1]`), { type: 'chatContact', contactId: 'ct2', action: 'ignore' });
+      assert.match(await page.ev(`document.querySelector('.sec .item.sel .item-sub').textContent`), /Bạn đã bỏ qua/);
+      // Trả lời lời mời: gửi kèm chấp nhận, chuyển sang Tin nhắn riêng
+      await open('Bạn Mới');
+      await page.until(() => !document.getElementById('req-bar').hidden && /Bạn Mới/.test(document.getElementById('req-text').textContent));
+      await page.ev(`(() => { const t = document.getElementById('text'); t.value = 'Chào bạn'; t.dispatchEvent(new Event('input')); t.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); return true; })()`);
+      await page.until(() => (window.__chatSends || []).length === 1 && document.getElementById('req-bar').hidden);
+      assert.equal(await page.ev(`window.__chatSends[0].acceptContactId`), 'ct3');
+      assert.equal(await page.ev(`document.querySelectorAll('.sec-tabs .tab')[1].textContent`), 'Lời mời1');
+      // Lời mình gửi đi: chờ người nhận chấp nhận, chưa gửi tiếp được
+      await open('Hải Yến');
+      await page.until(() => document.getElementById('text').disabled && /Bạn đã gửi lời mời/.test(document.getElementById('req-text').textContent));
+      assert.equal(await page.ev(`document.getElementById('req-actions').hidden`), true);
+      // Tìm: gộp cả tin nhắn riêng và lời mời (lời mời có ghi chú)
+      await setValue(page, 'q', 'Tặng');
+      await page.until(() => document.querySelectorAll('#list .item').length === 1 && !document.querySelector('.sec-tabs'));
+      await setValue(page, 'q', '');
+      // Lọc Tin nhắn riêng: vẫn có hai tab
+      await page.ev(`document.querySelector('#filters button[data-f=dm]').click(); true`);
+      await page.until(() => !!document.querySelector('.sec-tabs') && document.querySelectorAll('.sec').length === 1);
+      // Mở lại trang: nhớ tab đang chọn; mở thẳng một lời mời thì sang tab Lời mời
+      await page.open(url('chat', 'chat=1&req=1&c=rq2'), { width: 1280, height: 820 });
+      await page.until(() => !document.getElementById('req-bar').hidden && document.querySelectorAll('.sec-tabs .tab')[1].classList.contains('on'));
+      await page.ev(`localStorage.removeItem('beingroup-chat-dmtab'); true`);
+    },
+  },
+  {
+    name: 'Trang Chat: thread (bình luận, theo dõi) và huy hiệu',
+    async run({ page, url, assert }) {
+      await page.open(url('chat', 'chat=1&c=chMain'), { width: 1280, height: 820 });
+      await page.until(() => !!document.querySelector('#m-n2 .tbar'));
+      // Huy hiệu cạnh tên: tin, danh sách
+      assert.deepEqual(await page.ev(`[!!document.querySelector('#m-n1 .msg-name .vb.ok'), !!document.querySelector('#m-n1 .msg-name .vb.pr.lifetime'), document.querySelector('#m-n1 .msg-name .vb.ok').title, !!document.querySelector('#m-o1 .vb')]`), [true, true, 'Đã xác minh', false]);
+      assert.equal(await page.ev(`[...document.querySelectorAll('#list .item')].find((x) => x.textContent.includes('Lan Anh')).querySelectorAll('.item-title .vb').length`), 2);
+      // Thanh thread: người tham gia, số bình luận, theo dõi
+      assert.deepEqual(await page.ev(`[document.querySelectorAll('#m-n2 .tbar .avatar').length, document.querySelector('#m-n2 .tbar-n').textContent, document.querySelector('#m-n2 .tbar-follow').textContent]`), [1, '1 bình luận', 'Theo dõi']);
+      assert.equal(await page.ev(`!!document.querySelector('#m-n1 .tbar')`), false);
+      // Mở thread: tin gốc + bình luận, đánh dấu đã đọc
+      await page.ev(`document.querySelector('#m-n2 .tbar-n').click(); true`);
+      await page.until(() => !document.getElementById('thread').hidden && !!document.getElementById('t-n3'));
+      assert.deepEqual(await page.ev(`[!!document.getElementById('t-n2'), document.querySelector('#t-list .t-sep').textContent, document.getElementById('t-sub').textContent, window.__msgs.some((m) => m.type === 'chatThreadRead' && m.rootId === 'n2' && m.teamId === 'tCL'), document.getElementById('app').classList.contains('thread-open')]`), [true, '1 bình luận', 'Crypto Life', true, true]);
+      assert.equal(await page.ev(`!!document.querySelector('#t-n2 .tbar') || !![...document.querySelectorAll('#t-list .tools button')].find((b) => b.textContent === 'Bình luận')`), false);
+      // Theo dõi
+      await page.ev(`document.getElementById('t-follow').click(); true`);
+      await page.until(() => document.getElementById('t-follow').textContent === 'Đang theo dõi' && document.querySelector('#m-n2 .tbar-follow').textContent === 'Đang theo dõi');
+      assert.deepEqual(await page.ev(`window.__chatFollows`), [{ teamId: 'tCL', rootId: 'n2', follow: true }]);
+      // Bình luận: Enter gửi kèm mã tin gốc; số bình luận tăng
+      await page.ev(`(() => { const t = document.getElementById('t-text'); t.focus(); t.value = 'Cảm ơn anh'; t.dispatchEvent(new Event('input')); t.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); return true; })()`);
+      await page.until(() => (window.__chatSends || []).length === 1 && document.querySelectorAll('#t-list .msg').length === 3);
+      assert.deepEqual(await page.ev(`[window.__chatSends[0].rootId, window.__chatSends[0].message, document.querySelector('#m-n2 .tbar-n').textContent, document.getElementById('t-text').value]`), ['n2', 'Cảm ơn anh', '2 bình luận', '']);
+      // Bình luận mới của người khác: hiện trong thread, số bình luận tăng (không tính lại khi đọc lần sau)
+      await page.ev(`window.__chatIncoming = [{ id: 'in2', channelId: 'chMain', user: { id: 'u70', chatId: 'cu70', username: 'moi', fullname: 'Người mới', pictureAt: 0 }, createAt: Date.now(), updateAt: Date.now() + 1, editAt: 0, deleted: false, system: false, message: 'Mình dùng Ledger', rootId: 'n2', replyCount: 0, pinned: false, files: [], participants: [], following: false }]; true`);
+      await page.until(() => !!document.getElementById('t-in2') && document.querySelector('#m-n2 .tbar-n').textContent === '3 bình luận', 9000);
+      await new Promise((r) => setTimeout(r, 4500));
+      assert.equal(await page.ev(`document.querySelector('#m-n2 .tbar-n').textContent`), '3 bình luận');
+      assert.deepEqual(await page.ev(`[!!document.getElementById('m-in2'), !!document.getElementById('m-n3'), !!document.getElementById('m-new1')]`), [false, false, false]); // bình luận không lẫn vào cuộc trò chuyện
+      // Đóng bằng Esc trong ô bình luận
+      await page.ev(`document.getElementById('t-text').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); true`);
+      await page.until(() => document.getElementById('thread').hidden && !document.getElementById('app').classList.contains('thread-open'));
+      // Điện thoại: thread phủ cả màn hình, không tràn ngang
+      await page.open(url('chat', 'chat=1&c=chMain'), { width: 390, height: 800, mobile: true });
+      await page.until(() => !!document.querySelector('#m-n2 .tbar-n'));
+      await page.ev(`document.querySelector('#m-n2 .tbar-n').click(); true`);
+      await page.until(() => !document.getElementById('thread').hidden && !!document.getElementById('t-n3'));
+      assert.deepEqual(await page.ev(`[Math.round(document.getElementById('thread').getBoundingClientRect().width), document.documentElement.scrollWidth > innerWidth]`), [390, false]);
+    },
+  },
+  {
+    name: 'Trang Chat: bộ gõ tin nhắn',
+    async run({ page, url, assert }) {
+      await page.open(url('chat', 'chat=1&md=1&c=chMain'), { width: 1280, height: 820 });
+      await page.until(() => document.querySelectorAll('#msg-list .msg').length === 6);
+      // Tin có định dạng và độ ưu tiên
+      const mk = await page.call(() => {
+        const m = document.getElementById('m-mk1');
+        return { prio: m.querySelector('.prio.urgent')?.textContent, quote: m.querySelector('.md blockquote')?.textContent, li: m.querySelectorAll('.md li').length, s: m.querySelector('.md s')?.textContent, i: m.querySelector('.md i')?.textContent, link: [m.querySelector('.md li a')?.textContent, m.querySelector('.md li a')?.getAttribute('href')], pre: m.querySelector('.md pre')?.textContent };
+      });
+      assert.deepEqual(mk, { prio: 'KHẨN CẤP', quote: 'Lịch AMA tuần này', li: 2, s: '20h', i: '21h', link: ['đăng ký', 'https://group.beincom.com/ama'], pre: 'npm i' });
+      const val = () => page.ev(`document.getElementById('text').value`);
+      const setText = (v, s, e) => page.ev(`(() => { const t = document.getElementById('text'); t.focus(); t.value = ${JSON.stringify(v)}; t.dispatchEvent(new Event('input')); t.setSelectionRange(${s}, ${e}); return true; })()`);
+      const key = (code, o = {}) => page.ev(`document.getElementById('text').dispatchEvent(new KeyboardEvent('keydown', { code: '${code}', key: '${o.key || ''}', ctrlKey: ${!!o.ctrl}, shiftKey: ${!!o.shift}, altKey: ${!!o.alt}, bubbles: true, cancelable: true })); true`);
+      // Nút định dạng và phím tắt (bấm lại thì bỏ)
+      await setText('xin chào', 4, 8);
+      await page.ev(`document.querySelector('#fmt [data-md=bold]').click(); true`);
+      assert.equal(await val(), 'xin **chào**');
+      await key('KeyB', { ctrl: true });
+      assert.equal(await val(), 'xin chào');
+      await setText('xin chào', 4, 8);
+      await key('KeyX', { ctrl: true, shift: true });
+      assert.equal(await val(), 'xin ~~chào~~');
+      await setText('xem', 0, 3);
+      await key('KeyK', { ctrl: true, alt: true });
+      assert.deepEqual(await page.ev(`[document.getElementById('text').value, document.getElementById('text').selectionStart, document.getElementById('text').selectionEnd]`), ['[xem](url)', 6, 9]);
+      await setText('mua\nbán', 0, 7);
+      await page.ev(`document.querySelector('#fmt [data-md=ol]').click(); true`);
+      assert.equal(await val(), '1. mua\n2. bán');
+      // Shift + Enter trong danh sách: dòng mới có số kế tiếp
+      await setText('1. mua\n2. bán', 13, 13);
+      await key('Enter', { key: 'Enter', shift: true });
+      assert.equal(await val(), '1. mua\n2. bán\n3. ');
+      // Ctrl + Z hoàn tác được
+      await page.ev(`document.execCommand('undo'); true`);
+      assert.equal(await val(), '1. mua\n2. bán');
+      // Xem trước
+      await setText('**Đậm** và `mã`', 0, 0);
+      await page.ev(`document.getElementById('btn-preview').click(); true`);
+      assert.deepEqual(await page.ev(`[document.getElementById('text').hidden, document.querySelector('#preview b')?.textContent, document.querySelector('#preview code')?.textContent]`), [true, 'Đậm', 'mã']);
+      await page.ev(`document.getElementById('preview').click(); true`);
+      assert.equal(await page.ev(`document.getElementById('text').hidden`), false);
+      // Aa: ẩn / hiện thanh định dạng (nhớ trong máy)
+      await page.ev(`document.getElementById('btn-fmt').click(); true`);
+      assert.deepEqual(await page.ev(`[document.getElementById('fmt').hidden, localStorage.getItem('beingroup-chat-fmt'), getComputedStyle(document.getElementById('btn-prio')).display !== 'none']`), [true, '0', true]);
+      await page.ev(`document.getElementById('btn-fmt').click(); true`);
+      // Độ ưu tiên: Quan trọng, gửi kèm; gửi xong về Tiêu chuẩn
+      await page.ev(`document.getElementById('btn-prio').click(); true`);
+      await page.until(() => !document.getElementById('prio-menu').hidden);
+      assert.equal(await page.ev(`document.querySelector('#prio-menu [data-prio=""]').getAttribute('aria-checked')`), 'true');
+      await page.ev(`document.querySelector('#prio-menu [data-prio=important]').click(); true`);
+      await page.until(() => document.getElementById('prio-menu').hidden && !document.getElementById('prio-chip').hidden);
+      assert.match(await page.ev(`document.getElementById('prio-chip').textContent`), /QUAN TRỌNG/);
+      await setText('Họp lúc 20h', 11, 11);
+      await page.ev(`document.getElementById('send').click(); true`);
+      await page.until(() => (window.__chatSends || []).length === 1 && document.getElementById('prio-chip').hidden);
+      assert.deepEqual(await page.ev(`window.__chatSends[0]`), { type: 'chatSend', channelId: 'chMain', message: 'Họp lúc 20h', rootId: '', priority: 'important' });
+      // Emoji: chèn vào chỗ con trỏ, nhớ emoji hay dùng
+      await setText('Tuyệt', 5, 5);
+      await page.ev(`document.getElementById('btn-emoji').click(); true`);
+      await page.until(() => !document.getElementById('emoji-pop').hidden && document.querySelectorAll('#emoji-grid .emo').length > 5);
+      await page.ev(`document.querySelectorAll('#emoji-tabs .etab')[4].click(); true`);
+      await page.ev(`document.querySelector('#emoji-grid .emo').click(); true`);
+      assert.equal(await val(), 'Tuyệt🚀');
+      assert.equal(await page.ev(`JSON.parse(localStorage.getItem('beingroup-chat-emoji'))[0]`), '🚀');
+      await page.ev(`document.body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })); true`);
+      assert.equal(await page.ev(`document.getElementById('emoji-pop').hidden`), true);
+      // Đính kèm: chọn tệp -> tải lên ngay; tệp quá 25 MB thì báo; gửi chỉ có tệp (không cần chữ)
+      await setText('', 0, 0);
+      await page.ev(`(() => { const dt = new DataTransfer(); dt.items.add(new File(['abc'], 'ghi-chu.txt', { type: 'text/plain' })); dt.items.add(new File([new Uint8Array(26 * 1024 * 1024)], 'lon.zip', { type: 'application/zip' })); const i = document.getElementById('file-input'); i.files = dt.files; i.dispatchEvent(new Event('change')); return true; })()`);
+      await page.until(() => document.querySelectorAll('#attach-list .att.ok').length === 1);
+      assert.match(await page.ev(`document.getElementById('toast').textContent`), /lon\.zip: lớn quá 25 MB/);
+      assert.deepEqual(await page.ev(`window.__chatUploads`), [{ channelId: 'chMain', name: 'ghi-chu.txt', mime: 'text/plain', bytes: 3 }]);
+      // Dán ảnh
+      await page.ev(`(() => { const dt = new DataTransfer(); dt.items.add(new File([new Uint8Array([137, 80, 78, 71])], 'image.png', { type: 'image/png' })); document.getElementById('text').dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true })); return true; })()`);
+      await page.until(() => document.querySelectorAll('#attach-list .att.ok').length === 2 && !!document.querySelector('#attach-list .att img'));
+      // Bỏ một tệp rồi gửi
+      await page.ev(`document.querySelectorAll('#attach-list .att-x')[0].click(); true`);
+      assert.equal(await page.ev(`document.getElementById('send').disabled`), false);
+      await page.ev(`document.getElementById('send').click(); true`);
+      await page.until(() => (window.__chatSends || []).length === 2 && document.getElementById('attach-list').hidden);
+      assert.deepEqual(await page.ev(`[window.__chatSends[1].message, window.__chatSends[1].fileIds]`), ['', ['fu2']]);
+      // Đổi cuộc trò chuyện: bỏ tệp đang soạn
+      await page.ev(`(() => { const dt = new DataTransfer(); dt.items.add(new File(['x'], 'a.txt', { type: 'text/plain' })); const i = document.getElementById('file-input'); i.files = dt.files; i.dispatchEvent(new Event('change')); return true; })()`);
+      await page.until(() => document.querySelectorAll('#attach-list .att').length === 1);
+      await page.ev(`[...document.querySelectorAll('#list .item')].find((x) => x.textContent.includes('Lan Anh')).click(); true`);
+      await page.until(() => document.getElementById('attach-list').hidden);
+      // Điện thoại: thanh công cụ không tràn ngang
+      await page.open(url('chat', 'chat=1&c=chMain'), { width: 390, height: 800, mobile: true });
+      await page.until(() => document.getElementById('app').classList.contains('open') && !document.getElementById('composer').hidden);
+      assert.deepEqual(await page.ev(`[document.documentElement.scrollWidth > innerWidth, document.getElementById('send').getBoundingClientRect().right <= innerWidth]`), [false, true]);
+      await page.ev(`localStorage.removeItem('beingroup-chat-emoji'); true`);
     },
   },
   {
@@ -1028,6 +1230,8 @@ export const scenarios = [
     name: 'Trang Chat: nhiều cuộc trò chuyện',
     async run({ page, url, assert }) {
       // Khung chờ, rồi lần đọc nhanh: 8 tin nhắn riêng gần nhất + 5 cộng đồng (2 đã ghim lên đầu)
+      await page.open(url('chat', 'chat=1'));
+      await page.ev(`localStorage.removeItem('beingroup-chat-dmtab'); true`);
       await page.open(url('chat', 'chat=1&many=1'));
       await page.until(() => document.querySelectorAll('#list .item.skel').length > 0);
       await page.until(() => document.querySelectorAll('#list .item:not(.skel)').length > 0);

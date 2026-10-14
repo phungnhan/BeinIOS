@@ -2,6 +2,32 @@
 
 Mỗi bản một mục, bản mới nhất ở trên. Dashboard tự hiện các mục mới sau khi cập nhật (bấm "Có gì mới" ở cuối trang để xem lại).
 
+## v0.38.0 — 14/10/2026
+- **Thread (bình luận) trong trang Chat**, như web Beincom: mỗi tin nhắn có thể bình luận và theo dõi như một nhóm chat nhỏ.
+  - Cuộc trò chuyện chỉ hiện tin gốc. Tin có bình luận có thanh dưới tin: ảnh người tham gia, **N bình luận**, **Theo dõi / Đang theo dõi**.
+  - Bấm "N bình luận" (hoặc nút **Bình luận** khi rê chuột vào tin) để mở khung bình luận bên phải. Khung có tin gốc, các bình luận, ô viết bình luận (Enter gửi, phím tắt định dạng như ô gõ chính) và nút Theo dõi. Trên điện thoại, khung phủ cả màn hình.
+  - Bình luận mới tự hiện trong khung đang mở và cộng vào số bình luận. Mở khung là đánh dấu đã đọc thread, như web.
+- **Huy hiệu cạnh tên** như web: **tích xác minh** (hồ sơ phụ đã xác minh màu xám), **kim cương** cho tài khoản Premium. Có ở tin nhắn, danh sách tin nhắn riêng và đầu cuộc trò chuyện.
+
+## v0.37.0 — 14/10/2026
+- **Bộ gõ tin nhắn mới** trong trang Chat, như web Beincom:
+  - **Thanh định dạng**: in đậm, in nghiêng, gạch ngang, chèn link, mã, trích dẫn, danh sách, danh sách số. Bấm lại thì bỏ định dạng. Phím tắt như web: Ctrl + B / I, Ctrl + Shift + X, Ctrl + Alt + K / C, Ctrl + Shift + 7 / 8 / 9. Shift + Enter trong danh sách tự thêm mục kế tiếp. Ctrl + Z hoàn tác được.
+  - Nút **Aa** ẩn / hiện thanh định dạng (nhớ trong máy).
+  - **Độ ưu tiên của tin nhắn**: Tiêu chuẩn / Quan trọng / Khẩn cấp. Tin có độ ưu tiên hiện nhãn QUAN TRỌNG / KHẨN CẤP.
+  - **Xem trước** (biểu tượng con mắt, Ctrl + Alt + P): xem tin sẽ hiện thế nào trước khi gửi.
+  - **Đính kèm tệp**: chọn tệp, dán ảnh, hoặc kéo thả vào cuộc trò chuyện. Tối đa 10 tệp, mỗi tệp 25 MB. Tệp tải lên ngay; gửi chỉ có tệp cũng được.
+  - **Emoji**: hay dùng (nhớ trong máy), mặt cười, cử chỉ, trái tim, crypto.
+- **Tin nhắn hiện đúng định dạng**: trích dẫn, danh sách, khối mã, gạch ngang, nghiêng, link có chữ, tiêu đề.
+- **Lời mời** thành tab nằm cạnh **Tin nhắn riêng** (có số lời mời, sáng lên khi có lời mời chưa đọc; nhớ tab đang chọn). Tìm hoặc lọc Chưa đọc thì hiện cả hai.
+
+## v0.36.0 — 14/10/2026
+- **Lời mời trò chuyện tách riêng** (Beincom gọi là "Yêu cầu nhắn tin": tin nhắn riêng từ người chưa kết nối với bạn, như tin nhắn từ người lạ):
+  - Trang Chat có mục riêng **Lời mời trò chuyện**, có số lời mời, nằm dưới Tin nhắn riêng. Mỗi lời mời ghi rõ đang chờ, bị Beincom xếp vào Spam, hay bạn đã bỏ qua.
+  - Mở một lời mời: thanh **Chấp nhận / Bỏ qua** phía trên ô gõ. Bỏ qua có hỏi lại.
+  - Trả lời một lời mời là chấp nhận lời mời đó (như web Beincom). Lời mời chuyển sang Tin nhắn riêng.
+  - Lời mời bạn gửi đi vẫn nằm trong Tin nhắn riêng, ghi "Bạn đã gửi lời mời"; chưa gõ tiếp được cho tới khi người nhận chấp nhận.
+  - Thông báo, Việc cần làm và thẻ Tin nhắn chat cũng ghi riêng lời mời trò chuyện với tin nhắn riêng.
+
 ## v0.35.0 — 14/10/2026
 - **Xem ảnh phóng to trong trang Chat**: bấm ảnh trong tin nhắn thì ảnh phóng to ngay trong trang, không mở tab mới.
   - Muốn mở tab thì bấm nút **Mở tab mới** trong khung xem. Ctrl + bấm vẫn mở tab như trước.

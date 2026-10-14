@@ -172,7 +172,10 @@ async function syncChat(client, { settings, state, next, notifyAllowed, ctx, now
     for (const d of u.unread.dms) notified[d.channelId] = Math.max(notified[d.channelId] || 0, d.lastPostAt);
     next.chatNotified = notified;
     if (notifyAllowed && newDm.length && state.chatUnread) {
-      notify('bg-chat-dm', `BeinGroup: ${newDm.length} tin nhắn riêng mới`, 'Từ: ' + newDm.map((d) => d.user?.fullname || d.user?.username || d.title || 'người dùng').slice(0, 5).join(', ') + '. Bấm để mở chat.', BG.SITE + '/chat-home');
+      // Lời mời trò chuyện (người chưa kết nối nhắn cho bạn) báo riêng với tin nhắn riêng
+      const reqN = newDm.filter((d) => d.request).length;
+      const head = [newDm.length - reqN ? `${newDm.length - reqN} tin nhắn riêng mới` : '', reqN ? `${reqN} lời mời trò chuyện mới` : ''].filter(Boolean).join(', ');
+      notify('bg-chat-dm', `BeinGroup: ${head}`, 'Từ: ' + newDm.map((d) => (d.user?.fullname || d.user?.username || d.title || 'người dùng') + (d.request ? ' (lời mời)' : '')).slice(0, 5).join(', ') + '. Bấm để mở chat.', BG.SITE + '/chat-home');
     }
     if (notifyAllowed && state.chatUnread && u.unread.mentions > (state.chatUnread.mentions || 0)) {
       notify('bg-chat-mention', `BeinGroup: bạn được nhắc tên ${u.unread.mentions} lần trong chat`, 'Bấm để mở chat.', BG.SITE + '/chat-home');
@@ -303,10 +306,11 @@ async function chatPermsOf(client, names) {
 
 async function chatUsersOf(client, ids) {
   await loadChatCaches();
-  const need = [...new Set(ids)].filter((id) => id && !chatUserCache.has(id)).slice(0, 60);
+  // Bản ghi nhớ từ bản cũ chưa có huy hiệu (b) thì đọc lại
+  const need = [...new Set(ids)].filter((id) => id && !chatUserCache.get(id)?.b).slice(0, 60);
   await mapLimit(need, CHAT_FETCH_PARALLEL, async (id) => {
     const r = await chatGet(client, `v4/users/${id}`);
-    if (BG.chatOk(r)) chatUserCache.set(id, { ...BG.chatPerson(r.body), pictureAt: r.body.last_picture_update || 0, at: Date.now() });
+    if (BG.chatOk(r)) chatUserCache.set(id, { ...BG.chatPerson(r.body), pictureAt: r.body.last_picture_update || 0, at: Date.now(), b: 1 });
   });
   if (need.length) {
     const keep = [...chatUserCache.entries()].sort((a, b) => (b[1].at || 0) - (a[1].at || 0)).slice(0, CHAT_PEOPLE_MAX);
@@ -417,9 +421,13 @@ async function doChatOverview({ quick = false } = {}) {
     const otherOf = (c) => (c.type === 'D' ? String(c.name || '').split('__').find((id) => id && id !== me.body.id) || '' : '');
     const live = chs.filter((c) => !c.delete_at);
     const dmRaw = live.filter((c) => c.type === 'D' || c.type === 'G').sort((a, b) => (b.last_post_at || 0) - (a.last_post_at || 0));
-    // Đọc nhanh: tên người của 8 tin nhắn riêng gần nhất + tin nhắn riêng còn tin chưa đọc (tối đa 16)
+    // Lời mời trò chuyện (người chưa kết nối nhắn cho bạn): trả về riêng (requests), không lẫn vào tin nhắn riêng
+    const isReq = (c) => !!BG.chatContact(c, me.body.id)?.incoming;
+    const reqRaw = dmRaw.filter(isReq);
+    const dmOnly = dmRaw.filter((c) => !isReq(c));
+    // Đọc nhanh: tên người của 8 lời mời gần nhất, 8 tin nhắn riêng gần nhất + tin nhắn riêng còn tin chưa đọc (tối đa 16)
     const unreadOf = (c) => Math.max(0, (c.total_msg_count || 0) - (memOf.get(c.id)?.msg_count || 0)) || memOf.get(c.id)?.mention_count || 0;
-    const wantIds = (quick ? dmRaw.filter((c, i) => i < CHAT_QUICK_DMS || unreadOf(c)).slice(0, 2 * CHAT_QUICK_DMS) : dmRaw.slice(0, CHAT_FULL_DMS))
+    const wantIds = (quick ? [...reqRaw.slice(0, CHAT_QUICK_DMS), ...dmOnly.filter((c, i) => i < CHAT_QUICK_DMS || unreadOf(c)).slice(0, 2 * CHAT_QUICK_DMS)] : [...reqRaw.slice(0, 20), ...dmOnly.slice(0, CHAT_FULL_DMS)])
       .map(otherOf)
       .filter(Boolean);
     await loadChatCaches();
@@ -439,8 +447,10 @@ async function doChatOverview({ quick = false } = {}) {
       const sure = known(`${m?.roles || ''} ${teamRoles.get(t.id) || ''}`);
       const otherId = otherOf(c);
       const other = otherId ? users[otherId] : null;
+      const contact = BG.chatContact(c, me.body.id);
       return {
         ...ch,
+        ...(contact ? { contact } : {}),
         canPost: sure ? ch.canPost : null,
         canDelete: sure ? ch.canDelete : false,
         title: c.type === 'D' ? other?.fullname || other?.username || '' : c.display_name || c.name || '',
@@ -466,7 +476,8 @@ async function doChatOverview({ quick = false } = {}) {
       quick,
       me: { chatId: me.body.id, id: me.body.props?.bic_user_id || '', username: me.body.username || '', fullname: BG.chatPerson(me.body).fullname, pictureAt: me.body.last_picture_update || 0 },
       teams: out,
-      dms: dmRaw.map(item),
+      dms: dmOnly.map(item),
+      requests: reqRaw.map(item),
       dmTeam: dmTeamRaw ? { id: dmTeamRaw.id, name: dmTeamRaw.name || '' } : null,
     };
   });
@@ -478,7 +489,10 @@ async function doChatPosts({ channelId, before = '', since = 0, perPage = 40 }) 
   if (!settings.chatEnabled) return chatOff();
   if (!chatIdOk(channelId) || (before && !chatIdOk(before))) return { status: 'error', message: 'Thiếu kênh chat' };
   const n = Math.max(1, Math.min(100, Number(perPage) || 40));
-  const path = since > 0 ? `v5/channels/${channelId}/posts?since=${Math.floor(since)}` : `v5/channels/${channelId}/posts?${before ? `before=${before}&` : ''}page=0&per_page=${n}`;
+  // Trang tin: chỉ tin gốc, bình luận gộp vào thread (như web: collapsedThreads; Extended kèm người tham gia — gọi thật
+  // 14/10/2026). Tin mới từ lần trước (since) đọc đủ cả bình luận để trang cập nhật số bình luận / thread đang mở.
+  const crt = 'skipFetchThreads=false&collapsedThreads=true&collapsedThreadsExtended=true';
+  const path = since > 0 ? `v5/channels/${channelId}/posts?since=${Math.floor(since)}` : `v5/channels/${channelId}/posts?${before ? `before=${before}&` : ''}page=0&per_page=${n}&${crt}`;
   return withChatRead(async (client) => {
     const r = await chatGet(client, path);
     if (r.status === 401) return { ...chatLoginErr };
@@ -491,19 +505,121 @@ async function doChatPosts({ channelId, before = '', since = 0, perPage = 40 }) 
   });
 }
 
-// Gửi tin của mình (trả lời trong luồng: rootId). Gửi thật kể cả khi Chạy thử: đây là tin bạn tự gõ và bấm gửi.
-async function doChatSend({ channelId, message, rootId = '' }) {
+// Thread của một tin: tin gốc + bình luận (cũ -> mới), từng trang 100 (GET v5/posts/{id}/thread như web — gọi thật)
+async function doChatThread({ rootId, fromPost = '', fromCreateAt = 0 }) {
+  const settings = await chatSettings();
+  if (!settings.chatEnabled) return chatOff();
+  if (!chatIdOk(rootId) || (fromPost && !chatIdOk(fromPost))) return { status: 'error', message: 'Thiếu tin nhắn' };
+  const page = fromPost ? `&fromPost=${fromPost}&fromCreateAt=${Math.floor(Number(fromCreateAt) || 0)}` : '';
+  return withChatRead(async (client) => {
+    const r = await chatGet(client, `v5/posts/${rootId}/thread?skipFetchThreads=false&collapsedThreads=true&collapsedThreadsExtended=false&direction=down&perPage=100${page}`);
+    if (r.status === 401) return { ...chatLoginErr };
+    if (!BG.chatOk(r)) return { status: 'error', message: 'Đọc bình luận lỗi: ' + BG.errMsg(r) };
+    const posts = Object.values(r.body.posts || {})
+      .map(BG.chatPagePost)
+      .filter(Boolean)
+      .sort((a, b) => a.createAt - b.createAt);
+    return { status: 'ok', posts, hasNext: !!r.body.has_next };
+  });
+}
+
+// Theo dõi / bỏ theo dõi thread (PUT / DELETE v4/users/me/teams/{team}/threads/{tin}/following — như web, đọc từ mã web,
+// chưa gọi thật) và đánh dấu đã đọc thread (PUT …/read/{thời điểm}). Việc của chính bạn: làm thật kể cả khi Chạy thử.
+async function doChatFollow({ teamId, rootId, follow = true }) {
+  const settings = await chatSettings();
+  if (!settings.chatEnabled) return chatOff();
+  if (!chatIdOk(teamId) || !chatIdOk(rootId)) return { status: 'error', message: 'Thiếu tin nhắn' };
+  return withClient(async (client) => {
+    const r = await client.call(follow ? 'PUT' : 'DELETE', BG.CHAT_API + `v4/users/me/teams/${teamId}/threads/${rootId}/following`, null, '');
+    if (r.status === 401) return { ...chatLoginErr };
+    if (!BG.chatOk(r)) return { status: 'error', message: (follow ? 'Theo dõi' : 'Bỏ theo dõi') + ' lỗi: ' + BG.errMsg(r) };
+    return { status: 'ok', following: !!follow };
+  });
+}
+async function doChatThreadRead({ teamId, rootId }) {
+  const settings = await chatSettings();
+  if (!settings.chatEnabled) return chatOff();
+  if (!chatIdOk(teamId) || !chatIdOk(rootId)) return { status: 'error', message: 'Thiếu tin nhắn' };
+  return withChatRead(async (client) => {
+    const r = await client.call('PUT', BG.CHAT_API + `v4/users/me/teams/${teamId}/threads/${rootId}/read/${Date.now()}`, null, '', 0, { quiet: true });
+    return BG.chatOk(r) ? { status: 'ok' } : { status: 'error', message: BG.errMsg(r) };
+  });
+}
+
+// Gửi tin của mình (bình luận trong thread: rootId). Gửi thật kể cả khi Chạy thử: đây là tin bạn tự gõ và bấm gửi.
+async function doChatSend({ channelId, message, rootId = '', acceptContactId = '', priority = '', fileIds = [] }) {
   const settings = await chatSettings();
   if (!settings.chatEnabled) return chatOff();
   const text = String(message || '').trim();
-  if (!text) return { status: 'error', message: 'Tin nhắn trống' };
+  const files = Array.isArray(fileIds) ? fileIds.map(String) : [];
+  if (files.length > CHAT_FILES_MAX || files.some((id) => !chatIdOk(id))) return { status: 'error', message: `Tối đa ${CHAT_FILES_MAX} tệp mỗi tin` };
+  if (priority && !BG.CHAT_PRIORITIES.includes(priority)) return { status: 'error', message: 'Độ ưu tiên không hợp lệ' };
+  if (!text && !files.length) return { status: 'error', message: 'Tin nhắn trống' };
   if (text.length > CHAT_MSG_MAX) return { status: 'error', message: `Tin nhắn dài quá ${CHAT_MSG_MAX} ký tự` };
-  if (!chatIdOk(channelId) || (rootId && !chatIdOk(rootId))) return { status: 'error', message: 'Thiếu kênh chat' };
+  if (!chatIdOk(channelId) || (rootId && !chatIdOk(rootId)) || (acceptContactId && !chatIdOk(acceptContactId))) return { status: 'error', message: 'Thiếu kênh chat' };
   return withClient(async (client) => {
-    const r = await client.call('POST', BG.CHAT_API + 'v4/posts', { channel_id: channelId, message: text, ...(rootId ? { root_id: rootId } : {}) }, '');
+    // Trả lời một lời mời trò chuyện là chấp nhận lời mời (web Beincom chấp nhận rồi mới gửi)
+    let accepted = false;
+    if (acceptContactId) {
+      const a = await client.call('POST', BG.CHAT_API + `v4/contacts/${acceptContactId}/accept`, null, '');
+      if (a.status === 401) return { ...chatLoginErr };
+      accepted = BG.chatOk(a);
+    }
+    // Độ ưu tiên (Quan trọng / Khẩn cấp) và tệp đã tải lên (POST v4/files) — như web
+    const body = { channel_id: channelId, message: text, ...(rootId ? { root_id: rootId } : {}), ...(files.length ? { file_ids: files } : {}), ...(priority ? { metadata: { priority: { priority, requested_ack: false, persistent_notifications: false } } } : {}) };
+    const r = await client.call('POST', BG.CHAT_API + 'v4/posts', body, '');
     if (r.status === 401) return { ...chatLoginErr };
-    if (!BG.chatOk(r)) return { status: 'error', message: 'Gửi tin lỗi: ' + BG.errMsg(r) };
-    return { status: 'ok', post: BG.chatPagePost(r.body) };
+    if (!BG.chatOk(r)) return { status: 'error', message: 'Gửi tin lỗi: ' + BG.errMsg(r), accepted };
+    return { status: 'ok', post: BG.chatPagePost(r.body), accepted };
+  });
+}
+
+// Tải một tệp lên chat để gửi kèm tin (như web: POST v4/files, FormData files + channel_id + client_ids; máy chủ Beincom
+// nhận tối đa 25 MB mỗi tệp — MaxFileSize, gọi thật 14/10/2026). Trang gửi tệp dạng base64 (tin nhắn giữa trang và nền chỉ
+// nhận JSON). Chỉ gọi thẳng (không qua tab Beincom).
+const CHAT_FILE_MAX = 25 * 1024 * 1024;
+const CHAT_FILES_MAX = 10;
+async function doChatUpload({ channelId, name = '', mime = '', data = '' }) {
+  const settings = await chatSettings();
+  if (!settings.chatEnabled) return chatOff();
+  if (!chatIdOk(channelId)) return { status: 'error', message: 'Thiếu kênh chat' };
+  const b64 = String(data || '');
+  if (!b64 || !/^[A-Za-z0-9+/]+=*$/.test(b64)) return { status: 'error', message: 'Tệp trống hoặc không đọc được' };
+  if (Math.floor((b64.length * 3) / 4) > CHAT_FILE_MAX + 2) return { status: 'error', message: 'Tệp lớn quá 25 MB' };
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  const form = new FormData();
+  form.append('files', new Blob([bytes], { type: String(mime || 'application/octet-stream').slice(0, 100) }), String(name || 'tep').replace(/[\\/\r\n]/g, '_').slice(0, 200));
+  form.append('channel_id', channelId);
+  form.append('client_ids', 'bg' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8));
+  let res;
+  try {
+    res = await fetch(BG.CHAT_API + 'v4/files', { method: 'POST', credentials: 'include', headers: { Accept: 'application/json', 'x-application': 'BIC_GROUP', 'x-platform': 'WEB', 'X-Requested-With': 'XMLHttpRequest' }, body: form });
+  } catch (e) {
+    return { status: 'error', message: 'Không kết nối được chat: ' + String(e?.message || e) };
+  }
+  let body = null;
+  try {
+    body = await res.json();
+  } catch {}
+  if (res.status === 401) return { ...chatLoginErr };
+  const f = body?.file_infos?.[0];
+  if (res.status < 200 || res.status >= 300 || !f?.id) return { status: 'error', message: 'Tải tệp lên lỗi: ' + BG.errMsg({ status: res.status, body }) };
+  return { status: 'ok', file: { id: f.id, name: f.name || name, mime: f.mime_type || mime, size: f.size || bytes.length, width: f.width || 0, height: f.height || 0, mini: f.mini_preview || '' } };
+}
+
+// Lời mời trò chuyện: Chấp nhận / Bỏ qua (POST v4/contacts/{contact_id}/accept | ignore — như nút trên web Beincom; đọc từ mã
+// web, chưa gọi thật). Việc của chính bạn với tài khoản của bạn (như gửi tin): làm thật kể cả khi Chạy thử.
+async function doChatContact({ contactId, action }) {
+  const settings = await chatSettings();
+  if (!settings.chatEnabled) return chatOff();
+  if (!chatIdOk(contactId) || !['accept', 'ignore'].includes(action)) return { status: 'error', message: 'Thiếu lời mời trò chuyện' };
+  return withClient(async (client) => {
+    const r = await client.call('POST', BG.CHAT_API + `v4/contacts/${contactId}/${action}`, null, '');
+    if (r.status === 401) return { ...chatLoginErr };
+    if (!BG.chatOk(r)) return { status: 'error', message: (action === 'accept' ? 'Chấp nhận' : 'Bỏ qua') + ' lời mời lỗi: ' + BG.errMsg(r) };
+    return { status: 'ok' };
   });
 }
 
