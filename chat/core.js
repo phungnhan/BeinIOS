@@ -9,6 +9,7 @@ const PAGE = 40;
 const GROUP_GAP = 5 * 60e3;
 const CLOSED_KEY = 'beingroup-chat-closed';
 // Danh sách lần mở trước (tên, số chưa đọc — không có nội dung tin) trong bộ nhớ phiên của trình duyệt: mở lại là hiện ngay
+// Danh sách lần trước (tên cuộc trò chuyện, số chưa đọc, giờ tin cuối — không có nội dung tin) lưu trong máy: mở trang hiện ngay
 const CACHE_KEY = 'chatOverviewCache';
 // Bên trái hiện trước 8 tin nhắn riêng gần nhất, 5 lời mời trò chuyện và 5 cộng đồng (đã ghim trước, rồi có tin mới nhất);
 // còn lại sau "Xem thêm"
@@ -42,7 +43,8 @@ const S = {
   posts: new Map(),
   hasMore: false,
   loadingOlder: false,
-  polling: false,
+  polling: false, // kênh đang đọc phần mới
+  syncedAt: 0, // lúc đọc tin của cuộc trò chuyện đang mở lần gần nhất (bản nhớ trong chat/cache.js)
   sending: false,
   filter: 'all',
   q: '',
@@ -80,12 +82,34 @@ try {
 } catch {}
 
 async function call(type, extra = {}) {
+  const t0 = performance.now();
   try {
     return (await chrome.runtime.sendMessage({ type, ...extra })) || { status: 'error', message: 'Không có phản hồi' };
   } catch (e) {
     return { status: 'error', message: String(e?.message || e) };
+  } finally {
+    noteSlow(type, performance.now() - t0);
   }
 }
+
+// Lệnh chậm (quá 5 giây, trừ tải tệp lên): ghi vào Nhật ký → Lỗi kỹ thuật để biết chậm ở đâu — chỉ tên lệnh và thời gian,
+// không kèm nội dung; mỗi lệnh tối đa một dòng mỗi 10 phút
+const SLOW_MS = 5000;
+const slowSeen = new Map();
+function noteSlow(type, ms) {
+  if (ms < SLOW_MS || type === 'chatUpload' || type === 'diag' || Date.now() - (slowSeen.get(type) || 0) < 600e3) return;
+  slowSeen.set(type, Date.now());
+  reportChatDiag({ message: `Trang Chat: lệnh ${type} chậm ${(ms / 1000).toLocaleString('vi-VN', { maximumFractionDigits: 1 })} giây`, stack: `trang mở ${Math.round(performance.now() / 1000)} giây · ${document.hidden ? 'đang ẩn' : 'đang xem'}` });
+}
+
+// Lỗi / chậm của trang Chat: gửi về nền ghi vào Lỗi kỹ thuật (không làm gì thêm nếu gửi lỗi)
+function reportChatDiag(e) {
+  try {
+    chrome.runtime.sendMessage({ type: 'diag', entry: { where: 'chat', kind: 'js', ...e } }).catch(() => {});
+  } catch {}
+}
+window.addEventListener('error', (e) => reportChatDiag({ message: e.message, stack: e.error?.stack || `${e.filename}:${e.lineno}:${e.colno}` }));
+window.addEventListener('unhandledrejection', (e) => reportChatDiag({ message: String(e.reason?.message || e.reason), stack: e.reason?.stack || '' }));
 
 let toastTimer = 0;
 function toast(text, kind = '') {

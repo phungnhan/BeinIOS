@@ -1148,7 +1148,7 @@ export const scenarios = [
       await page.until(() => (window.__chatRead || 0) >= 1); // mở kênh: đánh dấu đã đọc
       // Gửi tin: Enter
       await page.ev(`(() => { const t = document.getElementById('text'); t.value = 'Tối nay 20h nhé'; t.dispatchEvent(new Event('input')); t.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); return true; })()`);
-      await page.until(() => (window.__chatSends || []).length === 1 && document.querySelectorAll('#msg-list .msg').length === 6);
+      await page.until(() => (window.__chatSends || []).length === 1 && !!document.getElementById('m-new1') && !document.querySelector('#msg-list .msg.pending'));
       assert.deepEqual(await page.ev(`window.__chatSends[0]`), { type: 'chatSend', channelId: 'chMain', message: 'Tối nay 20h nhé', rootId: '' });
       assert.equal(await page.ev(`document.getElementById('text').value`), '');
       // Bình luận một tin: mở thread, gửi kèm mã tin gốc; tin hiện "1 bình luận"
@@ -1359,11 +1359,219 @@ export const scenarios = [
     },
   },
   {
+    name: 'Trang Chat: cộng đồng con theo cây — ảnh group con, thụt lề theo cấp, dòng "thuộc"',
+    async run({ page, url, assert }) {
+      await page.open(url('chat', 'chat=1&tree=1&c=chDeep'), { width: 1280, height: 820 });
+      await page.until(() => [...document.querySelectorAll('.item-title')].some((x) => x.textContent === 'Kiến thức'));
+      const info = await page.ev(`(() => {
+        const sec = [...document.querySelectorAll('.sec')].find((x) => x.querySelector('.sec-title')?.textContent === 'Crypto Life');
+        return [...sec.querySelectorAll('.item')].map((it) => ({
+          t: it.querySelector('.item-title').textContent,
+          sub: it.querySelector('.item-sub').textContent,
+          depth: it.style.getPropertyValue('--depth').trim(),
+          pad: parseFloat(getComputedStyle(it).paddingLeft),
+          img: !!it.querySelector('.avatar img'),
+          lines: [...it.querySelectorAll('.tl')].map((x) => x.className.replace('tl ', '') + '@' + x.style.getPropertyValue('--col').trim()).join(' '),
+        }));
+      })()`);
+      // Kênh chính trước; Kiến thức (tin mới nhất) nằm ngay dưới group cha Hỏi đáp, không lên đầu
+      assert.deepEqual(info.map((x) => [x.t, x.depth, x.img]), [['Crypto Life', '', true], ['Hỏi đáp', '1', true], ['Kiến thức', '2', false], ['Sự kiện', '1', false]]);
+      assert.deepEqual(info.map((x) => x.sub), ['Crypto Life', 'Group con · Kênh hỏi đáp', 'thuộc Hỏi đáp', 'Group con']);
+      assert.ok(info[0].pad < info[1].pad && info[1].pad < info[2].pad && info[3].pad === info[1].pad, JSON.stringify(info.map((x) => x.pad)));
+      // Đường nối cây: ┬ dưới mục có con, ├ / └ tới mục, │ ở cột Hỏi đáp còn em (Sự kiện) phía dưới
+      assert.deepEqual(info.map((x) => x.lines), ['down@1', 'elbow@1 down@2', 'rail@1 elbow last@2', 'elbow last@1']);
+      // Đầu cuộc trò chuyện của group con dùng ảnh group
+      await page.ev(`[...document.querySelectorAll('.item')].find((x) => x.querySelector('.item-title').textContent === 'Hỏi đáp').click(); true`);
+      await page.until(() => document.querySelector('#conv-title')?.textContent.includes('Hỏi đáp'));
+      assert.equal(await page.ev(`!!document.querySelector('#conv-avatar img')`), true);
+      // Tìm kiếm vẫn hiện group con kèm dòng "thuộc"
+      await page.ev(`const q = document.getElementById('q'); q.value = 'thức'; q.dispatchEvent(new Event('input')); true`);
+      await page.until(() => document.querySelectorAll('.sec .item').length === 1);
+      assert.deepEqual(await page.ev(`[document.querySelector('.sec .item .item-sub').textContent, document.querySelectorAll('.sec .item .tl').length]`), ['↳ thuộc Hỏi đáp', 0]);
+    },
+  },
+  {
+    name: 'Dashboard: Cài đặt — ảnh trang Chat đã lưu trong máy (số ảnh, dung lượng, xoá)',
+    async run({ page, url, assert }) {
+      await page.open(url('dashboard', 'tab=settings'));
+      const img = await page.ev(`(async () => {
+        if (!window.caches) return { skip: true };
+        await renderImgCache();
+        const empty = document.getElementById('img-cache-info').textContent;
+        const c = await caches.open('beingroup-img-v1');
+        await c.put('https://chat.beincom.com/api/v4/users/cu9/image?_=1', new Response(new Blob([new Uint8Array(2048)]), { headers: { 'content-type': 'image/png' } }));
+        await renderImgCache();
+        const before = document.getElementById('img-cache-info').textContent;
+        document.getElementById('btn-img-clear').click();
+        for (let i = 0; i < 50 && !document.getElementById('btn-img-clear').disabled; i++) await new Promise((r) => setTimeout(r, 20));
+        return { empty, before, after: document.getElementById('img-cache-info').textContent, gone: !(await caches.has('beingroup-img-v1')), disabled: document.getElementById('btn-img-clear').disabled };
+      })()`);
+      if (img.skip) return;
+      assert.equal(img.empty, '🖼 Ảnh trang Chat đã lưu trong máy: chưa có');
+      assert.match(img.before, /^🖼 Ảnh trang Chat đã lưu trong máy: 1 ảnh · 2 KB$/);
+      assert.deepEqual([img.after, img.gone, img.disabled], [img.empty, true, true]);
+    },
+  },
+  {
+    name: 'Trang Chat: tin của mình nền nhạt dễ đọc; bình luận trả lời tin dài không tràn khung; thanh định dạng không đè nhau',
+    async run({ page, url, assert }) {
+      await page.open(url('chat', 'chat=1&me=1&c=chMain'), { width: 1280, height: 820 });
+      await page.until(() => !!document.querySelector('#m-me2 .quote'));
+      // Bong bóng của mình: nền màu (không còn dải tím đậm), chữ cùng màu chữ thường; khung trích / @tên đọc được
+      const look = await page.ev(`(() => {
+        const b = document.querySelector('#m-me2 .bubble');
+        const cs = getComputedStyle(b);
+        const other = getComputedStyle(document.querySelector('#m-n2 .bubble'));
+        return { img: cs.backgroundImage, sameFg: cs.color === other.color, quoteBg: getComputedStyle(document.querySelector('#m-me2 .quote')).backgroundColor !== cs.backgroundColor };
+      })()`);
+      assert.deepEqual(look, { img: 'none', sameFg: true, quoteBg: true });
+      // Khung bình luận: bình luận của mình trích một bình luận dài — nằm trọn trong khung, không có thanh cuộn ngang
+      await page.ev(`openThread(S.posts.get('n2')); true`);
+      await page.until(() => !!document.querySelector('#t-n6 .quote'));
+      const fit = await page.ev(`(() => {
+        const body = document.getElementById('t-body');
+        const r = body.getBoundingClientRect();
+        const b = document.querySelector('#t-n6 .bubble').getBoundingClientRect();
+        const q = document.querySelector('#t-n6 .quote').getBoundingClientRect();
+        return { inside: b.left >= r.left && b.right <= r.right && q.left >= b.left && q.right <= b.right, noScroll: body.scrollWidth <= body.clientWidth };
+      })()`);
+      assert.deepEqual(fit, { inside: true, noScroll: true });
+      // Thanh định dạng khi cuộc trò chuyện hẹp (khung bình luận đang mở): các nút không chồng lên nhau
+      const overlap = await page.ev(`(() => {
+        const bs = [...document.querySelectorAll('.fmt-wrap .tb')].map((x) => x.getBoundingClientRect()).filter((x) => x.width);
+        return bs.slice(1).some((x, i) => x.left < bs[i].right - 0.5);
+      })()`);
+      assert.equal(overlap, false);
+    },
+  },
+  {
+    name: 'Trang Chat: khung bình luận kéo rộng (nhớ trong máy), bấm đúp về mặc định, phóng to / thu nhỏ',
+    async run({ page, url, assert }) {
+      await page.open(url('chat', 'chat=1&me=1&c=chMain'), { width: 1400, height: 820 });
+      await page.ev(`localStorage.removeItem('beingroup-chat-side-w'); true`);
+      await page.open(url('chat', 'chat=1&me=1&c=chMain'), { width: 1400, height: 820 });
+      await page.until(() => !!document.querySelector('#m-me4'));
+      await page.ev(`openThread(S.posts.get('n2')); true`);
+      await page.until(() => !!document.querySelector('#t-n7'));
+      const w = () => page.ev(`Math.round(document.getElementById('thread').getBoundingClientRect().width)`);
+      assert.equal(await w(), 400);
+      const drag = (dx) =>
+        page.ev(`(() => {
+          const g = document.querySelector('#thread .side-grip');
+          const b = g.getBoundingClientRect();
+          const x = b.left + b.width / 2;
+          const ev = (t, cx) => g.dispatchEvent(new PointerEvent(t, { bubbles: true, clientX: cx, clientY: 300, button: 0, pointerId: 1 }));
+          ev('pointerdown', x); ev('pointermove', x + ${dx} / 2); ev('pointerup', x + ${dx});
+          return true;
+        })()`);
+      // Kéo sang trái 150px: rộng thêm 150, nhớ trong máy
+      await drag(-150);
+      assert.ok(Math.abs((await w()) - 550) <= 2, String(await w()));
+      assert.ok(Math.abs(Number(await page.ev(`localStorage.getItem('beingroup-chat-side-w')`)) - 550) <= 2);
+      // Kéo quá xa: vẫn chừa chỗ cho cuộc trò chuyện (360px); quá hẹp: tối thiểu 320px
+      await drag(-2000);
+      const conv = await page.ev(`Math.round(document.getElementById('conv').getBoundingClientRect().width)`);
+      assert.ok(conv >= 359, String(conv));
+      await drag(2000);
+      assert.equal(await w(), 320);
+      // Phím mũi tên khi đang chọn cạnh: ← rộng thêm 40
+      await page.ev(`document.querySelector('#thread .side-grip').dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true })); true`);
+      assert.equal(await w(), 360);
+      // Mở lại trang: giữ độ rộng đã chọn
+      await page.open(url('chat', 'chat=1&me=1&c=chMain'), { width: 1400, height: 820 });
+      await page.until(() => !!document.querySelector('#m-me4'));
+      await page.ev(`openThread(S.posts.get('n2')); true`);
+      await page.until(() => !!document.querySelector('#t-n7'));
+      assert.equal(await w(), 360);
+      // Bấm đúp cạnh: về mặc định
+      await page.ev(`document.querySelector('#thread .side-grip').dispatchEvent(new MouseEvent('dblclick', { bubbles: true })); true`);
+      assert.deepEqual([await w(), await page.ev(`localStorage.getItem('beingroup-chat-side-w')`)], [400, null]);
+      // Phóng to: khung phủ phần cuộc trò chuyện; bấm lại thu nhỏ; đóng khung thì lần mở sau ở cỡ thường
+      await page.ev(`document.getElementById('t-max').click(); true`);
+      const max = await page.ev(`(() => {
+        const t = document.getElementById('thread').getBoundingClientRect();
+        const c = document.getElementById('conv');
+        return { left: Math.round(t.left) === Math.round(c.getBoundingClientRect().left), right: Math.round(t.right) === innerWidth, hidden: getComputedStyle(c).visibility, pressed: document.getElementById('t-max').getAttribute('aria-pressed'), tip: document.getElementById('t-max').title };
+      })()`);
+      assert.deepEqual(max, { left: true, right: true, hidden: 'hidden', pressed: 'true', tip: 'Thu nhỏ khung bình luận' });
+      await page.ev(`document.getElementById('t-max').click(); true`);
+      assert.deepEqual([await w(), await page.ev(`getComputedStyle(document.getElementById('conv')).visibility`)], [400, 'visible']);
+      await page.ev(`document.getElementById('t-max').click(); document.getElementById('t-close').click(); true`);
+      await page.ev(`openThread(S.posts.get('n2')); true`);
+      await page.until(() => !document.getElementById('thread').hidden);
+      assert.deepEqual([await w(), await page.ev(`document.getElementById('app').classList.contains('side-max')`)], [400, false]);
+    },
+  },
+  {
+    name: 'Trang Chat nhanh: tải trước khi rê chuột, mở lại hiện ngay từ bộ nhớ, tin gửi hiện ngay',
+    async run({ page, url, assert }) {
+      await page.open(url('chat', 'chat=1&c=chMain'), { width: 1280, height: 820 });
+      await page.until(() => !!document.getElementById('m-n2') && !!document.querySelector('.unread-line'));
+      const full = (ch) => page.ev(`(window.__postsCalls || []).filter((x) => x.channelId === '${ch}' && !x.since && !x.before).length`);
+      assert.equal(await full('chMain'), 1); // tin của kênh trong địa chỉ: đọc một lần (song song với danh sách)
+      const item = (name) => `[...document.querySelectorAll('#list .item')].find((x) => x.textContent.includes('${name}'))`;
+      // Lúc rảnh: tải sẵn tin nhắn riêng còn chưa đọc (Lan Anh)
+      await page.until(() => (window.__postsCalls || []).some((x) => x.channelId === 'dm1'));
+      // Rê chuột vào "Hỏi đáp": tải trước; lướt qua (rời ngay) thì không tải
+      await page.ev(`(() => { const it = ${item('Minh Quân')}; it.dispatchEvent(new MouseEvent('mouseenter')); it.dispatchEvent(new MouseEvent('mouseleave')); return true; })()`);
+      await page.ev(`${item('Hỏi đáp')}.dispatchEvent(new MouseEvent('mouseenter')); true`);
+      await page.until(() => (window.__postsCalls || []).some((x) => x.channelId === 'chSub'));
+      await new Promise((r) => setTimeout(r, 200));
+      assert.deepEqual([await full('dm1'), await full('dm2')], [1, 0]);
+      // Bấm mở: hiện ngay (cùng lúc với cú bấm), không đọc lại cả trang
+      await page.ev(`window.__postsDelay = 600; true`);
+      const instant = await page.ev(`(() => { ${item('Hỏi đáp')}.click(); return document.querySelectorAll('#msg-list .msg').length; })()`);
+      assert.ok(instant > 0, 'mở từ bản tải trước phải hiện ngay');
+      assert.equal(await full('chSub'), 1);
+      // Quay lại kênh cũ: hiện ngay từ bộ nhớ, chỉ đọc phần mới (since)
+      const back = await page.ev(`(() => { ${item('Crypto Life')}.click(); return [!!document.getElementById('m-n2'), document.getElementById('msg-list').textContent.includes('Đang tải tin nhắn')]; })()`);
+      assert.deepEqual(back, [true, false]);
+      await page.until(() => (window.__postsCalls || []).some((x) => x.channelId === 'chMain' && x.since > 0));
+      assert.equal(await full('chMain'), 1);
+      await page.ev(`window.__postsDelay = 0; true`);
+      // Gửi tin khi máy chủ chậm: hiện ngay (mờ, "Đang gửi…"), ô gõ trống ngay; xong thì thành tin thật
+      await page.ev(`window.__sendDelay = 500; true`);
+      const sent = await page.ev(`(() => {
+        const t = document.getElementById('text');
+        t.value = 'Tin gửi nhanh'; t.dispatchEvent(new Event('input'));
+        t.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+        const m = document.querySelector('#msg-list .msg.pending');
+        return [t.value, !!m && m.textContent.includes('Tin gửi nhanh') && m.textContent.includes('Đang gửi…'), document.getElementById('send').disabled];
+      })()`);
+      assert.deepEqual(sent, ['', true, true]);
+      // Gõ tiếp tin thứ hai ngay khi tin đầu chưa xong: gửi theo đúng thứ tự
+      await page.ev(`(() => { const t = document.getElementById('text'); t.value = 'Tin thứ hai'; t.dispatchEvent(new Event('input')); t.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); return true; })()`);
+      assert.equal(await page.ev(`document.querySelectorAll('#msg-list .msg.pending').length`), 2);
+      await page.until(() => !document.querySelector('#msg-list .msg.pending') && (window.__chatSends || []).length === 2, 4000);
+      assert.deepEqual(await page.ev(`window.__chatSends.map((x) => x.message)`), ['Tin gửi nhanh', 'Tin thứ hai']);
+      assert.ok(await page.ev(`[...document.querySelectorAll('#msg-list .msg.me')].some((x) => x.textContent.includes('Tin thứ hai'))`));
+      // Gửi lỗi: bỏ tin tạm, chữ quay lại ô gõ, báo lỗi
+      await page.ev(`window.__sendFail = true; window.__sendDelay = 200; (() => { const t = document.getElementById('text'); t.value = 'Tin sẽ lỗi'; t.dispatchEvent(new Event('input')); t.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); return true; })()`);
+      await page.until(() => !document.querySelector('#msg-list .msg.pending') && document.getElementById('text').value === 'Tin sẽ lỗi');
+      assert.match(await page.ev(`document.getElementById('toast').textContent`), /mất kết nối — chữ đã đưa lại vào ô gõ/);
+      await page.ev(`window.__sendFail = false; window.__sendDelay = 0; document.getElementById('text').value = ''; true`);
+      // Bình luận: rê chuột vào "N bình luận" tải trước; mở là hiện ngay; bình luận gửi hiện ngay
+      const t0 = await page.ev(`window.__chatThreads || 0`);
+      await page.ev(`document.querySelector('#m-n2 .tbar-n').dispatchEvent(new MouseEvent('mouseenter')); true`);
+      await page.until((n) => (window.__chatThreads || 0) > n, 4000, t0);
+      await new Promise((r) => setTimeout(r, 100));
+      const tOpen = await page.ev(`(() => { document.querySelector('#m-n2 .tbar-n').click(); return !!document.getElementById('t-n3'); })()`);
+      assert.equal(tOpen, true);
+      await page.ev(`window.__sendDelay = 400; (() => { const t = document.getElementById('t-text'); t.value = 'Bình luận nhanh'; t.dispatchEvent(new Event('input')); document.getElementById('t-send').click(); return true; })()`);
+      assert.deepEqual(await page.ev(`[document.getElementById('t-text').value, !!document.querySelector('#t-list .msg.pending')]`), ['', true]);
+      await page.until(() => !document.querySelector('#t-list .msg.pending') && (window.__chatSends || []).some((x) => x.message === 'Bình luận nhanh'), 4000);
+      await page.ev(`window.__sendDelay = 0; true`);
+      // Đóng rồi mở lại khung bình luận: hiện ngay từ bộ nhớ
+      await page.ev(`document.getElementById('t-close').click(); true`);
+      assert.equal(await page.ev(`(() => { document.querySelector('#m-n2 .tbar-n').click(); return !!document.getElementById('t-n3'); })()`), true);
+    },
+  },
+  {
     name: 'Trang Chat: ảnh lưu trong máy (avatar, ảnh community, biểu cảm)',
     async run({ page, url, assert }) {
       await page.open(url('chat', 'chat=1&c=chMain'), { width: 1280, height: 820 });
       await page.until(() => document.querySelectorAll('#msg-list .msg').length > 0);
-      // Giả lập máy chủ ảnh: đếm số lần tải
+      // Giả lập máy chủ ảnh: đếm số lần tải ảnh đang thử (ảnh biểu cảm tải sẵn chạy song song, không đếm)
       const r = await page.ev(`(async () => {
         if (!window.caches) return { skip: true };
         await caches.delete('beingroup-img-v1');
@@ -1371,7 +1579,7 @@ export const scenarios = [
         let n = 0;
         const png = await (await fetch('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==')).blob();
         const real = window.fetch;
-        window.fetch = async (u, o) => (String(u).startsWith('https://chat.beincom.com/') || String(u).startsWith('https://group.beincom.com/') ? (n++, new Response(png, { headers: { 'content-type': 'image/png', date: new Date().toUTCString() } })) : real(u, o));
+        window.fetch = async (u, o) => (String(u).startsWith('https://chat.beincom.com/') || String(u).startsWith('https://group.beincom.com/') ? (n += String(u).includes('/users/cu99/') ? 1 : 0, new Response(png, { headers: { 'content-type': 'image/png', date: new Date().toUTCString() } })) : real(u, o));
         const a = 'https://chat.beincom.com/api/v4/users/cu99/image?_=1';
         const img1 = document.createElement('img');
         setImgSrc(img1, a);
@@ -1387,7 +1595,8 @@ export const scenarios = [
         IMG.clear();
         await cachedImage('https://chat.beincom.com/api/v4/users/cu99/image?_=2');
         const cache = await caches.open('beingroup-img-v1');
-        const keys = (await cache.keys()).map((k) => k.url);
+        // Chỉ xét ảnh đang thử (trang vẫn có thể lưu avatar khác khi vẽ lại)
+        const keys = (await cache.keys()).map((k) => k.url).filter((k) => k.includes('/users/cu99/'));
         // Link không phải ảnh Beincom: gắn thẳng
         const img3 = document.createElement('img');
         setImgSrc(img3, 'data:image/png;base64,AAAA');
@@ -1645,7 +1854,7 @@ export const scenarios = [
       const c3 = (await chips())[2];
       assert.ok(c3[0] === '1' || c3[0] === '💜1', c3[0]);
       assert.deepEqual((await chips()).slice(0, 2), [['👍2', false], ['❤️1', true]]);
-      assert.deepEqual(await page.ev(`(() => { const b = document.querySelector('#m-n1 .rc[data-name="bic_purple_heart"]'); return [b.querySelector('img.bemo')?.getAttribute('src') || b.querySelector('.rc-e').textContent, b.getAttribute('aria-label')]; })()`).then(([src, label]) => [src === '💜' ? 'https://group.beincom.com/images/emoji/animated/bic_purple_heart.gif' : src, label]), ['https://group.beincom.com/images/emoji/animated/bic_purple_heart.gif', 'purple heart 1']);
+      assert.deepEqual(await page.ev(`(() => { const b = document.querySelector('#m-n1 .rc[data-name="bic_purple_heart"]'); const i = b.querySelector('img.bemo'); return [(i && (i.dataset.src || i.getAttribute('src'))) || b.querySelector('.rc-e').textContent, b.getAttribute('aria-label')]; })()`).then(([src, label]) => [src === '💜' ? 'https://group.beincom.com/images/emoji/animated/bic_purple_heart.gif' : src, label]), ['https://group.beincom.com/images/emoji/animated/bic_purple_heart.gif', 'purple heart 1']);
       // Rê chuột: ai đã thả
       await page.ev(`document.querySelector('#m-n1 .reacts').dispatchEvent(new MouseEvent('mouseenter')); true`);
       await page.until(() => document.querySelector('#m-n1 .rc[data-name="+1"]').title === '👍 Hoa Mai, Minh' && document.querySelector('#m-n1 .rc[data-name="heart"]').title === '❤️ Bạn');

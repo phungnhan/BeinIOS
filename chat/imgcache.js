@@ -47,9 +47,10 @@ function cachedImage(url) {
 // Gắn ảnh vào thẻ img: đã có trong bộ nhớ thì gắn ngay; chưa thì gắn khi đọc xong bản lưu (link khác nguồn Beincom: gắn thẳng)
 function setImgSrc(img, url) {
   if (!url || !IMG_HOSTS.test(url) || !imgCacheOk()) return void (img.src = url);
+  // data-src: link gốc (ảnh hiện bằng bản lưu blob:)
+  img.dataset.src = url;
   const hit = IMG.get(url);
   if (typeof hit === 'string') return void (img.src = hit);
-  img.dataset.src = url;
   cachedImage(url).then((src) => {
     if (img.dataset.src === url) img.src = src;
   });

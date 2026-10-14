@@ -2,6 +2,37 @@
 
 Mỗi bản một mục, bản mới nhất ở trên. Dashboard tự hiện các mục mới sau khi cập nhật (bấm "Có gì mới" ở cuối trang để xem lại).
 
+## v0.47.0 — 14/10/2026
+- **Trang Chat nhanh hơn.** Đo thật từ máy bạn: mỗi lệnh đọc chat của Beincom mất 0,1–0,7 giây và dao động thất thường; một trang 40 tin nặng khoảng 0,4 MB. Phần addon tự vẽ chỉ mất vài chục mili giây. Vì vậy bản này tập trung vào bớt phải chờ mạng:
+  - **Mở lại cuộc trò chuyện vừa xem hiện ngay**: tin được nhớ trong bộ nhớ của trang (15 cuộc trò chuyện gần nhất; không ghi ra máy, đóng trang là mất), rồi chỉ đọc phần mới.
+  - **Tải trước khi rê chuột** (hoặc chọn bằng phím Tab) vào một mục ở danh sách: lúc bấm thì tin đã có sẵn. Lướt chuột qua nhanh thì không tải; tối đa 2 cuộc trò chuyện cùng lúc.
+  - Lúc trang rảnh, tải sẵn **3 cuộc trò chuyện còn tin chưa đọc** mới nhất. Tải trước chỉ đọc, không đánh dấu đã đọc.
+  - **Bình luận (thread)**: rê chuột vào "N bình luận" là tải trước; mở lại thread vừa xem hiện ngay.
+  - **Tin và bình luận chỉ có chữ hiện ngay khi gửi** (mờ, ghi "Đang gửi…"). Ô gõ trống ngay để gõ tiếp; các tin gửi lần lượt đúng thứ tự gõ. Gửi lỗi thì tin tạm biến mất, chữ được đưa lại vào ô gõ kèm thông báo. Tin có tệp vẫn chờ gửi xong như cũ.
+  - Gửi tin, sửa tin, thả biểu cảm, theo dõi thread **gọi thẳng chat Beincom**. Trước đây sau mỗi lần nền của addon khởi động lại (hoặc 5 phút không gọi), addon phải dò api.beincom.com trước khi gửi, mất thêm 0,1–2,6 giây. Chat chưa nhận phiên (401: tin chưa được tạo) thì mới đổi đường, nên không bao giờ gửi một tin hai lần.
+  - **Danh sách cuộc trò chuyện lần trước được lưu trong máy**: mở trang Chat lần đầu sau khi bật lại trình duyệt cũng hiện danh sách ngay, không phải chờ khung xám. Chỉ lưu tên cuộc trò chuyện, số chưa đọc, giờ tin cuối; không có nội dung tin.
+  - Ảnh và cấp của cộng đồng con đọc cùng lúc với tên người và quyền, không nối đuôi nhau.
+- Lệnh của trang Chat chạy quá 5 giây được ghi vào **Nhật ký → Lỗi kỹ thuật** (chỉ tên lệnh và thời gian, không có nội dung). Lỗi JavaScript của trang Chat cũng được ghi. Nếu vẫn thấy chậm, bấm **Sao chép báo cáo** ở đó để biết chậm ở đâu.
+
+## v0.46.0 — 14/10/2026
+- **Tin của bạn trong trang Chat dễ nhìn hơn**: bong bóng nền tím nhạt, chữ màu thường thay cho khối tím đậm chữ trắng. Khung trích tin trả lời, @tên, link, mã, ảnh biểu cảm Beincom đều rõ, cả ở giao diện tối.
+- Sửa **tin trả lời của bạn bị tràn trong khung bình luận**: trả lời một bình luận dài làm bong bóng rộng hơn khung, mất chữ bên trái và hiện thanh cuộn ngang. Khung trích nay tự xuống dòng (tối đa 2 dòng), không bao giờ rộng hơn bong bóng.
+- **Khung bình luận kéo rộng được**: kéo cạnh trái của khung (cả khung Tìm tin nhắn, Tin đã ghim) sang trái / phải.
+  - Độ rộng được nhớ cho lần sau. Bấm đúp vào cạnh để về cỡ mặc định. Khi đang chọn cạnh, phím ← → cũng đổi được độ rộng.
+  - Khung luôn chừa chỗ cho cuộc trò chuyện.
+- **Nút Phóng to** (⤢) trên đầu khung bình luận: khung phủ cả phần cuộc trò chuyện, chữ dàn rộng dễ đọc. Bấm lại (⤡) để thu nhỏ; đóng khung thì lần mở sau về cỡ thường.
+- Thanh định dạng ở ô chat không còn nút đè lên nhau khi cuộc trò chuyện hẹp (lúc khung bình luận đang mở); thiếu chỗ thì cuộn ngang.
+
+## v0.45.0 — 14/10/2026
+- **Cộng đồng con trong trang Chat hiện theo cây**, giống cây thư mục:
+  - Kênh chính của cộng đồng ở trên cùng. Mỗi group con nằm ngay dưới group cha, thụt vào một nấc, có đường nối (├ └ │) từ ảnh của group cha.
+  - Dòng phụ ghi **Group con** hoặc **thuộc <tên group cha>** (group cấp 3 trở xuống), kèm mô tả kênh nếu có.
+  - Cùng một cấp vẫn xếp theo tin mới nhất. Group con có group cha bạn chưa tham gia thì treo thẳng dưới kênh chính.
+  - Đang tìm hoặc lọc thì bỏ đường nối, chỉ giữ dòng "↳ thuộc …" để vẫn biết kênh nằm ở đâu.
+- **Ảnh group con**: kênh của group con giờ hiện ảnh của group (như trên web), cả ở danh sách và đầu cuộc trò chuyện. Group chưa có ảnh thì giữ chữ cái đầu.
+  - Ảnh, cấp và group cha đọc từ thông tin group (chỉ đọc) lúc tải đủ danh sách, rồi ghi nhớ trong máy 3 ngày. Lần mở sau hiện ngay.
+- **Dashboard → Cài đặt → 💬 Chat Beincom**: thêm dòng **Ảnh trang Chat đã lưu trong máy** (số ảnh, dung lượng) và nút **Xoá ảnh đã lưu**. Xoá xong, trang Chat tự tải lại ảnh khi cần.
+
 ## v0.44.7 — 14/10/2026
 - **Trang Chat tải ảnh nhanh hơn**: avatar, ảnh cộng đồng và ảnh biểu cảm Beincom được lưu trong máy. Lần sau hiện ngay, không chờ mạng.
   - Ai đổi avatar / cộng đồng đổi ảnh thì addon tự tải bản mới và xoá bản cũ.

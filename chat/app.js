@@ -297,14 +297,16 @@ chrome.storage.onChanged.addListener((changes, area) => {
 });
 
 async function start() {
+  initSide();
   loadReplies();
   warmEmojiCache();
   const want = new URLSearchParams(location.hash.slice(1)).get('c');
-  if (want && /^\w+$/.test(want)) S.prefetch = { id: want, promise: call('chatPosts', { channelId: want, perPage: PAGE }) };
+  // Tin của cuộc trò chuyện trong địa chỉ: đọc song song với danh sách
+  if (want && /^\w+$/.test(want)) fetchConv(want);
   let cached = null;
   try {
     const { settings } = await chrome.storage.local.get('settings');
-    if (settings?.chatEnabled) cached = (await chrome.storage.session?.get(CACHE_KEY))?.[CACHE_KEY] || null;
+    if (settings?.chatEnabled) cached = (await chrome.storage.local.get(CACHE_KEY))[CACHE_KEY] || null;
   } catch {}
   if (cached) {
     applyOverview(cached);

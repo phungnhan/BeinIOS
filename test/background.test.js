@@ -3050,6 +3050,63 @@ test('trang Chat: ảnh community (ảnh team chat) cho mục cộng đồng và
   assert.deepEqual(cl.channels.map((x) => [x.id, !!x.main]), [['chSub', false], ['chMain', true]]);
 });
 
+test('trang Chat: cộng đồng con — ảnh, cấp, group cha từ group/groups/{id}; nhớ 3 ngày, đọc nhanh không gọi', async () => {
+  const now = Date.parse('2026-10-14T03:00:00Z');
+  const data = fixture();
+  const c = (data.chat = chatFixture(now));
+  c.channels.tCL.push({ id: 'chDeep', type: 'O', name: 'kien-thuc', display_name: 'Kiến thức', props: { bic_group_id: 'gCLdeep' }, last_post_at: now - 10e3, total_msg_count: 1 });
+  c.channelMembers.tCL.push({ channel_id: 'chDeep', roles: 'roleUser' });
+  Object.assign(data.groups.gCLsub, { parentId: 'gCL', icon: 'https://media.beincom.com/g/sub.png' });
+  data.groups.gCLdeep = { id: 'gCLdeep', name: 'Kiến thức', communityId: 'cCL', level: 2, parents: ['gCL', 'gCLsub'], icon: 'http://khong-an-toan/x.png' };
+  const env = makeEnv({ data, now, settings: { chatEnabled: true } });
+  const chans = (r) => Object.fromEntries(r.teams.flatMap((t) => t.channels).map((x) => [x.id, [x.icon, x.level, x.parentGroupId]]));
+  // Đọc nhanh: chưa nhớ thì chưa có, không gọi group
+  const q = await env.send({ type: 'chatOverview', quick: true });
+  assert.deepEqual(chans(q).chSub, [undefined, undefined, undefined]);
+  assert.ok(!env.calls.some((x) => /^GET group\/groups\/\w+$/.test(x)));
+  // Đọc đủ: ảnh https, cấp, cha (parentId hoặc phần tử cuối của parents); group không đọc được (404) thì bỏ qua
+  const r = await env.send({ type: 'chatOverview' });
+  assert.deepEqual(chans(r), {
+    chDeep: ['', 2, 'gCLsub'],
+    chSub: ['https://media.beincom.com/g/sub.png', 1, 'gCL'],
+    chMain: ['', 0, ''],
+    chX: [undefined, undefined, undefined],
+  });
+  assert.deepEqual(env.calls.filter((x) => /^GET group\/groups\/\w+$/.test(x)).sort(), ['GET group/groups/gCL', 'GET group/groups/gCLdeep', 'GET group/groups/gCLsub', 'GET group/groups/gX']);
+  assert.deepEqual(Object.keys(env.storage.chatGroups).sort(), ['gCL', 'gCLdeep', 'gCLsub', 'gX']);
+  assert.equal(env.storage.chatGroups.gX.failed, true);
+  // Lỗi 404 không ghi Lỗi kỹ thuật; lần sau (kể cả đọc nhanh) lấy từ bộ nhớ, không gọi lại
+  assert.ok(!(env.storage.diagLog || []).some((x) => /group\/groups\/gX/.test(x.path)));
+  const n = env.calls.length;
+  const q2 = await env.send({ type: 'chatOverview', quick: true });
+  await env.send({ type: 'chatOverview' });
+  assert.equal(chans(q2).chSub[0], 'https://media.beincom.com/g/sub.png');
+  assert.ok(!env.calls.slice(n).some((x) => /^GET group\/groups\/\w+$/.test(x)));
+});
+
+test('trang Chat: gửi / sửa / thả biểu cảm gọi thẳng, không dò api.beincom.com trước; chỉ đổi đường khi 401 (tin chưa được tạo)', async () => {
+  const now = Date.parse('2026-10-14T03:00:00Z');
+  const data = fixture();
+  data.chat = chatFixture(now);
+  const env = makeEnv({ data, now, settings: { chatEnabled: true } });
+  const r = await env.send({ type: 'chatSend', channelId: 'chMain', message: 'Chào cả nhà' });
+  assert.deepEqual([r.status, r.mode], ['ok', 'direct']);
+  assert.equal((await env.send({ type: 'chatReact', postId: 'p1', emoji: '+1', add: true, meChatId: 'cu1' })).status, 'ok');
+  assert.ok(!env.calls.includes('GET group/me/permissions'));
+  assert.equal(env.calls.filter((x) => x === 'POST chat:v4/posts').length, 1);
+  // Hết phiên chat: báo cần đăng nhập, gửi đúng một lần
+  data.chatLoggedOut = true;
+  const r2 = await env.send({ type: 'chatSend', channelId: 'chMain', message: 'Lần hai' });
+  assert.equal(r2.status, 'need_login');
+  assert.equal(env.calls.filter((x) => x === 'POST chat:v4/posts').length, 2);
+  // Service worker vừa khởi động lại, chat chưa nhận phiên (401) nhưng api.beincom.com được: đổi đường (dò rồi gọi lại) —
+  // 401 nghĩa là tin chưa được tạo nên không gửi trùng
+  const env2 = makeEnv({ data, now, settings: { chatEnabled: true } });
+  const r3 = await env2.send({ type: 'chatSend', channelId: 'chMain', message: 'Lần ba' });
+  assert.equal(r3.status, 'need_login');
+  assert.deepEqual(env2.calls.filter((x) => x === 'POST chat:v4/posts' || x === 'GET group/me/permissions'), ['POST chat:v4/posts', 'GET group/me/permissions', 'POST chat:v4/posts']);
+});
+
 test('trang Chat: gửi tin trả lời như web — props.quoted_post_id; mã lạ thì không gửi', async () => {
   const now = Date.parse('2026-10-14T03:00:00Z');
   const data = fixture();

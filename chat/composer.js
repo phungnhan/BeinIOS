@@ -247,12 +247,15 @@ async function sendMsg(e) {
   const text = $('text').value.trim();
   const fileIds = S.attach.filter((a) => a.status === 'ok').map((a) => a.id);
   if (!c || (!text && !fileIds.length) || S.sending || $('send').disabled) return;
-  S.sending = true;
-  updateSend();
   // Trả lời lời mời trò chuyện là chấp nhận lời mời (như web Beincom)
   const accept = c.contact?.incoming && c.contact.status !== 'ignored' && c.contact.id ? c.contact.id : '';
   const quoted = S.quote;
-  const r = await call('chatSend', { channelId: c.id, message: (quoted && text ? quoteMarker(quoted) : '') + text, rootId: '', ...(quoted && text ? { quotedPostId: quoted.id } : {}), ...(accept ? { acceptContactId: accept } : {}), ...(S.priority ? { priority: S.priority } : {}), ...(fileIds.length ? { fileIds } : {}) });
+  const send = { channelId: c.id, message: (quoted && text ? quoteMarker(quoted) : '') + text, rootId: '', ...(quoted && text ? { quotedPostId: quoted.id } : {}), ...(accept ? { acceptContactId: accept } : {}), ...(S.priority ? { priority: S.priority } : {}), ...(fileIds.length ? { fileIds } : {}) };
+  // Tin chỉ có chữ: hiện ngay (chat/cache.js), máy chủ trả lời thì thay bằng tin thật
+  if (!fileIds.length) return sendNow(c, text, send, quoted);
+  S.sending = true;
+  updateSend();
+  const r = await call('chatSend', send);
   if (r.accepted) acceptedLocally(c.id);
   S.sending = false;
   if (r.status !== 'ok') {
@@ -283,6 +286,43 @@ async function sendMsg(e) {
   const it = findChat(c.id);
   if (it) bumpChat(c.id, { lastPostAt: r.post?.createAt || Date.now() });
   renderList();
+}
+
+// Tin chỉ có chữ: hiện ngay ở cuối cuộc trò chuyện (mờ, "Đang gửi…"), ô gõ trống ngay để gõ tiếp. Gửi lỗi thì bỏ tin tạm
+// và đưa chữ lại vào ô gõ (nếu ô đang trống)
+function sendNow(c, text, send, quoted) {
+  const temp = pendingPost(c, text, { quoted: quoted ? quoted : null, priority: send.priority || '' });
+  const map = S.posts;
+  map.set(temp.id, temp);
+  $('text').value = '';
+  setDraft(c.id, '');
+  if (quoted) cancelQuote();
+  S.reply = null;
+  renderReply();
+  resetComposer();
+  autosize();
+  renderMsgs({ scroll: 'bottom' });
+  return queueSend(async () => {
+    const r = await call('chatSend', send);
+    map.delete(temp.id);
+    if (r.accepted) acceptedLocally(c.id);
+    const here = S.sel?.id === c.id && S.posts === map;
+    if (r.status !== 'ok') {
+      if (here) {
+        renderMsgs({ scroll: 'keep' });
+        if (!$('text').value.trim()) {
+          $('text').value = text;
+          autosize();
+          updateSend();
+        }
+      }
+      return toast((r.message || 'Gửi tin lỗi') + (here ? ' — chữ đã đưa lại vào ô gõ' : ''), 'err');
+    }
+    if (r.post) here ? addPosts([r.post]) : map.set(r.post.id, r.post);
+    if (here) renderMsgs({ scroll: 'keep' });
+    bumpChat(c.id, { lastPostAt: r.post?.createAt || Date.now() });
+    renderList();
+  });
 }
 
 // Cập nhật một mục trong danh sách (số chưa đọc, giờ tin cuối)

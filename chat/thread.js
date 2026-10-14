@@ -9,7 +9,7 @@ function threadBar(p) {
     'div',
     { class: 'tbar' },
     people.length ? el('span', { class: 'tbar-people' }, people.map((u) => avatar({ name: u.fullname || u.username, chatId: u.chatId, pictureAt: u.pictureAt, size: 'xs' }))) : null,
-    el('button', { type: 'button', class: 'tbar-n', onclick: () => openThread(p) }, svg('M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2Zm0 14H6l-2 2V4h16v12Z'), `${p.replyCount} bình luận`),
+    el('button', { type: 'button', class: 'tbar-n', onclick: () => openThread(p), onmouseenter: () => hoverThread(p.id), onfocus: () => hoverThread(p.id), onmouseleave: unhoverConv }, svg('M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2Zm0 14H6l-2 2V4h16v12Z'), `${p.replyCount} bình luận`),
     el('button', { type: 'button', class: 'tbar-follow' + (p.following ? ' on' : ''), 'aria-pressed': String(!!p.following), title: p.following ? 'Bấm để bỏ theo dõi' : 'Theo dõi để nhận thông báo bình luận mới', onclick: () => toggleFollow(p) }, p.following ? 'Đang theo dõi' : 'Theo dõi'),
   );
 }
@@ -34,7 +34,10 @@ async function openThread(p) {
   if (!c) return;
   const root = S.posts.get(p.id) || p;
   threadSeen(root.id);
-  S.thread = { root, posts: new Map([[root.id, root]]), hasNext: false, loading: true, channelId: c.id };
+  saveThread(S.thread);
+  // Bình luận vừa xem / vừa tải trước (chat/cache.js): hiện ngay, rồi đọc lại
+  const cached = threadCache.get(root.id);
+  S.thread = { root, posts: new Map([[root.id, root], ...(cached ? cached.posts.map((x) => [x.id, x]) : [])]), hasNext: cached?.hasNext || false, loading: !cached, channelId: c.id, at: cached?.at || 0 };
   $('thread').hidden = false;
   $('t-sub').textContent = chatTitle(c);
   closePins();
@@ -45,12 +48,14 @@ async function openThread(p) {
   S.tQuote = null;
   renderQuote(true);
   $('t-text').value = draftOf(`${c.id}:${root.id}`);
-  renderThread();
+  renderThread({ scroll: cached ? 'bottom' : 'keep' });
   tAutosize();
   $('t-text').focus();
-  const r = await call('chatThread', { rootId: root.id });
+  const at = Date.now();
+  const r = await fetchThread(root.id);
   if (S.thread?.root.id !== root.id) return;
   S.thread.loading = false;
+  S.thread.at = at;
   if (r.status !== 'ok') {
     renderThread();
     return toast(r.message || 'Không đọc được bình luận', 'err');
@@ -64,7 +69,7 @@ async function openThread(p) {
     S.seenReplies.add(x.id);
   }
   S.thread.hasNext = r.hasNext;
-  renderThread({ scroll: 'bottom' });
+  renderThread({ scroll: cached ? 'keep' : 'bottom' });
   if (c.teamId) call('chatThreadRead', { teamId: c.teamId, rootId: root.id });
 }
 
@@ -85,12 +90,14 @@ async function loadMoreThread() {
 }
 
 function closeThread() {
+  saveThread(S.thread);
   S.thread = null;
   S.tEditing = null;
   S.tQuote = null;
   renderQuote(true);
   $('t-edit').hidden = true;
   $('thread').hidden = true;
+  setSideMax(false);
   syncSide();
   $('t-text').value = '';
 }
@@ -147,7 +154,7 @@ function tAutosize() {
   tUpdateSend();
 }
 function tUpdateSend() {
-  $('t-send').disabled = !!S.tSending || $('t-text').disabled || !$('t-text').value.trim();
+  $('t-send').disabled = $('t-text').disabled || !$('t-text').value.trim();
 }
 
 async function sendThread(e) {
@@ -156,27 +163,44 @@ async function sendThread(e) {
   const c = S.sel;
   if (S.tEditing) return saveEdit(true);
   const text = $('t-text').value.trim();
-  if (!t || !c || !text || S.tSending) return;
-  S.tSending = true;
-  tUpdateSend();
+  if (!t || !c || !text) return;
   const quoted = S.tQuote;
-  const r = await call('chatSend', { channelId: c.id, message: (quoted ? quoteMarker(quoted) : '') + text, rootId: t.root.id, ...(quoted ? { quotedPostId: quoted.id } : {}) });
-  S.tSending = false;
-  if (r.status !== 'ok') {
-    tUpdateSend();
-    return toast(r.message || 'Gửi bình luận lỗi', 'err');
-  }
+  // Hiện ngay (mờ, "Đang gửi…"), ô gõ trống ngay; gửi lỗi thì bỏ bình luận tạm, đưa chữ lại vào ô
+  const temp = pendingPost(c, text, { rootId: t.root.id, quoted });
+  t.posts.set(temp.id, temp);
   $('t-text').value = '';
   setDraft(`${c.id}:${t.root.id}`, '');
   if (quoted) cancelQuote(true);
   tAutosize();
-  if (r.post && S.thread === t) {
-    S.lastSync = Math.max(S.lastSync, r.post.updateAt || 0, r.post.createAt || 0);
-    addReply({ ...r.post, createAt: Math.max(r.post.createAt || 0, S.loadedAt) });
-    t.posts.set(r.post.id, r.post);
-    renderThread({ scroll: 'bottom' });
-    renderMsgs({ scroll: 'keep' });
-  }
+  tUpdateSend();
+  renderThread({ scroll: 'bottom' });
+  await queueSend(async () => {
+    const r = await call('chatSend', { channelId: c.id, message: (quoted ? quoteMarker(quoted) : '') + text, rootId: t.root.id, ...(quoted ? { quotedPostId: quoted.id } : {}) });
+    t.posts.delete(temp.id);
+    if (r.status !== 'ok') {
+      if (S.thread === t) {
+        renderThread();
+        if (!$('t-text').value.trim()) {
+          $('t-text').value = text;
+          tAutosize();
+          tUpdateSend();
+        }
+      }
+      return toast((r.message || 'Gửi bình luận lỗi') + (S.thread === t ? ' — chữ đã đưa lại vào ô' : ''), 'err');
+    }
+    sentReply(t, r.post);
+  });
+}
+
+// Bình luận đã gửi xong: thay bình luận tạm, cập nhật số bình luận của tin gốc
+function sentReply(t, post) {
+  if (!post) return;
+  if (S.thread !== t) return void t.posts.set(post.id, post);
+  S.lastSync = Math.max(S.lastSync, post.updateAt || 0, post.createAt || 0);
+  addReply({ ...post, createAt: Math.max(post.createAt || 0, S.loadedAt) });
+  t.posts.set(post.id, post);
+  renderThread({ scroll: 'bottom' });
+  renderMsgs({ scroll: 'keep' });
 }
 
 // ---------- Thread đang theo dõi (như nút "Thread" trên web) ----------

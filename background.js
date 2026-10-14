@@ -168,7 +168,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     telegramPoll: () => pollTelegram(),
     // Dashboard / popup báo lỗi JavaScript của trang
     diag: async () => {
-      if (msg.entry?.where === 'dashboard' || msg.entry?.where === 'popup') recordDiag({ ...msg.entry, kind: 'js' });
+      if (['dashboard', 'popup', 'chat'].includes(msg.entry?.where)) recordDiag({ ...msg.entry, kind: 'js' });
       return { status: 'ok' };
     },
     postStatsRefresh: () => measurePostStats({ refresh: true }),

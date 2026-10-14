@@ -1972,3 +1972,41 @@ test('chat Beincom: người dùng chat -> người Beincom, quyền kênh, thu 
   assert.deepEqual([BG.telegramKind('bg-chat'), BG.telegramKind('bg-chat-dm'), BG.telegramKind('bg-chat-mention'), BG.DEFAULT_TELEGRAM.kinds.chat], ['violations', 'chat', 'chat', true]);
 });
 
+test('chatTreeOrder: kênh chính trước, group con ngay dưới group cha, thụt theo cấp', () => {
+  const ch = (id, groupId, x = {}) => ({ id, groupId, name: id.toUpperCase(), ...x });
+  const list = [
+    ch('c3', 'g3', { level: 2, parentGroupId: 'g2' }), // tin mới nhất trước (thứ tự sẵn có)
+    ch('c4', 'g4', { level: 1, parentGroupId: 'root' }),
+    ch('c2', 'g2', { level: 1, parentGroupId: 'root' }),
+    ch('main', 'root', { main: true, level: 0 }),
+    ch('c5', 'g5', { level: 2, parentGroupId: 'gMissing' }), // cha chưa tham gia: thụt một cấp
+    ch('c6', 'g6'), // chưa biết cấp
+  ];
+  const out = BG.chatTreeOrder(list);
+  assert.deepEqual(out.map((c) => [c.id, c.depth, c.parentName]), [
+    ['main', 0, ''],
+    ['c4', 1, ''],
+    ['c2', 1, ''],
+    ['c3', 2, 'C2'],
+    ['c5', 1, ''],
+    ['c6', 0, ''],
+  ]);
+  // Đường nối: └ cho con cuối, │ ở cột tổ tiên còn em phía dưới (c2 còn em c5), ┬ cho mục có con
+  assert.deepEqual(out.map((c) => [c.id, c.last, c.rails, c.kids]), [
+    ['main', true, [], true],
+    ['c4', false, [], false],
+    ['c2', false, [], true],
+    ['c3', true, [true], false],
+    ['c5', true, [], false],
+    ['c6', true, [], false],
+  ]);
+  // Kênh chính mang group khác group gốc: con trực tiếp của group gốc (rootId) vẫn treo dưới kênh chính
+  const l2 = [ch('a', 'gA', { level: 1, parentGroupId: 'cRoot' }), ch('m', 'gM', { main: true })];
+  assert.deepEqual(BG.chatTreeOrder(l2).map((c) => [c.id, c.depth]), [['m', 0], ['a', 1]]);
+  assert.deepEqual(BG.chatTreeOrder(l2, 'cRoot').map((c) => [c.id, c.depth]), [['m', 0], ['a', 1]]);
+  // Dữ liệu vòng không làm mất kênh; không sửa danh sách gốc
+  const loop = [ch('x', 'gx', { parentGroupId: 'gy' }), ch('y', 'gy', { parentGroupId: 'gx' })];
+  assert.deepEqual(BG.chatTreeOrder(loop).map((c) => c.id).sort(), ['x', 'y']);
+  assert.equal(list[0].depth, undefined);
+  assert.deepEqual(BG.chatTreeOrder(null), []);
+});

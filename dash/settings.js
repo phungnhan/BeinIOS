@@ -167,7 +167,35 @@ function renderBackup() {
   $('backup-profiles-n').textContent = n ? `(${n} người)` : '(chưa có)';
   $('backup-profiles').disabled = !n;
   renderStorageUsage();
+  renderImgCache();
 }
+
+// Ảnh trang Chat lưu trong máy (avatar, ảnh community, biểu cảm — chat/imgcache.js): Cache Storage của addon, không nằm
+// trong chrome.storage / sao lưu. Xoá thì trang Chat tải lại ảnh khi cần
+const IMG_CACHE_NAME = 'beingroup-img-v1';
+async function renderImgCache() {
+  const info = $('img-cache-info');
+  try {
+    const has = await caches.has(IMG_CACHE_NAME);
+    const keys = has ? await (await caches.open(IMG_CACHE_NAME)).keys() : [];
+    let bytes = 0;
+    if (keys.length) {
+      const cache = await caches.open(IMG_CACHE_NAME);
+      for (const k of keys) bytes += (await (await cache.match(k))?.blob())?.size || 0;
+    }
+    info.textContent = keys.length ? `🖼 Ảnh trang Chat đã lưu trong máy: ${keys.length.toLocaleString('vi-VN')} ảnh · ${bytes < 1048576 ? Math.max(1, Math.round(bytes / 1024)) + ' KB' : BG.mbText(bytes)}` : '🖼 Ảnh trang Chat đã lưu trong máy: chưa có';
+    $('btn-img-clear').disabled = !keys.length;
+  } catch {
+    info.textContent = '';
+    $('btn-img-clear').disabled = true;
+  }
+}
+
+$('btn-img-clear').addEventListener('click', async () => {
+  await caches.delete(IMG_CACHE_NAME).catch(() => {});
+  await renderImgCache();
+  toast('Đã xoá ảnh đã lưu — trang Chat sẽ tải lại khi cần');
+});
 
 // Dung lượng addon đang dùng trong trình duyệt (chi tiết từng phần ở Nhật ký → Tự kiểm tra → Bộ nhớ của addon)
 async function renderStorageUsage() {

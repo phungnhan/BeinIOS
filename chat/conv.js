@@ -23,7 +23,10 @@ async function openChat(id, { fromHash = false } = {}) {
   const c = findChat(id);
   if (!c) return;
   if (S.view === 'threads') hideThreads();
+  // Số tin chưa đọc lúc bấm mở (đánh dấu đã đọc sẽ đặt lại về 0)
+  const unread = c.unread || 0;
   if (S.sel?.id !== c.id) {
+    saveConv();
     resetComposer();
     closeThread();
     closePins();
@@ -61,25 +64,52 @@ async function openChat(id, { fromHash = false } = {}) {
   $('msg-list').replaceChildren(el('div', { class: 'sys' }, 'Đang tải tin nhắn…'));
   $('older').hidden = true;
   applyComposer(c);
-  // Tin đã tải trước lúc mở trang (song song với danh sách) thì dùng luôn
-  const pre = S.prefetch?.id === c.id ? S.prefetch.promise : null;
-  S.prefetch = null;
-  const r = await (pre || call('chatPosts', { channelId: c.id, perPage: PAGE }));
+  // Đã xem gần đây hoặc vừa tải trước (chat/cache.js): hiện ngay từ bộ nhớ, rồi đọc phần mới
+  const cached = convCache.get(c.id);
+  if (cached) {
+    convCache.delete(c.id);
+    Object.assign(S, { posts: cached.posts, hasMore: cached.hasMore, lastSync: cached.lastSync, seenReplies: cached.seenReplies, loadedAt: cached.loadedAt, syncedAt: cached.at });
+    markDivider(unread);
+    renderMsgs({ scroll: S.dividerId ? 'divider' : 'bottom' });
+    markRead(true);
+    if (!fromHash) $('text').focus();
+    if (Date.now() - cached.at < CONV_SINCE_MAX) await pollChat(true);
+    else {
+      // Bản nhớ đã cũ: đọc lại trang mới nhất (giữa hai lần có thể quá nhiều tin, chỉ đọc phần mới sẽ hở)
+      const r = await fetchConv(c.id);
+      if (S.sel?.id !== c.id || r.status !== 'ok') return;
+      Object.assign(S, { posts: new Map(), seenReplies: new Set(), lastSync: 0, loadedAt: r.at, syncedAt: r.at });
+      addPosts(r.posts);
+      S.hasMore = r.hasMore;
+      renderMsgs({ scroll: 'bottom' });
+    }
+    // Có tin mới so với bản nhớ: đặt lại vạch "Tin chưa đọc"
+    const was = S.dividerId;
+    if (unread && S.sel?.id === c.id && (markDivider(unread), S.dividerId !== was)) renderMsgs({ scroll: 'divider' });
+    return;
+  }
+  // Đang tải trước (rê chuột, mở trang có #c=…) thì dùng chung lệnh đó
+  const r = await fetchConv(c.id);
   if (S.sel?.id !== c.id) return;
   if (r.status !== 'ok') {
     $('msg-list').replaceChildren(el('div', { class: 'sys' }, 'Không tải được tin nhắn: ' + (r.message || 'lỗi')));
     return;
   }
+  S.loadedAt = r.at;
+  S.syncedAt = r.at;
   addPosts(r.posts);
   S.hasMore = r.hasMore;
-  // Vạch "Tin chưa đọc": trước tin thứ `unread` tính từ cuối (tin của người khác)
-  if (c.unread) {
-    const others = sortedPosts().filter((p) => !p.system && p.user.chatId !== S.me?.chatId);
-    S.dividerId = others[Math.max(0, others.length - c.unread)]?.id || '';
-  }
+  markDivider(unread);
   renderMsgs({ scroll: S.dividerId ? 'divider' : 'bottom' });
   markRead(true);
   if (!fromHash) $('text').focus();
+}
+
+// Vạch "Tin chưa đọc": trước tin thứ `unread` tính từ cuối (tin của người khác)
+function markDivider(unread) {
+  if (!unread) return;
+  const others = sortedPosts().filter((p) => !p.system && !p.pending && p.user.chatId !== S.me?.chatId);
+  S.dividerId = others[Math.max(0, others.length - unread)]?.id || '';
 }
 
 // Ô gõ tin theo quyền của kênh. Quyền chưa rõ (canPost = null, lần đọc nhanh): cho gõ, Beincom tự từ chối nếu không được
@@ -155,7 +185,7 @@ async function reqAction(action) {
 function renderHead() {
   const c = S.sel;
   const dm = c.kind === 'dm';
-  $('conv-avatar').replaceWith(Object.assign(dm ? avatar({ name: chatTitle(c), chatId: c.other?.chatId, pictureAt: c.other?.pictureAt, size: 'lg' }) : avatar({ name: chatTitle(c), seed: c.id, channel: true, locked: c.type === 'P', size: 'lg', src: c.main ? c.teamIcon || S.teams.find((t) => t.id === c.teamId)?.icon || '' : '' }), { id: 'conv-avatar', onclick: dm && c.other && !c.self ? () => openPerson(c.other) : null, title: dm && c.other && !c.self ? 'Hồ sơ, vi phạm, xử lý' : '' }));
+  $('conv-avatar').replaceWith(Object.assign(dm ? avatar({ name: chatTitle(c), chatId: c.other?.chatId, pictureAt: c.other?.pictureAt, size: 'lg' }) : avatar({ name: chatTitle(c), seed: c.id, channel: true, locked: c.type === 'P', size: 'lg', src: c.main ? c.teamIcon || S.teams.find((t) => t.id === c.teamId)?.icon || '' : c.icon || '' }), { id: 'conv-avatar', onclick: dm && c.other && !c.self ? () => openPerson(c.other) : null, title: dm && c.other && !c.self ? 'Hồ sơ, vi phạm, xử lý' : '' }));
   $('conv-title').replaceChildren(el('span', { class: 'nm' }, chatTitle(c)), ...(dm && !c.self ? badges(c.other) : []));
   $('conv-sub').textContent = dm ? (c.self ? SELF_SUB + ' — chỉ bạn xem được' : c.type === 'G' ? 'Nhóm chat' : c.other?.username ? '@' + c.other.username + (c.req ? ' · lời mời trò chuyện' : ' · tin nhắn riêng') : c.req ? 'Lời mời trò chuyện' : 'Tin nhắn riêng') : [c.teamTitle, c.type === 'P' ? 'kênh riêng' : 'kênh chung', c.canDelete ? 'bạn là admin kênh' : ''].filter(Boolean).join(' · ');
   const team = dm ? (S.dmTeamName || '') : S.teams.find((t) => t.channels.some((x) => x.id === c.id))?.name || '';
@@ -217,12 +247,12 @@ function messageEl(p, { first, last, mine, inThread = false, mode = inThread ? '
     if (p.message) bubble.append(...msgBody(p.message));
     if (p.files.length) bubble.append(filesEl(p.files, p, mode));
     if (p.og) bubble.append(ogEl(p.og));
-    bubble.append(el('span', { class: 'meta', title: fullTime(p.createAt) }, p.editAt ? 'đã sửa · ' : '', hm(p.createAt)));
+    bubble.append(p.pending ? el('span', { class: 'meta' }, 'Đang gửi…') : el('span', { class: 'meta', title: fullTime(p.createAt) }, p.editAt ? 'đã sửa · ' : '', hm(p.createAt)));
   }
   // Nút khi rê chuột vào tin: biểu tượng một màu, rê chuột hiện ghi chú (data-tip)
   const live = mode === 'main' || mode === 'thread';
   const canQuote = live && !p.system && !!S.sel && $(mode === 'thread' ? 't-text' : 'text').disabled === false;
-  const tools = p.deleted
+  const tools = p.deleted || p.pending
     ? null
     : el(
         'div',
@@ -239,7 +269,7 @@ function messageEl(p, { first, last, mine, inThread = false, mode = inThread ? '
       );
   return el(
     'div',
-    { class: `msg${mine ? ' me' : ''}${first ? ' first' : ''}${last ? ' last' : ''}${p.deleted ? ' deleted' : ''}${!mine && mentionsMe(p.message) ? ' mentioned' : ''}`, id: { main: 'm-', thread: 't-', pins: 'p-', search: 's-' }[mode] + p.id },
+    { class: `msg${mine ? ' me' : ''}${first ? ' first' : ''}${last ? ' last' : ''}${p.deleted ? ' deleted' : ''}${p.pending ? ' pending' : ''}${!mine && mentionsMe(p.message) ? ' mentioned' : ''}`, id: { main: 'm-', thread: 't-', pins: 'p-', search: 's-' }[mode] + p.id },
     mine ? null : Object.assign(avatar({ name, chatId: p.user.chatId, pictureAt: p.user.pictureAt, size: 'sm' }), { onclick: () => openPerson(p.user), title: 'Xem ' + name }),
     el('div', { class: 'msg-col' }, (first || mode === 'pins' || mode === 'search') && !mine ? el('div', { class: 'msg-name', style: nameColor(p.user.chatId) }, el('button', { type: 'button', class: 'nm-btn', title: 'Hồ sơ, vi phạm, xử lý', onclick: () => openPerson(p.user) }, name), ...badges(p.user), el('time', { title: fullTime(p.createAt) }, mode === 'pins' ? shortTime(p.createAt) + ' ' + hm(p.createAt) : hm(p.createAt))) : null, bubble, mode === 'search' ? null : reactsEl(p), mode === 'main' && !p.deleted && p.replyCount > 0 ? threadBar(p) : null),
     tools,
@@ -427,13 +457,15 @@ async function loadOlder() {
   renderMsgs({ scroll: 'keep' });
 }
 
-async function pollChat() {
+async function pollChat(force = false) {
   const c = S.sel;
-  if (!c || S.polling || document.hidden || !S.lastSync) return;
-  S.polling = true;
+  if (!c || S.polling === c.id || (document.hidden && !force) || !S.lastSync) return;
+  S.polling = c.id;
+  const at = Date.now();
   const r = await call('chatPosts', { channelId: c.id, since: S.lastSync });
-  S.polling = false;
+  if (S.polling === c.id) S.polling = false;
   if (S.sel?.id !== c.id || r.status !== 'ok') return;
+  S.syncedAt = at;
   // Tin gốc mới / sửa / xoá hiện ở cuộc trò chuyện; bình luận cập nhật số bình luận và thread đang mở
   const changed = r.posts.filter((p) => {
     if (p.rootId) return !S.seenReplies.has(p.id) || !!S.thread?.posts.has(p.id);
@@ -479,8 +511,9 @@ async function loadOverview({ quiet = false, quick = false } = {}) {
   }
   applyOverview(r);
   afterOverview();
+  if (!r.quick) warmConvs();
   try {
-    await chrome.storage.session?.set({ [CACHE_KEY]: { at: Date.now(), me: S.me, teams: S.teams, dms: S.dms, requests: S.requests, dmTeam: r.dmTeam } });
+    await chrome.storage.local.set({ [CACHE_KEY]: { at: Date.now(), me: S.me, teams: S.teams, dms: S.dms, requests: S.requests, dmTeam: r.dmTeam } });
   } catch {}
   return r;
 }

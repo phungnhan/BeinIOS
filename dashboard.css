@@ -580,6 +580,7 @@ code { font-size: 12px; background: var(--none); padding: 0 4px; border-radius: 
 .tg-actions { display: flex; gap: 6px; }
 .err-text { color: var(--err); }
 .sync-row { display: flex; gap: 8px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+.img-cache-row { margin-top: 8px; }
 .sync-choice { display: flex; flex-direction: column; gap: 6px; }
 .weekly-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
 @media (max-width: 900px) { .weekly-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

@@ -146,7 +146,7 @@ async function doBeinLinkNames({ links = [] }) {
   }
   const remote = todo.filter((x) => x.kind === 'content' || x.kind === 'chat');
   if (!remote.length) return { status: 'ok', names };
-  return withClient(async (client) => {
+  return withChatRead(async (client) => {
     await mapLimit(remote, PARALLEL, async (l) => {
       if (l.kind === 'content') {
         const r = await client.call('GET', `content/contents/${l.id}`, null, '2.0.0', 15000, { quiet: true });
@@ -568,6 +568,39 @@ async function chatUsersOf(client, ids) {
   return Object.fromEntries(ids.map((id) => [id, chatUserCache.get(id) || null]));
 }
 
+// Ảnh, cấp và group cha của group (mỗi kênh chat là một group): GET group/groups/{group} như lần quét (icon, level, parentId
+// / parents — khuôn dữ liệu trong mã web). Ghi nhớ 3 ngày trong máy (khoá chatGroups); lỗi đọc (group riêng tư…) không ghi
+// vào Lỗi kỹ thuật, 3 ngày sau mới thử lại
+const CHAT_GROUPS_TTL = 3 * 864e5;
+const CHAT_GROUPS_MAX = 400;
+const chatGroupCache = new Map();
+let chatGroupReady = null;
+function loadChatGroups() {
+  return (chatGroupReady ||= chrome.storage.local
+    .get('chatGroups')
+    .then(({ chatGroups }) => {
+      const now = Date.now();
+      for (const [k, v] of Object.entries(chatGroups || {})) if (v?.at && now - v.at < CHAT_GROUPS_TTL) chatGroupCache.set(k, v);
+    })
+    .catch(() => {}));
+}
+async function chatGroupsOf(client, ids, { fetch = true } = {}) {
+  await loadChatGroups();
+  const need = fetch ? [...new Set(ids)].filter((id) => /^[\w-]{1,64}$/.test(id || '') && !chatGroupCache.has(id)).slice(0, 40) : [];
+  await mapLimit(need, PARALLEL, async (id) => {
+    const r = await client.call('GET', `group/groups/${id}`, null, '2.0.0', 15000, { quiet: true });
+    const d = BG.isOk(r) ? r.body.data : null;
+    if (d) chatGroupCache.set(id, { name: d.name || '', icon: /^https:\/\//i.test(d.icon || '') ? d.icon : '', level: Number(d.level) || 0, parentId: d.parentId || (Array.isArray(d.parents) ? d.parents.at(-1) : '') || '', at: Date.now() });
+    // Chỉ nhớ lỗi "không xem được group" (400 / 403 / 404); hết phiên, mất mạng thì lần sau đọc lại
+    else if ([400, 403, 404].includes(r.status)) chatGroupCache.set(id, { failed: true, at: Date.now() });
+  });
+  if (need.length) {
+    const keep = [...chatGroupCache.entries()].sort((a, b) => (b[1].at || 0) - (a[1].at || 0)).slice(0, CHAT_GROUPS_MAX);
+    await chrome.storage.local.set({ chatGroups: Object.fromEntries(keep) });
+  }
+  return Object.fromEntries(ids.map((id) => [id, chatGroupCache.get(id) || null]));
+}
+
 // Lệnh đọc của trang Chat: gọi thẳng trước (không phải dò api.beincom.com mỗi lần service worker khởi động lại);
 // không được (bị chặn cookie, chưa nhận phiên) thì chạy như các lệnh khác (dò, hoặc qua tab Beincom). Chỉ dùng cho lệnh
 // đọc / đánh dấu đã đọc — gửi, xoá tin không gọi lại hai lần.
@@ -584,6 +617,22 @@ async function withChatRead(fn) {
     return { ...r, mode: 'direct' };
   }
   return withClient(fn);
+}
+
+// Lệnh ghi của trang Chat (gửi, sửa, thả biểu cảm, theo dõi thread): cũng gọi thẳng trước. Trước đây mỗi lần service worker
+// vừa khởi động lại (hoặc 5 phút không gọi) phải dò api.beincom.com trước khi gửi (0,1–2,6 giây — đo thật 14/10/2026).
+// Chỉ thử lại đường khác khi máy chủ báo chưa nhận phiên (401: tin chưa được tạo) — không bao giờ gửi một tin hai lần.
+async function withChatWrite(fn) {
+  if (Date.now() < directUntil) return withClient(fn);
+  let r;
+  try {
+    r = await fn(directClient());
+  } catch (e) {
+    return { status: 'error', message: String(e?.message || e) };
+  }
+  if (r?.status === 'need_login') return withClient(fn);
+  if (r?.status === 'ok') directUntil = Date.now() + 5 * 60e3;
+  return { ...r, mode: 'direct' };
 }
 
 const chatOff = () => ({ status: 'off', message: 'Chưa bật Chat Beincom (Quy tắc & cài đặt → 💬 Chat Beincom)' });
@@ -687,6 +736,8 @@ async function doChatOverview({ quick = false } = {}) {
       .map(otherOf)
       .filter(Boolean);
     await loadChatCaches();
+    // Ảnh, cấp, group cha của kênh cộng đồng con: đọc cùng lúc với tên người, quyền (lần đọc nhanh chỉ lấy bản đã nhớ)
+    const groupsP = chatGroupsOf(client, live.map((c) => c.props?.bic_group_id).filter(Boolean), { fetch: !quick });
     const [perms, users] = await Promise.all([quick ? Object.fromEntries(roleNames.map((n) => [n, chatRoleCache.get(n)])) : chatPermsOf(client, roleNames), chatUsersOf(client, wantIds)]);
     const known = (roles) => String(roles || '').split(/\s+/).filter(Boolean).every((n) => perms[n]);
     for (const c of dmRaw) {
@@ -732,6 +783,13 @@ async function doChatOverview({ quick = false } = {}) {
       .sort((a, b) => (a.pinned === b.pinned ? (a.pinned ? a.pinRank - b.pinRank : latest(b) - latest(a)) : a.pinned ? -1 : 1));
     const tu = BG.chatOk(unreadT) && Array.isArray(unreadT.body) ? unreadT.body : [];
     const threads = tu.some((t) => typeof t.thread_count === 'number') ? { unread: tu.reduce((s, t) => s + (t.thread_count || 0), 0), mentions: tu.reduce((s, t) => s + (t.thread_mention_count || 0), 0) } : null;
+    // Ảnh, cấp và group cha của từng kênh (cộng đồng con): lần đọc nhanh chỉ lấy bản đã nhớ, lần đọc đủ đọc thêm cái thiếu
+    const ginfo = await groupsP;
+    for (const t of out)
+      for (const c of t.channels) {
+        const gi = ginfo[c.groupId];
+        if (gi && !gi.failed) Object.assign(c, { icon: gi.icon, level: gi.level, parentGroupId: gi.parentId });
+      }
     return {
       status: 'ok',
       quick,
@@ -826,7 +884,7 @@ async function doChatFollow({ teamId, rootId, follow = true }) {
   const settings = await chatSettings();
   if (!settings.chatEnabled) return chatOff();
   if (!chatIdOk(teamId) || !chatIdOk(rootId)) return { status: 'error', message: 'Thiếu tin nhắn' };
-  return withClient(async (client) => {
+  return withChatWrite(async (client) => {
     const r = await client.call(follow ? 'PUT' : 'DELETE', BG.CHAT_API + `v4/users/me/teams/${teamId}/threads/${rootId}/following`, null, '');
     if (r.status === 401) return { ...chatLoginErr };
     if (!BG.chatOk(r)) return { status: 'error', message: (follow ? 'Theo dõi' : 'Bỏ theo dõi') + ' lỗi: ' + BG.errMsg(r) };
@@ -854,7 +912,7 @@ async function doChatSend({ channelId, message, rootId = '', acceptContactId = '
   if (!text && !files.length) return { status: 'error', message: 'Tin nhắn trống' };
   if (text.length > CHAT_MSG_MAX) return { status: 'error', message: `Tin nhắn dài quá ${CHAT_MSG_MAX} ký tự` };
   if (!chatIdOk(channelId) || (rootId && !chatIdOk(rootId)) || (acceptContactId && !chatIdOk(acceptContactId)) || (quotedPostId && !chatIdOk(quotedPostId))) return { status: 'error', message: 'Thiếu kênh chat' };
-  return withClient(async (client) => {
+  return withChatWrite(async (client) => {
     // Trả lời một lời mời trò chuyện là chấp nhận lời mời (web Beincom chấp nhận rồi mới gửi)
     let accepted = false;
     if (acceptContactId) {
@@ -915,7 +973,7 @@ async function doChatEdit({ postId, message }) {
   if (!chatIdOk(postId)) return { status: 'error', message: 'Thiếu tin nhắn' };
   if (!text) return { status: 'error', message: 'Tin nhắn trống' };
   if (text.length > CHAT_MSG_MAX) return { status: 'error', message: `Tin nhắn dài quá ${CHAT_MSG_MAX} ký tự` };
-  return withClient(async (client) => {
+  return withChatWrite(async (client) => {
     const r = await client.call('PUT', BG.CHAT_API + `v4/posts/${postId}/patch`, { id: postId, message: text }, '');
     if (r.status === 401) return { ...chatLoginErr };
     if (!BG.chatOk(r)) return { status: 'error', message: 'Sửa tin lỗi: ' + BG.errMsg(r) };
@@ -981,7 +1039,7 @@ async function doChatReact({ postId, emoji, add = true, meChatId }) {
   const settings = await chatSettings();
   if (!settings.chatEnabled) return chatOff();
   if (!chatIdOk(postId) || !chatIdOk(meChatId) || !emojiOk(emoji)) return { status: 'error', message: 'Thiếu tin nhắn hoặc biểu cảm' };
-  return withClient(async (client) => {
+  return withChatWrite(async (client) => {
     const r = add
       ? await client.call('POST', BG.CHAT_API + 'v5/reactions', { user_id: meChatId, post_id: postId, emoji_name: emoji }, '')
       : await client.call('DELETE', BG.CHAT_API + `v5/users/${meChatId}/posts/${postId}/reactions/${encodeURIComponent(emoji)}`, null, '');

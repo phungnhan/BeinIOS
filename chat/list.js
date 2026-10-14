@@ -41,14 +41,28 @@ function teamIconEl(src) {
   return img;
 }
 
+// Đường nối cây cộng đồng con (cột i: dưới tâm ảnh của mục cấp i-1): │ tổ tiên còn em, ├ / └ tới mục, ┬ xuống con
+const TREE_MAX = 4;
+function treeLines(c) {
+  if (!c.tree) return [];
+  const d = Math.min(c.depth || 0, TREE_MAX);
+  const line = (cls, col) => el('span', { class: 'tl ' + cls, style: `--col: ${col}`, 'aria-hidden': 'true' });
+  return [
+    ...(c.rails || []).slice(0, d - 1).map((on, i) => (on ? line('rail', i + 1) : null)),
+    d ? line(c.last ? 'elbow last' : 'elbow', d) : null,
+    c.kids && d < TREE_MAX ? line('down', d + 1) : null,
+  ].filter(Boolean);
+}
+
 function listItem(c) {
   const dm = c.kind === 'dm';
   const unread = c.unread > 0 || c.mentions > 0;
   return el(
     'button',
-    { type: 'button', class: 'item' + (S.sel?.id === c.id ? ' sel' : '') + (unread ? ' unread' : ''), 'aria-current': S.sel?.id === c.id ? 'true' : null, onclick: () => openChat(c.id) },
-    dm ? avatar({ name: chatTitle(c), chatId: c.other?.chatId, pictureAt: c.other?.pictureAt }) : avatar({ name: chatTitle(c), seed: c.id, channel: true, locked: c.type === 'P', src: c.main ? c.teamIcon : '' }),
-    el('span', { class: 'item-main' }, el('span', { class: 'item-title' }, el('span', { class: 'nm' }, chatTitle(c)), dm && !c.self ? badges(c.other) : null), S.sel?.id !== c.id && draftOf(c.id) ? el('span', { class: 'item-sub draft' }, '✏ Nháp: ' + draftOf(c.id).replace(/\s+/g, ' ').slice(0, 60)) : el('span', { class: 'item-sub' }, dm ? (c.self ? SELF_SUB : c.type === 'G' ? 'Nhóm chat' : [c.other?.username ? '@' + c.other.username : contactNote(c) ? '' : 'Tin nhắn riêng', contactNote(c)].filter(Boolean).join(' · ')) : c.purpose || c.teamTitle)),
+    { type: 'button', class: 'item' + (S.sel?.id === c.id ? ' sel' : '') + (unread ? ' unread' : '') + (c.depth ? ' sub' : '') + (c.tree ? ' tree' : ''), style: c.depth ? `--depth: ${Math.min(c.depth, TREE_MAX)}` : null, 'aria-current': S.sel?.id === c.id ? 'true' : null, onclick: () => openChat(c.id), onmouseenter: () => hoverConv(c.id), onfocus: () => hoverConv(c.id), onmouseleave: unhoverConv },
+    ...treeLines(c),
+    dm ? avatar({ name: chatTitle(c), chatId: c.other?.chatId, pictureAt: c.other?.pictureAt }) : avatar({ name: chatTitle(c), seed: c.id, channel: true, locked: c.type === 'P', src: c.main ? c.teamIcon : c.icon || '' }),
+    el('span', { class: 'item-main' }, el('span', { class: 'item-title' }, el('span', { class: 'nm' }, chatTitle(c)), dm && !c.self ? badges(c.other) : null), S.sel?.id !== c.id && draftOf(c.id) ? el('span', { class: 'item-sub draft' }, '✏ Nháp: ' + draftOf(c.id).replace(/\s+/g, ' ').slice(0, 60)) : el('span', { class: 'item-sub' }, dm ? (c.self ? SELF_SUB : c.type === 'G' ? 'Nhóm chat' : [c.other?.username ? '@' + c.other.username : contactNote(c) ? '' : 'Tin nhắn riêng', contactNote(c)].filter(Boolean).join(' · ')) : c.depth ? [(c.tree ? '' : '↳ ') + (c.parentName ? 'thuộc ' + c.parentName : 'Group con'), c.purpose].filter(Boolean).join(' · ') : c.purpose || c.teamTitle)),
     el('span', { class: 'item-side' }, el('span', { class: 'item-time' }, shortTime(c.lastPostAt)), c.mentions ? el('span', { class: 'badge at' }, '@' + c.mentions) : c.unread ? el('span', { class: 'badge' }, c.unread > 99 ? '99+' : c.unread) : null),
   );
 }
@@ -156,7 +170,9 @@ function renderList() {
   if (S.filter !== 'dm') {
     // Cộng đồng: nền đã xếp (đã ghim trước theo thứ tự ghim, rồi có tin mới nhất); hiện 5, còn lại sau "Xem thêm"
     const all = !!S.q || S.filter !== 'all' || S.more.has('teams');
-    const teams = S.teams.map((t) => [t, t.channels.map((c) => ({ ...c, kind: 'ch', teamTitle: t.title, teamIcon: t.icon || '' })).filter(matches)]).filter(([, l]) => l.length);
+    // Kênh theo cây group: kênh chính, rồi group con thụt lề dưới group cha; đường nối chỉ vẽ khi hiện đủ danh sách
+    const tree = !S.q && S.filter === 'all';
+    const teams = S.teams.map((t) => [t, BG.chatTreeOrder(t.channels.map((c) => ({ ...c, kind: 'ch', teamTitle: t.title, teamIcon: t.icon || '', tree })), t.communityId).filter(matches)]).filter(([, l]) => l.length);
     for (const [t, list] of all ? teams : teams.slice(0, SHOW_TEAMS)) parts.push(section('t:' + t.id, t.title, list, { pinned: t.pinned, icon: t.icon }));
     if (!S.q && S.filter === 'all') parts.push(moreBtn('teams', teams.length - Math.min(teams.length, SHOW_TEAMS), 'cộng đồng'));
   }
