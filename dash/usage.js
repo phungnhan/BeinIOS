@@ -83,7 +83,7 @@ $('btn-usage-copy').addEventListener('click', async () => {
   const ok = await copyText(await usageText());
   toast(ok ? 'Đã sao chép báo cáo sử dụng — dán vào tin nhắn gửi tác giả.' : 'Không sao chép được — trình duyệt chặn bộ nhớ tạm', ok ? 'ok' : 'err');
 });
-$('btn-usage-file').addEventListener('click', async () => download(`beingroup-bao-cao-su-dung-${BG.vnDay()}.txt`, await usageText(), 'text/plain;charset=utf-8'));
+$('btn-usage-file').addEventListener('click', async () => download(`beinfusion-bao-cao-su-dung-${BG.vnDay()}.txt`, await usageText(), 'text/plain;charset=utf-8'));
 $('btn-usage-tg').addEventListener('click', async () => {
   const b = $('btn-usage-tg');
   b.disabled = true;

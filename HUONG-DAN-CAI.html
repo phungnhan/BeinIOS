@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Cài BeinGroup</title>
+  <title>Cài BeinFusion</title>
   <style>
     :root { --bg: #f7f7fb; --surface: #fff; --fg: #1c1a2e; --muted: #6b6880; --border: #e4e2ef; --accent: #6d4aff; --accent-soft: #efeaff; --warn-soft: #fff4e0; }
     @media (prefers-color-scheme: dark) {
@@ -27,7 +27,7 @@
 </head>
 <body>
   <main>
-    <h1>Cài BeinGroup</h1>
+    <h1>Cài BeinFusion</h1>
     <p class="sub">Addon quản lý Group Beincom cho Chrome / Edge trên máy tính · tác giả Kai | Crypto Life</p>
 
     <section>
@@ -35,18 +35,18 @@
       <ul>
         <li>Google Chrome hoặc Microsoft Edge trên máy tính (Windows / macOS).</li>
         <li>Tài khoản Beincom đang là admin của ít nhất một group / community.</li>
-        <li>Tệp <code>BeinGroup-v….zip</code> do người quản lý gửi.</li>
+        <li>Tệp <code>BeinFusion-v….zip</code> do người quản lý gửi.</li>
       </ul>
     </section>
 
     <section>
       <h2>Cài lần đầu</h2>
       <ol>
-        <li>Giải nén tệp <code>.zip</code> (chuột phải → <b>Giải nén tất cả</b>), được thư mục <b>BeinGroup</b>. Chuyển thư mục này tới chỗ cố định, ví dụ <code>Tài liệu\BeinGroup</code>. <b>Đừng xoá hay đổi tên thư mục sau khi cài</b> — addon chạy thẳng từ đó.</li>
+        <li>Giải nén tệp <code>.zip</code> (chuột phải → <b>Giải nén tất cả</b>), được thư mục <b>BeinFusion</b>. Chuyển thư mục này tới chỗ cố định, ví dụ <code>Tài liệu\BeinFusion</code>. <b>Đừng xoá hay đổi tên thư mục sau khi cài</b> — addon chạy thẳng từ đó.</li>
         <li>Mở trình duyệt, gõ vào thanh địa chỉ <code>chrome://extensions</code> (Edge: <code>edge://extensions</code>) rồi Enter.</li>
         <li>Bật <b>Chế độ dành cho nhà phát triển</b> (Developer mode): góc trên bên phải trên Chrome, cột bên trái trên Edge.</li>
-        <li>Bấm <b>Tải tiện ích đã giải nén</b> (Load unpacked) → chọn thư mục <b>BeinGroup</b> (thư mục có tệp <code>manifest.json</code> bên trong).</li>
-        <li>Bấm biểu tượng mảnh ghép trên thanh công cụ → bấm ghim ở dòng BeinGroup để icon luôn hiện.</li>
+        <li>Bấm <b>Tải tiện ích đã giải nén</b> (Load unpacked) → chọn thư mục <b>BeinFusion</b> (thư mục có tệp <code>manifest.json</code> bên trong).</li>
+        <li>Bấm biểu tượng mảnh ghép trên thanh công cụ → bấm ghim ở dòng BeinFusion để icon luôn hiện.</li>
       </ol>
     </section>
 
@@ -54,7 +54,7 @@
       <h2>Bắt đầu dùng</h2>
       <ol>
         <li>Đăng nhập <b>beincom.com</b> trên chính trình duyệt này.</li>
-        <li>Bấm icon BeinGroup → <b>Mở Dashboard</b>. Lần đầu sẽ có hướng dẫn <b>Bắt đầu nhanh</b> 3 bước (kết nối, tự kiểm tra, chọn tính năng) — làm theo là xong; mở lại ở cuối Dashboard.</li>
+        <li>Bấm icon BeinFusion → <b>Mở Dashboard</b>. Lần đầu sẽ có hướng dẫn <b>Bắt đầu nhanh</b> 3 bước (kết nối, tự kiểm tra, chọn tính năng) — làm theo là xong; mở lại ở cuối Dashboard.</li>
         <li>Kiểm tra nhanh: tab <b>Nhật ký</b> → thẻ <b>Tự kiểm tra</b> → chọn community của bạn → <b>▶ Chạy kiểm tra</b>. Mục nào báo <b>Lỗi</b> thì bấm <b>Sao chép kết quả</b> và gửi người hỗ trợ; <b>Bỏ qua</b> là phần tài khoản bạn không có quyền.</li>
         <li>Addon mặc định <b>Chạy thử</b>: mọi thao tác chỉ ghi vào Nhật ký, chưa gửi lên Beincom. Dùng quen rồi mới tắt Chạy thử ở tab <b>Quy tắc &amp; cài đặt</b>.</li>
       </ol>
@@ -65,8 +65,8 @@
       <h2>Cập nhật lên bản mới</h2>
       <ol>
         <li>(Nên làm) Dashboard → <b>Quy tắc &amp; cài đặt</b> → <b>Tải bản sao lưu</b>.</li>
-        <li>Giải nén bản mới rồi chép <b>đè</b> toàn bộ vào <b>đúng thư mục BeinGroup cũ</b> (chọn <b>Thay thế các tệp</b>).</li>
-        <li>Vào <code>chrome://extensions</code>, bấm nút <b>↻</b> ở thẻ BeinGroup.</li>
+        <li>Giải nén bản mới rồi chép <b>đè</b> toàn bộ vào <b>đúng thư mục addon cũ</b> (chọn <b>Thay thế các tệp</b>). Bản trước v0.48.0 có tên <b>BeinGroup</b>: thư mục cũ có thể vẫn tên BeinGroup — cứ chép đè vào đó, không cần đổi tên thư mục.</li>
+        <li>Vào <code>chrome://extensions</code>, bấm nút <b>↻</b> ở thẻ BeinFusion.</li>
         <li>Mở Dashboard: hộp <b>Có gì mới</b> hiện các thay đổi của bản mới. Xem lại bất cứ lúc nào ở cuối Dashboard.</li>
       </ol>
       <p class="note">Nếu tải bản mới từ một thư mục <b>khác</b>, trình duyệt coi đó là addon mới: cài đặt, quy tắc, nhật ký sẽ trống. Khi đó dùng <b>Khôi phục từ bản sao lưu</b> ở tab Quy tắc &amp; cài đặt (token Telegram không có trong bản sao lưu, cần nhập lại), rồi gỡ bản cũ.</p>
@@ -90,10 +90,10 @@
         <dt>Gửi góp ý cho tác giả</dt>
         <dd>Dashboard → <b>Nhật ký</b> → thẻ <b>Báo cáo sử dụng</b>: xem trước (chỉ số đếm, không có tên group / thành viên / nội dung), điền tên nếu muốn, rồi <b>Sao chép</b> hoặc <b>Gửi về Telegram</b> và chuyển cho tác giả — hoặc bật <b>Tự gửi mỗi tuần cho tác giả</b> nếu gói addon của bạn có.</dd>
         <dt>Gỡ cài đặt?</dt>
-        <dd><code>chrome://extensions</code> → thẻ BeinGroup → <b>Xoá</b>, rồi xoá thư mục BeinGroup.</dd>
+        <dd><code>chrome://extensions</code> → thẻ BeinFusion → <b>Xoá</b>, rồi xoá thư mục BeinFusion.</dd>
       </dl>
     </section>
-    <p class="muted">Danh sách thay đổi từng bản: tệp <code>CHANGELOG.md</code> trong thư mục BeinGroup, hoặc mục <b>Có gì mới</b> ở cuối Dashboard.</p>
+    <p class="muted">Danh sách thay đổi từng bản: tệp <code>CHANGELOG.md</code> trong thư mục BeinFusion, hoặc mục <b>Có gì mới</b> ở cuối Dashboard.</p>
   </main>
 </body>
 </html>

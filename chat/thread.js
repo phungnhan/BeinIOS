@@ -47,6 +47,7 @@ async function openThread(p) {
   $('t-edit').hidden = true;
   S.tQuote = null;
   renderQuote(true);
+  if (S.thread?.root.id !== root.id) resetTComposer();
   $('t-text').value = draftOf(`${c.id}:${root.id}`);
   renderThread({ scroll: cached ? 'bottom' : 'keep' });
   tAutosize();
@@ -91,6 +92,7 @@ async function loadMoreThread() {
 
 function closeThread() {
   saveThread(S.thread);
+  resetTComposer();
   S.thread = null;
   S.tEditing = null;
   S.tQuote = null;
@@ -154,7 +156,37 @@ function tAutosize() {
   tUpdateSend();
 }
 function tUpdateSend() {
-  $('t-send').disabled = $('t-text').disabled || !$('t-text').value.trim();
+  const busy = S.tAttach.some((a) => a.status === 'up' || a.status === 'wait');
+  const files = S.tAttach.some((a) => a.status === 'ok');
+  $('t-send').disabled = !!S.tSending || busy || $('t-text').disabled || (!$('t-text').value.trim() && !files);
+}
+
+// Ô bình luận: thanh định dạng (Aa, nhớ trong máy — mặc định ẩn vì khung hẹp), xem trước
+const TFMT_KEY = 'beingroup-chat-tfmt';
+function setTFmt(on) {
+  S.tFmt = !!on;
+  $('t-fmt').hidden = !S.tFmt;
+  $('t-btn-fmt').setAttribute('aria-pressed', String(S.tFmt));
+  $('t-btn-fmt').classList.toggle('on', S.tFmt);
+  try {
+    localStorage.setItem(TFMT_KEY, S.tFmt ? '1' : '0');
+  } catch {}
+}
+function setTPreview(on, focus = true) {
+  S.tPreview = !!on;
+  const text = $('t-text').value;
+  $('t-preview').hidden = !S.tPreview;
+  $('t-text').hidden = S.tPreview;
+  $('t-btn-preview').setAttribute('aria-pressed', String(S.tPreview));
+  $('t-btn-preview').classList.toggle('on', S.tPreview);
+  if (S.tPreview) $('t-preview').replaceChildren(...(text.trim() ? mdNodes(BG.chatMarkdown(text)) : [el('span', { class: 'muted' }, 'Chưa có gì để xem trước.')]));
+  else if (focus) $('t-text').focus();
+}
+// Đổi / đóng thread: bỏ tệp đang chờ, tắt xem trước, đóng hộp emoji nếu đang mở cho ô bình luận
+function resetTComposer() {
+  clearAttach('thread');
+  if (S.tPreview) setTPreview(false, false);
+  if (S.emojiFor === 't-text') closePops();
 }
 
 async function sendThread(e) {
@@ -163,8 +195,11 @@ async function sendThread(e) {
   const c = S.sel;
   if (S.tEditing) return saveEdit(true);
   const text = $('t-text').value.trim();
-  if (!t || !c || !text) return;
+  const fileIds = S.tAttach.filter((a) => a.status === 'ok').map((a) => a.id);
+  if (!t || !c || (!text && !fileIds.length) || $('t-send').disabled) return;
+  if (S.tPreview) setTPreview(false, false);
   const quoted = S.tQuote;
+  if (fileIds.length) return sendThreadFiles(t, c, text, quoted, fileIds);
   // Hiện ngay (mờ, "Đang gửi…"), ô gõ trống ngay; gửi lỗi thì bỏ bình luận tạm, đưa chữ lại vào ô
   const temp = pendingPost(c, text, { rootId: t.root.id, quoted });
   t.posts.set(temp.id, temp);
@@ -190,6 +225,31 @@ async function sendThread(e) {
     }
     sentReply(t, r.post);
   });
+}
+
+// Bình luận có tệp: chờ máy chủ trả lời (ô gõ giữ nguyên tới lúc đó); vài giây sau đọc lại thread để có ảnh / link tệp
+async function sendThreadFiles(t, c, text, quoted, fileIds) {
+  S.tSending = true;
+  tUpdateSend();
+  const r = await call('chatSend', { channelId: c.id, message: (quoted && text ? quoteMarker(quoted) : '') + text, rootId: t.root.id, fileIds, ...(quoted && text ? { quotedPostId: quoted.id } : {}) });
+  S.tSending = false;
+  if (r.status !== 'ok') {
+    tUpdateSend();
+    return toast(r.message || 'Gửi bình luận lỗi', 'err');
+  }
+  $('t-text').value = '';
+  setDraft(`${c.id}:${t.root.id}`, '');
+  if (quoted) cancelQuote(true);
+  clearAttach('thread');
+  tAutosize();
+  sentReply(t, r.post);
+  setTimeout(async () => {
+    if (S.thread !== t) return;
+    const again = await call('chatThread', { rootId: t.root.id });
+    if (again.status !== 'ok' || S.thread !== t) return;
+    for (const x of again.posts) if (x.id !== t.root.id) t.posts.set(x.id, x);
+    renderThread();
+  }, 1500);
 }
 
 // Bình luận đã gửi xong: thay bình luận tạm, cập nhật số bình luận của tin gốc

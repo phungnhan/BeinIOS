@@ -220,7 +220,7 @@ async function dailySelfCheck({ now = Date.now(), notifyAllowed = true } = {}) {
   await chrome.storage.local.set({ selfCheckAuto: { at: now, groups, regressions }, ...(shown ? { selfCheck: shown } : {}) });
   if (regressions.length && notifyAllowed) {
     const n = regressions.reduce((s, x) => s + x.items.length, 0);
-    notify('bg-selfcheck', `BeinGroup: ${n} tính năng ngừng chạy`, regressions.map((x) => `${x.group}: ${x.items.join(', ')}`).join(' · ') + '. Có thể Beincom vừa thay đổi — bấm để xem Tự kiểm tra.');
+    notify('bg-selfcheck', `BeinFusion: ${n} tính năng ngừng chạy`, regressions.map((x) => `${x.group}: ${x.items.join(', ')}`).join(' · ') + '. Có thể Beincom vừa thay đổi — bấm để xem Tự kiểm tra.');
   }
   return { status: 'ok', regressions };
 }

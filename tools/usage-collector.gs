@@ -1,4 +1,4 @@
-// BeinGroup — nơi nhận báo cáo sử dụng ẩn danh (Google Apps Script gắn với một Google Sheet, triển khai dạng Web app).
+// BeinFusion — nơi nhận báo cáo sử dụng ẩn danh (Google Apps Script gắn với một Google Sheet, triển khai dạng Web app).
 // Addon chỉ gửi khi admin đã đồng ý; mỗi báo cáo là một dòng ở trang "Báo cáo". Hướng dẫn: tools/HUONG-DAN-THU-THAP.md
 //
 // Báo cáo gồm số đếm và cài đặt — không có tên group, tên thành viên, nội dung bài. Mã cài đặt là chuỗi ngẫu nhiên
@@ -9,7 +9,7 @@ var HEADERS = ['Nhận lúc', 'Mã cài đặt', 'Phiên bản', 'Trình duyệt
 var MIN_GAP_SECONDS = 6 * 3600; // mỗi máy tối đa một báo cáo mỗi 6 giờ
 
 function doGet() {
-  return ContentService.createTextOutput('BeinGroup: nơi nhận báo cáo sử dụng đang chạy.');
+  return ContentService.createTextOutput('BeinFusion: nơi nhận báo cáo sử dụng đang chạy.');
 }
 
 function doPost(e) {
@@ -19,7 +19,7 @@ function doPost(e) {
   } catch (err) {
     return reply({ ok: false, error: 'json' });
   }
-  if (!d || d.app !== 'BeinGroup' || d.v !== 1 || typeof d.installId !== 'string' || !/^[\w-]{8,64}$/.test(d.installId)) return reply({ ok: false, error: 'format' });
+  if (!d || !['BeinGroup', 'BeinFusion'].includes(d.app) || d.v !== 1 || typeof d.installId !== 'string' || !/^[\w-]{8,64}$/.test(d.installId)) return reply({ ok: false, error: 'format' });
 
   var cache = CacheService.getScriptCache();
   if (cache.get(d.installId)) return reply({ ok: true, skipped: true });

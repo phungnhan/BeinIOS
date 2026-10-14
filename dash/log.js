@@ -94,8 +94,8 @@ $('btn-more').addEventListener('click', () => {
   logLimit += LOG_PAGE;
   renderLog();
 });
-$('btn-export-csv').addEventListener('click', () => download(`beingroup-nhat-ky-${BG.vnDay()}.csv`, BG.toCsv(filteredLog(), LOG_COLUMNS), 'text/csv;charset=utf-8'));
-$('btn-export-json').addEventListener('click', () => download(`beingroup-nhat-ky-${BG.vnDay()}.json`, JSON.stringify(filteredLog(), null, 2), 'application/json'));
+$('btn-export-csv').addEventListener('click', () => download(`beinfusion-nhat-ky-${BG.vnDay()}.csv`, BG.toCsv(filteredLog(), LOG_COLUMNS), 'text/csv;charset=utf-8'));
+$('btn-export-json').addEventListener('click', () => download(`beinfusion-nhat-ky-${BG.vnDay()}.json`, JSON.stringify(filteredLog(), null, 2), 'application/json'));
 $('btn-clear').addEventListener('click', async () => {
   if (!confirm('Xoá toàn bộ nhật ký thao tác? Không khôi phục được.')) return;
   await chrome.storage.local.set({ log: [] });

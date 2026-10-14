@@ -93,7 +93,7 @@ async function guardJoins(client, { settings, state, next, notifyAllowed, now = 
   if (notifyAllowed && freshImp.length) {
     notify(
       'bg-impostor',
-      `BeinGroup: ${freshImp.length} tài khoản giống admin vừa vào`,
+      `BeinFusion: ${freshImp.length} tài khoản giống admin vừa vào`,
       freshImp
         .slice(0, 3)
         .map((x) => `${x.user.fullname || x.user.username} (${x.groupName}) — ${x.reason}`)
@@ -101,7 +101,7 @@ async function guardJoins(client, { settings, state, next, notifyAllowed, now = 
     );
   }
   if (notifyAllowed) {
-    for (const b of freshBursts) notify('bg-burst-' + b.groupId, `BeinGroup: ${b.count} người vào ${b.groupName} trong ${b.minutes} phút`, `${b.noAvatar} người không có ảnh đại diện. Có thể là đợt tài khoản ảo — bấm để xem, bật Duyệt thành viên hoặc xoá hàng loạt.`);
+    for (const b of freshBursts) notify('bg-burst-' + b.groupId, `BeinFusion: ${b.count} người vào ${b.groupName} trong ${b.minutes} phút`, `${b.noAvatar} người không có ảnh đại diện. Có thể là đợt tài khoản ảo — bấm để xem, bật Duyệt thành viên hoặc xoá hàng loạt.`);
   }
   return { status: 'ok', impostors: freshImp.length, bursts: freshBursts.length };
 }

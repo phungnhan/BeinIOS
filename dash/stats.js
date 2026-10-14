@@ -140,7 +140,7 @@ function exportStats() {
     { label: 'Bài mới', key: 'posts' },
   ]);
   const slug = BG.norm(g.name).replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'group';
-  download(`beingroup-thong-ke-${slug}-${stats.days}ngay-${BG.vnDay()}.csv`, csv, 'text/csv;charset=utf-8');
+  download(`beinfusion-thong-ke-${slug}-${stats.days}ngay-${BG.vnDay()}.csv`, csv, 'text/csv;charset=utf-8');
 }
 
 $('stats-group').addEventListener('change', (e) => {

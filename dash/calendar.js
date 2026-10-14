@@ -345,7 +345,7 @@ $('btn-csv-template').addEventListener('click', () => {
   const names = csvGroups()
     .slice(0, 2)
     .map((g) => g.path);
-  download('beingroup-mau-bai-hen-gio.csv', BG.csvTemplate(names.length ? names : undefined), 'text/csv;charset=utf-8');
+  download('beinfusion-mau-bai-hen-gio.csv', BG.csvTemplate(names.length ? names : undefined), 'text/csv;charset=utf-8');
 });
 $('btn-csv-pick').addEventListener('click', () => $('csv-file').click());
 $('csv-file').addEventListener('change', (e) => {

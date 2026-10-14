@@ -31,16 +31,16 @@ function applyEdit(r, t = $('text')) {
   t.setSelectionRange(r.selStart, r.selEnd);
   t.dispatchEvent(new Event('input')); // cỡ ô gõ, nút gửi
 }
-const format = (kind) => {
-  const t = $('text');
+// t: ô gõ chính (#text) hoặc ô bình luận (#t-text)
+const format = (kind, t = $('text')) => {
   if (t.disabled) return;
-  applyEdit(BG.mdEdit(t.value, t.selectionStart, t.selectionEnd, kind));
+  applyEdit(BG.mdEdit(t.value, t.selectionStart, t.selectionEnd, kind), t);
 };
-function insertText(text) {
-  const t = $('text');
+function insertText(text, t = $('text')) {
   if (t.disabled) return;
-  const [s, e] = document.activeElement === t || S.caret == null ? [t.selectionStart, t.selectionEnd] : [S.caret, S.caret];
-  applyEdit({ from: s, to: e, text, selStart: s + text.length, selEnd: s + text.length });
+  const caret = t === $('text') ? S.caret : S.tCaret;
+  const [s, e] = document.activeElement === t || caret == null ? [t.selectionStart, t.selectionEnd] : [caret, caret];
+  applyEdit({ from: s, to: e, text, selStart: s + text.length, selEnd: s + text.length }, t);
 }
 
 // Xem trước: tin hiện như sau khi gửi
@@ -86,9 +86,11 @@ function setPriority(p) {
 function openPop(pop, btn, align) {
   closePops(pop);
   pop.hidden = false;
-  const c = $('composer').getBoundingClientRect();
+  const c = pop.parentElement.getBoundingClientRect();
   const b = btn.getBoundingClientRect();
-  pop.style.bottom = `${Math.round(c.bottom - b.top + 6)}px`;
+  // Mở hẳn phía trên khung gõ (không đè chữ đang gõ, tệp đính kèm)
+  const box = (pop.parentElement.querySelector('.box, .t-box') || btn).getBoundingClientRect();
+  pop.style.bottom = `${Math.round(c.bottom - Math.min(box.top, b.top) + 6)}px`;
   if (align === 'right') {
     pop.style.right = `${Math.max(8, Math.round(c.right - b.right))}px`;
     pop.style.left = '';
@@ -99,8 +101,8 @@ function openPop(pop, btn, align) {
   btn.setAttribute('aria-expanded', 'true');
 }
 function closePops(except) {
-  for (const [pop, btn] of [['prio-menu', 'btn-prio'], ['emoji-pop', 'btn-emoji']]) {
-    if ($(pop) === except || $(pop).hidden) continue;
+  for (const [pop, btn] of [['prio-menu', 'btn-prio'], ['emoji-pop', 'btn-emoji'], ['emoji-pop', 't-btn-emoji']]) {
+    if ($(pop) === except || $(pop).hidden && $(btn).getAttribute('aria-expanded') !== 'true') continue;
     $(pop).hidden = true;
     $(btn).setAttribute('aria-expanded', 'false');
   }
@@ -134,8 +136,18 @@ function renderEmoji(tab = S.emojiTab || 0) {
   const label = (e) => (/^:[\w-]+:$/.test(e) ? BG.chatEmojiLabel(e.slice(1, -1)) : e);
   $('emoji-grid').replaceChildren(...list.map((e) => el('button', { type: 'button', class: 'emo', title: label(e), 'aria-label': label(e), onclick: () => pickEmoji(e) }, emojiFace(e))));
 }
+// Hộp emoji dùng chung: mở ở ô nào thì chèn vào ô đó (hộp được chuyển vào khung của ô)
+function openEmoji(forThread) {
+  const pop = $('emoji-pop');
+  const btn = $(forThread ? 't-btn-emoji' : 'btn-emoji');
+  if (!pop.hidden && S.emojiFor === (forThread ? 't-text' : 'text')) return closePops();
+  S.emojiFor = forThread ? 't-text' : 'text';
+  $(forThread ? 't-composer' : 'composer').append(pop);
+  renderEmoji(0);
+  openPop(pop, btn, 'right');
+}
 function pickEmoji(e) {
-  insertText(e);
+  insertText(e, $(S.emojiFor || 'text'));
   try {
     localStorage.setItem(EMOJI_KEY, JSON.stringify([e, ...recentEmoji().filter((x) => x !== e)].slice(0, 24)));
   } catch {}
@@ -149,28 +161,35 @@ const readB64 = (file) =>
     fr.onerror = () => rej(fr.error);
     fr.readAsDataURL(file);
   });
-function addFiles(list) {
+// Hai bộ tệp đính kèm: ô gõ chính ('main') và ô bình luận ('thread'); mỗi bộ tải lên lần lượt
+const ATT = {
+  main: { key: 'attach', busy: 'uploading', box: 'attach-list', input: 'text', update: () => updateSend() },
+  thread: { key: 'tAttach', busy: 'tUploading', box: 't-attach-list', input: 't-text', update: () => tUpdateSend() },
+};
+function addFiles(list, where = 'main') {
   const c = S.sel;
-  if (!c || $('text').disabled) return;
+  const A = ATT[where];
+  if (!c || $(A.input).disabled || (where === 'thread' && !S.thread)) return;
   for (const f of [...(list || [])]) {
-    if (S.attach.length >= FILES_MAX) {
+    if (S[A.key].length >= FILES_MAX) {
       toast(`Tối đa ${FILES_MAX} tệp mỗi tin`, 'err');
       break;
     }
     if (!f.size) toast(`${f.name || 'Tệp'}: tệp trống`, 'err');
     else if (f.size > FILE_MAX) toast(`${f.name || 'Tệp'}: lớn quá 25 MB`, 'err');
-    else S.attach.push({ key: Math.random().toString(36).slice(2), file: f, name: f.name || 'anh-dan.png', size: f.size, type: f.type || '', status: 'wait', channelId: c.id, thumb: /^image\//.test(f.type) ? URL.createObjectURL(f) : '' });
+    else S[A.key].push({ key: Math.random().toString(36).slice(2), file: f, name: f.name || 'anh-dan.png', size: f.size, type: f.type || '', status: 'wait', channelId: c.id, thumb: /^image\//.test(f.type) ? URL.createObjectURL(f) : '' });
   }
-  renderAttach();
-  pumpUploads();
+  renderAttach(where);
+  pumpUploads(where);
 }
-async function pumpUploads() {
-  if (S.uploading) return;
-  const a = S.attach.find((x) => x.status === 'wait');
+async function pumpUploads(where = 'main') {
+  const A = ATT[where];
+  if (S[A.busy]) return;
+  const a = S[A.key].find((x) => x.status === 'wait');
   if (!a) return;
-  S.uploading = true;
+  S[A.busy] = true;
   a.status = 'up';
-  renderAttach();
+  renderAttach(where);
   let r;
   try {
     const data = await readB64(a.file);
@@ -178,37 +197,40 @@ async function pumpUploads() {
   } catch (e) {
     r = { status: 'error', message: 'Không đọc được tệp' };
   }
-  S.uploading = false;
-  if (S.attach.includes(a)) Object.assign(a, r.status === 'ok' ? { status: 'ok', id: r.file.id } : { status: 'err', error: r.message || 'lỗi' });
-  renderAttach();
-  pumpUploads();
+  S[A.busy] = false;
+  if (S[A.key].includes(a)) Object.assign(a, r.status === 'ok' ? { status: 'ok', id: r.file.id } : { status: 'err', error: r.message || 'lỗi' });
+  renderAttach(where);
+  pumpUploads(where);
 }
-function removeAttach(key) {
-  const a = S.attach.find((x) => x.key === key);
+function removeAttach(key, where = 'main') {
+  const A = ATT[where];
+  const a = S[A.key].find((x) => x.key === key);
   if (a?.thumb) URL.revokeObjectURL(a.thumb);
-  S.attach = S.attach.filter((x) => x.key !== key);
-  renderAttach();
+  S[A.key] = S[A.key].filter((x) => x.key !== key);
+  renderAttach(where);
 }
-function clearAttach() {
-  for (const a of S.attach) if (a.thumb) URL.revokeObjectURL(a.thumb);
-  S.attach = [];
-  renderAttach();
+function clearAttach(where = 'main') {
+  const A = ATT[where];
+  for (const a of S[A.key]) if (a.thumb) URL.revokeObjectURL(a.thumb);
+  S[A.key] = [];
+  renderAttach(where);
 }
-function renderAttach() {
-  const box = $('attach-list');
-  box.hidden = !S.attach.length;
+function renderAttach(where = 'main') {
+  const A = ATT[where];
+  const box = $(A.box);
+  box.hidden = !S[A.key].length;
   box.replaceChildren(
-    ...S.attach.map((a) =>
+    ...S[A.key].map((a) =>
       el(
         'div',
         { class: 'att ' + a.status, title: a.error ? `${a.name}: ${a.error}` : a.name },
         a.thumb ? el('img', { src: a.thumb, alt: '' }) : el('span', { class: 'att-ic' }, svgFile()),
         el('span', { class: 'att-main' }, el('span', { class: 'att-name' }, a.name), el('small', {}, a.status === 'up' ? 'Đang tải lên…' : a.status === 'wait' ? 'Chờ tải lên' : a.status === 'err' ? 'Lỗi: ' + a.error : sizeText(a.size))),
-        el('button', { type: 'button', class: 'att-x', title: 'Bỏ tệp', 'aria-label': 'Bỏ tệp ' + a.name, onclick: () => removeAttach(a.key) }, '✕'),
+        el('button', { type: 'button', class: 'att-x', title: 'Bỏ tệp', 'aria-label': 'Bỏ tệp ' + a.name, onclick: () => removeAttach(a.key, where) }, '✕'),
       ),
     ),
   );
-  updateSend();
+  A.update();
 }
 
 // Đổi cuộc trò chuyện: bỏ tệp đang chờ (tải lên theo kênh), độ ưu tiên, xem trước

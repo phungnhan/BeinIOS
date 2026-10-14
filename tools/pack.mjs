@@ -1,5 +1,5 @@
-// Đóng gói addon thành dist/BeinGroup-v<phiên bản>.zip để gửi cho admin khác: chỉ các tệp addon cần để chạy,
-// kèm CHANGELOG.md và HUONG-DAN-CAI.html; trong zip là thư mục BeinGroup/ (giải nén ra là tải được ngay).
+// Đóng gói addon thành dist/BeinFusion-v<phiên bản>.zip để gửi cho admin khác: chỉ các tệp addon cần để chạy,
+// kèm CHANGELOG.md và HUONG-DAN-CAI.html; trong zip là thư mục BeinFusion/ (giải nén ra là tải được ngay).
 // Trước khi ghi, kiểm tra mọi tệp mà manifest, các trang HTML và service worker nhắc tới đều có trong gói.
 //
 // Chạy: node tools/pack.mjs [--usage-url <link Google Apps Script>]
@@ -12,7 +12,7 @@ import { fileURLToPath } from 'node:url';
 import zlib from 'node:zlib';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const FOLDER = 'BeinGroup';
+const FOLDER = 'BeinFusion';
 // Không đưa vào gói: mã kiểm thử, công cụ, tài liệu cho người phát triển, tệp tạm
 const SKIP_DIRS = new Set(['test', 'tools', 'dist', 'node_modules', '.git', '.github', '.vscode', '.idea', '.claude']);
 const SKIP_FILES = new Set(['README.md', 'API.md', '.gitignore', '.gitattributes', 'package.json', 'package-lock.json', 'Thumbs.db', 'desktop.ini', '.DS_Store']);
@@ -43,6 +43,11 @@ function required(files) {
   for (const f of files.filter((x) => x.endsWith('.html'))) {
     const html = readFileSync(path.join(ROOT, f), 'utf8');
     for (const m of html.matchAll(/\b(?:src|href)="([^"#:?]+)"/g)) add(path.posix.join(path.posix.dirname(f), m[1]), f);
+  }
+  // Tệp CSS gọi tới bằng url(…) (font, ảnh) — đường dẫn tính từ thư mục của tệp CSS
+  for (const f of files.filter((x) => x.endsWith('.css'))) {
+    const css = readFileSync(path.join(ROOT, f), 'utf8');
+    for (const m of css.matchAll(/url\(\s*['"]?([^'")#:?]+)['"]?\s*\)/g)) add(path.posix.normalize(path.posix.join(path.posix.dirname(f), m[1])), f);
   }
   const sw = readFileSync(path.join(ROOT, manifest.background.service_worker), 'utf8');
   for (const call of sw.matchAll(/importScripts\(([^)]*)\)/g)) for (const m of call[1].matchAll(/'([^']+\.js)'/g)) add(m[1], 'background.js');
@@ -153,10 +158,10 @@ if (!new RegExp(`^## v${version.replace(/\./g, '\\.')}\\b`, 'm').test(readFileSy
   console.error(`CHANGELOG.md chưa có mục cho v${version}`);
   process.exit(1);
 }
-const unused = files.filter((f) => !need.has(f) && !['CHANGELOG.md', 'HUONG-DAN-CAI.html'].includes(f));
+const unused = files.filter((f) => !need.has(f) && !['CHANGELOG.md', 'HUONG-DAN-CAI.html', 'fonts/OFL.txt'].includes(f));
 const buf = zip(files.map((f) => ({ name: `${FOLDER}/${f}`, data: packed(f) })));
 mkdirSync(path.join(ROOT, 'dist'), { recursive: true });
-const out = path.join(ROOT, 'dist', `BeinGroup-v${version}.zip`);
+const out = path.join(ROOT, 'dist', `BeinFusion-v${version}.zip`);
 writeFileSync(out, buf);
 console.log(`Đã tạo ${path.relative(ROOT, out)}: ${files.length} tệp, ${(buf.length / 1024).toFixed(0)} KB`);
 console.log(usageUrl ? 'Báo cáo sử dụng: gửi về ' + usageUrl + ' (khi admin đồng ý)' : 'Báo cáo sử dụng: gói chưa có nơi nhận — admin không được hỏi gửi (thêm --usage-url <link> hoặc tools/usage-url.txt)');

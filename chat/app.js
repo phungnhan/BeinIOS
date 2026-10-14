@@ -12,11 +12,7 @@ $('btn-fmt').addEventListener('click', () => setFmt(!S.fmt));
 $('btn-prio').addEventListener('click', () => ($('prio-menu').hidden ? openPop($('prio-menu'), $('btn-prio'), 'left') : closePops()));
 for (const b of document.querySelectorAll('#prio-menu [data-prio]')) b.addEventListener('click', () => setPriority(b.dataset.prio));
 $('btn-emoji').addEventListener('mousedown', (e) => e.preventDefault());
-$('btn-emoji').addEventListener('click', () => {
-  if (!$('emoji-pop').hidden) return closePops();
-  renderEmoji(0);
-  openPop($('emoji-pop'), $('btn-emoji'), 'right');
-});
+$('btn-emoji').addEventListener('click', () => openEmoji(false));
 $('btn-attach').addEventListener('click', () => !$('text').disabled && $('file-input').click());
 $('file-input').addEventListener('change', () => {
   addFiles($('file-input').files);
@@ -47,7 +43,7 @@ for (const id of ['msgs', 'composer']) {
   });
 }
 document.addEventListener('mousedown', (e) => {
-  if (!e.target.closest?.('.pop, #btn-prio, #btn-emoji')) closePops();
+  if (!e.target.closest?.('.pop, #btn-prio, #btn-emoji, #t-btn-emoji')) closePops();
 });
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') closePops();
@@ -58,6 +54,46 @@ renderPrio();
 $('t-close').addEventListener('click', closeThread);
 $('t-follow').addEventListener('click', () => S.thread && toggleFollow(S.thread.root));
 $('t-more').addEventListener('click', loadMoreThread);
+// Ô bình luận: định dạng, xem trước, đính kèm (chọn / dán / kéo thả), emoji — như ô gõ chính
+for (const b of document.querySelectorAll('#t-fmt [data-md]')) {
+  b.addEventListener('mousedown', (e) => e.preventDefault());
+  b.addEventListener('click', () => format(b.dataset.md, $('t-text')));
+}
+$('t-btn-fmt').addEventListener('click', () => setTFmt(!S.tFmt));
+$('t-btn-preview').addEventListener('click', () => setTPreview(!S.tPreview));
+$('t-preview').addEventListener('click', () => setTPreview(false));
+$('t-btn-attach').addEventListener('click', () => !$('t-text').disabled && S.thread && $('t-file-input').click());
+$('t-file-input').addEventListener('change', () => {
+  addFiles($('t-file-input').files, 'thread');
+  $('t-file-input').value = '';
+});
+$('t-text').addEventListener('paste', (e) => {
+  const files = [...(e.clipboardData?.files || [])];
+  if (files.length && !e.clipboardData.getData('text/plain')) {
+    e.preventDefault();
+    addFiles(files, 'thread');
+  }
+});
+$('t-text').addEventListener('blur', () => (S.tCaret = $('t-text').selectionStart));
+$('t-btn-emoji').addEventListener('mousedown', (e) => e.preventDefault());
+$('t-btn-emoji').addEventListener('click', () => openEmoji(true));
+$('thread').addEventListener('dragover', (e) => {
+  if (!S.thread || !e.dataTransfer?.types?.includes('Files')) return;
+  e.preventDefault();
+  e.stopPropagation();
+  $('t-composer').classList.add('drop');
+});
+$('thread').addEventListener('dragleave', (e) => {
+  if (!e.relatedTarget || !$('thread').contains(e.relatedTarget)) $('t-composer').classList.remove('drop');
+});
+$('thread').addEventListener('drop', (e) => {
+  if (!e.dataTransfer?.files?.length) return;
+  e.preventDefault();
+  e.stopPropagation();
+  $('t-composer').classList.remove('drop');
+  addFiles(e.dataTransfer.files, 'thread');
+});
+setTFmt(S.tFmt);
 $('t-composer').addEventListener('submit', sendThread);
 $('t-text').addEventListener('input', () => {
   tAutosize();
@@ -297,6 +333,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
 });
 
 async function start() {
+  initLook();
   initSide();
   loadReplies();
   warmEmojiCache();

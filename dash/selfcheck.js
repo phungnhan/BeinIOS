@@ -102,7 +102,7 @@ $('btn-check-tg').addEventListener('click', async () => {
   try {
     const s = r.summary;
     const text = BG.selfCheckText(r, { version: chrome.runtime.getManifest().version, ua: navigator.userAgent });
-    const res = await chrome.runtime.sendMessage({ type: 'telegramReport', title: `BeinGroup: tự kiểm tra ${r.group.name} — ${s.fail ? s.fail + ' lỗi' : 'không có lỗi'}`, text });
+    const res = await chrome.runtime.sendMessage({ type: 'telegramReport', title: `BeinFusion: tự kiểm tra ${r.group.name} — ${s.fail ? s.fail + ' lỗi' : 'không có lỗi'}`, text });
     toast(res?.status === 'ok' ? 'Đã gửi kết quả kiểm tra về Telegram.' : res?.message || 'Không gửi được', res?.status === 'ok' ? 'ok' : 'err');
   } finally {
     b.disabled = false;

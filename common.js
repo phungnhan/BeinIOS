@@ -1,4 +1,4 @@
-// BeinGroup — phần dùng chung cho service worker, popup, dashboard và test (Node): lõi (hằng số, tiện ích, quyền, đường dẫn).
+// BeinFusion — phần dùng chung cho service worker, popup, dashboard và test (Node): lõi (hằng số, tiện ích, quyền, đường dẫn).
 // Các phần còn lại ở lib/*.js, nạp sau tệp này theo thứ tự BG.PARTS (background.js, dashboard.html, popup.html; Node tự nạp).
 // Chỉ có hàm thuần: không gọi chrome.* hay mạng.
 (function (root, factory) {

@@ -1,4 +1,4 @@
-// BeinGroup — trang Chat (chat.html), phần chung: hằng số, trạng thái S, gọi service worker, thông báo nhỏ, ảnh đại diện,
+// BeinFusion — trang Chat (chat.html), phần chung: hằng số, trạng thái S, gọi service worker, thông báo nhỏ, ảnh đại diện,
 // biểu tượng, giờ, huy hiệu cạnh tên, dựng nội dung tin (Markdown) bằng phần tử DOM (không chèn HTML).
 // Các tệp chat/*.js là script thường dùng chung phạm vi toàn cục, nạp theo thứ tự cuối chat.html; mọi lệnh tới Beincom đi qua
 // service worker (bg/chat.js) bằng phiên đăng nhập như web. Nội dung tin chỉ nằm trong trang, không lưu lại.
@@ -71,6 +71,10 @@ const S = {
   loadedAt: 0, // lúc mở cuộc trò chuyện: bình luận sau lúc này mới cộng vào số
   priority: '', // độ ưu tiên của tin đang soạn
   attach: [], // tệp đính kèm đang soạn
+  tAttach: [], // tệp đính kèm của bình luận đang soạn
+  tUploading: false,
+  tFmt: localStorage.getItem('beingroup-chat-tfmt') === '1', // thanh định dạng của ô bình luận
+  tPreview: false,
   uploading: false,
   preview: false,
   fmt: true,

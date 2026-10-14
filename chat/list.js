@@ -106,9 +106,10 @@ function setDmTab(tab, render = true) {
 
 // tabs: [[mã, tên, số, có tin chưa đọc]] — đầu mục là các tab (bấm mũi tên để thu gọn)
 // after: phần tử thêm cuối mục (vd nút xem lời mời đã bỏ qua)
-function section(key, title, items, { limit = 0, label = '', pinned = false, tabs = null, tab = '', empty = '', moreKey = key, after = null, icon = '' } = {}) {
+function section(key, title, items, { limit = 0, label = '', pinned = false, tabs = null, tab = '', empty = '', moreKey = key, after = null, icon = '', open = false } = {}) {
   if (!items.length && !tabs) return null;
-  const closed = S.closed.has(key) && !S.q && S.filter === 'all';
+  // open: luôn mở (Silk: một cộng đồng chiếm cả cột, không thu gọn được)
+  const closed = !open && S.closed.has(key) && !S.q && S.filter === 'all';
   // Đang tìm / lọc thì hiện đủ; không thì giới hạn (tin nhắn riêng: 8 gần nhất)
   const cut = limit && !S.q && S.filter === 'all' && !S.more.has(moreKey) ? limit : 0;
   const shown = cut ? items.slice(0, cut) : items;
@@ -162,12 +163,14 @@ function renderList() {
   const all = allChats();
   const unreadN = all.filter((c) => c.unread || c.mentions).length;
   $('cnt-unread').textContent = unreadN ? unreadN : '';
-  document.title = (unreadN ? `(${unreadN}) ` : '') + 'BeinGroup Chat';
+  document.title = (unreadN ? `(${unreadN}) ` : '') + 'BeinFusion Chat';
   for (const b of document.querySelectorAll('#filters button')) b.classList.toggle('on', b.dataset.f === S.filter);
   if (!S.loaded && !S.error) return box.replaceChildren(...skeleton());
   if (!S.on || S.error) return box.replaceChildren();
-  const parts = [threadsEntry(), dmSection()];
-  if (S.filter !== 'dm') {
+  // BeinFusion Silk: chỉ mục đang chọn ở thanh cộng đồng (chat/silk.js); BeinFusion theme / Silk "Tất cả": như cũ
+  const sp = silkSpace();
+  const parts = sp ? silkParts(sp) : [threadsEntry(), dmSection()];
+  if (!sp && S.filter !== 'dm') {
     // Cộng đồng: nền đã xếp (đã ghim trước theo thứ tự ghim, rồi có tin mới nhất); hiện 5, còn lại sau "Xem thêm"
     const all = !!S.q || S.filter !== 'all' || S.more.has('teams');
     // Kênh theo cây group: kênh chính, rồi group con thụt lề dưới group cha; đường nối chỉ vẽ khi hiện đủ danh sách
@@ -178,6 +181,8 @@ function renderList() {
   }
   const shown = parts.filter(Boolean);
   box.replaceChildren(...(shown.length ? shown : [el('div', { class: 'list-empty' }, S.q ? 'Không có cuộc trò chuyện nào khớp.' : S.filter === 'unread' ? 'Đã đọc hết 🎉' : 'Chưa có cuộc trò chuyện nào.')]));
+  box.classList.toggle('space-team', !!sp && sp !== 'dm');
+  renderSilk();
 }
 
 // Khung chờ lúc mới mở trang (chưa có danh sách lần trước)

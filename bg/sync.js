@@ -32,7 +32,7 @@ const syncBytes = (key, item) => new TextEncoder().encode(key + JSON.stringify(i
 function cleanSynced(key, v) {
   if (key === 'welcome' || key === 'shoutout') return typeof v?.template === 'string' ? { template: v.template.slice(0, 5000) } : undefined;
   try {
-    return BG.readBackup({ app: 'BeinGroup', format: BG.BACKUP_FORMAT, data: { [key]: v } }).data[key];
+    return BG.readBackup({ app: 'BeinFusion', format: BG.BACKUP_FORMAT, data: { [key]: v } }).data[key];
   } catch {
     return undefined;
   }

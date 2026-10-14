@@ -1,4 +1,4 @@
-// BeinGroup — biểu đồ SVG nhỏ cho tab Thống kê (không dùng thư viện ngoài).
+// BeinFusion — biểu đồ SVG nhỏ cho tab Thống kê (không dùng thư viện ngoài).
 // Quy ước: cột ≤ 24px, đầu cột bo 4px (vuông ở đường gốc), đường 2px, chấm ≥ 8px có viền màu nền,
 // lưới mảnh, rê chuột hiện số liệu. Màu lấy từ biến CSS --series-up / --series-down (đổi theo nền sáng/tối).
 (function (root) {

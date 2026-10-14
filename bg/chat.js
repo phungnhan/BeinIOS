@@ -204,7 +204,7 @@ async function syncChatReports(client, { state, next, notifyAllowed, now = Date.
   next.chatReports = out;
   if (notifyAllowed && fresh.length) {
     const f = fresh[0];
-    notify('bg-chat-reports', `BeinGroup: ${fresh.length} tin chat bị báo cáo mới`, `${f.communityName}${f.channel ? ' · ' + f.channel : ''} — ${f.member.fullname || f.member.username || 'người dùng'}: ${(f.message || (f.files ? '📎 tệp' : '')).replace(/\s+/g, ' ').slice(0, 100)}`);
+    notify('bg-chat-reports', `BeinFusion: ${fresh.length} tin chat bị báo cáo mới`, `${f.communityName}${f.channel ? ' · ' + f.channel : ''} — ${f.member.fullname || f.member.username || 'người dùng'}: ${(f.message || (f.files ? '📎 tệp' : '')).replace(/\s+/g, ' ').slice(0, 100)}`);
   }
   return fresh.length;
 }
@@ -284,10 +284,10 @@ async function chatNotices(client, { settings, me, dmTeam, prevUsers = {}, notif
         // Lời mời trò chuyện (người chưa kết nối nhắn cho bạn) báo riêng với tin nhắn riêng
         const reqN = newDm.filter((d) => d.request).length;
         const head = [newDm.length - reqN ? `${newDm.length - reqN} tin nhắn riêng mới` : '', reqN ? `${reqN} lời mời trò chuyện mới` : ''].filter(Boolean).join(', ');
-        notify('bg-chat-dm', `BeinGroup: ${head}`, 'Từ: ' + newDm.map((d) => (d.user?.fullname || d.user?.username || d.title || 'người dùng') + (d.request ? ' (lời mời)' : '')).slice(0, 5).join(', ') + '. Bấm để mở chat.', BG.SITE + '/chat-home');
+        notify('bg-chat-dm', `BeinFusion: ${head}`, 'Từ: ' + newDm.map((d) => (d.user?.fullname || d.user?.username || d.title || 'người dùng') + (d.request ? ' (lời mời)' : '')).slice(0, 5).join(', ') + '. Bấm để mở chat.', BG.SITE + '/chat-home');
       }
       if (notifyAllowed && typeof cur.mentions === 'number' && u.unread.mentions > cur.mentions) {
-        notify('bg-chat-mention', `BeinGroup: bạn được nhắc tên ${u.unread.mentions} lần trong chat`, 'Bấm để mở chat.', BG.SITE + '/chat-home');
+        notify('bg-chat-mention', `BeinFusion: bạn được nhắc tên ${u.unread.mentions} lần trong chat`, 'Bấm để mở chat.', BG.SITE + '/chat-home');
       }
       cur.mentions = u.unread.mentions;
     }
@@ -305,7 +305,7 @@ async function chatNotices(client, { settings, me, dmTeam, prevUsers = {}, notif
       if (notifyAllowed && tn.fresh.length) {
         const mentions = tn.fresh.reduce((s, t) => s + (t.unreadMentions || 0), 0);
         const people = [...new Set(tn.fresh.flatMap((t) => t.people))].slice(0, 5);
-        notify('bg-chat-thread', `BeinGroup: ${tn.fresh.length} thread bạn theo dõi có bình luận mới${mentions ? ` (${mentions} lần nhắc bạn)` : ''}`, (people.length ? 'Người tham gia: ' + people.join(', ') + '. ' : '') + 'Bấm để xem.', BG.SITE + '/chat-home');
+        notify('bg-chat-thread', `BeinFusion: ${tn.fresh.length} thread bạn theo dõi có bình luận mới${mentions ? ` (${mentions} lần nhắc bạn)` : ''}`, (people.length ? 'Người tham gia: ' + people.join(', ') + '. ' : '') + 'Bấm để xem.', BG.SITE + '/chat-home');
       }
     }
   }
@@ -414,7 +414,7 @@ async function syncChat(client, { settings, state, next, notifyAllowed, ctx, now
     if (notifyAllowed && (bad.length || waves.length || freshImp.length)) {
       const parts = [bad.length && `${bad.length} tin vi phạm`, waves.length && `${waves.length} đợt spam`, freshImp.length && `${freshImp.length} tài khoản giống admin`].filter(Boolean);
       const first = bad[0] || added.find((x) => waves[0]?.items.some((i) => i.id === x.id));
-      notify('bg-chat', `BeinGroup: ${parts.join(', ')} trong chat`, first ? `${first.groupName} — ${first.user.fullname || first.user.username}: ${first.text.replace(/\s+/g, ' ').slice(0, 100)}` : 'Bấm để xem.');
+      notify('bg-chat', `BeinFusion: ${parts.join(', ')} trong chat`, first ? `${first.groupName} — ${first.user.fullname || first.user.username}: ${first.text.replace(/\s+/g, ' ').slice(0, 100)}` : 'Bấm để xem.');
     }
   }
   // Tin nhắn chat bị báo cáo ở community bạn là chủ / admin (cùng công tắc quét báo cáo)

@@ -64,5 +64,5 @@ test('nơi nhận báo cáo sử dụng: từ chối dữ liệu sai dạng; ô 
   assert.equal(r[2], "'+1");
   assert.equal(r[5], 0);
   assert.equal(r[3].length, 40);
-  assert.equal(load().ctx.doGet().body, 'BeinGroup: nơi nhận báo cáo sử dụng đang chạy.');
+  assert.equal(load().ctx.doGet().body, 'BeinFusion: nơi nhận báo cáo sử dụng đang chạy.');
 });

@@ -219,7 +219,7 @@ $('btn-backup').addEventListener('click', async () => {
   const store = await chrome.storage.local.get(['settings', 'rules', 'postRules', 'groupRules', 'templates', 'promptBank', 'chatReplies', 'profiles', 'postStats', 'nudges', 'log', 'state']);
   const backup = BG.makeBackup(store, { profiles: $('backup-profiles').checked, history: $('backup-history').checked, version: chrome.runtime.getManifest().version });
   const url = URL.createObjectURL(new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' }));
-  const a = el('a', { href: url, download: `beingroup-sao-luu-${fileStamp()}.json` });
+  const a = el('a', { href: url, download: `beinfusion-sao-luu-${fileStamp()}.json` });
   document.body.append(a);
   a.click();
   a.remove();
@@ -258,7 +258,7 @@ $('restore-file').addEventListener('change', async (e) => {
     : null;
   const ok = await confirmDialog({
     title: 'Khôi phục từ bản sao lưu?',
-    text: `${f.name}${parsed.exportedAt ? ' — tạo lúc ' + fmtTime(parsed.exportedAt) : ''}${parsed.version ? ' (BeinGroup v' + parsed.version + ')' : ''}. Các mục dưới đây sẽ thay cho dữ liệu hiện tại; hồ sơ vi phạm thì gộp thêm.`,
+    text: `${f.name}${parsed.exportedAt ? ' — tạo lúc ' + fmtTime(parsed.exportedAt) : ''}${parsed.version ? ' (BeinFusion v' + parsed.version + ')' : ''}. Các mục dưới đây sẽ thay cho dữ liệu hiện tại; hồ sơ vi phạm thì gộp thêm.`,
     names: BG.backupSummary(parsed.data),
     okText: 'Khôi phục',
     danger: true,

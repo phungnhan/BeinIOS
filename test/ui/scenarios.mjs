@@ -318,7 +318,7 @@ export const scenarios = [
       await page.ev(`document.getElementById('btn-rules-export').click(); true`);
       await page.until(() => window.__blobs.length === 1);
       const file = JSON.parse(await page.ev(`window.__blobs[0].text()`));
-      assert.equal(file.app, 'BeinGroup');
+      assert.equal(file.app, 'BeinFusion');
       assert.deepEqual([Object.keys(file.data).filter((k) => !['rules', 'postRules', 'groupRules'].includes(k)), file.data.postRules.reviewContacts], [[], true]);
     },
   },
@@ -441,7 +441,7 @@ export const scenarios = [
       assert.deepEqual(info.tiles.slice(0, 4), ['12.362', '+5 / −1', '80%', '6']);
       assert.equal(info.posts, 5);
       assert.ok(info.newAuthor);
-      assert.match(info.text, /^BeinGroup: báo cáo Tháng \d+\/\d{4} — Crypto Life\n• Thành viên: 12\.358 → 12\.362 \(\+4\)/);
+      assert.match(info.text, /^BeinFusion: báo cáo Tháng \d+\/\d{4} — Crypto Life\n• Thành viên: 12\.358 → 12\.362 \(\+4\)/);
       assert.match(info.text, /• Người mới trong tháng: 5 người · còn ở lại 4 \(80%\) · 1 tự rời · đã đăng bài 1/);
       assert.match(info.text, /• Bài viết: 6 bài \(tháng trước 4, \+50%\)/);
       // Đội admin theo nhật ký Beincom
@@ -459,7 +459,7 @@ export const scenarios = [
       await page.ev(`document.getElementById('btn-monthly-tg').click(); true`);
       await page.until(() => !!window.__tgReport);
       const tg = await page.ev(`window.__tgReport`);
-      assert.match(tg.title, /^BeinGroup: báo cáo Tháng \d+\/\d{4} — Crypto Life$/);
+      assert.match(tg.title, /^BeinFusion: báo cáo Tháng \d+\/\d{4} — Crypto Life$/);
       assert.match(tg.text, /^• Thành viên:/);
       // Mở từ thông báo đầu tháng: tự tạo báo cáo tháng trước
       await page.open(url('dashboard', 'tab=stats&monthly=1'));
@@ -612,7 +612,7 @@ export const scenarios = [
         bold: !!document.querySelector('#whatsnew-body li b, #whatsnew-body li strong'),
       }));
       const version = await page.ev(`chrome.runtime.getManifest().version`);
-      assert.equal(info.title, `BeinGroup đã cập nhật lên v${version}`);
+      assert.equal(info.title, `BeinFusion đã cập nhật lên v${version}`);
       assert.ok(info.heads[0].startsWith(`v${version} — `));
       assert.ok(info.heads.every((h) => !/^v0\.(22|21|20)\./.test(h)));
       assert.ok(info.items >= 3 && info.bold);
@@ -1380,6 +1380,8 @@ export const scenarios = [
       assert.ok(info[0].pad < info[1].pad && info[1].pad < info[2].pad && info[3].pad === info[1].pad, JSON.stringify(info.map((x) => x.pad)));
       // Đường nối cây: ┬ dưới mục có con, ├ / └ tới mục, │ ở cột Hỏi đáp còn em (Sự kiện) phía dưới
       assert.deepEqual(info.map((x) => x.lines), ['down@1', 'elbow@1 down@2', 'rail@1 elbow last@2', 'elbow last@1']);
+      // Đường nối thật sự hiện (không bị luật của thanh cộng đồng Silk — lớp .srail — làm ẩn)
+      assert.ok(await page.ev(`[...document.querySelectorAll('.tl')].every((x) => x.offsetHeight > 0 && getComputedStyle(x).position === 'absolute')`));
       // Đầu cuộc trò chuyện của group con dùng ảnh group
       await page.ev(`[...document.querySelectorAll('.item')].find((x) => x.querySelector('.item-title').textContent === 'Hỏi đáp').click(); true`);
       await page.until(() => document.querySelector('#conv-title')?.textContent.includes('Hỏi đáp'));
@@ -1564,6 +1566,115 @@ export const scenarios = [
       // Đóng rồi mở lại khung bình luận: hiện ngay từ bộ nhớ
       await page.ev(`document.getElementById('t-close').click(); true`);
       assert.equal(await page.ev(`(() => { document.querySelector('#m-n2 .tbar-n').click(); return !!document.getElementById('t-n3'); })()`), true);
+    },
+  },
+  {
+    name: 'Bảng Giao diện: BeinFusion Silk (Lụa) — thanh cộng đồng, tuỳ chỉnh, giữ khi mở lại; BeinFusion theme không đổi',
+    async run({ page, url, assert }) {
+      await page.open(url('chat', 'chat=1&tree=1&c=chMain'), { width: 1440, height: 900 });
+      await page.ev(`localStorage.removeItem('beingroup-chat-look'); localStorage.removeItem('beingroup-chat-space'); chrome.storage.local.remove('chatLook'); true`);
+      await page.open(url('chat', 'chat=1&tree=1&c=chMain'), { width: 1440, height: 900 });
+      await page.until(() => !!document.getElementById('m-n2'));
+      // Mặc định: BeinFusion theme, không có thanh cộng đồng; nút Giao diện ở đầu danh sách
+      assert.deepEqual(await page.ev(`[document.documentElement.dataset.ui, document.getElementById('rail').offsetWidth, !!document.getElementById('btn-look').offsetWidth]`), ['theme', 0, true]);
+      await page.ev(`document.getElementById('btn-look').click(); true`);
+      await page.until(() => document.getElementById('look').open);
+      assert.match(await page.ev(`document.querySelector('#look .lk-note').textContent`), /Chọn BeinFusion Silk \(Lụa\)/);
+      // Chọn Silk: thanh cộng đồng, bảng hiện các tuỳ chọn
+      await page.ev(`document.querySelector('#look [data-k="ui:silk"]').click(); true`);
+      await page.until(() => document.documentElement.dataset.ui === 'silk' && document.getElementById('rail').offsetWidth === 72);
+      assert.deepEqual(await page.ev(`[document.querySelectorAll('#rail .rail-btn.team').length, document.querySelector('#space-head b').textContent, !!document.querySelector('#look [data-k="mode:dark"]'), document.getElementById('fmt').hidden]`), [1, 'Tất cả', true, true]);
+      // Giao diện, Dashboard, tài khoản: góc phải hàng tiêu đề của cột danh sách (không ở thanh cộng đồng)
+      assert.deepEqual(await page.ev(`[[...document.querySelectorAll('#space-head .space-actions [aria-label]')].map((x) => x.getAttribute('aria-label')), !!document.querySelector('#space-head .space-me .avatar'), document.querySelectorAll('#rail [aria-label="Giao diện"], #rail [href="dashboard.html"], #rail .avatar').length]`), [['Giao diện', 'Mở Dashboard'], true, 0]);
+      // Màu nhấn xanh dương: biến màu và nút Gửi đổi theo; chế độ tối; kiểu Phẳng; cỡ chữ lớn
+      await page.ev(`document.querySelector('#look [data-k="accent:#2F6FEB"]').click(); true`);
+      await page.ev(`document.querySelector('#look [data-k="mode:dark"]').click(); true`);
+      await page.ev(`document.querySelector('#look [data-k="style:flat"]').click(); true`);
+      await page.ev(`document.querySelector('#look [data-k="size:l"]').click(); true`);
+      await page.ev(`document.querySelector('#look [data-k="avatars"]').click(); true`);
+      const look = await page.ev(`(() => {
+        const r = document.documentElement;
+        const me = document.querySelector('#m-o2');
+        return {
+          accent: r.style.getPropertyValue('--s-accent').trim(),
+          scheme: r.dataset.scheme, style: r.dataset.style, size: r.dataset.size, avatars: r.dataset.avatars,
+          bg: getComputedStyle(document.body).backgroundColor,
+          meName: getComputedStyle(me.querySelector('.msg-name')).display !== 'none',
+          meBubble: getComputedStyle(me.querySelector('.bubble')).backgroundColor,
+          fs: getComputedStyle(document.querySelector('#m-n2 .bubble')).fontSize,
+          saved: JSON.parse(localStorage.getItem('beingroup-chat-look')).look.accent,
+        };
+      })()`);
+      assert.deepEqual(look, { accent: '#6D9AF1', scheme: 'dark', style: 'flat', size: 'l', avatars: 'off', bg: 'rgb(15, 14, 20)', meName: true, meBubble: 'rgba(0, 0, 0, 0)', fs: '16.5px', saved: '#2F6FEB' });
+      await page.ev(`document.querySelector('#look .lk-reset').click(); true`);
+      assert.deepEqual(await page.ev(`[document.documentElement.dataset.ui, document.documentElement.dataset.style, document.documentElement.dataset.scheme === 'dark' || document.documentElement.dataset.scheme === 'light']`), ['silk', 'bubble', true]);
+      await page.ev(`document.getElementById('look').close(); true`);
+      // Thanh cộng đồng: chọn cộng đồng thì cột chỉ còn kênh của nó (theo cây); Tin nhắn riêng thì chỉ tin nhắn riêng
+      await page.ev(`document.querySelector('#rail .rail-btn.team').click(); true`);
+      await page.until(() => document.querySelector('#space-head b')?.textContent === 'Crypto Life');
+      assert.deepEqual(await page.ev(`[...document.querySelectorAll('#list .item .item-title')].map((x) => x.textContent)`), ['Crypto Life', 'Hỏi đáp', 'Kiến thức', 'Sự kiện']);
+      await page.ev(`document.querySelector('#rail [aria-label^="Tin nhắn riêng"]').click(); true`);
+      await page.until(() => document.querySelector('#space-head b')?.textContent === 'Tin nhắn riêng');
+      assert.ok(await page.ev(`[...document.querySelectorAll('#list .item .item-title')].every((x) => !/Crypto Life|Hỏi đáp/.test(x.textContent))`));
+      // Mở kênh của cộng đồng khi đang ở Tin nhắn riêng: tự chuyển sang cộng đồng đó
+      await page.ev(`openChat('chSub'); true`);
+      await page.until(() => document.querySelector('#space-head b')?.textContent === 'Crypto Life');
+      // Mở lại trang: vẫn là Silk ngay từ đầu (không nháy giao diện mặc định), vẫn ở cộng đồng đã chọn
+      await page.open(url('chat', 'chat=1&tree=1&c=chMain'), { width: 1440, height: 900 });
+      assert.equal(await page.ev(`document.documentElement.dataset.ui`), 'silk');
+      await page.until(() => document.querySelector('#space-head b')?.textContent === 'Crypto Life');
+      // Về BeinFusion theme: không còn thanh cộng đồng, danh sách đủ như cũ
+      await page.ev(`openLook(); document.querySelector('#look [data-k="ui:theme"]').click(); true`);
+      await page.until(() => document.documentElement.dataset.ui === 'theme');
+      assert.deepEqual(await page.ev(`[document.getElementById('rail').offsetWidth, [...document.querySelectorAll('.sec-title')].map((x) => x.textContent), document.getElementById('fmt').hidden]`), [0, ['Tin nhắn riêng', 'Crypto Life'], false]);
+      await page.ev(`localStorage.removeItem('beingroup-chat-look'); localStorage.removeItem('beingroup-chat-space'); chrome.storage.local.remove('chatLook'); true`);
+    },
+  },
+  {
+    name: 'Trang Chat: ô bình luận đủ như ô gõ chính — định dạng, xem trước, emoji, câu trả lời mẫu, đính kèm',
+    async run({ page, url, assert }) {
+      await page.open(url('chat', 'chat=1&c=chMain'), { width: 1280, height: 820 });
+      await page.until(() => !!document.getElementById('m-n2'));
+      await page.ev(`openThread(S.posts.get('n2')); true`);
+      await page.until(() => !!document.getElementById('t-n3'));
+      const visible = (id) => `!document.getElementById('${id}').hidden && document.getElementById('${id}').offsetHeight > 0`;
+      // Có đủ nút; thanh định dạng mặc định ẩn, bấm Aa thì hiện; B bọc chữ đang chọn
+      assert.deepEqual(await page.ev(`['t-btn-fmt', 't-btn-preview', 't-btn-replies', 't-btn-attach', 't-btn-emoji', 't-send'].map((id) => !!document.getElementById(id)?.offsetWidth)`), [true, true, true, true, true, true]);
+      assert.equal(await page.ev(`document.getElementById('t-fmt').hidden`), true);
+      await page.ev(`document.getElementById('t-btn-fmt').click(); var t = document.getElementById('t-text'); t.value = 'ví lạnh'; t.focus(); t.setSelectionRange(0, 7); document.querySelector('#t-fmt [data-md=bold]').click(); true`);
+      assert.deepEqual(await page.ev(`[${visible('t-fmt')}, document.getElementById('t-text').value, document.getElementById('text').value]`), [true, '**ví lạnh**', '']);
+      // Xem trước: chữ đậm thật
+      await page.ev(`document.getElementById('t-btn-preview').click(); true`);
+      assert.deepEqual(await page.ev(`[${visible('t-preview')}, document.querySelector('#t-preview b')?.textContent, document.getElementById('t-text').hidden]`), [true, 'ví lạnh', true]);
+      await page.ev(`document.getElementById('t-btn-preview').click(); true`);
+      // Emoji: hộp mở trong khung bình luận, chèn vào ô bình luận (không vào ô gõ chính)
+      await page.ev(`var t = document.getElementById('t-text'); t.setSelectionRange(t.value.length, t.value.length); document.getElementById('t-btn-emoji').click(); true`);
+      await page.until(() => !document.getElementById('emoji-pop').hidden);
+      assert.equal(await page.ev(`document.getElementById('emoji-pop').parentElement.id`), 't-composer');
+      await page.ev(`document.querySelector('#emoji-grid .emo').click(); true`);
+      assert.deepEqual(await page.ev(`[document.getElementById('t-text').value.startsWith('**ví lạnh**') && document.getElementById('t-text').value.length > 11, document.getElementById('text').value]`), [true, '']);
+      // Mở emoji ở ô gõ chính: hộp về lại khung chính
+      await page.ev(`closePops(); document.getElementById('btn-emoji').click(); true`);
+      await page.until(() => !document.getElementById('emoji-pop').hidden);
+      assert.equal(await page.ev(`document.getElementById('emoji-pop').parentElement.id`), 'composer');
+      await page.ev(`closePops(); true`);
+      // Câu trả lời mẫu: chèn vào ô bình luận
+      await page.ev(`var t = document.getElementById('t-text'); t.value = ''; t.dispatchEvent(new Event('input')); document.getElementById('t-btn-replies').click(); true`);
+      await page.until(() => !document.getElementById('mention-pop').hidden && document.getElementById('mention-pop').classList.contains('slash'));
+      await page.ev(`document.querySelector('#mention-pop .mi').dispatchEvent(new MouseEvent('mousedown', { bubbles: true })); document.querySelector('#mention-pop .mi').click(); true`);
+      await page.until(() => document.getElementById('t-text').value.length > 10);
+      // Đính kèm: tải lên ngay, gửi kèm mã tệp và mã tin gốc; xong thì ô trống
+      await page.ev(`addFiles([new File([new Uint8Array([1, 2, 3])], 'bieu-do.png', { type: 'image/png' })], 'thread'); true`);
+      await page.until(() => document.querySelectorAll('#t-attach-list .att.ok').length === 1);
+      assert.equal(await page.ev(`document.querySelectorAll('#attach-list .att').length`), 0);
+      await page.ev(`document.getElementById('t-send').click(); true`);
+      await page.until(() => (window.__chatSends || []).some((x) => x.rootId === 'n2' && x.fileIds?.length === 1));
+      await page.until(() => document.getElementById('t-attach-list').hidden && document.getElementById('t-text').value === '');
+      // Đóng khung: bỏ tệp đang chờ
+      await page.ev(`addFiles([new File([new Uint8Array([1])], 'a.txt', { type: 'text/plain' })], 'thread'); true`);
+      await page.until(() => document.querySelectorAll('#t-attach-list .att').length === 1);
+      await page.ev(`document.getElementById('t-close').click(); true`);
+      assert.deepEqual(await page.ev(`[S.tAttach.length, document.getElementById('t-attach-list').hidden]`), [0, true]);
     },
   },
   {
@@ -2154,13 +2265,13 @@ export const scenarios = [
       await page.ev(`navigator.clipboard.writeText = async (t) => { window.__clip = t; }; document.getElementById('btn-check-copy').click(); true`);
       await page.until(() => !!window.__clip);
       const clip = await page.ev(`window.__clip`);
-      assert.match(clip.split('\n')[0], /^BeinGroup v\d+\.\d+\.\d+ · .* · tự kiểm tra Crypto Life lúc /);
+      assert.match(clip.split('\n')[0], /^BeinFusion v\d+\.\d+\.\d+ · .* · tự kiểm tra Crypto Life lúc /);
       assert.match(clip, /\n✗ Bài ghim: Không thấy API \(404\) — Beincom có thể đã đổi đường dẫn \[404 content\/contents\/pinned-content\/groups\/gCL\]\n— Chat Beincom —\n✓ Chat: đăng nhập: @kaicrypto\n– Chat: tin nhắn bị báo cáo: chỉ chủ/);
       // Gửi về Telegram: tiêu đề có tên group và số lỗi, nội dung là bản chữ đầy đủ
       await page.ev(`document.getElementById('btn-check-tg').click(); true`);
       await page.until(() => !!window.__tgReport);
       const tg = await page.ev(`window.__tgReport`);
-      assert.deepEqual([tg.title, tg.text], ['BeinGroup: tự kiểm tra Crypto Life — 1 lỗi', clip]);
+      assert.deepEqual([tg.title, tg.text], ['BeinFusion: tự kiểm tra Crypto Life — 1 lỗi', clip]);
       await page.until(() => [...document.querySelectorAll('.toast')].some((t) => /Đã gửi kết quả kiểm tra về Telegram/.test(t.textContent)));
     },
   },
@@ -2184,7 +2295,7 @@ export const scenarios = [
       assert.equal(await page.ev(`window.__clip`), await page.ev(`document.getElementById('usage-text').textContent`));
       await page.ev(`document.getElementById('btn-usage-tg').click(); true`);
       await page.until(() => !!window.__tgReport);
-      assert.match((await page.ev(`window.__tgReport`)).title, /^BeinGroup v\d+\.\d+\.\d+ · .* · Lan — admin thử$/);
+      assert.match((await page.ev(`window.__tgReport`)).title, /^BeinFusion v\d+\.\d+\.\d+ · .* · Lan — admin thử$/);
       assert.equal(await page.ev(`chrome.storage.local.get('usageNote').then((o) => o.usageNote)`), 'Lan — admin thử');
     },
   },
@@ -2227,7 +2338,7 @@ export const scenarios = [
       await page.ev(`navigator.clipboard.writeText = async (t) => { window.__clip = t; }; document.getElementById('btn-diag-copy').click(); true`);
       await page.until(() => [...document.querySelectorAll('.toast')].some((t) => /Đã sao chép báo cáo 2 lỗi/.test(t.textContent)));
       const clip = await page.ev(`window.__clip`);
-      assert.match(clip.split('\n')[0], /^BeinGroup v\d+\.\d+\.\d+ · .* · 2 lỗi$/);
+      assert.match(clip.split('\n')[0], /^BeinFusion v\d+\.\d+\.\d+ · .* · 2 lỗi$/);
       assert.equal(clip.split('\n').filter((l) => /^\d\d:\d\d \d\d\/\d\d \[/.test(l)).length, 2);
       // Lỗi JavaScript của trang được ghi lại (lỗi cố ý nên bỏ khỏi danh sách lỗi của kịch bản)
       await page.ev(`setTimeout(() => { throw new Error('lỗi thử nghiệm'); }); true`);

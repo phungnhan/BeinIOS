@@ -178,7 +178,7 @@ $('btn-monthly-copy').addEventListener('click', async () => {
 });
 $('btn-monthly-file').addEventListener('click', () => {
   const r = monthly.report;
-  if (r) download(`beingroup-bao-cao-${r.key}.txt`, BG.monthlyText(r), 'text/plain;charset=utf-8');
+  if (r) download(`beinfusion-bao-cao-${r.key}.txt`, BG.monthlyText(r), 'text/plain;charset=utf-8');
 });
 $('btn-monthly-tg').addEventListener('click', async () => {
   const r = monthly.report;
@@ -187,7 +187,7 @@ $('btn-monthly-tg').addEventListener('click', async () => {
   b.disabled = true;
   try {
     const [, ...body] = BG.monthlyText(r).split('\n');
-    const res = await chrome.runtime.sendMessage({ type: 'telegramReport', title: `BeinGroup: báo cáo ${r.label} — ${r.group.name}`, text: body.join('\n') });
+    const res = await chrome.runtime.sendMessage({ type: 'telegramReport', title: `BeinFusion: báo cáo ${r.label} — ${r.group.name}`, text: body.join('\n') });
     toast(res?.status === 'ok' ? 'Đã gửi báo cáo về Telegram.' : res?.message || 'Không gửi được', res?.status === 'ok' ? 'ok' : 'err');
   } finally {
     b.disabled = false;

@@ -602,7 +602,7 @@ test('sao lưu: tạo bản sao lưu, đọc lại có làm sạch, tóm tắt, 
   const store = { settings: { dryRun: false, intervalMin: 15 }, rules: { bannedKeywords: ['spam'] }, postRules: {}, groupRules: { g1: { name: 'G1', rules: {}, postRules: {} } }, templates: [{ id: 't1', name: 'Mẫu', text: 'Chào', groupIds: ['g1'] }], profiles, state: { x: 1 }, log: [1] };
   const b = BG.makeBackup(store, { version: '0.10.0', now: Date.parse('2026-10-09T01:00:00Z') });
   assert.deepEqual(Object.keys(b.data), ['settings', 'rules', 'postRules', 'groupRules', 'templates']); // không có state / nhật ký / hồ sơ
-  assert.deepEqual([b.app, b.format, b.version, b.exportedAt], ['BeinGroup', 1, '0.10.0', '2026-10-09T01:00:00.000Z']);
+  assert.deepEqual([b.app, b.format, b.version, b.exportedAt], ['BeinFusion', 1, '0.10.0', '2026-10-09T01:00:00.000Z']);
   assert.ok(BG.makeBackup(store, { profiles: true }).data.profiles);
   // Đọc lại: bỏ khoá lạ / sai kiểu, giới hạn số
   const r = BG.readBackup(JSON.parse(JSON.stringify({
@@ -624,8 +624,11 @@ test('sao lưu: tạo bản sao lưu, đọc lại có làm sạch, tóm tắt, 
   assert.deepEqual([r.version, r.exportedAt], ['0.10.0', '2026-10-09T01:00:00.000Z']);
   assert.deepEqual(BG.backupSummary(r.data), ['Cài đặt chung (Chạy thử: TẮT)', 'Quy tắc lọc thành viên', 'Quy tắc bài viết', 'Quy tắc riêng: 1 group', 'Mẫu bài: 1']);
   assert.throws(() => BG.readBackup({ app: 'Khác', data: {} }), /Không phải tệp sao lưu/);
-  assert.throws(() => BG.readBackup({ ...b, format: 9 }), /phiên bản BeinGroup mới hơn/);
-  assert.throws(() => BG.readBackup({ app: 'BeinGroup', data: { foo: 1 } }), /không có dữ liệu/);
+  assert.throws(() => BG.readBackup({ ...b, format: 9 }), /phiên bản BeinFusion mới hơn/);
+  assert.throws(() => BG.readBackup({ app: 'BeinFusion', data: { foo: 1 } }), /không có dữ liệu/);
+  // Tệp sao lưu trước khi đổi tên (BeinGroup) vẫn đọc được; tệp của ứng dụng khác thì không
+  assert.equal(BG.readBackup({ app: 'BeinGroup', format: 1, data: { settings: { unansweredHours: 24 } } }).data.settings.unansweredHours, 24);
+  assert.throws(() => BG.readBackup({ app: 'Khac', data: { settings: {} } }), /Không phải tệp sao lưu của BeinFusion/);
   // Gộp hồ sơ: bỏ trùng, thêm người mới
   const incoming = BG.readBackup(BG.makeBackup({ profiles: BG.addViolations(profiles, [{ user: { id: 'u2', username: 'binh' }, type: 'hidden', key: 'hide:9', time: '2026-10-02T00:00:00Z' }]).store }, { profiles: true })).data.profiles;
   const merged = BG.mergeProfiles(profiles, incoming);
@@ -713,7 +716,7 @@ test('tóm tắt tuần: đếm thao tác trong kỳ, thành viên tăng giảm,
   assert.deepEqual(r.detected, { posts: 1, comments: 1 });
   assert.deepEqual(r.violators.map((v) => [v.user.id, v.count, v.types]), [['u1', 2, ['Bị cấm', 'Bài vi phạm quy tắc']], ['u2', 1, ['Nội dung bị ẩn']]]);
   const text = BG.reportText(r);
-  assert.match(text, /^BeinGroup: tóm tắt 7 ngày \(02\/10 → 09\/10\/2026\)/);
+  assert.match(text, /^BeinFusion: tóm tắt 7 ngày \(02\/10 → 09\/10\/2026\)/);
   assert.match(text, /Thành viên: Crypto Life \+40 \(1\.250\) · Food −1 \(3\)/);
   const same = BG.reportText({ ...r, members: [...r.members, { id: 'g9', name: 'Yên', start: 5, end: 5, change: 0 }] });
   assert.match(same, /Food −1 \(3\) · 1 group không đổi/);
@@ -814,7 +817,7 @@ test('vinh danh và theo dõi: xếp hạng thành viên, bài vinh danh, từ k
   assert.match(BG.shoutoutText('', { rows: rows.slice(0, 1), groupName: 'G' }).text, /^Cảm ơn những thành viên tích cực nhất của G tuần qua 🏆\n\n🥇 @an/);
   assert.deepEqual(BG.watchHits('Sàn này LUA DAO, không rút tiền được', ['lừa đảo', 'rút tiền', 'scam', '']), ['lừa đảo', 'rút tiền']);
   assert.deepEqual(BG.watchHits('bình thường', ['lừa đảo']), []);
-  assert.equal(BG.readBackup({ app: 'BeinGroup', data: { settings: { unansweredHours: 500, watchKeywords: ['a', 1] } } }).data.settings.unansweredHours, 72);
+  assert.equal(BG.readBackup({ app: 'BeinFusion', data: { settings: { unansweredHours: 500, watchKeywords: ['a', 1] } } }).data.settings.unansweredHours, 72);
 });
 
 test('Telegram: loại tin, nội dung HTML an toàn, giờ yên lặng, khi nào gửi', () => {
@@ -1124,7 +1127,7 @@ test('thành viên tin cậy: danh sách / số bài được duyệt, bị từ
     { kind: 'member', action: 'approve', status: 'ok', userId: 'u3' },
   ], 100);
   assert.deepEqual(t, { u1: { approved: 2, rejected: 0, username: 'kai', at: 100 }, u2: { approved: 0, rejected: 1, username: 'lan', at: 100 } });
-  assert.equal(BG.readBackup({ app: 'BeinGroup', format: 1, data: { settings: { trustAfterApproved: 500 } } }).data.settings.trustAfterApproved, 100);
+  assert.equal(BG.readBackup({ app: 'BeinFusion', format: 1, data: { settings: { trustAfterApproved: 500 } } }).data.settings.trustAfterApproved, 100);
 });
 
 test('Article: bảng, ảnh, nhắc tên (chỉ người đã chọn), xem trước an toàn; kiểm tra ảnh chưa tải', () => {
@@ -1244,7 +1247,7 @@ test('Lỗi kỹ thuật: làm sạch (không lộ token), gộp lỗi giống n
   for (let i = 0; i < 205; i++) many = BG.pushDiag(many, { where: 'sw', kind: 'js', message: 'lỗi ' + i }, t0 + i);
   assert.equal(many.length, 200);
   const text = BG.diagText(list, { version: '0.22.0', ua: 'Mozilla/5.0 Chrome/141.0.1.2 Safari/537.36', now: t0 });
-  assert.match(text, /^BeinGroup v0\.22\.0 · Chrome\/141\.0\.1\.2 · 07:00 11\/10 \(giờ VN\) · 2 lỗi\n/);
+  assert.match(text, /^BeinFusion v0\.22\.0 · Chrome\/141\.0\.1\.2 · 07:00 11\/10 \(giờ VN\) · 2 lỗi\n/);
   assert.match(text, /\[sw · API\] GET content\/contents\/8f1a2b3c-1111-2222-3333-444455556666 → 500: Lỗi \(×2, lần đầu 07:00 11\/10\)/);
 });
 
@@ -1391,7 +1394,7 @@ test('báo cáo tháng: tháng đang chạy, nhật ký thiếu thì không tín
   assert.deepEqual(r.violators.map((v) => [v.user.username, v.count]), [['spam1', 1]]);
   assert.deepEqual([r.addon.posts, r.addon.measured, r.addon.avg.views], [1, 1, 10]);
   const text = BG.monthlyText(r);
-  assert.match(text, /^BeinGroup: báo cáo Tháng 10\/2026 \(tới 11\/10\) — Crypto Life\n• Thành viên: 1 người vào, 0 người rời \(tháng trước: 0 vào, 0 rời\)\n/);
+  assert.match(text, /^BeinFusion: báo cáo Tháng 10\/2026 \(tới 11\/10\) — Crypto Life\n• Thành viên: 1 người vào, 0 người rời \(tháng trước: 0 vào, 0 rời\)\n/);
   assert.match(text, /• Bài viết: 0 bài · 👁 0 lượt xem/);
   assert.match(text, /• Vi phạm nhiều nhất: Spam \(@spam1\) 1 lần/);
   assert.match(text, /• Đăng qua addon: 1 bài · trung bình mỗi bài 👁 10 · ❤ 2 · 💬 1$/);
@@ -1524,7 +1527,10 @@ test('trang Chat chia thành chat/*.js: chat.html nạp đủ (sau lib, app.js c
   const html = fs.readFileSync(path.join(root, 'chat.html'), 'utf8');
   const loaded = [...html.matchAll(/<script src="(chat\/[\w-]+\.js)"><\/script>/g)].map((m) => m[1]);
   assert.deepEqual(loaded.slice().sort(), fs.readdirSync(path.join(root, 'chat')).filter((f) => f.endsWith('.js')).map((f) => 'chat/' + f).sort());
-  assert.equal(loaded[0], 'chat/core.js');
+  // chat/look-early.js: trong <head>, chạy trước khi vẽ (áp giao diện đã chọn); không khai báo tên chung
+  assert.ok(html.indexOf('chat/look-early.js') < html.indexOf('</head>'));
+  assert.equal(loaded[0], 'chat/look-early.js');
+  assert.equal(loaded[1], 'chat/core.js');
   assert.equal(loaded.at(-1), 'chat/app.js');
   assert.ok(html.indexOf('lib/chat.js') < html.indexOf('chat/core.js'));
   assert.ok(!fs.existsSync(path.join(root, 'chat-app.js')));
@@ -1701,7 +1707,7 @@ test('báo cáo sử dụng: đếm tính năng theo ngày (chỉ lệnh có tê
   assert.equal(
     text,
     [
-      'BeinGroup v0.28.0 · Chrome/141.0.1.2 · báo cáo sử dụng 30 ngày (tới 2026-10-12) · Lan — admin',
+      'BeinFusion v0.28.0 · Chrome/141.0.1.2 · báo cáo sử dụng 30 ngày (tới 2026-10-12) · Lan — admin',
       '• Dùng từ 2026-10-12 · 1 ngày có dùng trong 30 ngày · quản trị 1 community, 2 group',
       '• Đang bật: Chạy thử, Tự ẩn spam, Telegram (có nút)',
       '• Tính năng dùng: Đăng / hẹn giờ bài 2 · Quét tay 1 · Báo cáo tháng 1',
@@ -1789,10 +1795,10 @@ test('việc chờ lâu: quá số giờ, chờ lâu nhất trước, nhắc m�
   const first = BG.pendingReminder(o, ['req:r1', 'req:gone']);
   assert.deepEqual([first.fresh.map((x) => x.key), first.reminded], [['appr:p1', 'appr:p3'], ['appr:p1', 'req:r1', 'appr:p3']]);
   assert.deepEqual(BG.pendingReminder(o, first.reminded).fresh, []);
-  assert.deepEqual(BG.pendingText(o, { hours: 24, now }), { title: 'BeinGroup: 3 việc chờ quá 24 giờ', message: '1 yêu cầu tham gia (Food), 2 bài chờ duyệt (Crypto Life). Lâu nhất đã chờ 3 ngày. Bấm để xử lý.' });
+  assert.deepEqual(BG.pendingText(o, { hours: 24, now }), { title: 'BeinFusion: 3 việc chờ quá 24 giờ', message: '1 yêu cầu tham gia (Food), 2 bài chờ duyệt (Crypto Life). Lâu nhất đã chờ 3 ngày. Bấm để xử lý.' });
   assert.deepEqual([BG.waitText(26 * 3600e3), BG.waitText(47.9 * 3600e3), BG.waitText(50 * 3600e3)], ['26 giờ', '47 giờ', '2 ngày']);
   assert.equal(BG.telegramKind('bg-pending'), 'queue');
-  assert.equal(BG.readBackup({ app: 'BeinGroup', data: { settings: { pendingHours: 999, remindPending: false } } }).data.settings.pendingHours, 168);
+  assert.equal(BG.readBackup({ app: 'BeinFusion', data: { settings: { pendingHours: 999, remindPending: false } } }).data.settings.pendingHours, 168);
 });
 
 test('bộ nhớ: dung lượng từng khoá (lớn nhất trước, có tên dễ đọc), báo khi sắp đầy 10 MB hoặc quá lớn dù không giới hạn; manifest xin unlimitedStorage', () => {
@@ -2009,4 +2015,27 @@ test('chatTreeOrder: kênh chính trước, group con ngay dưới group cha, th
   assert.deepEqual(BG.chatTreeOrder(loop).map((c) => c.id).sort(), ['x', 'y']);
   assert.equal(list[0].depth, undefined);
   assert.deepEqual(BG.chatTreeOrder(null), []);
+});
+
+test('Giao diện trang Chat: lựa chọn đọc từ máy được làm sạch; màu Silk luôn đủ rõ', () => {
+  assert.deepEqual(BG.cleanChatLook(null), BG.CHAT_LOOK_DEFAULT);
+  assert.equal(BG.CHAT_LOOK_DEFAULT.ui, 'theme'); // mặc định: BeinFusion theme
+  const x = BG.cleanChatLook({ ui: 'silk', mode: 'tím', accent: '#2f6feb', style: 'flat', size: 'xl', avatars: false, times: 'có', extra: 1 });
+  assert.deepEqual(x, { ...BG.CHAT_LOOK_DEFAULT, ui: 'silk', accent: '#2F6FEB', style: 'flat', avatars: false });
+  assert.equal(BG.cleanChatLook({ accent: 'red' }).accent, '#6B3FE7');
+  assert.equal(BG.mixHex('#000000', '#FFFFFF', 0.5), '#808080');
+  assert.ok(Math.abs(BG.contrastRatio('#000000', '#FFFFFF') - 21) < 0.01);
+  // Mọi màu có sẵn, sáng và tối: chữ màu nhấn ≥ 4,5:1 trên bề mặt; chữ trên nút màu nhấn ≥ 4,5:1 (trừ màu rất sáng thì ≥ 3)
+  for (const [hex] of BG.CHAT_ACCENTS)
+    for (const dark of [false, true]) {
+      const c = BG.chatLookColors(hex, dark);
+      assert.ok(BG.contrastRatio(c.accentText, dark ? '#18171F' : '#FFFFFF') >= 4.5, `${hex} ${dark}`);
+      assert.ok(BG.contrastRatio(c.onAccent, c.accent) >= 3, `${hex} ${dark} nút`);
+    }
+  // Màu tự chọn quá nhạt (vàng chanh): chữ màu nhấn được làm đậm, chữ trên nút là màu tối
+  const pale = BG.chatLookColors('#E8F06A', false);
+  assert.equal(pale.fixed, true);
+  assert.ok(BG.contrastRatio(pale.accentText, '#FFFFFF') >= 4.5);
+  assert.equal(pale.onAccent, '#14111F');
+  assert.equal(BG.chatLookColors('#6B3FE7', false).fixed, false);
 });

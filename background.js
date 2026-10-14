@@ -1,4 +1,4 @@
-// BeinGroup — service worker (MV3)
+// BeinFusion — service worker (MV3)
 //
 // Mỗi lần quét (chi tiết trong API.md):
 //   1. GET group/me/permissions                       -> các group đang quản trị

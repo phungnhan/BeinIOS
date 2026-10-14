@@ -3,22 +3,34 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>BeinGroup Chat</title>
+  <title>BeinFusion Chat</title>
   <link rel="icon" href="icons/icon48.png" />
   <link rel="stylesheet" href="chat.css" />
+  <link rel="stylesheet" href="chat/silk.css" />
+  <!-- Giao diện đã chọn (BeinFusion theme / Silk): áp trước khi vẽ -->
+  <script src="chat/look-early.js"></script>
 </head>
 <body>
   <div class="app" id="app">
+    <!-- BeinFusion Silk (Lụa): thanh cộng đồng (chat/silk.js); ẩn ở BeinFusion theme -->
+    <nav class="srail" id="rail" aria-label="Mục chat"></nav>
     <aside class="side" id="side" aria-label="Danh sách cuộc trò chuyện">
       <header class="side-head">
         <div class="brand">
           <img src="icons/icon48.png" alt="" width="30" height="30" />
-          <div><b>Chat</b><span>BeinGroup</span></div>
+          <div><b>Chat</b><span>BeinFusion</span></div>
         </div>
-        <a class="icon-btn" href="dashboard.html" title="Mở Dashboard" aria-label="Mở Dashboard">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 13h6V4H4v9Zm0 7h6v-5H4v5Zm8 0h8v-9h-8v9Zm0-16v5h8V4h-8Z" /></svg>
-        </a>
+        <span class="head-actions">
+          <button type="button" class="icon-btn" id="btn-look" title="Giao diện" aria-label="Giao diện" aria-haspopup="dialog">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 0 0 0 18c.83 0 1.5-.67 1.5-1.5 0-.39-.15-.74-.39-1.01-.23-.26-.38-.61-.38-.99 0-.83.67-1.5 1.5-1.5H16c2.76 0 5-2.24 5-5 0-4.42-4.03-8-9-8Zm-5.5 9a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3Zm3-4a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3Zm5 0a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3Zm3 4a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3Z" /></svg>
+          </button>
+          <a class="icon-btn" href="dashboard.html" title="Mở Dashboard" aria-label="Mở Dashboard">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 13h6V4H4v9Zm0 7h6v-5H4v5Zm8 0h8v-9h-8v9Zm0-16v5h8V4h-8Z" /></svg>
+          </a>
+        </span>
       </header>
+      <!-- Silk: tên mục đang chọn (Tất cả / Tin nhắn riêng / một cộng đồng) -->
+      <div class="space-head" id="space-head"></div>
       <label class="search">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10.5 4a6.5 6.5 0 0 1 5.2 10.4l4.2 4.2-1.4 1.4-4.2-4.2A6.5 6.5 0 1 1 10.5 4Zm0 2a4.5 4.5 0 1 0 0 9 4.5 4.5 0 0 0 0-9Z" /></svg>
         <input id="q" type="search" placeholder="Tìm cuộc trò chuyện…" aria-label="Tìm cuộc trò chuyện" autocomplete="off" />
@@ -191,12 +203,38 @@
           <span id="t-edit-text"></span>
           <button type="button" class="icon-btn sm" id="t-edit-x" aria-label="Huỷ sửa">✕</button>
         </div>
-        <div class="t-box">
-          <textarea id="t-text" rows="1" maxlength="4000" placeholder="Viết bình luận…" aria-label="Nội dung bình luận"></textarea>
-          <button type="submit" class="send" id="t-send" aria-label="Gửi bình luận" disabled>
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.4 20.4 21 12 3.4 3.6 3.4 10l12.6 2-12.6 2z" /></svg>
-          </button>
+        <!-- Ô bình luận đủ như ô gõ chính: đính kèm (chọn / dán / kéo thả), xem trước, định dạng, câu trả lời mẫu, emoji -->
+        <div class="t-box" id="t-box">
+          <div class="attach-list" id="t-attach-list" hidden></div>
+          <div class="t-edit">
+            <textarea id="t-text" rows="1" maxlength="4000" placeholder="Viết bình luận…" aria-label="Nội dung bình luận"></textarea>
+            <div class="preview md" id="t-preview" hidden></div>
+          </div>
+          <div class="fmt t-fmt" id="t-fmt" role="toolbar" aria-label="Định dạng chữ trong bình luận" hidden>
+            <button type="button" class="tb" data-md="bold" title="In đậm (Ctrl + B)" aria-label="In đậm"><b>B</b></button>
+            <button type="button" class="tb" data-md="italic" title="In nghiêng (Ctrl + I)" aria-label="In nghiêng"><i>I</i></button>
+            <button type="button" class="tb" data-md="strike" title="Gạch ngang (Ctrl + Shift + X)" aria-label="Gạch ngang"><s>S</s></button>
+            <span class="sep" aria-hidden="true"></span>
+            <button type="button" class="tb" data-md="link" title="Chèn link (Ctrl + Alt + K)" aria-label="Chèn link"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1ZM8 13h8v-2H8v2Zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4c2.76 0 5-2.24 5-5s-2.24-5-5-5Z" /></svg></button>
+            <button type="button" class="tb" data-md="code" title="Mã (Ctrl + Alt + C)" aria-label="Mã"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9.4 16.6 4.8 12l4.6-4.6L8 6l-6 6 6 6 1.4-1.4Zm5.2 0 4.6-4.6-4.6-4.6L16 6l6 6-6 6-1.4-1.4Z" /></svg></button>
+            <button type="button" class="tb" data-md="quote" title="Trích dẫn (Ctrl + Shift + 9)" aria-label="Trích dẫn"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 17h3l2-4V7H5v6h3Zm8 0h3l2-4V7h-6v6h3Z" /></svg></button>
+            <span class="sep" aria-hidden="true"></span>
+            <button type="button" class="tb" data-md="ul" title="Danh sách (Ctrl + Shift + 8)" aria-label="Danh sách"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10.5c-.83 0-1.5.67-1.5 1.5s.67 1.5 1.5 1.5 1.5-.67 1.5-1.5-.67-1.5-1.5-1.5Zm0-6c-.83 0-1.5.67-1.5 1.5S3.17 7.5 4 7.5 5.5 6.83 5.5 6 4.83 4.5 4 4.5Zm0 12c-.83 0-1.5.68-1.5 1.5s.68 1.5 1.5 1.5 1.5-.68 1.5-1.5-.67-1.5-1.5-1.5ZM7 19h14v-2H7v2Zm0-6h14v-2H7v2Zm0-8v2h14V5H7Z" /></svg></button>
+            <button type="button" class="tb" data-md="ol" title="Danh sách số (Ctrl + Shift + 7)" aria-label="Danh sách số"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 17h2v.5H3v1h1v.5H2v1h3v-4H2v1Zm1-9h1V4H2v1h1v3Zm-1 3h1.8L2 13.1v.9h3v-1H3.2L5 10.9V10H2v1Zm5-6v2h14V5H7Zm0 14h14v-2H7v2Zm0-6h14v-2H7v2Z" /></svg></button>
+          </div>
+          <div class="t-tools">
+            <button type="button" class="tb aa" id="t-btn-fmt" title="Ẩn / hiện thanh định dạng" aria-pressed="false">Aa</button>
+            <button type="button" class="tb" id="t-btn-preview" title="Xem trước" aria-label="Xem trước bình luận" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5c5 0 9 4.5 10 7-1 2.5-5 7-10 7S3 14.5 2 12c1-2.5 5-7 10-7Zm0 2.5a4.5 4.5 0 1 0 0 9 4.5 4.5 0 0 0 0-9Zm0 2a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5Z" /></svg></button>
+            <span class="t-fill"></span>
+            <button type="button" class="tb" id="t-btn-replies" title="Câu trả lời mẫu (hoặc gõ / ở đầu ô)" aria-label="Câu trả lời mẫu" aria-haspopup="listbox"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2Zm0 16H5V5h14v14ZM7 7h10v2H7V7Zm0 4h10v2H7v-2Zm0 4h7v2H7v-2Z" /></svg></button>
+            <button type="button" class="tb" id="t-btn-attach" title="Đính kèm tệp (tối đa 10 tệp, mỗi tệp 25 MB; dán hoặc kéo thả ảnh vào cũng được)" aria-label="Đính kèm tệp vào bình luận"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16.5 6v11.5c0 2.21-1.79 4-4 4s-4-1.79-4-4V5c0-1.38 1.12-2.5 2.5-2.5s2.5 1.12 2.5 2.5v10.5c0 .55-.45 1-1 1s-1-.45-1-1V6H10v9.5c0 1.38 1.12 2.5 2.5 2.5s2.5-1.12 2.5-2.5V5c0-2.21-1.79-4-4-4S7 2.79 7 5v12.5c0 3.04 2.46 5.5 5.5 5.5s5.5-2.46 5.5-5.5V6h-1.5Z" /></svg></button>
+            <button type="button" class="tb" id="t-btn-emoji" title="Biểu tượng cảm xúc" aria-label="Biểu tượng cảm xúc" aria-haspopup="dialog" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.5 11a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Zm-7 0a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Zm3.5 7c2.28 0 4.22-1.66 5-4H7c.78 2.34 2.72 4 5 4Zm0-16C6.47 2 2 6.48 2 12s4.47 10 10 10 10-4.48 10-10S17.52 2 12 2Zm0 18c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8Z" /></svg></button>
+            <button type="submit" class="send" id="t-send" aria-label="Gửi bình luận" disabled>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.4 20.4 21 12 3.4 3.6 3.4 10l12.6 2-12.6 2z" /></svg>
+            </button>
+          </div>
         </div>
+        <input type="file" id="t-file-input" multiple hidden />
         <div class="hint">Enter để gửi · Shift + Enter xuống dòng</div>
       </form>
     </aside>
@@ -230,6 +268,9 @@
       <div class="t-body" id="p-body"><div id="p-list"></div></div>
     </aside>
   </div>
+
+  <!-- Bảng Giao diện (chat/look.js) -->
+  <dialog id="look" class="look" aria-labelledby="look-title"></dialog>
 
   <!-- Thả biểu cảm -->
   <div class="react-pop" id="react-pop" role="dialog" aria-label="Thả biểu cảm" hidden></div>
@@ -329,6 +370,8 @@
   <script src="chat/links.js"></script>
   <script src="chat/side.js"></script>
   <script src="chat/cache.js"></script>
+  <script src="chat/look.js"></script>
+  <script src="chat/silk.js"></script>
   <script src="chat/app.js"></script>
 </body>
 </html>

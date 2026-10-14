@@ -1,4 +1,4 @@
-// Kiểm thử trên addon thật: nạp BeinGroup vào Chrome headless (CDP qua pipe, Extensions.loadUnpacked),
+// Kiểm thử trên addon thật: nạp BeinFusion vào Chrome headless (CDP qua pipe, Extensions.loadUnpacked),
 // nạp dữ liệu mẫu vào storage, mở Dashboard và popup thật, đi qua từng tab, báo lỗi JavaScript.
 // Không đăng nhập Beincom, không thao tác gì lên tài khoản (lần quét lúc cài sẽ báo cần đăng nhập).
 //
@@ -165,6 +165,18 @@ try {
   await sleep(1500);
   result.chat = await evalIn(cSid, `({ title: document.getElementById('empty-title').textContent, enable: !document.getElementById('btn-enable').hidden })`);
   if (result.chat.title !== 'Kết nối Chat Beincom' || !result.chat.enable) fail('Trang Chat: không hiện nút Kết nối Chat Beincom');
+  // BeinFusion Silk: font Be Vietnam Pro gói trong addon (fonts/) tải được — chữ tiếng Việt và Latin, 4 độ đậm
+  result.silk = await evalIn(cSid, `(async () => {
+    setLook({ ui: 'silk' });
+    const W = ['400', '500', '600', '700'];
+    const loaded = (await Promise.all(W.map((w) => document.fonts.load(w + ' 14px "Be Vietnam Pro"', 'Tiếng Việt Aa')))).map((f) => f.length);
+    const ok = W.every((w) => document.fonts.check(w + ' 14px "Be Vietnam Pro"', 'Tiếng Việt Aa'));
+    const ui = document.documentElement.dataset.ui;
+    const font = getComputedStyle(document.body).fontFamily;
+    setLook({ ui: 'theme' });
+    return { ui, loaded, ok, font };
+  })()`);
+  if (result.silk.ui !== 'silk' || !result.silk.ok || result.silk.loaded.some((n) => n < 2) || !/Be Vietnam Pro/.test(result.silk.font)) fail('BeinFusion Silk: không tải được font Be Vietnam Pro trong addon');
 } catch (e) {
   fail(e.message);
 }
@@ -172,7 +184,7 @@ try {
 result.problems = problems;
 if (problems.length) fail(`${problems.length} lỗi JavaScript`);
 console.log(JSON.stringify(result, null, 2));
-console.log(failed ? '✖ Có lỗi' : '✔ Addon thật chạy được: service worker, Dashboard (8 tab), popup, trang Chat');
+console.log(failed ? '✖ Có lỗi' : '✔ Addon thật chạy được: service worker, Dashboard (8 tab), popup, trang Chat (cả BeinFusion Silk, font gói sẵn)');
 chrome.kill();
 await sleep(300);
 try {

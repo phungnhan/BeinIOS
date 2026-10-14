@@ -53,7 +53,7 @@ async function doGroupSettingAct({ key, value, groupIds = [], source = 'manual' 
 async function doRestore({ data, keepDry = false }) {
   let parsed;
   try {
-    parsed = BG.readBackup({ app: 'BeinGroup', format: BG.BACKUP_FORMAT, data });
+    parsed = BG.readBackup({ app: 'BeinFusion', format: BG.BACKUP_FORMAT, data });
   } catch (e) {
     return { status: 'error', message: e.message };
   }

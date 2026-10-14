@@ -69,7 +69,7 @@ async function exportRules() {
   const store = await chrome.storage.local.get(['rules', 'postRules', 'groupRules']);
   const file = BG.makeBackup(store, { version: chrome.runtime.getManifest().version });
   const url = URL.createObjectURL(new Blob([JSON.stringify(file, null, 2)], { type: 'application/json' }));
-  const a = el('a', { href: url, download: `beingroup-quy-tac-${fileStamp()}.json` });
+  const a = el('a', { href: url, download: `beinfusion-quy-tac-${fileStamp()}.json` });
   document.body.append(a);
   a.click();
   a.remove();

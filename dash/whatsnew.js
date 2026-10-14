@@ -35,7 +35,7 @@ async function checkWhatsNew() {
     await chrome.storage.local.set({ seenVersion: version });
     return false;
   }
-  showWhatsNew(list, `BeinGroup đã cập nhật lên v${version}`);
+  showWhatsNew(list, `BeinFusion đã cập nhật lên v${version}`);
   return true;
 }
 
@@ -44,5 +44,5 @@ $('btn-whatsnew').addEventListener('click', async (e) => {
   e.preventDefault();
   const sections = await loadChangelog();
   if (!sections.length) return toast('Không đọc được danh sách thay đổi', 'err');
-  showWhatsNew(sections.slice(0, 3), 'Có gì mới ở BeinGroup');
+  showWhatsNew(sections.slice(0, 3), 'Có gì mới ở BeinFusion');
 });

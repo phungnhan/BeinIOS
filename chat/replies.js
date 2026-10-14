@@ -72,9 +72,16 @@ $('btn-replies').addEventListener('click', () => {
   t.focus();
   slashSuggest(t, { start: t.selectionStart, term: '', button: true });
 });
+$('t-btn-replies').addEventListener('click', () => {
+  const t = $('t-text');
+  if (t.disabled || !S.thread) return;
+  if (!$('mention-pop').hidden && M.mode === 'slash') return closeMention();
+  t.focus();
+  slashSuggest(t, { start: t.selectionStart, term: '', button: true });
+});
 // Bấm ra ngoài: đóng danh sách câu mẫu
 document.addEventListener('mousedown', (e) => {
-  if (M.mode === 'slash' && !e.target.closest('#mention-pop, #btn-replies')) closeMention();
+  if (M.mode === 'slash' && !e.target.closest('#mention-pop, #btn-replies, #t-btn-replies')) closeMention();
 });
 $('rp-add').addEventListener('click', () => addCannedReply());
 $('rp-from').addEventListener('click', () => {

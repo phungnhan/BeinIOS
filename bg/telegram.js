@@ -55,7 +55,7 @@ async function doTelegramReport({ title, text }) {
   const cfg = await loadTelegram();
   if (!telegramOn(cfg)) return { status: 'error', message: 'Chưa bật gửi về Telegram — cài ở tab Quy tắc & cài đặt' };
   if (!String(text || '').trim()) return { status: 'error', message: 'Báo cáo trống' };
-  const r = await tgSend(cfg, String(title || 'BeinGroup'), String(text), '', 3500);
+  const r = await tgSend(cfg, String(title || 'BeinFusion'), String(text), '', 3500);
   return r.ok ? { status: 'ok' } : { status: 'error', message: tgError(r) };
 }
 
@@ -63,7 +63,7 @@ async function doTelegramReport({ title, text }) {
 async function doTelegramTest({ token, chatId }) {
   if (!BG.validTelegramToken(token)) return { status: 'error', message: 'Token bot chưa đúng dạng (vd 123456789:AA…)' };
   if (!String(chatId || '').trim()) return { status: 'error', message: 'Chưa có chat ID — bấm Lấy chat ID trước' };
-  const r = await tgSend({ token, chatId }, 'BeinGroup: tin thử ✓', 'Từ giờ addon sẽ gửi thông báo vào đây.', BG.SITE);
+  const r = await tgSend({ token, chatId }, 'BeinFusion: tin thử ✓', 'Từ giờ addon sẽ gửi thông báo vào đây.', BG.SITE);
   return r.ok ? { status: 'ok' } : { status: 'error', message: tgError(r) };
 }
 
@@ -198,7 +198,7 @@ async function flushTelegramItems() {
     map[token] = { kind: it.kind, data: it.data, acts: it.acts || null, text, url: it.url || '', at: Date.now(), chatId, messageId: r.body?.result?.message_id ?? null };
   }
   if (status.ok && items.length > batch.length) {
-    const r = await tgApi(cfg.token, 'sendMessage', { chat_id: chatId, text: BG.telegramText(`BeinGroup: còn ${items.length - batch.length} việc mới khác`, 'Mở Dashboard để xử lý.', ''), parse_mode: 'HTML' });
+    const r = await tgApi(cfg.token, 'sendMessage', { chat_id: chatId, text: BG.telegramText(`BeinFusion: còn ${items.length - batch.length} việc mới khác`, 'Mở Dashboard để xử lý.', ''), parse_mode: 'HTML' });
     if (!r.ok) status = { at: Date.now(), ok: false, error: tgError(r) };
   }
   await chrome.storage.local.set({ tgActions: map, telegramStatus: status });

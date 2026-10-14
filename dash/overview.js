@@ -242,4 +242,4 @@ $('btn-weekly-copy').addEventListener('click', async () => {
     toast('Không sao chép được — dùng Tải tệp .txt', 'err');
   }
 });
-$('btn-weekly-file').addEventListener('click', () => download(`beingroup-tom-tat-${weeklyDays}-ngay-${BG.vnDay()}.txt`, BG.reportText(currentReport()), 'text/plain;charset=utf-8'));
+$('btn-weekly-file').addEventListener('click', () => download(`beinfusion-tom-tat-${weeklyDays}-ngay-${BG.vnDay()}.txt`, BG.reportText(currentReport()), 'text/plain;charset=utf-8'));

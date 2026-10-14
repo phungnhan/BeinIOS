@@ -22,6 +22,7 @@ function addPosts(list) {
 async function openChat(id, { fromHash = false } = {}) {
   const c = findChat(id);
   if (!c) return;
+  silkFollow(c);
   if (S.view === 'threads') hideThreads();
   // Số tin chưa đọc lúc bấm mở (đánh dấu đã đọc sẽ đặt lại về 0)
   const unread = c.unread || 0;
@@ -270,8 +271,8 @@ function messageEl(p, { first, last, mine, inThread = false, mode = inThread ? '
   return el(
     'div',
     { class: `msg${mine ? ' me' : ''}${first ? ' first' : ''}${last ? ' last' : ''}${p.deleted ? ' deleted' : ''}${p.pending ? ' pending' : ''}${!mine && mentionsMe(p.message) ? ' mentioned' : ''}`, id: { main: 'm-', thread: 't-', pins: 'p-', search: 's-' }[mode] + p.id },
-    mine ? null : Object.assign(avatar({ name, chatId: p.user.chatId, pictureAt: p.user.pictureAt, size: 'sm' }), { onclick: () => openPerson(p.user), title: 'Xem ' + name }),
-    el('div', { class: 'msg-col' }, (first || mode === 'pins' || mode === 'search') && !mine ? el('div', { class: 'msg-name', style: nameColor(p.user.chatId) }, el('button', { type: 'button', class: 'nm-btn', title: 'Hồ sơ, vi phạm, xử lý', onclick: () => openPerson(p.user) }, name), ...badges(p.user), el('time', { title: fullTime(p.createAt) }, mode === 'pins' ? shortTime(p.createAt) + ' ' + hm(p.createAt) : hm(p.createAt))) : null, bubble, mode === 'search' ? null : reactsEl(p), mode === 'main' && !p.deleted && p.replyCount > 0 ? threadBar(p) : null),
+    Object.assign(avatar({ name, chatId: p.user.chatId, pictureAt: p.user.pictureAt, size: 'sm' }), { onclick: () => openPerson(p.user), title: 'Xem ' + name }),
+    el('div', { class: 'msg-col' }, first || mode === 'pins' || mode === 'search' ? el('div', { class: 'msg-name', style: nameColor(p.user.chatId) }, el('button', { type: 'button', class: 'nm-btn', title: 'Hồ sơ, vi phạm, xử lý', onclick: () => openPerson(p.user) }, name), ...badges(p.user), el('time', { title: fullTime(p.createAt) }, mode === 'pins' ? shortTime(p.createAt) + ' ' + hm(p.createAt) : hm(p.createAt))) : null, bubble, mode === 'search' ? null : reactsEl(p), mode === 'main' && !p.deleted && p.replyCount > 0 ? threadBar(p) : null),
     tools,
   );
 }

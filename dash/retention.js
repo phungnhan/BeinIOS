@@ -214,7 +214,7 @@ function exportRetention() {
     { label: 'Bài', get: (m) => v.activity[m.user.id]?.posts || 0 },
     { label: 'Bình luận (addon đã đọc)', get: (m) => v.activity[m.user.id]?.comments || 0 },
   ]);
-  download(`beingroup-thanh-vien-moi-${ret.raw.days}-ngay-${BG.vnDay()}.csv`, csv, 'text/csv;charset=utf-8');
+  download(`beinfusion-thanh-vien-moi-${ret.raw.days}-ngay-${BG.vnDay()}.csv`, csv, 'text/csv;charset=utf-8');
 }
 
 $('ret-group').addEventListener('change', (e) => {

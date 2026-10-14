@@ -358,7 +358,7 @@ function exportProfiles() {
     { label: 'Lúc', get: (r) => r.sum.last.time },
     { label: 'Group', get: (r) => r.sum.last.group },
   ];
-  download(`beingroup-ho-so-vi-pham-${BG.vnDay()}.csv`, BG.toCsv(rows, cols), 'text/csv;charset=utf-8');
+  download(`beinfusion-ho-so-vi-pham-${BG.vnDay()}.csv`, BG.toCsv(rows, cols), 'text/csv;charset=utf-8');
 }
 
 function renderMembers() {
@@ -509,7 +509,7 @@ async function exportMembers() {
       { label: 'Số group đã vào', get: (u) => u.totalJoinedGroup ?? '' },
     ]);
     const slug = BG.norm(g.name).replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'group';
-    download(`beingroup-thanh-vien-${slug}-${BG.vnDay()}.csv`, csv, 'text/csv;charset=utf-8');
+    download(`beinfusion-thanh-vien-${slug}-${BG.vnDay()}.csv`, csv, 'text/csv;charset=utf-8');
   }
   if (error) toast(`Dừng ở ${rows.length} người vì lỗi: ${error}`, 'err');
   else if (job.cancel) toast(`Đã dừng, xuất ${rows.length} người đã tải.`, 'warn');

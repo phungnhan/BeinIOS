@@ -1240,8 +1240,8 @@ test('quét báo cáo lần sau: báo báo cáo mới và bài mới bị gắn 
   env.listeners.alarm({ name: 'beingroup-scan' });
   await scan(env, 'popup');
   assert.deepEqual(env.notifications.map((n) => [n.id, n.title, n.message]), [
-    ['bg-reports', 'BeinGroup: 1 báo cáo vi phạm mới', 'Food Research'],
-    ['bg-autoflag', 'BeinGroup: 1 bài bị Beincom gắn cờ vi phạm', 'Crypto Life - General'], // f1 đã biết
+    ['bg-reports', 'BeinFusion: 1 báo cáo vi phạm mới', 'Food Research'],
+    ['bg-autoflag', 'BeinFusion: 1 bài bị Beincom gắn cờ vi phạm', 'Crypto Life - General'], // f1 đã biết
   ]);
   assert.equal(env.badge.text, '10'); // 3 yêu cầu + 2 bài chờ duyệt + 3 báo cáo + 2 bài gắn cờ (f1 ở 2 group đếm một lần)
   env.listeners.notif('bg-reports');
@@ -2137,7 +2137,7 @@ test('nhắc việc chờ lâu: yêu cầu tham gia / bài chờ duyệt quá s�
   await scan(env, 'popup');
   let r = env.notifications.filter((n) => n.id === 'bg-pending');
   assert.equal(r.length, 1);
-  assert.equal(r[0].title, 'BeinGroup: 4 việc chờ quá 24 giờ');
+  assert.equal(r[0].title, 'BeinFusion: 4 việc chờ quá 24 giờ');
   assert.equal(r[0].message, '3 yêu cầu tham gia (Food Research), 1 bài chờ duyệt (Crypto Life). Lâu nhất đã chờ 28 giờ. Bấm để xử lý.');
   assert.deepEqual(env.storage.state.pendingReminded, ['appr:p1', 'req:jr1', 'req:jr2', 'req:jr3']);
   // Lần sau: không nhắc lại; một yêu cầu đã xử lý trên web thì rơi khỏi danh sách; yêu cầu cũ mới thấy thì nhắc riêng
@@ -2151,7 +2151,7 @@ test('nhắc việc chờ lâu: yêu cầu tham gia / bài chờ duyệt quá s�
   await scan(env, 'popup');
   r = env.notifications.filter((n) => n.id === 'bg-pending');
   assert.equal(r.length, 2);
-  assert.equal(r[1].title, 'BeinGroup: 1 việc chờ quá 24 giờ');
+  assert.equal(r[1].title, 'BeinFusion: 1 việc chờ quá 24 giờ');
   assert.match(r[1].message, /^1 yêu cầu tham gia \(Food Research\)\. Lâu nhất đã chờ 3 ngày/);
   // Chưa đủ giờ: không nhắc; quét bấm tay: không nhắc; tắt: không nhắc
   const early = makeEnv({ data: fixture(), now, settings: { remindPending: true, pendingHours: 48 } });
@@ -2255,7 +2255,7 @@ test('Telegram: quét tự động gửi tin đúng loại (kể cả khi tắt 
   assert.equal(sent.length, 1);
   assert.equal(sent[0].token, TG_TOKEN);
   assert.deepEqual([sent[0].body.chat_id, sent[0].body.parse_mode, sent[0].body.disable_web_page_preview], ['42', 'HTML', true]);
-  assert.match(sent[0].body.text, /^<b>BeinGroup: 1 bài mới vi phạm quy tắc<\/b>\nTác giả t5\n<a href="https:\/\/group\.beincom\.com\/posts\/t5">Mở trên Beincom<\/a>$/);
+  assert.match(sent[0].body.text, /^<b>BeinFusion: 1 bài mới vi phạm quy tắc<\/b>\nTác giả t5\n<a href="https:\/\/group\.beincom\.com\/posts\/t5">Mở trên Beincom<\/a>$/);
   assert.equal(env.storage.telegramStatus.ok, true);
   // Bấm Quét ngay trên Dashboard: không gửi
   env.data.timeline.gCL.unshift(post('t6', 'Lại t.me/xyz', { publishedAt: nowIso(1) }));
@@ -2862,7 +2862,7 @@ test('chat Beincom: mỗi lần quét đọc tin mới trong kênh chat group (c
   assert.deepEqual(st.impostors.map((x) => [x.user.id, x.source]), [['u70', 'chat']]);
   const n = (id) => env.notifications.filter((x) => x.id === id);
   assert.equal(n('bg-chat').length, 1);
-  assert.equal(n('bg-chat')[0].title, 'BeinGroup: 1 tin vi phạm, 1 đợt spam, 1 tài khoản giống admin trong chat');
+  assert.equal(n('bg-chat')[0].title, 'BeinFusion: 1 tin vi phạm, 1 đợt spam, 1 tài khoản giống admin trong chat');
   // Tin nhắn riêng: chỉ số tin chưa đọc và người gửi, không đọc nội dung
   assert.deepEqual(st.chatUnread.dms.map((d) => [d.channelId, d.unread, d.user?.fullname, d.url]), [['dm1', 2, 'Người 50', 'https://group.beincom.com/chat-home?teamName=direct&channel=dm1']]);
   assert.equal(st.chatUnread.mentions, 2);
@@ -2883,8 +2883,8 @@ test('chat Beincom: mỗi lần quét đọc tin mới trong kênh chat group (c
   assert.ok(!calls.some((x) => x.includes('channels/chSub/posts')));
   assert.equal(env.storage.state.chatMessages[0].id, 'p7');
   assert.equal(n('bg-chat').length, 1); // p7 không vi phạm
-  assert.deepEqual([n('bg-chat-dm').length, n('bg-chat-dm')[0]?.title, n('bg-chat-dm')[0]?.message], [1, 'BeinGroup: 1 tin nhắn riêng mới', 'Từ: Người 50. Bấm để mở chat.']);
-  assert.equal(n('bg-chat-mention')[0].title, 'BeinGroup: bạn được nhắc tên 3 lần trong chat');
+  assert.deepEqual([n('bg-chat-dm').length, n('bg-chat-dm')[0]?.title, n('bg-chat-dm')[0]?.message], [1, 'BeinFusion: 1 tin nhắn riêng mới', 'Từ: Người 50. Bấm để mở chat.']);
+  assert.equal(n('bg-chat-mention')[0].title, 'BeinFusion: bạn được nhắc tên 3 lần trong chat');
   // Tắt: không gọi chat; chưa cho phép chat.beincom.com: báo lỗi, không gọi
   const off = makeEnv({ data: { ...fixture(), chat: chatFixture(now) }, now });
   await scan(off);
@@ -3434,7 +3434,7 @@ test('chat Beincom: báo bình luận mới ở thread đang theo dõi (lần đ
   c.threads.tCL = [th('t1', now + 5e3, { unread_replies: 2, unread_mentions: 1 }), th('t2', now + 6e3)];
   env.listeners.alarm({ name: 'beingroup-scan' });
   await scan(env, 'popup');
-  assert.deepEqual([n().length, n()[0].title, n()[0].message], [1, 'BeinGroup: 2 thread bạn theo dõi có bình luận mới (1 lần nhắc bạn)', 'Người tham gia: Người 70, Người 71. Bấm để xem.']);
+  assert.deepEqual([n().length, n()[0].title, n()[0].message], [1, 'BeinFusion: 2 thread bạn theo dõi có bình luận mới (1 lần nhắc bạn)', 'Người tham gia: Người 70, Người 71. Bấm để xem.']);
   assert.ok(!JSON.stringify(env.notifications).includes('bí mật') && !JSON.stringify(env.storage.state).includes('bí mật') && !JSON.stringify(env.storage.chatNotify).includes('bí mật'));
   env.listeners.alarm({ name: 'beingroup-scan' });
   await scan(env, 'popup');
@@ -3468,7 +3468,7 @@ test('chat Beincom: tin nhắn chat bị báo cáo ở community mình làm ch�
   c.chatReports.cFood.push(rp('r2', 81, { message: 'Inbox  nhận\nquà' }));
   env.listeners.alarm({ name: 'beingroup-scan' });
   await scan(env, 'popup');
-  assert.deepEqual([n('bg-chat-reports').length, n('bg-chat-reports')[0].title, n('bg-chat-reports')[0].message], [1, 'BeinGroup: 1 tin chat bị báo cáo mới', 'Food Research · Food Research — Người 81: Inbox nhận quà']);
+  assert.deepEqual([n('bg-chat-reports').length, n('bg-chat-reports')[0].title, n('bg-chat-reports')[0].message], [1, 'BeinFusion: 1 tin chat bị báo cáo mới', 'Food Research · Food Research — Người 81: Inbox nhận quà']);
   // Ẩn: theo Chạy thử (không gọi), ghi Nhật ký
   const item = (id, n) => ({ id, snippet: 'Tin ' + id, member: { id: 'u' + n, username: 'user' + n, fullname: 'Người ' + n } });
   const dry = await env.send({ type: 'chatReportAct', communityId: 'cFood', communityName: 'Food Research', action: 'hide', items: [item('r1', 80)] });
@@ -3521,8 +3521,8 @@ test('chat Beincom: kiểm tra nhanh mỗi phút — tin nhắn riêng / nhắc 
   const before = env.calls.length;
   const q = await env.send({ type: 'chatQuick' });
   assert.deepEqual([q.status, q.checked], ['ok', true]);
-  assert.deepEqual([n('bg-chat-dm').length, n('bg-chat-dm')[0].title, n('bg-chat-dm')[0].message], [1, 'BeinGroup: 1 tin nhắn riêng mới', 'Từ: Người 51. Bấm để mở chat.']);
-  assert.deepEqual([n('bg-chat-mention').length, n('bg-chat-mention')[0].title], [1, 'BeinGroup: bạn được nhắc tên 4 lần trong chat']);
+  assert.deepEqual([n('bg-chat-dm').length, n('bg-chat-dm')[0].title, n('bg-chat-dm')[0].message], [1, 'BeinFusion: 1 tin nhắn riêng mới', 'Từ: Người 51. Bấm để mở chat.']);
+  assert.deepEqual([n('bg-chat-mention').length, n('bg-chat-mention')[0].title], [1, 'BeinFusion: bạn được nhắc tên 4 lần trong chat']);
   const quick = env.calls.slice(before);
   assert.ok(quick.every((x) => x.startsWith('GET chat:')) && quick.length <= 8, quick.join('\n'));
   // Lần quét sau không báo lại cùng tin
@@ -3554,7 +3554,7 @@ test('chat Beincom: thông báo tách lời mời trò chuyện với tin nhắn
   const st = env.storage.state;
   assert.deepEqual(st.chatUnread.dms.map((d) => [d.channelId, !!d.request]), [['dm1', false], ['rq1', true]]);
   const n = env.notifications.filter((x) => x.id === 'bg-chat-dm');
-  assert.deepEqual([n.length, n[0]?.title, n[0]?.message], [1, 'BeinGroup: 1 tin nhắn riêng mới, 1 lời mời trò chuyện mới', 'Từ: Người 50, Người 90 (lời mời). Bấm để mở chat.']);
+  assert.deepEqual([n.length, n[0]?.title, n[0]?.message], [1, 'BeinFusion: 1 tin nhắn riêng mới, 1 lời mời trò chuyện mới', 'Từ: Người 50, Người 90 (lời mời). Bấm để mở chat.']);
 });
 
 test('trang Chat: tin của kênh (trang mới nhất, cũ hơn, mới từ lần trước), gửi tin, trả lời, đánh dấu đã đọc, xoá tin', async () => {
@@ -3645,9 +3645,9 @@ test('Bảo vệ community: mỗi lần quét đọc người vào (chỉ đọc
   assert.match(st.impostors[1].reason, /Kai Crypto \(@kaicrypto\)/);
   const n = (id) => env.notifications.filter((x) => x.id === id);
   assert.equal(n('bg-impostor').length, 1);
-  assert.equal(n('bg-impostor')[0].title, 'BeinGroup: 2 tài khoản giống admin vừa vào');
+  assert.equal(n('bg-impostor')[0].title, 'BeinFusion: 2 tài khoản giống admin vừa vào');
   assert.equal(n('bg-burst-gCL').length, 1);
-  assert.equal(n('bg-burst-gCL')[0].title, 'BeinGroup: 35 người vào Crypto Life trong 60 phút');
+  assert.equal(n('bg-burst-gCL')[0].title, 'BeinFusion: 35 người vào Crypto Life trong 60 phút');
   assert.match(n('bg-burst-gCL')[0].message, /^22 người không có ảnh đại diện/);
   assert.deepEqual([st.bursts.gCL.count, st.recentJoins.gCL.length, st.joinSince.gCL], [35, 35, now]);
   assert.equal(writes(env).length, 0);
@@ -3657,7 +3657,7 @@ test('Bảo vệ community: mỗi lần quét đọc người vào (chỉ đọc
   await scan(env, 'popup');
   assert.equal(n('bg-burst-gCL').length, 1);
   assert.equal(n('bg-impostor').length, 2);
-  assert.equal(n('bg-impostor')[1].title, 'BeinGroup: 1 tài khoản giống admin vừa vào');
+  assert.equal(n('bg-impostor')[1].title, 'BeinFusion: 1 tài khoản giống admin vừa vào');
   // Không phải: bỏ khỏi danh sách, không báo lại; bỏ đợt vào ồ ạt
   assert.equal((await env.send({ type: 'guardAct', action: 'notImpostor', userIds: ['u801'] })).status, 'ok');
   assert.deepEqual([env.storage.state.impostors.some((x) => x.user.id === 'u801'), env.storage.state.impostorOk], [false, ['u801']]);
@@ -3960,7 +3960,7 @@ test('báo cáo tháng: đọc nhật ký từ đầu tháng trước tới nay,
   assert.equal(r.topAuthors.find((a) => a.actor.id === 'u213').isNew, true);
   assert.deepEqual([r.actions.approved, r.actions.postsHidden], [1, 0]);
   const text = BG.monthlyText(r);
-  assert.match(text, new RegExp(`^BeinGroup: báo cáo ${r.label} — Crypto Life\\n`));
+  assert.match(text, new RegExp(`^BeinFusion: báo cáo ${r.label} — Crypto Life\\n`));
   assert.match(text, /• Thành viên: 11\.998 → 12\.000 \(\+2\) · 3 người vào, 1 người rời \(tháng trước: 2 vào, 1 rời\)/);
   assert.match(text, /• Người mới trong tháng: 3 người · còn ở lại 2 \(67%\) · 1 tự rời · đã đăng bài 1/);
   assert.match(text, /• Bài viết: 31 bài \(tháng trước 10, \+210%\)/);
@@ -3991,7 +3991,7 @@ test('báo cáo tháng: đầu tháng (7 ngày đầu) quét tự động thì n
   await scan(env, 'popup');
   const monthly = env.notifications.filter((n) => n.id === 'bg-monthly');
   assert.equal(monthly.length, 1);
-  assert.equal(monthly[0].title, 'BeinGroup: báo cáo Tháng 10/2026');
+  assert.equal(monthly[0].title, 'BeinFusion: báo cáo Tháng 10/2026');
   assert.match(monthly[0].message, /^1 thành viên được duyệt · 1 bài \/ bình luận đã ẩn\. Bấm để xem/);
   assert.equal(env.storage.state.monthlyKey, '2026-10');
   // Quét lại: không nhắc nữa
@@ -4016,14 +4016,14 @@ test('báo cáo tháng: đầu tháng (7 ngày đầu) quét tự động thì n
   assert.equal(late.notifications.filter((n) => n.id === 'bg-monthly').length, 0);
 
   // Gửi báo cáo về Telegram: cần bật Telegram; tin dài hơn tin thường (tới 3500 ký tự)
-  assert.match((await env.send({ type: 'telegramReport', title: 'BeinGroup: báo cáo', text: 'x' })).message, /Chưa bật gửi về Telegram/);
+  assert.match((await env.send({ type: 'telegramReport', title: 'BeinFusion: báo cáo', text: 'x' })).message, /Chưa bật gửi về Telegram/);
   env.storage.telegram = { enabled: true, token: '123456789:' + 'A'.repeat(35), chatId: '42' };
   const long = '• dòng báo cáo\n'.repeat(150);
-  const sent = await env.send({ type: 'telegramReport', title: 'BeinGroup: báo cáo Tháng 10/2026 — Crypto Life', text: long });
+  const sent = await env.send({ type: 'telegramReport', title: 'BeinFusion: báo cáo Tháng 10/2026 — Crypto Life', text: long });
   assert.equal(sent.status, 'ok');
   const msg = env.tg.at(-1);
   assert.equal(msg.method, 'sendMessage');
-  assert.ok(msg.body.text.startsWith('<b>BeinGroup: báo cáo Tháng 10/2026 — Crypto Life</b>\n'));
+  assert.ok(msg.body.text.startsWith('<b>BeinFusion: báo cáo Tháng 10/2026 — Crypto Life</b>\n'));
   assert.ok(msg.body.text.length > 2000 && msg.body.text.length < 3700);
 });
 
@@ -4060,7 +4060,7 @@ test('Tự kiểm tra: gọi thử các API đọc (chỉ GET), báo dùng đư�
   const ob = Object.fromEntries(odd.items.map((x) => [x.id, x]));
   assert.deepEqual([ob.tagPerm.status, ob.settings.status], ['fail', 'skip']);
   assert.match(ob.tagPerm.detail, /đổi API/);
-  assert.match(BG.selfCheckText(odd, { version: '0.26.0', ua: 'Chrome/141.0.0.0' }), /^BeinGroup v0\.26\.0 · Chrome\/141\.0\.0\.0 · tự kiểm tra Food Research lúc .*\n\d+ dùng được · \d+ bỏ qua · 1 lỗi\n[\s\S]*✗ Quyền quản lý tag: Beincom trả dữ liệu khác trước — có thể đã đổi API \[200 group\/me\/permissions\/can-cud-tags\/community\/cFood\]/);
+  assert.match(BG.selfCheckText(odd, { version: '0.26.0', ua: 'Chrome/141.0.0.0' }), /^BeinFusion v0\.26\.0 · Chrome\/141\.0\.0\.0 · tự kiểm tra Food Research lúc .*\n\d+ dùng được · \d+ bỏ qua · 1 lỗi\n[\s\S]*✗ Quyền quản lý tag: Beincom trả dữ liệu khác trước — có thể đã đổi API \[200 group\/me\/permissions\/can-cud-tags\/community\/cFood\]/);
   await new Promise((res) => setImmediate(res));
   assert.equal((env.storage.diagLog || []).length, diagBefore);
   // Telegram đã bật: hỏi getMe (không gửi tin)
@@ -4157,7 +4157,7 @@ test('nhắc người mới: soạn sẵn sáng thứ Hai (chỉ đọc, không 
   assert.deepEqual([d.groupId, d.groupName, d.users.map((u) => u.id)], ['gCL', 'Crypto Life', ['u501', 'u505']]);
   const n = env.notifications.filter((x) => x.id === 'bg-nudge');
   assert.equal(n.length, 1);
-  assert.equal(n[0].title, 'BeinGroup: soạn sẵn bài nhắc 2 người mới');
+  assert.equal(n[0].title, 'BeinFusion: soạn sẵn bài nhắc 2 người mới');
   assert.ok(!writes(env).some((c) => c.startsWith('POST content/posts')), 'không tự đăng');
   // Cùng tuần: không soạn lại
   env.listeners.alarm({ name: 'beingroup-scan' });
@@ -4225,7 +4225,7 @@ test('Tự kiểm tra mỗi ngày: lần quét tự động đầu ngày kiểm 
   await scan(env2, 'popup');
   const n = env2.notifications.filter((x) => x.id === 'bg-selfcheck');
   assert.equal(n.length, 1);
-  assert.equal(n[0].title, 'BeinGroup: 1 tính năng ngừng chạy');
+  assert.equal(n[0].title, 'BeinFusion: 1 tính năng ngừng chạy');
   assert.match(n[0].message, /^Food Research: Quyền quản lý tag\. Có thể Beincom vừa thay đổi/);
   assert.deepEqual(env2.storage.selfCheckAuto.regressions, [{ groupId: 'gFood', group: 'Food Research', items: ['Quyền quản lý tag'] }]);
   assert.equal(env2.storage.selfCheck.group.id, 'gFood');
@@ -4255,7 +4255,7 @@ test('bài thảo luận: sáng thứ Hai soạn sẵn câu hỏi + giờ gợi 
   assert.equal(d.text, BG.DEFAULT_PROMPTS[0]);
   const n = env.notifications.filter((x) => x.id === 'bg-prompt');
   assert.equal(n.length, 1);
-  assert.equal(n[0].title, 'BeinGroup: bài thảo luận tuần này cho Crypto Life');
+  assert.equal(n[0].title, 'BeinFusion: bài thảo luận tuần này cho Crypto Life');
   assert.match(n[0].message, /\(gợi ý Thứ Tư 20:00\)\.$/);
   assert.ok(!writes(env).some((c) => c.startsWith('POST content/posts')), 'không tự đăng');
   env.listeners.notif('bg-prompt');
@@ -4302,7 +4302,7 @@ test('việc đầu tuần: nhiều việc định kỳ cùng lần quét thì g
   assert.ok(!ids.some((id) => ['bg-welcome', 'bg-weekly', 'bg-prompt'].includes(id)), 'không thông báo riêng từng việc');
   const dg = env.notifications.filter((n) => n.id === 'bg-digest');
   assert.equal(dg.length, 1);
-  assert.equal(dg[0].title, 'BeinGroup: việc đầu tuần (3 việc)');
+  assert.equal(dg[0].title, 'BeinFusion: việc đầu tuần (3 việc)');
   assert.match(dg[0].message, /^• Chào thành viên mới và vinh danh thành viên tích cực\n• Tóm tắt tuần: .+\n• Bài thảo luận cho Crypto Life \(gợi ý Thứ Tư 20:00\)\nBấm để làm lần lượt\.$/);
   assert.deepEqual(env.storage.periodicDigest.items.map((x) => x.kind), ['welcome', 'weekly', 'prompt']);
   assert.equal(env.tg.filter((t) => t.method === 'sendMessage' && /việc đầu tuần/.test(t.body.text)).length, 1);
@@ -4376,7 +4376,7 @@ test('báo cáo sử dụng tự gửi: chỉ khi có nơi nhận, admin đồng
   assert.equal(env.data.usagePosts.length, 1);
   const p = env.data.usagePosts[0];
   assert.deepEqual([p.url, p.method, p.headers['Content-Type']], [URL, 'POST', 'text/plain;charset=utf-8']);
-  assert.deepEqual([p.body.app, p.body.v, p.body.installId, p.body.version, p.body.note, p.body.communities], ['BeinGroup', 1, 'id-ngau-nhien-01', '0.0.0-test', 'Lan', 2]);
+  assert.deepEqual([p.body.app, p.body.v, p.body.installId, p.body.version, p.body.note, p.body.communities], ['BeinGroup', 1, 'id-ngau-nhien-01', '0.0.0-test', 'Lan', 2]); // mã cũ: nơi nhận đã triển khai kiểm tra mã này
   assert.ok(p.body.features['Quét tay'] >= 1);
   const raw = JSON.stringify(p.body);
   for (const secret of ['Crypto Life', 'Food Research', 'gCL', 'gFood', 'user1', 'Người 1']) assert.ok(!raw.includes(secret), 'lộ ' + secret);

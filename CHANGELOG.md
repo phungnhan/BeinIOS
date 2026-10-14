@@ -1,6 +1,36 @@
-# Có gì mới ở BeinGroup
+# Có gì mới ở BeinFusion
 
 Mỗi bản một mục, bản mới nhất ở trên. Dashboard tự hiện các mục mới sau khi cập nhật (bấm "Có gì mới" ở cuối trang để xem lại).
+
+## v0.50.0 — 15/10/2026
+- **Ô viết bình luận (khung thread) đủ chức năng như ô gõ tin chính**:
+  - **Aa** để hiện / ẩn thanh định dạng: đậm, nghiêng, gạch, link, mã, trích dẫn, danh sách. Thanh mặc định ẩn cho gọn; addon nhớ lựa chọn của bạn.
+  - **Xem trước** bình luận như sau khi gửi.
+  - **Câu trả lời mẫu** (nút, hoặc gõ / ở đầu ô).
+  - **Đính kèm tệp**: chọn tệp, dán ảnh, hoặc kéo thả vào khung bình luận; tối đa 10 tệp, mỗi tệp 25 MB, tải lên ngay. Bình luận có tệp chờ máy chủ xong mới hiện, rồi tự đọc lại để có ảnh.
+  - **Biểu tượng cảm xúc** chèn vào đúng ô bình luận.
+  - Đổi sang thread khác hoặc đóng khung thì tệp đang chờ được bỏ.
+- Hộp biểu cảm / độ ưu tiên mở hẳn phía trên khung gõ, không che chữ đang gõ và tệp đính kèm.
+
+## v0.49.0 — 15/10/2026
+- **Giao diện mới cho trang Chat: BeinFusion Silk (Lụa).** Bấm nút **Giao diện** (bảng màu, ở đầu danh sách bên trái) để chọn **BeinFusion theme** (mặc định, như cũ) hoặc **BeinFusion Silk (Lụa)**.
+  - Silk có **thanh cộng đồng** bên trái: Tất cả, Tin nhắn riêng, Thread đang theo dõi, ảnh từng cộng đồng (chấm đỏ khi có tin chưa đọc, số khi có người nhắc tên bạn). Nút Giao diện, Dashboard và ảnh tài khoản ở góc phải hàng tiêu đề của cột danh sách.
+  - Bấm một cộng đồng thì cột bên cạnh chỉ còn kênh của cộng đồng đó, theo cây group con. Mở một cuộc trò chuyện ở mục khác (từ thông báo, kết quả tìm) thì tự chuyển sang mục của nó.
+  - Nền xám tím rất nhạt, bề mặt trắng, một màu nhấn. Ô soạn tin nổi và gọn: thanh định dạng, nút độ ưu tiên hiện khi bấm Aa.
+  - Tuỳ chỉnh riêng cho Silk:
+    - Chế độ màu (theo hệ thống / sáng / tối), màu nhấn (6 màu + tự chọn; màu quá nhạt thì chữ màu nhấn tự đậm lên cho rõ).
+    - Kiểu tin: Bong bóng, hoặc Phẳng (tên + chữ như Slack, tin của bạn cũng nằm bên trái).
+    - Mật độ (thoáng / gọn), cỡ chữ (nhỏ / vừa / lớn), font (**Be Vietnam Pro** — font làm riêng cho tiếng Việt, gói sẵn trong addon, hoặc font hệ thống), độ rộng tin (vừa / toàn màn hình), hiện ảnh đại diện, hiện giờ từng tin.
+  - Lựa chọn lưu trong máy và áp ngay khi mở trang, không nháy giao diện cũ. Trên điện thoại, thanh cộng đồng nằm dưới đáy màn hình.
+  - Mọi phần của trang Chat theo kiểu Silk, cả sáng lẫn tối: trang Thread đang theo dõi (thread chưa đọc nền nhấn nhạt), khung bình luận / tìm tin / tin ghim, hồ sơ người, hộp hỏi, hộp biểu cảm, gợi ý @tên, xem ảnh, lời mời trò chuyện.
+  - Font Be Vietnam Pro gói trong thư mục `fonts/` (12 tệp woff2, ~185 KB: 4 độ đậm × tiếng Việt / Latin mở rộng / Latin; trình duyệt chỉ tải phần cần). Giấy phép SIL Open Font License, kèm `fonts/OFL.txt`.
+  - Silk được làm một lần ở bản này. Các bản sau chỉ cập nhật BeinFusion theme; Silk chỉ được chỉnh khi có yêu cầu.
+
+## v0.48.0 — 15/10/2026
+- **Addon đổi tên thành BeinFusion** (trước đây là BeinGroup). Tên mới có ở thanh công cụ trình duyệt, Dashboard, cửa sổ nhỏ, trang Chat, thông báo và tin Telegram ("BeinFusion: …"), tệp xuất ra (`beinfusion-sao-luu-….json`, `beinfusion-nhat-ky-….csv`…) và tệp cài (`BeinFusion-v….zip`).
+- Không mất gì khi cập nhật: cài đặt, quy tắc, nhật ký, hồ sơ, ảnh đã lưu vẫn giữ nguyên. Tệp sao lưu cũ của BeinGroup vẫn khôi phục được.
+- Cập nhật bản mới: chép đè vào **đúng thư mục addon cũ**, kể cả khi thư mục đó vẫn tên BeinGroup. Đừng tải thư mục mới thành một addon thứ hai, vì trình duyệt sẽ coi đó là addon khác với dữ liệu trống.
+- Giao diện trang Chat hiện tại từ nay có tên **BeinFusion theme** (mặc định).
 
 ## v0.47.0 — 14/10/2026
 - **Trang Chat nhanh hơn.** Đo thật từ máy bạn: mỗi lệnh đọc chat của Beincom mất 0,1–0,7 giây và dao động thất thường; một trang 40 tin nặng khoảng 0,4 MB. Phần addon tự vẽ chỉ mất vài chục mili giây. Vì vậy bản này tập trung vào bớt phải chờ mạng:

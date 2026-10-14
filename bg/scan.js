@@ -276,7 +276,7 @@ function applyGroups(state, next, groups, notifyAllowed, now) {
   const fresh = BG.newRequestIds(groups, state.knownRequestIds);
   if (state.knownRequestIds && fresh.length && notifyAllowed) {
     const withNew = groups.filter((g) => g.requests.some((r) => fresh.includes(r.id)));
-    notify('bg-requests', `BeinGroup: ${fresh.length} yêu cầu tham gia mới`, withNew.map((g) => g.name).join(', '), withNew[0] ? BG.memberRequestsUrl(withNew[0]) : '');
+    notify('bg-requests', `BeinFusion: ${fresh.length} yêu cầu tham gia mới`, withNew.map((g) => g.name).join(', '), withNew[0] ? BG.memberRequestsUrl(withNew[0]) : '');
   }
   next.knownRequestIds = [...fresh, ...(state.knownRequestIds || [])].slice(0, KNOWN_MAX);
 
@@ -288,7 +288,7 @@ function applyGroups(state, next, groups, notifyAllowed, now) {
     approvalCounts[g.communityId] = g.approvalCount;
     const before = prevPosts[g.communityId];
     if (before != null && g.approvalCount > before && notifyAllowed) {
-      notify(`bg-posts-${g.communityId}`, `BeinGroup: ${g.approvalCount} bài chờ duyệt`, g.communityName || g.name, BG.contentApprovalUrl(g.communityId));
+      notify(`bg-posts-${g.communityId}`, `BeinFusion: ${g.approvalCount} bài chờ duyệt`, g.communityName || g.name, BG.contentApprovalUrl(g.communityId));
     }
   }
   next.approvalCounts = approvalCounts;
@@ -305,7 +305,7 @@ function applyPosts(state, next, posts, ctx, notifyAllowed, now) {
   const badNew = list.filter((p) => freshSet.has(p.id) && !p.isHidden && BG.evaluatePostIn(p, ctx).verdict === 'bad');
   noteViolations(BG.violationsFromPosts(badNew, 'rule', (p) => BG.evaluatePostIn(p, ctx).reasons.filter((x) => x.level !== 'ok').map((x) => x.text).join('; ')));
   if (state.recentPosts && badNew.length && notifyAllowed) {
-    notify('bg-flagged', `BeinGroup: ${badNew.length} bài mới vi phạm quy tắc`, badNew.map((p) => p.actor.fullname || p.actor.username).join(', '), BG.postUrl(badNew[0]));
+    notify('bg-flagged', `BeinFusion: ${badNew.length} bài mới vi phạm quy tắc`, badNew.map((p) => p.actor.fullname || p.actor.username).join(', '), BG.postUrl(badNew[0]));
   }
   next.recentPosts = list;
   // Lần quét bài đầu tiên chỉ ghi nhận: không coi là mới (để tự ẩn, theo dõi từ khoá)
@@ -322,7 +322,7 @@ function applyComments(state, next, scan, ctx, notifyAllowed, now) {
   const badNew = list.filter((c) => freshSet.has(c.id) && !c.isHidden && BG.evaluatePostIn(c, ctx).verdict === 'bad');
   noteViolations(BG.violationsFromComments(badNew, reasons));
   if (state.recentComments && badNew.length && notifyAllowed) {
-    notify('bg-comments', `BeinGroup: ${badNew.length} bình luận mới vi phạm quy tắc`, badNew.map((c) => c.actor.fullname || c.actor.username).join(', '), BG.commentUrl(badNew[0]));
+    notify('bg-comments', `BeinFusion: ${badNew.length} bình luận mới vi phạm quy tắc`, badNew.map((c) => c.actor.fullname || c.actor.username).join(', '), BG.commentUrl(badNew[0]));
   }
   next.recentComments = list;
   // Chỉ nhớ số bình luận đã đọc của các bài còn trong danh sách bài mới
@@ -345,7 +345,7 @@ function notifyWatch(state, next, settings, items, notifyAllowed) {
   const words = [...new Set(hits.flatMap((h) => h.words))];
   notify(
     'bg-watch',
-    `BeinGroup: ${hits.length} bài / bình luận nhắc tới ${words.slice(0, 3).join(', ')}${words.length > 3 ? '…' : ''}`,
+    `BeinFusion: ${hits.length} bài / bình luận nhắc tới ${words.slice(0, 3).join(', ')}${words.length > 3 ? '…' : ''}`,
     hits
       .slice(0, 3)
       .map((h) => `${h.x.actor.fullname || h.x.actor.username}: ${String(h.x.title || h.x.text || '').replace(/\s+/g, ' ').slice(0, 60)}`)
@@ -363,7 +363,7 @@ function remindUnanswered(state, next, settings, notifyAllowed) {
   if (!due.length) return;
   notify(
     'bg-unanswered',
-    `BeinGroup: ${due.length} bài chưa ai trả lời quá ${settings.unansweredHours} giờ`,
+    `BeinFusion: ${due.length} bài chưa ai trả lời quá ${settings.unansweredHours} giờ`,
     due
       .slice(0, 3)
       .map((p) => `${p.actor.fullname || p.actor.username}: ${String(p.title || p.text || '').replace(/\s+/g, ' ').slice(0, 60)}`)
@@ -455,7 +455,7 @@ async function autoHideSpam({ settings, state, next, log, ctx, posts = [], comme
   const r = await performActions(items, settings);
   pushLog(log, r.entries);
   const n = markHidden(next, r.entries);
-  if (n && notifyAllowed) notify('bg-autohide', `BeinGroup: đã tự ẩn ${n} bài / bình luận`, 'Có link tới tên miền cấm. Xem ở tab Nhật ký.');
+  if (n && notifyAllowed) notify('bg-autohide', `BeinFusion: đã tự ẩn ${n} bài / bình luận`, 'Có link tới tên miền cấm. Xem ở tab Nhật ký.');
 }
 
 // Báo đợt spam mới (mỗi đợt một lần)
@@ -473,7 +473,7 @@ function notifyWaves(state, next, settings, postRules, notifyAllowed, now) {
     const first = w.items[0];
     const item = first.kind === 'comment' ? (next.recentComments || []).find((c) => c.id === first.id) : (next.recentPosts || []).find((p) => p.id === first.id);
     const url = item ? (first.kind === 'comment' ? BG.commentUrl(item) : BG.postUrl(item)) : '';
-    notify('bg-wave', `BeinGroup: phát hiện ${fresh.length > 1 ? fresh.length + ' đợt' : 'đợt'} spam`, `${w.type === 'link' ? w.label : '"' + w.label + '"'}: ${w.accounts.length} tài khoản, ${w.items.length} bài / bình luận`, url);
+    notify('bg-wave', `BeinFusion: phát hiện ${fresh.length > 1 ? fresh.length + ' đợt' : 'đợt'} spam`, `${w.type === 'link' ? w.label : '"' + w.label + '"'}: ${w.accounts.length} tài khoản, ${w.items.length} bài / bình luận`, url);
   }
   next.knownWaves = [...new Set([...waves.map((w) => w.key), ...(state.knownWaves || [])])].slice(0, 200);
   return state.recentPosts ? fresh : []; // đợt mới (để gửi tin có nút về Telegram)
@@ -482,8 +482,8 @@ function notifyWaves(state, next, settings, postRules, notifyAllowed, now) {
 // Báo cáo chờ xử lý mới và bài mới bị Beincom gắn cờ (lần quét đầu chỉ ghi nhận)
 function applyReports(state, next, groups, notifyAllowed) {
   const kinds = [
-    { field: 'reportIds', known: 'knownReportIds', id: 'bg-reports', title: (n) => `BeinGroup: ${n} báo cáo vi phạm mới`, name: (g) => g.communityName || g.name },
-    { field: 'flaggedIds', known: 'knownFlaggedIds', id: 'bg-autoflag', title: (n) => `BeinGroup: ${n} bài bị Beincom gắn cờ vi phạm`, name: (g) => g.name },
+    { field: 'reportIds', known: 'knownReportIds', id: 'bg-reports', title: (n) => `BeinFusion: ${n} báo cáo vi phạm mới`, name: (g) => g.communityName || g.name },
+    { field: 'flaggedIds', known: 'knownFlaggedIds', id: 'bg-autoflag', title: (n) => `BeinFusion: ${n} bài bị Beincom gắn cờ vi phạm`, name: (g) => g.name },
   ];
   for (const k of kinds) {
     const known = new Set(state[k.known] || []);
@@ -606,7 +606,7 @@ async function doScan({ source = 'alarm' } = {}) {
       }
     }
     if ((autoMembers || autoPosts) && notifyAllowed) {
-      notify('bg-auto', 'BeinGroup: đã tự xử lý', [autoMembers && `${autoMembers} yêu cầu tham gia theo quy tắc`, autoPosts && `duyệt ${autoPosts} bài của thành viên tin cậy`].filter(Boolean).join(', '));
+      notify('bg-auto', 'BeinFusion: đã tự xử lý', [autoMembers && `${autoMembers} yêu cầu tham gia theo quy tắc`, autoPosts && `duyệt ${autoPosts} bài của thành viên tin cậy`].filter(Boolean).join(', '));
     }
 
     const freshRequestIds = applyGroups(state, next, groups, notifyAllowed, now);
@@ -635,7 +635,7 @@ async function doScan({ source = 'alarm' } = {}) {
     }
   } else if (result.status === 'need_login' && notifyAllowed && state.lastLoginNotifyDay !== BG.vnDay()) {
     next.lastLoginNotifyDay = BG.vnDay();
-    notify('bg-login', 'BeinGroup: cần đăng nhập', 'Bấm để mở Beincom và đăng nhập lại.', BG.SITE + '/login');
+    notify('bg-login', 'BeinFusion: cần đăng nhập', 'Bấm để mở Beincom và đăng nhập lại.', BG.SITE + '/login');
   }
 
   // Việc định kỳ (đầu tuần / đầu tháng) trong lần quét này: gom lại, nhiều việc thì gộp một thông báo (cuối khối)
@@ -646,7 +646,7 @@ async function doScan({ source = 'alarm' } = {}) {
   const welcomeKey = settings.welcomeReminder && notifyAllowed && result.status === 'ok' ? BG.weeklyDue(state.welcomeKey, now) : null;
   if (welcomeKey) {
     next.welcomeKey = welcomeKey;
-    due({ id: 'bg-welcome', kind: 'welcome', title: 'BeinGroup: việc đầu tuần', message: 'Chào thành viên mới và vinh danh thành viên tích cực tuần qua. Bấm để addon tìm sẵn người và soạn bài.', line: 'Chào thành viên mới và vinh danh thành viên tích cực' });
+    due({ id: 'bg-welcome', kind: 'welcome', title: 'BeinFusion: việc đầu tuần', message: 'Chào thành viên mới và vinh danh thành viên tích cực tuần qua. Bấm để addon tìm sẵn người và soạn bài.', line: 'Chào thành viên mới và vinh danh thành viên tích cực' });
   }
 
   // Sáng thứ Hai: thông báo tóm tắt tuần trước (một lần mỗi tuần, chỉ khi quét tự động thành công)
@@ -662,7 +662,7 @@ async function doScan({ source = 'alarm' } = {}) {
       a.reportsHandled && `${a.reportsHandled} báo cáo đã xử lý`,
       a.removed + a.banned && `${a.removed + a.banned} người bị xoá / cấm`,
     ].filter(Boolean);
-    due({ id: 'bg-weekly', kind: 'weekly', title: 'BeinGroup: tóm tắt tuần qua', message: parts.length ? parts.join(' · ') : 'Tuần qua yên ả, không có việc gì cần xử lý. Bấm để xem chi tiết.', line: 'Tóm tắt tuần: ' + (parts.length ? parts.join(' · ') : 'tuần qua yên ả') });
+    due({ id: 'bg-weekly', kind: 'weekly', title: 'BeinFusion: tóm tắt tuần qua', message: parts.length ? parts.join(' · ') : 'Tuần qua yên ả, không có việc gì cần xử lý. Bấm để xem chi tiết.', line: 'Tóm tắt tuần: ' + (parts.length ? parts.join(' · ') : 'tuần qua yên ả') });
   }
 
   // Sáng thứ Hai: soạn sẵn danh sách nhắc người mới chưa hoạt động (chỉ đọc; người dùng tự xem rồi đăng)
@@ -672,7 +672,7 @@ async function doScan({ source = 'alarm' } = {}) {
     const nd = await prepareNudge({ groupId: settings.nudgeGroupId, now }).catch(() => null);
     if (nd?.status === 'ok' && nd.users.length) {
       await chrome.storage.local.set({ nudgeDraft: { id: 'nd' + now, groupId: nd.group.id, groupName: nd.group.name, at: now, users: nd.users, joined: nd.joined } });
-      due({ id: 'bg-nudge', kind: 'nudge', title: `BeinGroup: soạn sẵn bài nhắc ${nd.users.length} người mới`, message: `${nd.group.name}: ${nd.users.length} người mới vào chưa thấy đăng bài hay bình luận. Bấm để xem bài nhắc, sửa rồi tự đăng hoặc hẹn giờ.`, line: `Bài nhắc ${nd.users.length} người mới chưa hoạt động (${nd.group.name})` });
+      due({ id: 'bg-nudge', kind: 'nudge', title: `BeinFusion: soạn sẵn bài nhắc ${nd.users.length} người mới`, message: `${nd.group.name}: ${nd.users.length} người mới vào chưa thấy đăng bài hay bình luận. Bấm để xem bài nhắc, sửa rồi tự đăng hoặc hẹn giờ.`, line: `Bài nhắc ${nd.users.length} người mới chưa hoạt động (${nd.group.name})` });
     }
   }
 
@@ -691,7 +691,7 @@ async function doScan({ source = 'alarm' } = {}) {
       a.reportsHandled && `${a.reportsHandled} báo cáo đã xử lý`,
       a.removed + a.banned && `${a.removed + a.banned} người bị xoá / cấm`,
     ].filter(Boolean);
-    due({ id: 'bg-monthly', kind: 'monthly', title: `BeinGroup: báo cáo ${range.label}`, message: (parts.length ? parts.join(' · ') + '. ' : '') + 'Bấm để xem báo cáo từng community: thành viên, người mới có ở lại không, bài viết, tương tác.', line: `Báo cáo ${range.label}` });
+    due({ id: 'bg-monthly', kind: 'monthly', title: `BeinFusion: báo cáo ${range.label}`, message: (parts.length ? parts.join(' · ') + '. ' : '') + 'Bấm để xem báo cáo từng community: thành viên, người mới có ở lại không, bài viết, tương tác.', line: `Báo cáo ${range.label}` });
   }
 
   // Sáng thứ Hai: soạn sẵn bài thảo luận (câu hỏi mồi + giờ gợi ý); người dùng tự xem rồi hẹn giờ
@@ -701,7 +701,7 @@ async function doScan({ source = 'alarm' } = {}) {
     const draft = await preparePrompt({ groupId: settings.promptGroupId, now }).catch(() => null);
     if (draft) {
       await chrome.storage.local.set({ promptDraft: draft });
-      due({ id: 'bg-prompt', kind: 'prompt', title: `BeinGroup: bài thảo luận tuần này cho ${draft.groupName}`, message: `"${draft.text.slice(0, 120)}" — bấm để xem, sửa rồi hẹn giờ${draft.suggestAt ? ` (gợi ý ${BG.slotLabel(draft.suggestAt)})` : ''}.`, line: `Bài thảo luận cho ${draft.groupName}${draft.suggestAt ? ` (gợi ý ${BG.slotLabel(draft.suggestAt)})` : ''}` });
+      due({ id: 'bg-prompt', kind: 'prompt', title: `BeinFusion: bài thảo luận tuần này cho ${draft.groupName}`, message: `"${draft.text.slice(0, 120)}" — bấm để xem, sửa rồi hẹn giờ${draft.suggestAt ? ` (gợi ý ${BG.slotLabel(draft.suggestAt)})` : ''}.`, line: `Bài thảo luận cho ${draft.groupName}${draft.suggestAt ? ` (gợi ý ${BG.slotLabel(draft.suggestAt)})` : ''}` });
     }
   }
 
@@ -709,7 +709,7 @@ async function doScan({ source = 'alarm' } = {}) {
   if (periodic.length === 1) notify(periodic[0].id, periodic[0].title, periodic[0].message);
   else if (periodic.length > 1) {
     await chrome.storage.local.set({ periodicDigest: { at: now, items: periodic.map(({ kind, line }) => ({ kind, line })), done: {}, dismissed: false } });
-    notify('bg-digest', `BeinGroup: việc đầu tuần (${periodic.length} việc)`, periodic.map((x) => '• ' + x.line).join('\n') + '\nBấm để làm lần lượt.');
+    notify('bg-digest', `BeinFusion: việc đầu tuần (${periodic.length} việc)`, periodic.map((x) => '• ' + x.line).join('\n') + '\nBấm để làm lần lượt.');
   }
 
   // Tự kiểm tra mỗi ngày: lần quét tự động thành công đầu tiên trong ngày (chạy sau khi lưu, cần danh sách group mới)
