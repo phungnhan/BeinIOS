@@ -4,18 +4,23 @@
 
 const isImage = (f) => /^image\//.test(f.mime || '') && !!(f.url || f.mini);
 const miniSrc = (f) => (f.mini ? 'data:image/jpeg;base64,' + f.mini.replace(/[^A-Za-z0-9+/=]/g, '') : '');
-const V = { list: [], i: 0, zoom: false, swipe: null, swiped: false };
+const V = { list: [], i: 0, zoom: false, swipe: null, swiped: false, mode: 'main' };
 
-// Mọi ảnh của cuộc trò chuyện đang mở (cũ → mới)
-function chatImages() {
-  return sortedPosts()
-    .filter((p) => !p.deleted && !p.system)
-    .flatMap((p) => (p.files || []).filter(isImage).map((f) => ({ ...f, post: p })));
+// Ảnh để xem qua lại (cũ → mới): cuộc trò chuyện đang mở, khung bình luận (tin gốc + bình luận), hoặc chỉ tin được bấm
+// (tin ghim, kết quả tìm)
+function chatImages(post, mode) {
+  const t = S.thread;
+  const posts =
+    mode === 'thread' && t ? [t.root, ...[...t.posts.values()].filter((x) => x.id !== t.root.id).sort((a, b) => a.createAt - b.createAt)] : mode === 'main' ? sortedPosts() : post ? [post] : [];
+  return posts.filter((p) => p && !p.deleted && !p.system).flatMap((p) => (p.files || []).filter(isImage).map((f) => ({ ...f, post: p })));
 }
 
-function openViewer(postId, fileId) {
-  V.list = chatImages();
-  V.i = Math.max(0, V.list.findIndex((x) => x.post.id === postId && x.id === fileId));
+function openViewer(post, fileId, mode = 'main') {
+  V.mode = mode;
+  V.list = chatImages(post, mode);
+  // Không thấy ảnh trong danh sách (tin vừa đổi): xem riêng ảnh của tin được bấm
+  if (!V.list.some((x) => x.post.id === post?.id && x.id === fileId)) V.list = chatImages(post, 'one');
+  V.i = Math.max(0, V.list.findIndex((x) => x.post.id === post?.id && x.id === fileId));
   if (!V.list.length) return;
   V.zoom = false;
   renderViewer();
@@ -37,6 +42,8 @@ function renderViewer() {
   $('v-name').textContent = f.name || 'Ảnh';
   $('v-meta').textContent = `${f.post.user.fullname || f.post.user.username || 'Người dùng'} · ${fullTime(f.post.createAt)}`;
   $('v-count').textContent = n > 1 ? `${V.i + 1} / ${n}` : '';
+  // Tới tin nhắn: có ở cuộc trò chuyện và khung bình luận
+  $('v-goto').hidden = !(V.mode === 'main' || V.mode === 'thread');
   // Ảnh chỉ có bản xem trước (máy chủ không cho link ảnh gốc): mở cuộc trò chuyện trên web
   $('v-open').href = f.url || $('conv-web').href;
   $('v-open').title = f.url ? 'Mở ảnh trong tab mới' : 'Mở trên web Beincom để xem ảnh gốc';
@@ -70,8 +77,8 @@ function renderViewer() {
   for (const k of [V.i - 1, V.i + 1]) if (V.list[k]?.url) new Image().src = V.list[k].url;
 }
 
-function flashTo(id) {
-  const n = $('m-' + id);
+function flashTo(id, prefix = 'm-') {
+  const n = $(prefix + id);
   if (!n) return;
   n.scrollIntoView({ block: 'center', behavior: 'smooth' });
   n.classList.remove('flash');

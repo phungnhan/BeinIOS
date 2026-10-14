@@ -269,6 +269,45 @@ async function doNewMembers({ groupId, days = 7 }) {
   });
 }
 
+// Cửa sổ Bài viết & bình luận (Dashboard): một trang bình luận của bài, mới nhất trước (GET content/comments?postId&limit
+// [&after][&parentId] — như lần quét); parentId: trả lời của một bình luận. Chỉ đọc, không lưu
+async function doPostComments({ postId, after = '', parentId = '' }) {
+  const idOk = (x) => /^[\w-]{1,64}$/.test(String(x || ''));
+  if (!idOk(postId) || (parentId && !idOk(parentId)) || (after && !/^[\w=+/-]{1,512}$/.test(after))) return { status: 'error', message: 'Thiếu bài' };
+  const { state } = await chrome.storage.local.get('state');
+  const post = (state?.recentPosts || []).find((p) => p.id === postId) || { id: postId };
+  return withClient(async (client) => {
+    const r = await client.call('GET', `content/comments?${qs({ postId, parentId, limit: COMMENT_PAGE, after })}`);
+    if (r.status === 401) return { ...NEED_LOGIN };
+    if (!BG.isOk(r)) return { status: 'error', message: 'Đọc bình luận lỗi: ' + BG.errMsg(r) };
+    const d = r.body.data || {};
+    const list = (d.list || []).map((x) => (parentId ? { ...x, parentId } : x));
+    return { status: 'ok', items: BG.flattenComments(list, post), hasNext: !!d.meta?.hasNextPage, after: d.meta?.endCursor || '' };
+  });
+}
+
+// Cửa sổ Bài viết & bình luận: đọc bài đầy đủ (GET content/contents/{mã}, chỉ đọc). Article: các khối nội dung (Plate) để
+// Dashboard dựng như trên web; bài thường: toàn bộ chữ
+async function doPostFull({ id }) {
+  if (!/^[\w-]{1,64}$/.test(String(id || ''))) return { status: 'error', message: 'Thiếu bài' };
+  return withClient(async (client) => {
+    const r = await client.call('GET', `content/contents/${id}`);
+    if (r.status === 401) return { ...NEED_LOGIN };
+    if (BG.isContentGone(r)) return { status: 'error', message: 'Bài không còn trên Beincom (đã bị xoá)' };
+    if (!BG.isOk(r) || !r.body.data) return { status: 'error', message: 'Đọc bài lỗi: ' + BG.errMsg(r) };
+    const d = r.body.data;
+    const post = BG.slimPost(d);
+    let nodes = null;
+    if (post.type === 'ARTICLE') {
+      try {
+        const x = JSON.parse(String(d.content || '[]'));
+        if (Array.isArray(x) && JSON.stringify(x).length < 400000) nodes = x;
+      } catch {}
+    }
+    return { status: 'ok', post, nodes, text: post.type === 'ARTICLE' ? BG.articlePlain(d.content).slice(0, 60000) : String(d.content || '').slice(0, 60000) };
+  });
+}
+
 // ---------- Thành viên (đọc khi Dashboard cần, không lưu vào storage) ----------
 
 function qs(params) {

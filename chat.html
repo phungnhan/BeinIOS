@@ -104,6 +104,11 @@
           <span id="reply-text"></span>
           <button type="button" class="icon-btn sm" id="reply-x" aria-label="Huỷ trả lời">✕</button>
         </div>
+        <div class="reply quoting" id="quote-bar" hidden>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 9V5l-7 7 7 7v-4.1c5 0 8.5 1.6 11 5.1-1-5-4-10-11-11Z" /></svg>
+          <span id="quote-bar-text"></span>
+          <button type="button" class="icon-btn sm" id="quote-bar-x" aria-label="Huỷ trả lời" title="Huỷ trả lời (Esc)">✕</button>
+        </div>
         <!-- Bộ gõ tin nhắn (như web Beincom): ô gõ + xem trước; thanh định dạng, độ ưu tiên; Aa, đính kèm, emoji, gửi -->
         <div class="box" id="box">
           <div class="box-top">
@@ -173,6 +178,11 @@
         <button type="button" class="older" id="t-more" hidden>Tải thêm bình luận</button>
       </div>
       <form class="t-composer" id="t-composer">
+        <div class="reply quoting" id="t-quote" hidden>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 9V5l-7 7 7 7v-4.1c5 0 8.5 1.6 11 5.1-1-5-4-10-11-11Z" /></svg>
+          <span id="t-quote-text"></span>
+          <button type="button" class="icon-btn sm" id="t-quote-x" aria-label="Huỷ trả lời" title="Huỷ trả lời (Esc)">✕</button>
+        </div>
         <div class="reply" id="t-edit" hidden>
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25ZM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83Z" /></svg>
           <span id="t-edit-text"></span>
@@ -302,6 +312,7 @@
   <script src="lib/diag.js"></script>
   <script src="lib/chat.js"></script>
   <script src="chat/core.js"></script>
+  <script src="chat/imgcache.js"></script>
   <script src="chat/list.js"></script>
   <script src="chat/conv.js"></script>
   <script src="chat/viewer.js"></script>
@@ -312,6 +323,7 @@
   <script src="chat/search.js"></script>
   <script src="chat/pins.js"></script>
   <script src="chat/replies.js"></script>
+  <script src="chat/links.js"></script>
   <script src="chat/app.js"></script>
 </body>
 </html>

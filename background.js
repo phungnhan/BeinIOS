@@ -138,6 +138,12 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   noteUsage(msg?.type); // Báo cáo sử dụng: chỉ đếm loại lệnh
   // Đọc danh sách thành viên / nhật ký không cần chờ lần quét đang chạy
   const reads = {
+    // Trang Chat: tin được trích (trả lời), tên link Beincom; Dashboard: bài đầy đủ (chỉ đọc)
+    chatQuotes: () => doChatQuotes(msg),
+    beinLinkNames: () => doBeinLinkNames(msg),
+    postFull: () => doPostFull(msg),
+    // Cửa sổ Bài viết & bình luận: đọc bình luận của một bài (chỉ đọc)
+    postComments: () => doPostComments(msg),
     members: () => doMembers(msg),
     activity: () => doActivity(msg),
     scheduled: () => doScheduled(),

@@ -2,6 +2,68 @@
 
 Mỗi bản một mục, bản mới nhất ở trên. Dashboard tự hiện các mục mới sau khi cập nhật (bấm "Có gì mới" ở cuối trang để xem lại).
 
+## v0.44.7 — 14/10/2026
+- **Trang Chat tải ảnh nhanh hơn**: avatar, ảnh cộng đồng và ảnh biểu cảm Beincom được lưu trong máy. Lần sau hiện ngay, không chờ mạng.
+  - Ai đổi avatar / cộng đồng đổi ảnh thì addon tự tải bản mới và xoá bản cũ.
+  - Ảnh biểu cảm kiểm tra lại sau 7 ngày. Biểu cảm ở hàng nhanh được tải sẵn khi mở trang.
+- **Ảnh cộng đồng** trong trang Chat: có ở đầu mỗi mục cộng đồng bên trái, ở kênh chính của cộng đồng, và ở đầu cuộc trò chuyện.
+- Biểu tượng của thanh nút trên tin đổi sang cùng một bộ, nét đều nhau (sao chép, thùng rác cân với các biểu tượng khác).
+- Ảnh biểu cảm Beincom không tải được thì hiện emoji gần nghĩa thay cho ô ảnh hỏng.
+- **Dashboard**:
+  - Thanh tab con (Đợt spam, Duyệt bài, Bài mới đăng…) dính ngay dưới thanh tab lớn khi cuộn. Bấm một tab con thì thẻ dừng ngay dưới, không bị che.
+  - Tên trong danh sách **Thành viên** (cả danh sách Bị cấm) bấm được để mở cửa sổ Hồ sơ.
+
+## v0.44.6 — 14/10/2026
+- **Thanh nút khi rê chuột vào tin nằm sát bong bóng**: tin của bạn thì ngay bên trái bong bóng, tin người khác thì ngay bên phải. Thiếu chỗ (khung bình luận đang mở, màn hình hẹp) thì nằm ngay trên bong bóng. Trước đây thanh bám theo cả hàng nên có lúc nằm rất xa tin.
+
+## v0.44.5 — 14/10/2026
+- Sửa **tin trả lời** cho giống hệt web Beincom:
+  - Tin gửi đi giờ kèm mã tin được trả lời (`quoted_post_id`) và đúng định dạng link như web.
+  - Không còn thẻ xem trước "BEINCOM | CHAT" dưới tin trả lời. Máy chủ tạo thẻ này cho link tin trả lời trong tin nhắn riêng; web không hiện nó, addon nay cũng ẩn.
+  - Khung trích ghi thêm số tệp khi tin được trả lời có ảnh / tệp.
+
+## v0.44.4 — 14/10/2026
+- **Cửa sổ Bài viết & bình luận**: Article (và bài dài) mở ra giống thẻ xem trước, cuối có **Xem thêm ▾**. Bấm thì tải và hiện cả bài, bấm **Thu gọn ▴** để về phần xem trước.
+- **Nút khi rê chuột vào tin** (cuộc trò chuyện và khung bình luận) đổi thành biểu tượng một màu: thả biểu cảm, trả lời, bình luận, sửa, sao chép, ghim, xoá. Rê chuột vào biểu tượng thì hiện ngay ghi chú.
+- **Trả lời trích tin** như web Beincom: nút ↩ Trả lời ở mỗi tin và mỗi bình luận. Ô gõ hiện dòng "Trả lời …" (Esc hoặc ✕ để huỷ). Tin gửi đi là tin trả lời đúng kiểu Beincom, nên trên web cũng hiện khung trích. Trong khung bình luận, trả lời vẫn nằm trong thread.
+
+## v0.44.3 — 14/10/2026
+- **Đọc cả bài** (Dashboard): thẻ Article và chữ bị cắt ở danh sách chỉ là phần xem trước. Bấm 💬 Bình luận thì cửa sổ Bài viết & bình luận tải bài đầy đủ.
+  - Article dựng như trên web: tiêu đề mục, đoạn văn, chữ đậm / nghiêng, link, danh sách, trích dẫn, ảnh, bảng.
+  - Bài thường hiện toàn bộ chữ.
+- **Trang Chat hiện tin giống Beincom hơn**:
+  - **Tin trả lời**: không còn đoạn mã `[](bein.mm.reply)…`. Đầu tin có khung trích "↩ Tên người" cùng nội dung tin được trả lời; bấm khung để tới tin đó. Tin được trả lời không có sẵn thì addon tự đọc thêm (chỉ đọc). Sửa tin trả lời của mình vẫn giữ là tin trả lời.
+  - **Link Beincom chưa có tên** (bài viết, Article, tin chat, community / group): hiện tên bài hoặc tên tin (đọc thêm, có ghi nhớ) thay cho đường dẫn dài; rê chuột thấy đường dẫn.
+  - **Link trong dấu `< >`** không còn hiện dấu ngoặc.
+  - **Link ngoài** có thẻ xem trước (tiêu đề, mô tả, ảnh) như web.
+
+## v0.44.2 — 14/10/2026
+- **Bài Article hiện như thẻ trên web** (Bài mới đăng, Duyệt bài, Tìm & dọn, cửa sổ Bài viết & bình luận…).
+  - Thẻ có ảnh bìa, tiêu đề, tóm tắt, số phút đọc, tag, số cảm xúc và bình luận.
+  - Trước đây phần nội dung hiện cả chuỗi mã của trình soạn Article; nay là chữ thường. Bài đã quét trước đó cũng hiện đúng.
+  - Link nằm trong chữ của Article (vd chữ "nhóm" gắn link t.me) vẫn bị quy tắc bài viết xét như bài thường.
+- **Lời mời trò chuyện** (trang Chat):
+  - Số cạnh tab **Lời mời** chỉ hiện khi có lời mời mới (còn tin chưa đọc).
+  - Lời mời bạn đã bỏ qua hoặc bị xếp vào Spam được ẩn; bấm **Xem thêm … lời mời đã bỏ qua / spam** để xem, như danh sách tin nhắn riêng.
+
+## v0.44.1 — 14/10/2026
+- **Hồ sơ trên Dashboard**: bấm tên một người ở các bảng (bài, bình luận, thành viên, báo cáo…), bấm huy hiệu ⚠, hoặc nút "⚠ Hồ sơ trên Dashboard" ở trang Chat để mở **cửa sổ Hồ sơ**.
+  - Có cả người chưa từng vi phạm (trước đây nút này chỉ mở danh sách Hồ sơ vi phạm, người chưa vi phạm thì trống).
+  - Cửa sổ có: tình trạng (vi phạm, giống admin, đang xin vào group nào); hồ sơ vi phạm; bài, bình luận và tin chat addon đã thấy; thao tác của admin với người này (theo Nhật ký).
+  - Nút **Tìm bài** còn hiện trong các community bạn quản trị (chỉ đọc). Nút **🧹 Dọn tài khoản**, **Cấm ở mọi community**, **Xoá hồ sơ vi phạm**, và "Xem trong danh sách Hồ sơ vi phạm".
+
+## v0.44.0 — 14/10/2026
+- **Cửa sổ Bài viết & bình luận** (tab Bài viết): bấm **💬 Bình luận** ở một bài (nút có số bình luận), hoặc **Trả lời** ở Bình luận mới, để mở cửa sổ lớn.
+  - Cửa sổ có đủ nội dung bài và các bình luận đọc thẳng từ Beincom, cũ → mới, trả lời nằm dưới bình luận gốc. Có **Xem N trả lời** và **Xem bình luận cũ hơn**.
+  - Mỗi bình luận có Trả lời (điền sẵn @tên), Ẩn, 🧹 Dọn tài khoản, Mở ↗.
+  - Ô viết bình luận ở cuối cửa sổ, Ctrl + Enter để gửi. Bình luận vừa gửi hiện ngay.
+  - Thẻ **Bình luận mới** chuyển lên ngay dưới Bài mới đăng.
+- **Biểu cảm trong Chat giống Beincom**:
+  - Sửa lỗi thả biểu cảm: addon gửi lệnh tới sai địa chỉ (`v4/reactions`), nay gửi đúng `v5/reactions` như web.
+  - Biểu cảm riêng của Beincom (tim tím, tên lửa, ngón cái… và linh vật Bamzo) hiện bằng ảnh của Beincom thay vì chữ `:bic_…:`, cả dưới tin và trong chữ của tin.
+  - Hộp chọn biểu cảm: hàng nhanh gồm biểu cảm bạn vừa dùng rồi các biểu cảm Beincom hay dùng nhất. Bấm … để xem đủ ba nhóm Beincom, Bamzo, Biểu tượng. Bộ emoji ở ô gõ có thêm nhóm Beincom và Bamzo.
+- Sửa: bấm ảnh trong khung bình luận (thread) nay mở đúng ảnh đó và chuyển qua lại giữa các ảnh của thread. "Tới tin nhắn" nháy đúng bình luận.
+
 ## v0.43.0 — 14/10/2026
 - **Tự kiểm tra có thêm nhóm Chat Beincom** (Nhật ký → Tự kiểm tra, khi đã bật Chat). Addon gọi thử, chỉ đọc, từng phần mà trang Chat và lần quét dùng:
   - đăng nhập chat, danh sách cộng đồng và kênh, số tin đã đọc;

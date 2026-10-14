@@ -120,11 +120,15 @@ function initials(name) {
   return ((w[0]?.[0] || '?') + (w.length > 1 ? w[w.length - 1][0] : '')).toUpperCase();
 }
 
-function avatar({ name, chatId = '', pictureAt = 0, seed = '', channel = false, locked = false, size = '' }) {
+// src: ảnh có sẵn (ảnh community cho kênh chính); không tải được thì giữ chữ cái đầu
+function avatar({ name, chatId = '', pictureAt = 0, seed = '', channel = false, locked = false, size = '', src = '' }) {
   const a = el('div', { class: `avatar ${channel ? 'ch' : ''} ${size}`, style: grad(seed || chatId || name), 'aria-hidden': 'true' }, initials(name));
-  if (chatId && !channel) {
-    const img = el('img', { src: BG.chatAvatarUrl(chatId, pictureAt), alt: '', loading: 'lazy' });
+  const url = src || (chatId && !channel ? BG.chatAvatarUrl(chatId, pictureAt) : '');
+  if (url) {
+    // Ảnh lưu trong máy (chat/imgcache.js): hiện ngay, tải lại chỉ khi ảnh đổi
+    const img = el('img', { alt: '', loading: 'lazy' });
     img.addEventListener('error', () => img.remove());
+    setImgSrc(img, url);
     a.append(img);
   }
   if (locked) a.append(el('span', { class: 'lock' }, svgLock()));
@@ -184,6 +188,19 @@ const sizeText = (n) => (n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.
 
 // ---------- Nội dung tin: link, @nhắc tên, **đậm**, `mã` ----------
 
+// Biểu cảm theo tên: ảnh riêng của Beincom (bic_*, Bamzo), emoji, hoặc :tên: khi không biết hình
+function emojiImg(name, cls = '') {
+  const src = BG.chatCustomEmoji(name);
+  if (src) {
+    const img = el('img', { class: 'bemo ' + cls, alt: `:${name}:`, title: BG.chatEmojiLabel(name), loading: 'lazy', draggable: 'false', referrerpolicy: 'no-referrer' });
+    setImgSrc(img, src);
+    // Không tải được ảnh: emoji gần nghĩa (bic_purple_heart -> 💜), không có thì 🙂
+    img.addEventListener('error', () => img.replaceWith(document.createTextNode(BG.chatEmoji(name.replace(/^(bic|bamzo)_/, '')) || '🙂')));
+    return img;
+  }
+  return document.createTextNode(BG.chatEmoji(name) || `:${name}:`);
+}
+
 // Markdown của tin (BG.chatMarkdown) -> phần tử trang; link chỉ http(s) / mailto (bộ đọc đã lọc)
 function mdNodes(nodes) {
   const me = String(S.me?.username || '').toLowerCase();
@@ -197,8 +214,14 @@ function mdNodes(nodes) {
           return el('br');
         case 'code':
           return el('code', {}, n.v);
-        case 'a':
-          return el('a', { href: n.href, target: '_blank', rel: 'noopener noreferrer' }, kids(n));
+        case 'emo':
+          return emojiImg(n.name, 'cemo');
+        case 'a': {
+          // Link Beincom chỉ có đường dẫn (bài, Article, tin chat…): hiện tên như web (chat/links.js)
+          const bare = n.c?.length === 1 && n.c[0].t === 'text' && n.c[0].v === n.href;
+          const bl = bare ? BG.beinLink(n.href) : null;
+          return bl ? beinLinkEl(n.href, bl) : el('a', { href: n.href, target: '_blank', rel: 'noopener noreferrer' }, kids(n));
+        }
         case 'at': {
           const who = n.v.slice(1).toLowerCase();
           return el('span', { class: 'mention' + (who === me || ['all', 'channel', 'here'].includes(who) ? ' mine' : '') }, n.v);

@@ -42,6 +42,8 @@ async function openThread(p) {
   syncSide();
   S.tEditing = null;
   $('t-edit').hidden = true;
+  S.tQuote = null;
+  renderQuote(true);
   $('t-text').value = draftOf(`${c.id}:${root.id}`);
   renderThread();
   tAutosize();
@@ -85,6 +87,8 @@ async function loadMoreThread() {
 function closeThread() {
   S.thread = null;
   S.tEditing = null;
+  S.tQuote = null;
+  renderQuote(true);
   $('t-edit').hidden = true;
   $('thread').hidden = true;
   syncSide();
@@ -155,7 +159,8 @@ async function sendThread(e) {
   if (!t || !c || !text || S.tSending) return;
   S.tSending = true;
   tUpdateSend();
-  const r = await call('chatSend', { channelId: c.id, message: text, rootId: t.root.id });
+  const quoted = S.tQuote;
+  const r = await call('chatSend', { channelId: c.id, message: (quoted ? quoteMarker(quoted) : '') + text, rootId: t.root.id, ...(quoted ? { quotedPostId: quoted.id } : {}) });
   S.tSending = false;
   if (r.status !== 'ok') {
     tUpdateSend();
@@ -163,6 +168,7 @@ async function sendThread(e) {
   }
   $('t-text').value = '';
   setDraft(`${c.id}:${t.root.id}`, '');
+  if (quoted) cancelQuote(true);
   tAutosize();
   if (r.post && S.thread === t) {
     S.lastSync = Math.max(S.lastSync, r.post.updateAt || 0, r.post.createAt || 0);

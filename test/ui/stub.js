@@ -22,6 +22,20 @@
     { ...P('t3', 'Lan Anh', 'Cho mình hỏi ví nào an toàn cho người mới bắt đầu ạ?', 5, { cmt: 0 }), actor: { id: 'aLan', username: 'lananh', fullname: 'Lan Anh', avatar: '' } },
   ];
 
+  // Bài Article (#…&art=1): nội dung còn ở dạng JSON như bản lưu cũ, có ảnh bìa, tóm tắt, số phút đọc, tag
+  if (new URLSearchParams(location.hash.slice(1)).get('art'))
+    recent.push({
+      ...P('ar1', 'Lê Thái Thịnh', JSON.stringify([{ type: 'p', children: [{ text: 'Một năm trước, ngân hàng truyền thống bắt đầu nhập cuộc crypto.' }] }, { type: 'p', children: [{ text: 'Việt Nam từng bước xây dựng khung pháp lý.' }] }]), 7, { cmt: 9 }),
+      type: 'ARTICLE',
+      title: '⏳ 1 Năm Nhìn Lại: Crypto Việt Nam',
+      summary: 'Sau một năm, câu hỏi không còn là crypto có được chấp nhận.',
+      cover: 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="514"><rect width="1200" height="514" fill="#1971c2"/></svg>'),
+      readMin: 7,
+      reactions: 1956,
+      tags: ['MULTICHAIN JOURNEY', 'CRYPTO'],
+      links: [],
+    });
+
   // 120 thành viên mẫu cho Crypto Life
   const names = ['Nguyễn Hải', 'Trần Quang', 'Lê Thu', 'Phạm Minh', 'Hoàng Yến', 'Vũ Nam', 'Đỗ Hạnh', 'Bùi Long'];
   const members = Array.from({ length: 120 }, (_, i) => ({ ...u(100 + i, names[i % names.length], { v: i % 3 === 0, p: i % 7 === 0, avatar: i % 4 ? img : '' }), joinedAt: iso(i * 5 + 1), isCommunityAdmin: i === 3, totalJoinedGroup: (i % 4) + 1, isAdmin: false }));
@@ -329,7 +343,7 @@
             me: cu(1, 'Kai Crypto', 'kaicrypto'),
             dmTeam: { id: 'tDM', name: 'direct' },
             threads: { unread: Math.max(0, 2 - (window.__threadSeen || []).length), mentions: (window.__threadSeen || []).includes('n2') ? 0 : 1 },
-            teams: [{ id: 'tCL', name: 'crypto-life', title: 'Crypto Life', communityId: 'cCL', channels: [ch('chMain', 'Crypto Life', 'O', { canDelete: true, unread: window.__chatRead ? 0 : 2, lastPostAt: now - 30e3 }), ch('chSub', 'Hỏi đáp', 'P', { canPost: false, purpose: 'Kênh hỏi đáp', lastPostAt: now - 3600e3 })] }],
+            teams: [{ id: 'tCL', name: 'crypto-life', title: 'Crypto Life', communityId: 'cCL', icon: 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect width="64" height="64" fill="#6c3cf0"/></svg>'), channels: [ch('chMain', 'Crypto Life', 'O', { canDelete: true, unread: window.__chatRead ? 0 : 2, lastPostAt: now - 30e3, main: true }), ch('chSub', 'Hỏi đáp', 'P', { canPost: false, purpose: 'Kênh hỏi đáp', lastPostAt: now - 3600e3 })] }],
             dms: [
               // Nhắn cho chính mình (#…&self=1): Nhật ký cá nhân
               ...(new URLSearchParams(location.hash.slice(1)).get('self') ? [{ ...ch('dmSelf', 'Nhật ký cá nhân', 'D'), teamId: 'tDM', teamName: 'direct', groupId: '', self: true, other: { ...cu(1, 'Kai Crypto', 'kaicrypto'), id: 'me1', verified: true }, lastPostAt: now - 30 * 864e5 }] : []),
@@ -353,7 +367,10 @@
           window.__chatThreads = (window.__chatThreads || 0) + 1;
           const tp = (id, n, name, un, text, min, extra = {}) => ({ id, channelId: 'chMain', user: { id: 'u' + n, chatId: 'cu' + n, username: un, fullname: name, pictureAt: 0, ...(n === 62 ? { verified: true, premium: 'lifetime' } : {}) }, createAt: now - min * 60e3, updateAt: now - min * 60e3, editAt: 0, deleted: false, system: false, message: text, rootId: '', replyCount: 0, pinned: false, files: [], participants: [], following: false, ...extra });
           if (m.rootId !== 'n2') return { status: 'ok', posts: [], hasNext: false };
-          return { status: 'ok', posts: [tp('n2', 62, 'Lan Anh', 'lananh', '@kaicrypto ơi cho em hỏi **ví lạnh** nào tốt?', 29, { replyCount: 1 }), tp('n3', 1, 'Kai Crypto', 'kaicrypto', 'Ledger hoặc Trezor đều ổn', 5, { rootId: 'n2' })], hasNext: false };
+          // #…&imgs=…: bình luận n3 có 2 ảnh (xem ảnh trong khung bình luận)
+          const tpic = (id, n) => ({ id, name: `binh-luan-${n}.png`, mime: 'image/png', size: 1000, url: 'data:image/svg+xml,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300"><rect width="400" height="300" fill="#2b8a3e"/></svg>`), width: 400, height: 300 });
+          const timgs = new URLSearchParams(location.hash.slice(1)).get('imgs') ? { files: [tpic('tf1', 1), tpic('tf2', 2)] } : {};
+          return { status: 'ok', posts: [tp('n2', 62, 'Lan Anh', 'lananh', '@kaicrypto ơi cho em hỏi **ví lạnh** nào tốt?', 29, { replyCount: 1 }), tp('n3', 1, 'Kai Crypto', 'kaicrypto', 'Ledger hoặc Trezor đều ổn', 5, { rootId: 'n2', ...timgs })], hasNext: false };
         }
         // Thread đang theo dõi: tin n2 (Crypto Life, 1 bình luận chưa đọc, có nhắc tên), tin nhắn riêng với Lan Anh (chưa đọc),
         // kênh Hỏi đáp (đã đọc)
@@ -417,7 +434,7 @@
             cp('o1', 60, 'Hoa Mai', 'hoamai', 'Tin hôm qua', 26 * 60, { pinned: !(window.__unpinned || []).includes('o1') }),
             cp('o2', 1, 'Kai Crypto', 'kaicrypto', 'Chào cả nhà, tối nay có AMA nhé', 25 * 60),
             cp('sys1', 61, 'Tuấn', 'tuan', 'tuan đã vào kênh', 40, { system: true }),
-            cp('n1', 62, 'Lan Anh', 'lananh', 'Mọi người xem bài này https://group.beincom.com/posts/abc nhé', 30, { reactions: [{ name: '+1', count: 2, mine: false, top: ['cu60', 'cu63'] }, { name: 'heart', count: 1, mine: true, top: ['cu1'] }, { name: 'bic_star', count: 1, mine: false, top: ['cu60'] }] }),
+            cp('n1', 62, 'Lan Anh', 'lananh', 'Mọi người xem bài này https://group.beincom.com/posts/abc nhé', 30, { reactions: [{ name: '+1', count: 2, mine: false, top: ['cu60', 'cu63'] }, { name: 'heart', count: 1, mine: true, top: ['cu1'] }, { name: 'bic_purple_heart', count: 1, mine: false, top: ['cu60'] }] }),
             cp('n2', 62, 'Lan Anh', 'lananh', '@kaicrypto ơi cho em hỏi **ví lạnh** nào tốt?', 29),
             cp('n3', 1, 'Kai Crypto', 'kaicrypto', 'Ledger hoặc Trezor đều ổn', 5, { rootId: 'n2' }),
             cp('n4', 63, 'Minh', 'minh', '', 2, { files: [{ id: 'f1', name: 'bieu-do.png', mime: 'image/png', size: 120000, url: '', mini: '', width: 400, height: 300 }, { id: 'f2', name: 'bao-cao.pdf', mime: 'application/pdf', size: 2400000, url: '', mini: '' }] }),
@@ -435,6 +452,15 @@
               cp('im3', 64, 'Bảo Ngọc', 'baongoc', '', 1, { files: [{ id: 'f31', name: 'xem-truoc.jpg', mime: 'image/jpeg', size: 90000, url: '', mini: '/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgICAgMCAgIDAwMDBAYEBAQEBAgGBgUGCQgKCgkICQkKDA8MCgsOCwkJDRENDg8QEBEQCgwSExIQEw8QEBD/wAALCAABAAEBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AKp//2Q==' }] }),
             );
           }
+          // Tin trả lời, link Beincom, thẻ xem trước (#…&lk=1): lq1 trả lời n2 (đang hiện), lq2 trả lời tin cũ (đọc thêm),
+          // lk1 có link Article trong <…>, og1 có thẻ xem trước
+          if (new URLSearchParams(location.hash.slice(1)).get('lk'))
+            base.push(
+              cp('lq1', 63, 'Minh', 'minh', 'Mình cũng muốn hỏi câu này', 2, { quote: { id: 'n2', url: 'https://chat.beincom.com/crypto-life/pl/n2' }, quotePrefix: '[](bein.mm.reply)https://chat.beincom.com/crypto-life/pl/n2[](bein.mm.reply)\n' }),
+              cp('lq2', 64, 'Bảo Ngọc', 'baongoc', 'Đồng ý với bạn', 2, { quote: { id: 'zzzzzzzzzzzzzzzzzzzzzzzzzz', url: 'https://chat.beincom.com/crypto-life/pl/zzzzzzzzzzzzzzzzzzzzzzzzzz' } }),
+              cp('lk1', 62, 'Lan Anh', 'lananh', 'Chi tiết ở bài viết bên dưới nhé <https://group.beincom.com/article/c8d60d10-c10b-4851-935a-1cff8a04ecf2>', 1),
+              cp('og1', 60, 'Hoa Mai', 'hoamai', 'https://example.com/tin', 1, { og: { url: 'https://example.com/tin', title: 'Tin thị trường hôm nay', description: 'Bitcoin tăng mạnh', site: 'Example', image: '' } }),
+            );
           // Tin có định dạng (#…&md=1): trích dẫn, danh sách, mã, gạch, nghiêng, link có chữ; độ ưu tiên Khẩn cấp
           if (new URLSearchParams(location.hash.slice(1)).get('md')) base.push(cp('mk1', 66, 'Quốc Bảo', 'quocbao', '> Lịch AMA tuần này\n\n- Thứ Hai: ~~20h~~ *21h*\n- Thứ Sáu: [đăng ký](https://group.beincom.com/ama)\n\n```\nnpm i\n```', 1, { priority: 'urgent' }));
           if (m.since) return { status: 'ok', posts: window.__chatIncoming || [], hasMore: false };
@@ -442,6 +468,17 @@
           if (m.channelId !== 'chMain') return { status: 'ok', posts: [cp('d1', 50, 'Lan Anh', 'lananh', 'Chào anh!', 3)], hasMore: false };
           // Như nền (gộp thread): chỉ tin gốc; tin n2 có 1 bình luận của Kai
           return { status: 'ok', posts: base.filter((p) => !p.rootId).map((p) => (p.id === 'n2' ? { ...p, replyCount: 1, participants: [{ id: 'u1', chatId: 'cu1', username: 'kaicrypto', fullname: 'Kai Crypto', pictureAt: 0 }] } : p)), hasMore: true };
+        }
+        // Tin được trích không có trong phần đang hiện; tên link Beincom
+        if (m.type === 'chatQuotes') {
+          window.__quoteCalls = [...(window.__quoteCalls || []), m.ids];
+          await new Promise((res) => setTimeout(res, 60));
+          return { status: 'ok', posts: Object.fromEntries(m.ids.map((id) => [id, id === 'zzzzzzzzzzzzzzzzzzzzzzzzzz' ? { id, user: { id: 'u70', chatId: 'cu70', username: 'nguoicu', fullname: 'Người Cũ' }, message: 'Tin cũ đã **trôi**', files: 0 } : { id, missing: true }])) };
+        }
+        if (m.type === 'beinLinkNames') {
+          window.__linkCalls = [...(window.__linkCalls || []), m.links];
+          await new Promise((res) => setTimeout(res, 60));
+          return { status: 'ok', names: Object.fromEntries(m.links.filter((l) => l.kind === 'content').map((l) => [`content:${l.id}`, { name: '1 Năm Nhìn Lại: Crypto Việt Nam', type: 'ARTICLE' }])) };
         }
         if (m.type === 'chatContact') {
           (window.__chatContacts = window.__chatContacts || []).push(m);
@@ -755,6 +792,30 @@
           store.syncStatus = { at: Date.now(), dir: m.mode, keys: ['settings', 'rules', 'postRules'], skipped: m.mode === 'push' ? ['groupRules'] : [] };
           fire();
           return { status: 'ok', mode: m.mode, keys: ['settings', 'rules', 'postRules'], skipped: [] };
+        }
+        // Bài đầy đủ (cửa sổ Bài viết & bình luận): Article ar1 có các khối nội dung
+        if (m.type === 'postFull') {
+          window.__postFull = [...(window.__postFull || []), m.id];
+          await new Promise((res) => setTimeout(res, 60));
+          if (m.id !== 'ar1') return { status: 'ok', nodes: null, text: (store.state.recentPosts.find((p) => p.id === m.id) || {}).text || '' };
+          const nodes = [
+            { type: 'h2', children: [{ text: 'Bước đi của ngân hàng lớn' }] },
+            { type: 'p', children: [{ text: 'Đoạn mở đầu, xem ' }, { type: 'a', url: 'https://example.com/nguon', children: [{ text: 'nguồn', bold: true }] }, { text: '.' }] },
+            { type: 'ul', children: [{ type: 'li', children: [{ type: 'lic', children: [{ text: 'Ý thứ nhất' }] }] }, { type: 'li', children: [{ type: 'lic', children: [{ text: 'Ý thứ hai' }] }] }] },
+            { type: 'blockquote', children: [{ text: 'Kỷ yếu lớn' }] },
+            { type: 'a', url: 'javascript:alert(1)', children: [{ text: 'link xấu' }] },
+          ];
+          return { status: 'ok', nodes, text: 'Bước đi của ngân hàng lớn\nĐoạn mở đầu, xem nguồn.', post: { title: '⏳ 1 Năm Nhìn Lại: Crypto Việt Nam', readMin: 7 } };
+        }
+        // Cửa sổ Bài viết & bình luận: bình luận gốc của bài (cm1 có 1 trả lời đọc riêng); bài t1 có thêm một trang cũ hơn
+        if (m.type === 'postComments') {
+          window.__postComments = [...(window.__postComments || []), { postId: m.postId, after: m.after || '', parentId: m.parentId || '' }];
+          await new Promise((res) => setTimeout(res, 80));
+          const all = store.state.recentComments.filter((c) => c.postId === m.postId);
+          if (m.parentId) return { status: 'ok', items: all.filter((c) => c.parentId === m.parentId), hasNext: false, after: '' };
+          if (m.after === 'p2') return { status: 'ok', items: [{ ...all[0], id: 'old1', text: 'Bình luận cũ nhất', createdAt: new Date(now - 30 * 3600e3).toISOString(), parentId: '', totalReply: 0 }], hasNext: false, after: '' };
+          const roots = all.filter((c) => !c.parentId).map((c) => (c.id === 'cm1' ? { ...c, totalReply: 1 } : c));
+          return { status: 'ok', items: roots, hasNext: m.postId === 't1', after: m.postId === 't1' ? 'p2' : '' };
         }
         if (m.type === 'commentWrite') {
           window.__lastCommentWrite = m;

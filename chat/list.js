@@ -6,7 +6,7 @@
 const asDm = (c) => ({ ...c, kind: 'dm', teamTitle: '' });
 const asReq = (c) => ({ ...c, kind: 'dm', req: true, teamTitle: '' });
 function allChats() {
-  return [...S.dms.map(asDm), ...S.requests.map(asReq), ...S.teams.flatMap((t) => t.channels.map((c) => ({ ...c, kind: 'ch', teamTitle: t.title })))];
+  return [...S.dms.map(asDm), ...S.requests.map(asReq), ...S.teams.flatMap((t) => t.channels.map((c) => ({ ...c, kind: 'ch', teamTitle: t.title, teamIcon: t.icon || '' })))];
 }
 
 // Dòng phụ của lời mời trò chuyện / lời mời bạn gửi đi
@@ -33,13 +33,21 @@ function matches(c) {
   return BG.norm(`${chatTitle(c)} ${c.other?.username || ''} ${c.teamTitle}`).includes(q);
 }
 
+// Ảnh community nhỏ ở đầu mục cộng đồng (ẩn nếu không tải được)
+function teamIconEl(src) {
+  const img = el('img', { class: 'sec-icon', alt: '', loading: 'lazy' });
+  img.addEventListener('error', () => img.remove());
+  setImgSrc(img, src);
+  return img;
+}
+
 function listItem(c) {
   const dm = c.kind === 'dm';
   const unread = c.unread > 0 || c.mentions > 0;
   return el(
     'button',
     { type: 'button', class: 'item' + (S.sel?.id === c.id ? ' sel' : '') + (unread ? ' unread' : ''), 'aria-current': S.sel?.id === c.id ? 'true' : null, onclick: () => openChat(c.id) },
-    dm ? avatar({ name: chatTitle(c), chatId: c.other?.chatId, pictureAt: c.other?.pictureAt }) : avatar({ name: chatTitle(c), seed: c.id, channel: true, locked: c.type === 'P' }),
+    dm ? avatar({ name: chatTitle(c), chatId: c.other?.chatId, pictureAt: c.other?.pictureAt }) : avatar({ name: chatTitle(c), seed: c.id, channel: true, locked: c.type === 'P', src: c.main ? c.teamIcon : '' }),
     el('span', { class: 'item-main' }, el('span', { class: 'item-title' }, el('span', { class: 'nm' }, chatTitle(c)), dm && !c.self ? badges(c.other) : null), S.sel?.id !== c.id && draftOf(c.id) ? el('span', { class: 'item-sub draft' }, '✏ Nháp: ' + draftOf(c.id).replace(/\s+/g, ' ').slice(0, 60)) : el('span', { class: 'item-sub' }, dm ? (c.self ? SELF_SUB : c.type === 'G' ? 'Nhóm chat' : [c.other?.username ? '@' + c.other.username : contactNote(c) ? '' : 'Tin nhắn riêng', contactNote(c)].filter(Boolean).join(' · ')) : c.purpose || c.teamTitle)),
     el('span', { class: 'item-side' }, el('span', { class: 'item-time' }, shortTime(c.lastPostAt)), c.mentions ? el('span', { class: 'badge at' }, '@' + c.mentions) : c.unread ? el('span', { class: 'badge' }, c.unread > 99 ? '99+' : c.unread) : null),
   );
@@ -83,7 +91,8 @@ function setDmTab(tab, render = true) {
 }
 
 // tabs: [[mã, tên, số, có tin chưa đọc]] — đầu mục là các tab (bấm mũi tên để thu gọn)
-function section(key, title, items, { limit = 0, label = '', pinned = false, tabs = null, tab = '', empty = '', moreKey = key } = {}) {
+// after: phần tử thêm cuối mục (vd nút xem lời mời đã bỏ qua)
+function section(key, title, items, { limit = 0, label = '', pinned = false, tabs = null, tab = '', empty = '', moreKey = key, after = null, icon = '' } = {}) {
   if (!items.length && !tabs) return null;
   const closed = S.closed.has(key) && !S.q && S.filter === 'all';
   // Đang tìm / lọc thì hiện đủ; không thì giới hạn (tin nhắn riêng: 8 gần nhất)
@@ -101,9 +110,14 @@ function section(key, title, items, { limit = 0, label = '', pinned = false, tab
           tabs.map(([k, name, n, hot]) => el('button', { type: 'button', role: 'tab', class: 'tab' + (k === tab ? ' on sec-title' : '') + (hot ? ' hot' : ''), 'aria-selected': String(k === tab), onclick: () => setDmTab(k) }, name, n ? el('span', { class: 'sec-n' }, String(n)) : null)),
         ),
       )
-    : el('button', { type: 'button', class: 'sec-head', 'aria-expanded': String(!closed), onclick: () => toggleSec(key) }, svgChevron(), el('span', { class: 'sec-title' }, title), pinned ? el('span', { class: 'pin', title: 'Cộng đồng bạn đã ghim trên Beincom' }, svgPin()) : null);
-  return el('div', { class: 'sec' + (closed ? ' closed' : '') }, head, el('div', { class: 'sec-items' }, ...shown.map(listItem), items.length ? more : el('div', { class: 'sec-empty' }, empty)));
+    : el('button', { type: 'button', class: 'sec-head', 'aria-expanded': String(!closed), onclick: () => toggleSec(key) }, svgChevron(), icon ? teamIconEl(icon) : null, el('span', { class: 'sec-title' }, title), pinned ? el('span', { class: 'pin', title: 'Cộng đồng bạn đã ghim trên Beincom' }, svgPin()) : null);
+  return el('div', { class: 'sec' + (closed ? ' closed' : '') }, head, el('div', { class: 'sec-items' }, ...shown.map(listItem), items.length ? more : el('div', { class: 'sec-empty' }, empty), after));
 }
+
+// Lời mời đã bỏ qua / bị xếp vào Spam: ẩn sau nút "Xem thêm" (như tin nhắn riêng cũ)
+const isDeclined = (c) => c.contact?.status === 'ignored' || c.contact?.status === 'spammed';
+// Lời mời mới: có tin chưa đọc (số cạnh tab Lời mời chỉ đếm những lời mời này)
+const isNewReq = (c) => !isDeclined(c) && !!(c.unread || c.mentions);
 
 // Tin nhắn riêng và Lời mời trò chuyện: hai tab cạnh nhau. Đang tìm / lọc Chưa đọc thì gộp cả hai (lời mời có ghi chú)
 function dmSection() {
@@ -111,17 +125,21 @@ function dmSection() {
   const reqs = S.requests.map(asReq).filter(matches);
   if (S.q || S.filter === 'unread') return section('dm', 'Tin nhắn riêng', [...dms, ...reqs].sort((a, b) => (b.lastPostAt || 0) - (a.lastPostAt || 0)));
   const req = S.dmTab === 'req';
-  const hot = S.requests.some((r) => r.unread || r.mentions);
-  return section('dm', 'Tin nhắn riêng', req ? reqs : dms, {
+  const fresh = S.requests.filter(isNewReq).length;
+  const active = reqs.filter((c) => !isDeclined(c));
+  const declined = reqs.filter(isDeclined);
+  const showOld = S.more.has('reqold');
+  return section('dm', 'Tin nhắn riêng', req ? (showOld ? [...active, ...declined] : active) : dms, {
     limit: req ? SHOW_REQS : SHOW_DMS,
     label: req ? 'lời mời' : 'tin nhắn riêng',
     moreKey: req ? 'req' : 'dm',
     tabs: [
       ['dm', 'Tin nhắn riêng', 0, false],
-      ['req', 'Lời mời', S.requests.length, hot],
+      ['req', 'Lời mời', fresh, fresh > 0],
     ],
     tab: req ? 'req' : 'dm',
-    empty: req ? 'Không có lời mời trò chuyện nào. Lời mời là tin nhắn riêng từ người chưa kết nối với bạn.' : 'Chưa có tin nhắn riêng.',
+    empty: req ? (declined.length ? 'Không có lời mời mới.' : 'Không có lời mời trò chuyện nào. Lời mời là tin nhắn riêng từ người chưa kết nối với bạn.') : 'Chưa có tin nhắn riêng.',
+    after: req && declined.length ? moreBtn('reqold', showOld ? 0 : declined.length, 'lời mời đã bỏ qua / spam') : null,
   });
 }
 
@@ -138,8 +156,8 @@ function renderList() {
   if (S.filter !== 'dm') {
     // Cộng đồng: nền đã xếp (đã ghim trước theo thứ tự ghim, rồi có tin mới nhất); hiện 5, còn lại sau "Xem thêm"
     const all = !!S.q || S.filter !== 'all' || S.more.has('teams');
-    const teams = S.teams.map((t) => [t, t.channels.map((c) => ({ ...c, kind: 'ch', teamTitle: t.title })).filter(matches)]).filter(([, l]) => l.length);
-    for (const [t, list] of all ? teams : teams.slice(0, SHOW_TEAMS)) parts.push(section('t:' + t.id, t.title, list, { pinned: t.pinned }));
+    const teams = S.teams.map((t) => [t, t.channels.map((c) => ({ ...c, kind: 'ch', teamTitle: t.title, teamIcon: t.icon || '' })).filter(matches)]).filter(([, l]) => l.length);
+    for (const [t, list] of all ? teams : teams.slice(0, SHOW_TEAMS)) parts.push(section('t:' + t.id, t.title, list, { pinned: t.pinned, icon: t.icon }));
     if (!S.q && S.filter === 'all') parts.push(moreBtn('teams', teams.length - Math.min(teams.length, SHOW_TEAMS), 'cộng đồng'));
   }
   const shown = parts.filter(Boolean);

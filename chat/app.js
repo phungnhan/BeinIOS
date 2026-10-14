@@ -70,6 +70,10 @@ $('t-text').addEventListener('keydown', (e) => {
     e.preventDefault();
     return cancelEdit(true);
   }
+  if (e.key === 'Escape' && S.tQuote) {
+    e.preventDefault();
+    return cancelQuote(true);
+  }
   const t = $('t-text');
   if (e.ctrlKey || e.metaKey) {
     const k = SHORTCUTS.find(([code, shift, alt]) => e.code === code && e.shiftKey === shift && e.altKey === alt);
@@ -103,7 +107,7 @@ $('v-next').addEventListener('click', () => showImage(V.i + 1));
 $('v-goto').addEventListener('click', () => {
   const id = V.list[V.i]?.post.id;
   $('viewer').close();
-  if (id) flashTo(id);
+  if (id) flashTo(id, V.mode === 'thread' ? 't-' : 'm-');
 });
 $('viewer').addEventListener('keydown', (e) => {
   if (e.key === 'ArrowLeft') showImage(V.i - 1);
@@ -188,11 +192,10 @@ $('text').addEventListener('keydown', (e) => {
     return;
   }
   if (e.key === 'Enter' && !e.shiftKey) sendMsg(e);
-  if (e.key === 'Escape' && S.reply) {
-    S.reply = null;
-    renderReply();
-  }
+  if (e.key === 'Escape' && S.quote) cancelQuote();
 });
+$('quote-bar-x').addEventListener('click', () => (cancelQuote(), $('text').focus()));
+$('t-quote-x').addEventListener('click', () => (cancelQuote(true), $('t-text').focus()));
 $('reply-x').addEventListener('click', () => {
   cancelEdit();
   $('text').focus();
@@ -295,6 +298,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
 
 async function start() {
   loadReplies();
+  warmEmojiCache();
   const want = new URLSearchParams(location.hash.slice(1)).get('c');
   if (want && /^\w+$/.test(want)) S.prefetch = { id: want, promise: call('chatPosts', { channelId: want, perPage: PAGE }) };
   let cached = null;

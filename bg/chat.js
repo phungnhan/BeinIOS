@@ -91,6 +91,82 @@ async function readChatUnread(client, map, prevUsers = {}) {
   };
 }
 
+// ---------- Tin được trích (trả lời), tên link Beincom (trang Chat) — chỉ đọc ----------
+// Tin trả lời không kèm sẵn tin được trích: GET v4/posts/{mã} (như web), tên người đọc qua chatUsersOf (có ghi nhớ)
+async function doChatQuotes({ ids = [] }) {
+  const settings = await chatSettings();
+  if (!settings.chatEnabled) return chatOff();
+  const list = [...new Set((ids || []).map(String))].filter(chatIdOk).slice(0, 20);
+  if (!list.length) return { status: 'ok', posts: {} };
+  return withChatRead(async (client) => {
+    const posts = {};
+    let login = false;
+    await mapLimit(list, PARALLEL, async (id) => {
+      const r = await chatGet(client, `v4/posts/${id}`);
+      if (r.status === 401) login = true;
+      posts[id] = BG.chatOk(r) ? BG.quotedBrief(r.body) : r.status === 404 || r.status === 403 ? { id, missing: true } : null;
+    });
+    if (login) return { ...chatLoginErr };
+    const users = await chatUsersOf(client, Object.values(posts).filter((p) => p?.user && !p.user.fullname && p.user.chatId).map((p) => p.user.chatId));
+    for (const p of Object.values(posts)) if (p?.user && !p.user.fullname && users[p.user.chatId]) p.user = { ...users[p.user.chatId], chatId: p.user.chatId };
+    return { status: 'ok', posts };
+  });
+}
+
+// Tên hiển thị cho link Beincom chưa có chữ: bài / Article (GET content/contents/{mã}: tiêu đề hoặc dòng đầu), tin chat
+// (người gửi: đoạn đầu), community / group (theo kết quả quét). Ghi nhớ 1 giờ trong lúc service worker còn chạy
+const linkNameCache = new Map();
+async function doBeinLinkNames({ links = [] }) {
+  const want = [];
+  const seen = new Set();
+  for (const l of links || []) {
+    const key = `${l?.kind}:${l?.id}`;
+    if (seen.has(key) || !['content', 'chat', 'community', 'group'].includes(l?.kind) || !/^[\w-]{1,64}$/.test(String(l.id || ''))) continue;
+    seen.add(key);
+    want.push({ kind: l.kind, id: String(l.id), key });
+  }
+  const names = {};
+  const now = Date.now();
+  const todo = [];
+  for (const l of want.slice(0, 30)) {
+    const c = linkNameCache.get(l.key);
+    if (c && now - c.at < 3600e3) names[l.key] = c.v;
+    else todo.push(l);
+  }
+  if (!todo.length) return { status: 'ok', names };
+  const { state } = await chrome.storage.local.get('state');
+  const groups = state?.snapshot?.groups || [];
+  const put = (key, v) => {
+    names[key] = v;
+    linkNameCache.set(key, { at: now, v });
+  };
+  for (const l of todo.filter((x) => x.kind === 'community' || x.kind === 'group')) {
+    const g = groups.find((x) => (l.kind === 'community' ? x.isCommunity && x.communityId === l.id : x.id === l.id));
+    if (g) put(l.key, { name: g.name });
+  }
+  const remote = todo.filter((x) => x.kind === 'content' || x.kind === 'chat');
+  if (!remote.length) return { status: 'ok', names };
+  return withClient(async (client) => {
+    await mapLimit(remote, PARALLEL, async (l) => {
+      if (l.kind === 'content') {
+        const r = await client.call('GET', `content/contents/${l.id}`, null, '2.0.0', 15000, { quiet: true });
+        if (BG.isContentGone(r)) return put(l.key, { name: 'Bài đã bị xoá', gone: true });
+        if (!BG.isOk(r) || !r.body.data) return;
+        const p = BG.slimPost(r.body.data);
+        put(l.key, { name: (p.title || p.text.split('\n')[0] || 'Bài viết').replace(/\s+/g, ' ').trim().slice(0, 90), type: p.type, author: p.actor.fullname || '' });
+      } else {
+        const r = await chatGet(client, `v4/posts/${l.id}`);
+        if (r.status === 404 || r.status === 403) return put(l.key, { name: 'Tin nhắn không còn', gone: true });
+        if (!BG.chatOk(r)) return;
+        const q = BG.quotedBrief(r.body);
+        const u = (await chatUsersOf(client, [q.user.chatId]))[q.user.chatId];
+        put(l.key, { name: `${u?.fullname || u?.username || 'Tin nhắn'}: ${BG.chatPlain(q.message).slice(0, 70) || '📎 tệp'}` });
+      }
+    });
+    return { status: 'ok', names };
+  });
+}
+
 // ---------- Tin nhắn chat bị báo cáo (community bạn là chủ / admin) ----------
 // Đọc GET chat v4/communities/{community}/reports?per_page=50; xử lý POST …/reports/{báo cáo} { action: hide | ignore } (như
 // nút Ẩn / Bỏ qua ở trang quản trị của web — đọc từ mã web, chưa gọi thật). Ẩn / Bỏ qua theo Chạy thử, ghi Nhật ký.
@@ -649,7 +725,7 @@ async function doChatOverview({ quick = false } = {}) {
     const latest = (t) => Math.max(0, ...t.channels.map((c) => c.lastPostAt));
     const out = teamList
       .filter((t) => t !== dmTeamRaw)
-      .map((t) => ({ id: t.id, name: t.name || '', title: t.display_name || t.name || '', communityId: t.props?.bic_group_team_id || '', channels: live.filter((c) => c.team_id === t.id && c.type !== 'D' && c.type !== 'G').map(item).sort((a, b) => b.lastPostAt - a.lastPostAt) }))
+      .map((t) => ({ id: t.id, name: t.name || '', title: t.display_name || t.name || '', communityId: t.props?.bic_group_team_id || '', icon: BG.chatTeamIcon(t.id, t.last_team_icon_update), channels: live.filter((c) => c.team_id === t.id && c.type !== 'D' && c.type !== 'G').map(item).sort((a, b) => b.lastPostAt - a.lastPostAt) }))
       .filter((t) => t.channels.length)
       .map((t) => ({ ...t, pinned: rankOf(t) !== null, pinRank: rankOf(t) }))
       // Ghim trước (theo thứ tự ghim), rồi cộng đồng có tin mới nhất
@@ -768,7 +844,7 @@ async function doChatThreadRead({ teamId, rootId }) {
 }
 
 // Gửi tin của mình (bình luận trong thread: rootId). Gửi thật kể cả khi Chạy thử: đây là tin bạn tự gõ và bấm gửi.
-async function doChatSend({ channelId, message, rootId = '', acceptContactId = '', priority = '', fileIds = [] }) {
+async function doChatSend({ channelId, message, rootId = '', acceptContactId = '', priority = '', fileIds = [], quotedPostId = '' }) {
   const settings = await chatSettings();
   if (!settings.chatEnabled) return chatOff();
   const text = String(message || '').trim();
@@ -777,7 +853,7 @@ async function doChatSend({ channelId, message, rootId = '', acceptContactId = '
   if (priority && !BG.CHAT_PRIORITIES.includes(priority)) return { status: 'error', message: 'Độ ưu tiên không hợp lệ' };
   if (!text && !files.length) return { status: 'error', message: 'Tin nhắn trống' };
   if (text.length > CHAT_MSG_MAX) return { status: 'error', message: `Tin nhắn dài quá ${CHAT_MSG_MAX} ký tự` };
-  if (!chatIdOk(channelId) || (rootId && !chatIdOk(rootId)) || (acceptContactId && !chatIdOk(acceptContactId))) return { status: 'error', message: 'Thiếu kênh chat' };
+  if (!chatIdOk(channelId) || (rootId && !chatIdOk(rootId)) || (acceptContactId && !chatIdOk(acceptContactId)) || (quotedPostId && !chatIdOk(quotedPostId))) return { status: 'error', message: 'Thiếu kênh chat' };
   return withClient(async (client) => {
     // Trả lời một lời mời trò chuyện là chấp nhận lời mời (web Beincom chấp nhận rồi mới gửi)
     let accepted = false;
@@ -787,7 +863,8 @@ async function doChatSend({ channelId, message, rootId = '', acceptContactId = '
       accepted = BG.chatOk(a);
     }
     // Độ ưu tiên (Quan trọng / Khẩn cấp) và tệp đã tải lên (POST v4/files) — như web
-    const body = { channel_id: channelId, message: text, ...(rootId ? { root_id: rootId } : {}), ...(files.length ? { file_ids: files } : {}), ...(priority ? { metadata: { priority: { priority, requested_ack: false, persistent_notifications: false } } } : {}) };
+    // Tin trả lời: props.quoted_post_id như web (web đọc mã tin được trích ở đây trước, rồi mới tới link trong tin)
+    const body = { channel_id: channelId, message: text, ...(rootId ? { root_id: rootId } : {}), ...(files.length ? { file_ids: files } : {}), ...(priority ? { metadata: { priority: { priority, requested_ack: false, persistent_notifications: false } } } : {}), ...(quotedPostId ? { props: { quoted_post_id: quotedPostId } } : {}) };
     const r = await client.call('POST', BG.CHAT_API + 'v4/posts', body, '');
     if (r.status === 401) return { ...chatLoginErr };
     if (!BG.chatOk(r)) return { status: 'error', message: 'Gửi tin lỗi: ' + BG.errMsg(r), accepted };
@@ -906,7 +983,7 @@ async function doChatReact({ postId, emoji, add = true, meChatId }) {
   if (!chatIdOk(postId) || !chatIdOk(meChatId) || !emojiOk(emoji)) return { status: 'error', message: 'Thiếu tin nhắn hoặc biểu cảm' };
   return withClient(async (client) => {
     const r = add
-      ? await client.call('POST', BG.CHAT_API + 'v4/reactions', { user_id: meChatId, post_id: postId, emoji_name: emoji }, '')
+      ? await client.call('POST', BG.CHAT_API + 'v5/reactions', { user_id: meChatId, post_id: postId, emoji_name: emoji }, '')
       : await client.call('DELETE', BG.CHAT_API + `v5/users/${meChatId}/posts/${postId}/reactions/${encodeURIComponent(emoji)}`, null, '');
     if (r.status === 401) return { ...chatLoginErr };
     if (!BG.chatOk(r) && !(r.status === 404 && !add)) return { status: 'error', message: 'Biểu cảm lỗi: ' + BG.errMsg(r) };
@@ -914,6 +991,8 @@ async function doChatReact({ postId, emoji, add = true, meChatId }) {
   });
 }
 
+// Thả: POST v5/reactions { user_id, post_id, emoji_name } (web: getReactionsRoute dùng /api/v5 — trước dùng v4 nên lỗi);
+// bỏ: DELETE v5/users/{mình}/posts/{tin}/reactions/{tên}
 // Ai đã thả biểu cảm (GET v4/posts/{id}/reactions — như web): theo emoji, tên người (có ghi nhớ)
 async function doChatReactions({ postId }) {
   const settings = await chatSettings();

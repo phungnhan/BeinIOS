@@ -169,7 +169,7 @@ function renderRecent() {
         el(
           'span',
           { class: 'act-break' },
-          el('button', { class: 'ghost sm', disabled: busy, text: '💬 Bình luận', title: 'Viết bình luận vào bài (dưới tên tài khoản của bạn)', onclick: () => commentOnPost(p) }),
+          el('button', { class: 'ghost sm', disabled: busy, text: '💬 Bình luận' + (p.commentsCount ? ` (${p.commentsCount})` : ''), title: 'Xem bài và các bình luận, viết bình luận (dưới tên tài khoản của bạn)', onclick: () => commentOnPost(p) }),
           el('button', { class: 'ghost sm', disabled: busy, text: '📌 Ghim', title: 'Ghim / bỏ ghim bài ở các group bạn quản trị (tối đa 5 bài mỗi group)', onclick: () => pinPost(p) }),
           el('button', { class: 'ghost sm', disabled: busy, text: '⚙ Cài đặt', title: 'Bật / tắt bình luận, cảm xúc, đánh dấu Quan trọng', onclick: () => settingPost(p) }),
           isMine(p) ? el('button', { class: 'ghost sm', disabled: busy, text: '✎ Sửa', title: 'Sửa nội dung bài đã đăng', onclick: () => editPost(p) }) : null,
@@ -549,37 +549,13 @@ function peopleOfPost(postId) {
   return [...new Map(all.filter((u) => u?.id && u.username).map((u) => [u.id, u])).values()];
 }
 
-async function writeComment({ title, target, postId, commentId = '', prefill = '' }) {
-  if (busy) return;
-  const box = el('textarea', { rows: 4, placeholder: 'Nội dung…' });
-  box.value = prefill;
-  const extra = el('label', { class: 'text-row' }, el('span', {}, el('b', { text: 'Nội dung' }), el('br'), el('span', { class: 'muted small', text: 'Gõ @username để nhắc tên người đăng bài hoặc người đã bình luận trong bài.' })), box);
-  setTimeout(() => {
-    box.focus();
-    box.setSelectionRange(box.value.length, box.value.length);
-  }, 50);
-  const ok = await confirmDialog({
-    title,
-    text: '',
-    names: [target],
-    okText: commentId ? 'Gửi trả lời' : 'Gửi bình luận',
-    extra,
-    sendNote: 'Sẽ đăng lên Beincom ngay, dưới tên tài khoản của bạn.',
-  });
-  if (!ok) return;
-  const err = BG.validateComment(box.value);
-  if (err) return toast(err, 'err');
-  const mentions = BG.commentMentions(box.value, peopleOfPost(postId));
-  await send({ type: 'commentWrite', postId, commentId, content: box.value, mentions }, () => (commentId ? 'Đã gửi trả lời.' : 'Đã gửi bình luận.'));
-}
-
+// Trả lời / bình luận: mở cửa sổ lớn Bài viết & bình luận (dash/postview.js) — thấy cả bài và các bình luận khác
 function replyComment(c) {
-  const t = BG.replyTarget(c);
-  return writeComment({ title: 'Trả lời bình luận', target: snippet(c), postId: c.postId, commentId: t.commentId, prefill: t.prefill });
+  return openPost(postOf(c.postId, c), { reply: c });
 }
 
 function commentOnPost(p) {
-  return writeComment({ title: 'Bình luận vào bài', target: snippet(p), postId: p.id });
+  return openPost(p);
 }
 
 async function dismissComments(list, dismiss) {

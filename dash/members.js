@@ -149,7 +149,7 @@ function memberCell(u) {
     'div',
     { class: 'user' },
     avatarOf(u),
-    el('div', {}, el('div', { class: 'name' }, u.fullname || u.username || '(không tên)', violationBadge(u)), u.username ? el('a', { class: 'uname', href: BG.userUrl(u.username), target: '_blank', text: '@' + u.username }) : null, memberBadges(u)),
+    el('div', {}, el('div', { class: 'name' }, nameBtn(u), violationBadge(u)), u.username ? el('a', { class: 'uname', href: BG.userUrl(u.username), target: '_blank', text: '@' + u.username }) : null, memberBadges(u)),
   );
 }
 
@@ -223,18 +223,6 @@ function renderBanned() {
 // ---------- Hồ sơ vi phạm ----------
 
 const prof = { key: '', filter: 'all', open: null };
-
-function openProfile(u) {
-  prof.key = u.username || u.fullname || '';
-  prof.filter = 'all';
-  prof.open = u.id;
-  mem.tab = 'profiles';
-  $('profiles-key').value = prof.key;
-  showTab('members');
-  renderMembers();
-  renderProfiles();
-  document.querySelector(`#profiles-body tr[data-user="${CSS.escape(u.id)}"]`)?.scrollIntoView({ block: 'center' });
-}
 
 function profileRows() {
   const q = BG.norm(prof.key);

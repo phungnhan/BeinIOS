@@ -113,7 +113,11 @@ const EMOJI = [
   ['👍', 'Cử chỉ', ['👍', '👎', '👌', '✌️', '🤞', '🤟', '🤘', '🤙', '👈', '👉', '👆', '👇', '☝️', '✋', '🤚', '🖐️', '🖖', '👋', '👏', '🙌', '👐', '🤲', '🙏', '🤝', '💪', '✍️', '👀', '🧠']],
   ['❤️', 'Trái tim', ['❤️', '🧡', '💛', '💚', '💙', '💜', '🖤', '🤍', '🤎', '💔', '❣️', '💕', '💞', '💓', '💗', '💖', '💘', '💝']],
   ['🚀', 'Crypto', ['🚀', '🌕', '📈', '📉', '💰', '💵', '💸', '💎', '🪙', '🏦', '🔥', '⚡', '✅', '❌', '⚠️', '🎉', '🎁', '🏆', '⭐', '🌟', '💯', '🔔', '📢', '📌', '🔗', '🐂', '🐻', '🐳', '🦄', '⏳', '🎯', '🤖']],
+  [':bic_purple_heart:', 'Beincom', [...BG.BIC_EMOJI.animated, ...BG.BIC_EMOJI.static].map((n) => `:${n}:`)],
+  [':bamzo_happy:', 'Bamzo', BG.BIC_EMOJI.mascot.map((n) => `:${n}:`)],
 ];
+// Mục emoji: biểu cảm riêng (":bic_…:") hiện bằng ảnh, còn lại là chữ emoji
+const emojiFace = (e) => (/^:[\w-]+:$/.test(e) ? emojiImg(e.slice(1, -1)) : e);
 const EMOJI_DEFAULT = ['👍', '❤️', '😂', '🙏', '🔥', '🎉', '🚀', '✅', '😍', '👏', '💯', '😅'];
 function recentEmoji() {
   try {
@@ -125,9 +129,10 @@ function recentEmoji() {
 }
 function renderEmoji(tab = S.emojiTab || 0) {
   S.emojiTab = tab;
-  $('emoji-tabs').replaceChildren(...EMOJI.map(([ic, name], k) => el('button', { type: 'button', role: 'tab', class: 'etab' + (k === tab ? ' on' : ''), title: name, 'aria-label': name, 'aria-selected': String(k === tab), onclick: () => renderEmoji(k) }, ic)));
+  $('emoji-tabs').replaceChildren(...EMOJI.map(([ic, name], k) => el('button', { type: 'button', role: 'tab', class: 'etab' + (k === tab ? ' on' : ''), title: name, 'aria-label': name, 'aria-selected': String(k === tab), onclick: () => renderEmoji(k) }, emojiFace(ic))));
   const list = tab === 0 ? recentEmoji() : EMOJI[tab][2];
-  $('emoji-grid').replaceChildren(...list.map((e) => el('button', { type: 'button', class: 'emo', title: e, 'aria-label': e, onclick: () => pickEmoji(e) }, e)));
+  const label = (e) => (/^:[\w-]+:$/.test(e) ? BG.chatEmojiLabel(e.slice(1, -1)) : e);
+  $('emoji-grid').replaceChildren(...list.map((e) => el('button', { type: 'button', class: 'emo', title: label(e), 'aria-label': label(e), onclick: () => pickEmoji(e) }, emojiFace(e))));
 }
 function pickEmoji(e) {
   insertText(e);
@@ -246,7 +251,8 @@ async function sendMsg(e) {
   updateSend();
   // Trả lời lời mời trò chuyện là chấp nhận lời mời (như web Beincom)
   const accept = c.contact?.incoming && c.contact.status !== 'ignored' && c.contact.id ? c.contact.id : '';
-  const r = await call('chatSend', { channelId: c.id, message: text, rootId: S.reply?.rootId || S.reply?.id || '', ...(accept ? { acceptContactId: accept } : {}), ...(S.priority ? { priority: S.priority } : {}), ...(fileIds.length ? { fileIds } : {}) });
+  const quoted = S.quote;
+  const r = await call('chatSend', { channelId: c.id, message: (quoted && text ? quoteMarker(quoted) : '') + text, rootId: '', ...(quoted && text ? { quotedPostId: quoted.id } : {}), ...(accept ? { acceptContactId: accept } : {}), ...(S.priority ? { priority: S.priority } : {}), ...(fileIds.length ? { fileIds } : {}) });
   if (r.accepted) acceptedLocally(c.id);
   S.sending = false;
   if (r.status !== 'ok') {
@@ -255,6 +261,7 @@ async function sendMsg(e) {
   }
   $('text').value = '';
   setDraft(c.id, '');
+  if (quoted) cancelQuote();
   S.reply = null;
   renderReply();
   resetComposer();
@@ -447,7 +454,7 @@ async function saveEdit(inThread = false) {
   if (!p) return;
   if (!text) return toast('Tin nhắn trống', 'err');
   if (text === String(p.message || '').trim()) return cancelEdit(inThread);
-  const r = await call('chatEdit', { postId: p.id, message: text });
+  const r = await call('chatEdit', { postId: p.id, message: (p.quotePrefix || '') + text });
   if (r.status !== 'ok') return toast(r.message || 'Không sửa được', 'err');
   const upd = (m) => (m ? { ...m, message: r.post?.message ?? text, editAt: r.post?.editAt || Date.now() } : m);
   if (S.posts.has(p.id)) S.posts.set(p.id, upd(S.posts.get(p.id)));

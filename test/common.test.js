@@ -1419,6 +1419,74 @@ test('BG chia thành common.js + lib/*.js: mọi nơi nạp đúng thứ tự BG
   for (const f of ['norm', 'slimPerson', 'evaluateRequest', 'evaluatePostIn', 'validateCompose', 'mdToPlate', 'readBackup', 'monthlyReport', 'tgKeyboard', 'pushDiag']) assert.equal(typeof BG[f], 'function', f);
 });
 
+test('Article: nội dung JSON (Plate) -> chữ thường, tóm tắt, ảnh bìa, số phút đọc, link trong bài vẫn bị quy tắc xét', () => {
+  const content = JSON.stringify([
+    { type: 'h2', children: [{ text: 'Tiêu đề mục' }] },
+    { type: 'p', children: [{ text: 'Xem ' }, { type: 'a', url: 'https://t.me/abc', children: [{ text: 'nhóm' }] }, { text: ' nhé ' }, { type: 'mention', value: 'kai', children: [{ text: '' }] }] },
+    { type: 'img', url: 'https://cdn.example/anh.png', children: [{ text: '' }] },
+    { type: 'p', children: [{ text: '' }] },
+  ]);
+  const p = BG.slimPost({ id: 'a1', type: 'ARTICLE', title: '1 Năm Nhìn Lại', summary: 'Một năm trước…', coverMedia: { url: 'https://cdn.example/bia.jpg' }, wordCount: 1400, content, actor: { id: 'u1' }, audience: { groups: [] }, tags: [{ name: 'CRYPTO' }] });
+  assert.deepEqual([p.title, p.text, p.summary, p.cover, p.readMin, p.links, p.tags], ['1 Năm Nhìn Lại', 'Tiêu đề mục\nXem nhóm nhé @kai', 'Một năm trước…', 'https://cdn.example/bia.jpg', 7, ['https://t.me/abc'], ['CRYPTO']]);
+  assert.equal(BG.evaluatePost(p, { blockedDomains: ['t.me'] }).verdict, 'bad'); // link nằm trong chữ "nhóm" vẫn bị bắt
+  // Ảnh bìa không phải https: bỏ; bài thường giữ nguyên chữ; chuỗi không phải JSON giữ nguyên
+  assert.equal(BG.slimPost({ id: 'a2', type: 'ARTICLE', content: '[]', coverMedia: { url: 'http://x/y.jpg' }, audience: {} }).cover, '');
+  assert.equal(BG.slimPost({ id: 'p1', type: 'POST', content: '[{"không phải bài viết"}]', audience: {} }).text, '[{"không phải bài viết"}]');
+  assert.deepEqual([BG.articlePlain('bình thường'), BG.articlePlain('[{"lỗi'), BG.readMinutes(0), BG.readMinutes(50), BG.readMinutes(450)], ['bình thường', '[{"lỗi', 0, 1, 2]);
+});
+
+test('Chat: tin trả lời (bein.mm.reply), thẻ xem trước link, link <…>, nhận diện link Beincom', () => {
+  const id = 'z4pr6ga5nbdjim19soeyowctmr';
+  const raw = (extra = {}) => ({ id: 'p1', channel_id: 'c', user_id: 'u1', message: `[](bein.mm.reply)https://chat.beincom.com/dea5c152dbcd/pl/${id}[](bein.mm.reply)\n@anhphuc Đăng kí như thế nào vậy ạ`, props: { previewed_post: id }, ...extra });
+  const author = { id: 'u2', username: 'anhphuc', first_name: 'Phùng', last_name: 'Anh Phúc', props: { bic_user_id: 'b2' } };
+  // Có sẵn tin được trích (permalink): người gửi, nội dung; tin hiện không còn phần đánh dấu, giữ lại để sửa tin
+  const a = BG.chatPagePost(raw({ metadata: { embeds: [{ type: 'permalink', data: { post_id: id, channel_display_name: 'Kênh', post: { id, user_id: 'u2', message: 'Mình đã đk', author } } }] } }));
+  assert.deepEqual([a.message, a.quote.id, a.quote.post.user.fullname, a.quote.post.message, a.quote.post.channel], ['@anhphuc Đăng kí như thế nào vậy ạ', id, 'Phùng Anh Phúc', 'Mình đã đk', 'Kênh']);
+  assert.ok(a.quotePrefix.startsWith('[](bein.mm.reply)') && a.quotePrefix.endsWith('\n'));
+  // Không kèm tin được trích: chỉ có mã (trang đọc thêm)
+  const b = BG.chatPagePost(raw());
+  assert.deepEqual([b.quote.id, b.quote.post], [id, undefined]);
+  assert.equal(BG.chatPagePost({ id: 'p2', message: 'Tin thường' }).quote, undefined);
+  // Thẻ xem trước (opengraph): ảnh chỉ https
+  const og = BG.chatPagePost({ id: 'p3', message: 'https://x.com/a', metadata: { embeds: [{ type: 'opengraph', url: 'https://x.com/a', data: { title: 'Tiêu đề', description: 'Mô tả', site_name: 'X', images: [{ url: 'http://x.com/i.png' }, { secure_url: 'https://x.com/i.png' }] } }] } }).og;
+  assert.deepEqual(og, { url: 'https://x.com/a', title: 'Tiêu đề', description: 'Mô tả', site: 'X', image: 'https://x.com/i.png' });
+  // Tin trả lời kiểu web mới (dấu cách quanh link, props.quoted_post_id) trong tin nhắn riêng: máy chủ đọc link thành trang chung
+  // "BEINCOM | CHAT" — không hiện thẻ đó
+  const dm = BG.chatPagePost({ id: 'p4', message: `[](bein.mm.reply) https://chat.beincom.com/direct-message/pl/${id} [](bein.mm.reply)\n46546465`, props: { quoted_post_id: id }, metadata: { embeds: [{ type: 'opengraph', url: `https://chat.beincom.com/direct-message/pl/${id}`, data: { title: 'BEINCOM | CHAT', description: 'To connect everyone' } }] } });
+  assert.deepEqual([dm.message, dm.quote.id, dm.og], ['46546465', id, undefined]);
+  // <https://…>: link không kèm dấu ngoặc
+  assert.deepEqual(BG.chatMarkdown('Xem <https://group.beincom.com/article/c8d60d10-c10b-4851-935a-1cff8a04ecf2> nhé')[0].c[1], { t: 'a', href: 'https://group.beincom.com/article/c8d60d10-c10b-4851-935a-1cff8a04ecf2', c: [{ t: 'text', v: 'https://group.beincom.com/article/c8d60d10-c10b-4851-935a-1cff8a04ecf2' }] });
+  // Link Beincom: loại và mã để đọc tên
+  const L = (u) => (({ kind, id, type, name }) => ({ kind, id, type, name }))(BG.beinLink(u) || {});
+  assert.deepEqual(L('https://group.beincom.com/article/C8D60D10-c10b-4851-935a-1cff8a04ecf2?x=1'), { kind: 'content', id: 'c8d60d10-c10b-4851-935a-1cff8a04ecf2', type: 'ARTICLE', name: undefined });
+  assert.deepEqual(L('https://group.beincom.com/posts/c8d60d10-c10b-4851-935a-1cff8a04ecf2'), { kind: 'content', id: 'c8d60d10-c10b-4851-935a-1cff8a04ecf2', type: 'POST', name: undefined });
+  assert.deepEqual(L(`https://chat.beincom.com/dea5c152dbcd/pl/${id}`), { kind: 'chat', id, type: undefined, name: undefined });
+  assert.deepEqual(L('https://group.beincom.com/users/kai.crypto'), { kind: 'user', id: 'kai.crypto', type: undefined, name: '@kai.crypto' });
+  for (const u of ['https://google.com/article/c8d60d10-c10b-4851-935a-1cff8a04ecf2', 'https://group.beincom.com/newsfeed', 'không phải link']) assert.equal(BG.beinLink(u), null, u);
+});
+
+test('Chat: biểu cảm riêng của Beincom (bic_*, Bamzo) là ảnh trên group.beincom.com; :tên: trong chữ của tin; hàng biểu cảm nhanh', () => {
+  assert.equal(BG.chatCustomEmoji('bic_purple_heart'), 'https://group.beincom.com/images/emoji/animated/bic_purple_heart.gif');
+  assert.equal(BG.chatCustomEmoji('bic_thumbs_up'), 'https://group.beincom.com/images/emoji/static/bic_thumbs_up.png');
+  assert.equal(BG.chatCustomEmoji('bamzo_in_love'), 'https://group.beincom.com/images/emoji/mascot/bamzo_in_love.png');
+  assert.deepEqual([BG.chatCustomEmoji('heart'), BG.chatCustomEmoji('bic_lạ')], ['', '']);
+  assert.deepEqual([BG.chatEmojiLabel('bic_purple_heart'), BG.chatEmojiLabel('bamzo_in_love')], ['purple heart', 'Bamzo in love']);
+  assert.deepEqual([BG.BIC_EMOJI.static.length, BG.BIC_EMOJI.animated.length, BG.BIC_EMOJI.mascot.length], [36, 12, 10]);
+  // Tên hay gặp trong chat thật có hình
+  for (const n of ['+1', 'heart', 'joy', 'laughing', 'rolling_on_the_floor_laughing', 'smiling_face_with_3_hearts', 'up', 'flag-vn', 'star-struck', 'four_leaf_clover']) assert.ok(BG.chatEmoji(n), n);
+  // Chữ của tin: :bic_…: thành ảnh, :joy: thành emoji, tên lạ / giờ giữ nguyên, link không bị cắt
+  assert.deepEqual(BG.chatMarkdown('Chào :bic_purple_heart: và :joy: lúc 10:30:45 :abc: https://x.com/a:b:c')[0].c, [
+    { t: 'text', v: 'Chào ' },
+    { t: 'emo', name: 'bic_purple_heart', src: 'https://group.beincom.com/images/emoji/animated/bic_purple_heart.gif' },
+    { t: 'text', v: ' và 😂 lúc 10:30:45 :abc: ' },
+    { t: 'a', href: 'https://x.com/a:b:c', c: [{ t: 'text', v: 'https://x.com/a:b:c' }] },
+  ]);
+  assert.deepEqual(BG.chatMarkdown('`:bic_heart:`')[0].c, [{ t: 'code', v: ':bic_heart:' }]); // trong mã: giữ chữ
+  // Hàng nhanh: vừa dùng trước (bỏ tên lạ), rồi biểu cảm riêng dùng nhiều nhất; tối đa 8
+  assert.deepEqual(BG.chatQuickReacts(['tada', 'bic_fire', 'lạ']), ['tada', 'bic_fire', 'bic_purple_heart', 'bic_thumbs_up', 'bic_heart', 'bic_hugging_face', 'bic_flying_rocket', 'heart']);
+  assert.deepEqual(BG.chatQuickReacts(), BG.CHAT_QUICK_REACTS);
+});
+
 test('Chat: câu trả lời mẫu — "/chữ" ở đầu dòng, khớp không dấu, làm sạch, bộ mặc định, có trong bản sao lưu', () => {
   assert.deepEqual(BG.chatSlashQuery('/noi', 4), { start: 0, term: 'noi' });
   assert.deepEqual(BG.chatSlashQuery('Chào\n/', 6), { start: 5, term: '' });

@@ -24,6 +24,22 @@ function violationBadge(u) {
   });
 }
 
+// Tên người: có mã Beincom thì bấm để mở cửa sổ Hồ sơ (dash/person.js)
+function nameBtn(u) {
+  const name = u.fullname || u.username || '(không tên)';
+  if (!u.id) return name;
+  return el('button', {
+    type: 'button',
+    class: 'name-btn',
+    title: 'Xem hồ sơ',
+    text: name,
+    onclick: (e) => {
+      e.stopPropagation();
+      openProfile(u);
+    },
+  });
+}
+
 function userCell(u) {
   const badges = el(
     'div',
@@ -40,7 +56,7 @@ function userCell(u) {
     el(
       'div',
       {},
-      el('div', { class: 'name' }, u.fullname || u.username || '(không tên)', violationBadge(u)),
+      el('div', { class: 'name' }, nameBtn(u), violationBadge(u)),
       u.username ? el('a', { class: 'uname', href: BG.userUrl(u.username), target: '_blank', text: '@' + u.username }) : null,
       badges,
     ),
@@ -109,25 +125,39 @@ function postAuthor(a) {
     'div',
     { class: 'user' },
     avatarOf(a),
-    el('div', {}, el('div', { class: 'name' }, a.fullname || a.username || '(không tên)', violationBadge(a)), a.username ? el('a', { class: 'uname', href: BG.userUrl(a.username), target: '_blank', text: '@' + a.username }) : null),
+    el('div', {}, el('div', { class: 'name' }, nameBtn(a), violationBadge(a)), a.username ? el('a', { class: 'uname', href: BG.userUrl(a.username), target: '_blank', text: '@' + a.username }) : null),
   );
 }
 
+// Article hiện như thẻ trên web: ảnh bìa, tiêu đề, tóm tắt, số phút đọc, tag; nội dung (chữ thường) thu gọn bên dưới
 function postContent(p) {
-  const text = el('div', { class: 'post-text clamp', title: 'Bấm để xem hết / thu gọn', text: p.text || '(không có chữ)' });
+  const art = p.type === 'ARTICLE';
+  const body = art ? BG.articlePlain(p.text) : p.text; // bài đã lưu từ bản cũ còn là JSON
+  const text = el('div', { class: 'post-text clamp' + (art ? ' art-body' : ''), title: 'Bấm để xem hết / thu gọn', text: body || (art ? '' : '(không có chữ)') });
   text.addEventListener('click', () => text.classList.toggle('clamp'));
   const meta = el(
     'div',
     { class: 'post-meta' },
-    p.type === 'ARTICLE' ? el('span', { class: 'tag accent', text: 'Article' }) : null,
+    art ? el('span', { class: 'tag accent', text: 'Article' }) : null,
+    art && p.readMin ? el('span', { class: 'tag info', text: `⏱ ${p.readMin} phút đọc` }) : null,
+    ...(p.tags || []).slice(0, 6).map((t) => el('span', { class: 'tag', text: '#' + t })),
     p.media.images ? el('span', { class: 'tag info', text: `🖼 ${p.media.images} ảnh` }) : null,
     p.media.videos ? el('span', { class: 'tag info', text: `🎬 ${p.media.videos} video` }) : null,
     p.media.files ? el('span', { class: 'tag info', text: `📎 ${p.media.files} tệp` }) : null,
     p.link ? el('a', { class: 'tag info', href: p.link, target: '_blank', rel: 'noreferrer', text: '🔗 ' + (BG.linkDomains(p.link)[0] || 'link') }) : null,
     p.full === false ? el('span', { class: 'tag warn', title: 'Chưa tải được nội dung đầy đủ, quy tắc chỉ xét phần này', text: 'Mới có 500 ký tự đầu' }) : null,
+    p.reactions ? el('span', { class: 'tag info', text: `❤ ${p.reactions.toLocaleString('vi-VN')}` }) : null,
     p.commentsCount ? el('span', { class: 'tag info', text: `💬 ${p.commentsCount}` }) : null,
   );
-  return el('div', {}, p.title ? el('div', { class: 'post-title', text: p.title }) : null, text, meta);
+  return el(
+    'div',
+    { class: art ? 'art-card' : null },
+    art && p.cover ? el('img', { class: 'post-cover', src: p.cover, alt: '', loading: 'lazy', referrerpolicy: 'no-referrer' }) : null,
+    p.title ? el('div', { class: 'post-title', text: p.title }) : null,
+    art && p.summary ? el('div', { class: 'art-summary', text: p.summary }) : null,
+    body || !art ? text : null,
+    meta,
+  );
 }
 
 function postGroups(p, adminIds) {

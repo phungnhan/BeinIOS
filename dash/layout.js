@@ -47,11 +47,21 @@ function setFolded(card, folded, { save = true } = {}) {
   renderToc();
 }
 
+// Thanh tab con (các thẻ trong tab) dính ngay dưới thanh tab lớn: ghi chiều cao thanh tab và thanh tab con để CSS đặt
+// vị trí dính và chỗ dừng khi cuộn tới thẻ (scroll-margin)
+function syncSticky() {
+  const root = document.documentElement.style;
+  root.setProperty('--tabs-h', ($('tabs')?.offsetHeight || 49) + 'px');
+  const toc = $('tab-toc');
+  root.setProperty('--toc-h', (toc && !toc.hidden ? toc.offsetHeight : 0) + 'px');
+}
+window.addEventListener('resize', syncSticky);
+
 function renderToc() {
   const nav = $('tab-toc');
   const cards = tabCards(currentTab);
   nav.hidden = cards.length < TOC_MIN;
-  if (nav.hidden) return;
+  if (nav.hidden) return syncSticky();
   const anyOpen = cards.some((c) => !c.classList.contains('folded'));
   nav.replaceChildren(
     ...cards.map((c) =>
@@ -75,6 +85,7 @@ function renderToc() {
       },
     }),
   );
+  syncSticky();
 }
 
 // Nút thu gọn ở đầu mỗi thẻ; áp trạng thái đã nhớ

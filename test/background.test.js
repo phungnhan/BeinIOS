@@ -176,7 +176,8 @@ function makeEnv({ data = fixture(), settings = {}, rules = {}, postRules = {}, 
       }
       if ((m = path.match(/^v4\/users\/me\/teams\/(\w+)\/threads\/(\w+)\/(following|read\/\d+)$/)) && (method === 'PUT' || method === 'DELETE')) return res(200, { status: 'OK' });
       // Biểu cảm: thả / bỏ / ai đã thả; tìm tin (theo team, mọi nơi — c.noGlobalSearch: máy chủ không có)
-      if (path === 'v4/reactions' && method === 'POST') return res(201, { ...JSON.parse(opts.body), create_at: 1 });
+      // Thả biểu cảm: máy chủ Beincom nhận ở v5 (v4/reactions trả 404 như máy chủ thật — lỗi trước v0.43.1)
+      if (path === 'v5/reactions' && method === 'POST') return res(201, { ...JSON.parse(opts.body), create_at: 1 });
       if ((m = path.match(/^v5\/users\/(\w+)\/posts\/(\w+)\/reactions\/([\w+%-]+)$/)) && method === 'DELETE') return res(200, { status: 'OK' });
       if ((m = path.match(/^v4\/posts\/(\w+)\/reactions$/))) return res(200, (c.reactions || {})[m[1]] || []);
       const searchIn = (teamIds, terms) => {
@@ -187,6 +188,11 @@ function makeEnv({ data = fixture(), settings = {}, rules = {}, postRules = {}, 
       if ((m = path.match(/^v4\/teams\/(\w+)\/posts\/search$/)) && method === 'POST') return searchIn([m[1]], JSON.parse(opts.body).terms);
       if (path === 'v4/posts/search' && method === 'POST') return c.noGlobalSearch ? res(404, { id: 'api.context.404.app_error', message: 'Sorry, we could not find the page.', status_code: 404 }) : searchIn(null, JSON.parse(opts.body).terms);
       // Sửa tin, ghim / bỏ ghim, tin đã ghim, gợi ý tên
+      // Đọc một tin (tin được trích, tên link tin chat)
+      if ((m = path.match(/^v4\/posts\/(\w+)$/)) && method === 'GET') {
+        const x = Object.values(c.posts).flat().find((y) => y.id === m[1]);
+        return x ? res(200, { ...x, author: undefined }) : res(404, { id: 'app.post.get.app_error', message: 'Unable to get the post.', status_code: 404 });
+      }
       if ((m = path.match(/^v4\/posts\/(\w+)\/patch$/)) && method === 'PUT') {
         const x = Object.values(c.posts).flat().find((y) => y.id === m[1]);
         return x ? res(200, { ...x, ...JSON.parse(opts.body), edit_at: 123 }) : res(404, { id: 'app.post.get.app_error', message: 'Unable to get the post.', status_code: 404 });
@@ -326,8 +332,11 @@ function makeEnv({ data = fixture(), settings = {}, rules = {}, postRules = {}, 
     }
     // Bình luận của một bài (trang đầu = mới nhất), ẩn bình luận
     if (path === 'content/comments' && method === 'GET') {
-      const src = q.parentId ? data.replies?.[q.parentId] : data.comments?.[q.postId];
-      return reply(200, ok({ list: (src || []).slice(0, Number(q.limit) || 10), meta: { hasNextPage: false } }));
+      const src = (q.parentId ? data.replies?.[q.parentId] : data.comments?.[q.postId]) || [];
+      const start = Number(q.after) || 0;
+      const list = src.slice(start, start + (Number(q.limit) || 10));
+      const more = start + list.length < src.length;
+      return reply(200, ok({ list, meta: { hasNextPage: more, endCursor: more ? String(start + list.length) : null } }));
     }
     // Viết bình luận / trả lời: trả về bình luận vừa tạo
     if (path === 'content/comments' && method === 'POST') {
@@ -1797,6 +1806,27 @@ test('khôi phục sao lưu: ghi cài đặt / quy tắc / mẫu bài, giữ Ch�
 
 const cmt = (id, text, extra = {}) => ({ id, postId: 't1', parentId: '00000000-0000-0000-0000-000000000000', content: text, actor: { id: 'u' + id, username: 'nguoi' + id, fullname: 'Người ' + id, avatar: '' }, createdAt: '2026-10-07T11:00:00Z', totalReply: 0, media: { images: [] }, ...extra });
 
+test('cửa sổ Bài viết & bình luận: đọc một trang bình luận của bài (chỉ đọc), trang cũ hơn theo after, trả lời theo parentId', async () => {
+  const data = fixture();
+  data.comments = { t1: Array.from({ length: 30 }, (_, i) => cmt('k' + i, 'Bình luận ' + i, i === 0 ? { totalReply: 1 } : {})) };
+  data.replies = { k0: [cmt('r1', 'Trả lời', { parentId: 'k0' })] };
+  const env = makeEnv({ data });
+  await scan(env);
+  const before = env.calls.length;
+  const p1 = await env.send({ type: 'postComments', postId: 't1' });
+  assert.deepEqual([p1.status, p1.items.length, p1.hasNext, p1.after], ['ok', 25, true, '25']);
+  assert.deepEqual([p1.items[0].id, p1.items[0].text, p1.items[0].actor.username, p1.items[0].totalReply, p1.items[0].groups.map((g) => g.id)], ['k0', 'Bình luận 0', 'nguoik0', 1, ['gCL']]);
+  const p2 = await env.send({ type: 'postComments', postId: 't1', after: p1.after });
+  assert.deepEqual([p2.items.length, p2.hasNext, p2.items[0].id], [5, false, 'k25']);
+  const rp = await env.send({ type: 'postComments', postId: 't1', parentId: 'k0' });
+  assert.deepEqual(rp.items.map((x) => [x.id, x.parentId]), [['r1', 'k0']]);
+  assert.deepEqual(env.calls.slice(before), ['GET content/comments?postId=t1&limit=25', 'GET content/comments?postId=t1&limit=25&after=25', 'GET content/comments?postId=t1&parentId=k0&limit=25']);
+  assert.match((await env.send({ type: 'postComments', postId: '../x' })).message, /Thiếu/);
+  // Hết phiên đăng nhập
+  const out = makeEnv({ data, loggedIn: false });
+  assert.equal((await out.send({ type: 'postComments', postId: 't1' })).status, 'need_login');
+});
+
 test('quét bình luận: chỉ đọc bài có bình luận mới, chấm theo quy tắc, lần sau báo bình luận mới vi phạm', async () => {
   const data = fixture();
   data.timeline.gCL[0].commentsCount = 2; // t1
@@ -3007,6 +3037,67 @@ test('trang Chat: tin nhắn riêng với chính mình là "Nhật ký cá nhân
   assert.ok(!('dmSelf' in env.storage.chatNotify.dm));
 });
 
+test('trang Chat: ảnh community (ảnh team chat) cho mục cộng đồng và kênh chính (town-square)', async () => {
+  const now = Date.parse('2026-10-14T03:00:00Z');
+  const data = fixture();
+  const c = (data.chat = chatFixture(now));
+  c.teams[0].last_team_icon_update = 1749242105003;
+  const env = makeEnv({ data, now, settings: { chatEnabled: true } });
+  const r = await env.send({ type: 'chatOverview' });
+  const cl = r.teams.find((t) => t.id === 'tCL');
+  assert.equal(cl.icon, 'https://chat.beincom.com/api/v4/teams/tCL/image?_=1749242105003');
+  assert.equal(r.teams.find((t) => t.id === 'tX').icon, ''); // chưa có ảnh
+  assert.deepEqual(cl.channels.map((x) => [x.id, !!x.main]), [['chSub', false], ['chMain', true]]);
+});
+
+test('trang Chat: gửi tin trả lời như web — props.quoted_post_id; mã lạ thì không gửi', async () => {
+  const now = Date.parse('2026-10-14T03:00:00Z');
+  const data = fixture();
+  data.chat = chatFixture(now);
+  const env = makeEnv({ data, now, settings: { chatEnabled: true } });
+  const msg = '[](bein.mm.reply) https://chat.beincom.com/crypto-life/pl/aaaaaaaaaaaaaaaaaaaaaaaaaa [](bein.mm.reply)\nĐồng ý';
+  const r = await env.send({ type: 'chatSend', channelId: 'chMain', message: msg, quotedPostId: 'aaaaaaaaaaaaaaaaaaaaaaaaaa' });
+  assert.equal(r.status, 'ok');
+  assert.deepEqual(env.bodies.find(([k]) => k === 'POST chat:v4/posts')[1], { channel_id: 'chMain', message: msg, props: { quoted_post_id: 'aaaaaaaaaaaaaaaaaaaaaaaaaa' } });
+  assert.deepEqual([r.post.message, r.post.quote.id], ['Đồng ý', 'aaaaaaaaaaaaaaaaaaaaaaaaaa']); // tin trả về: bỏ phần đánh dấu, còn khung trích
+  assert.match((await env.send({ type: 'chatSend', channelId: 'chMain', message: 'x', quotedPostId: '../x' })).message, /Thiếu/);
+});
+
+test('trang Chat: tin được trích (trả lời), tên link Beincom (chỉ đọc, có ghi nhớ); Dashboard đọc bài / Article đầy đủ', async () => {
+  const now = Date.parse('2026-10-14T03:00:00Z');
+  const data = fixture();
+  const c = (data.chat = chatFixture(now));
+  c.users.cu60 = chatUser(60);
+  c.posts.chMain = [chatPost('q1aaaaaaaaaaaaaaaaaaaaaaaa', 'chMain', chatUser(60), 'Mình đã đăng ký', now - 3600e3)];
+  const nodes = [{ type: 'h2', children: [{ text: 'Mục 1' }] }, { type: 'p', children: [{ text: 'Xem ' }, { type: 'a', url: 'https://t.me/x', children: [{ text: 'nhóm' }] }] }];
+  data.timeline.gCL.push(post('art1', '', { type: 'ARTICLE', title: '1 Năm Nhìn Lại', summary: 'Tóm tắt', content: JSON.stringify(nodes), coverMedia: { url: 'https://cdn.example/bia.jpg' }, wordCount: 600 }));
+  const env = makeEnv({ data, now, settings: { chatEnabled: true } });
+  await scan(env);
+  const before = env.calls.length;
+  // Tin được trích: đọc tin theo mã, tên người theo bộ nhớ / đọc thêm; mã lạ thì báo không còn
+  const q = await env.send({ type: 'chatQuotes', ids: ['q1aaaaaaaaaaaaaaaaaaaaaaaa', 'zzzzzzzzzzzzzzzzzzzzzzzzzz', '../x'] });
+  assert.deepEqual([q.status, q.posts.q1aaaaaaaaaaaaaaaaaaaaaaaa.message, q.posts.q1aaaaaaaaaaaaaaaaaaaaaaaa.user.fullname, q.posts.zzzzzzzzzzzzzzzzzzzzzzzzzz.missing, Object.keys(q.posts).length], ['ok', 'Mình đã đăng ký', 'Người 60', true, 2]);
+  // Tên link: Article (tiêu đề), tin chat (người gửi: đoạn đầu), community theo kết quả quét; lần sau lấy từ bộ nhớ
+  const links = [{ kind: 'content', id: 'art1' }, { kind: 'chat', id: 'q1aaaaaaaaaaaaaaaaaaaaaaaa' }, { kind: 'community', id: 'cCL' }, { kind: 'content', id: 'gone1' }, { kind: 'lạ', id: 'x' }];
+  const n1 = await env.send({ type: 'beinLinkNames', links });
+  assert.deepEqual(n1.names, {
+    'content:art1': { name: '1 Năm Nhìn Lại', type: 'ARTICLE', author: n1.names['content:art1'].author },
+    'chat:q1aaaaaaaaaaaaaaaaaaaaaaaa': { name: 'Người 60: Mình đã đăng ký' },
+    'community:cCL': { name: 'Crypto Life' },
+    'content:gone1': { name: 'Bài đã bị xoá', gone: true },
+  });
+  const mid = env.calls.length;
+  await env.send({ type: 'beinLinkNames', links });
+  assert.equal(env.calls.length, mid); // ghi nhớ: không gọi lại
+  assert.ok(env.calls.slice(before).every((x) => x.startsWith('GET ')));
+  // Bài đầy đủ: Article trả về các khối nội dung + chữ thường; bài thường trả toàn bộ chữ
+  const full = await env.send({ type: 'postFull', id: 'art1' });
+  assert.deepEqual([full.status, full.nodes, full.text, full.post.cover, full.post.readMin], ['ok', nodes, 'Mục 1\nXem nhóm', 'https://cdn.example/bia.jpg', 3]);
+  const plain = await env.send({ type: 'postFull', id: 't1' });
+  assert.deepEqual([plain.status, plain.nodes, plain.text], ['ok', null, 'Tin tức thị trường hôm nay']);
+  assert.match((await env.send({ type: 'postFull', id: 'gone2' })).message, /không còn/);
+});
+
 test('trang Chat: đọc nhanh — tên 8 tin nhắn riêng gần nhất, quyền chỉ lấy từ bộ nhớ; cộng đồng đã ghim lên đầu (thứ tự ghim lưu trong máy, đọc lại ngầm)', async () => {
   const now = Date.parse('2026-10-14T03:00:00Z');
   const data = fixture();
@@ -3246,7 +3337,7 @@ test('trang Chat: biểu cảm (thả / bỏ, ai đã thả), tìm tin trong kê
   assert.deepEqual(page.posts[0].reactions, [{ name: '+1', count: 2, mine: true, top: ['cu60', 'cu61'] }]);
   // Thả / bỏ: việc của mình, thật kể cả Chạy thử
   assert.deepEqual(await env.send({ type: 'chatReact', postId: 'p1', emoji: 'heart', add: true, meChatId: 'cu1' }), { status: 'ok', added: true, mode: 'direct' });
-  assert.deepEqual(env.bodies.find(([k]) => k === 'POST chat:v4/reactions')[1], { user_id: 'cu1', post_id: 'p1', emoji_name: 'heart' });
+  assert.deepEqual(env.bodies.find(([k]) => k === 'POST chat:v5/reactions')[1], { user_id: 'cu1', post_id: 'p1', emoji_name: 'heart' });
   assert.equal((await env.send({ type: 'chatReact', postId: 'p1', emoji: '+1', add: false, meChatId: 'cu1' })).status, 'ok');
   assert.ok(env.calls.includes('DELETE chat:v5/users/cu1/posts/p1/reactions/%2B1'));
   assert.match((await env.send({ type: 'chatReact', postId: 'p1', emoji: 'a/b', meChatId: 'cu1' })).message, /Thiếu/);
@@ -4119,14 +4210,16 @@ test('bài thảo luận: sáng thứ Hai soạn sẵn câu hỏi + giờ gợi 
 
   // Chạy thử: không ghi lần dùng
   env.storage.settings = { ...env.storage.settings, dryRun: true };
-  await env.send({ type: 'compose', groupIds: ['gCL'], content: d.text, setting: BG.DEFAULT_POST_SETTING, scheduledAt: d.suggestAt, prompt: { id: d.promptId } });
+  // Giờ hẹn kiểm tra theo đồng hồ thật (ít nhất 5 phút sau): dùng giờ ngày mai thay cho giờ gợi ý (đã qua theo đồng hồ thật)
+  const at = new Date(Math.ceil((Date.now() + 864e5) / 60e3) * 60e3).toISOString();
+  await env.send({ type: 'compose', groupIds: ['gCL'], content: d.text, setting: BG.DEFAULT_POST_SETTING, scheduledAt: at, prompt: { id: d.promptId } });
   assert.equal(env.storage.promptBank, undefined);
   // Hẹn giờ thật: ghi lần dùng (bài, group, giờ đăng), bỏ bản soạn sẵn; tuần sau sẽ chọn câu khác
   env.storage.settings = { ...env.storage.settings, dryRun: false };
-  const r = await env.send({ type: 'compose', groupIds: ['gCL'], content: d.text, setting: BG.DEFAULT_POST_SETTING, scheduledAt: d.suggestAt, prompt: { id: d.promptId } });
+  const r = await env.send({ type: 'compose', groupIds: ['gCL'], content: d.text, setting: BG.DEFAULT_POST_SETTING, scheduledAt: at, prompt: { id: d.promptId } });
   assert.equal(r.status, 'ok', r.message);
   const used = env.storage.promptBank.items.find((x) => x.id === 'd1').uses;
-  assert.deepEqual(used, [{ postId: r.contentId, groupId: 'gCL', at: d.suggestAt }]);
+  assert.deepEqual(used, [{ postId: r.contentId, groupId: 'gCL', at }]);
   assert.equal(env.storage.promptDraft, undefined);
   assert.equal(BG.pickPrompt(env.storage.promptBank, { groupId: 'gCL', now }).id, 'd2');
   assert.ok(env.storage.postStats[r.contentId], 'bài được theo dõi ở Hiệu quả bài đã đăng');

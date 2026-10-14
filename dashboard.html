@@ -389,6 +389,38 @@
       <button id="btn-recent-more" class="ghost more" hidden>Xem thêm</button>
     </section>
 
+    <section class="card span-3" id="comments" data-tab="content">
+      <div class="card-head">
+        <h2>Bình luận mới</h2>
+        <div class="review-tools">
+          <div class="seg" id="comment-filter">
+            <button data-f="flagged" class="active">Cần xử lý <span id="ccnt-flagged"></span></button>
+            <button data-f="all">Tất cả <span id="ccnt-all"></span></button>
+            <button data-f="dismissed">Đã bỏ qua <span id="ccnt-dismissed"></span></button>
+            <button data-f="hidden">Đã ẩn <span id="ccnt-hidden"></span></button>
+          </div>
+          <input type="search" id="comment-q" class="list-q" placeholder="Lọc: @tên, chữ…" aria-label="Lọc bình luận theo người viết hoặc nội dung" />
+        </div>
+      </div>
+      <div id="comments-note" class="muted small review-note"></div>
+      <div class="bulk-bar">
+        <label class="check"><input type="checkbox" id="comments-check-all" /> Chọn tất cả đang hiện</label>
+        <span class="muted small" id="comments-selected">Đã chọn 0</span>
+        <span class="spacer"></span>
+        <button id="btn-dismiss-comments" class="ghost" disabled>Bỏ qua đã chọn</button>
+        <button id="btn-hide-comments" class="danger" disabled>Ẩn đã chọn</button>
+      </div>
+      <div class="table-wrap">
+        <table class="requests posts">
+          <thead>
+            <tr><th class="cb"></th><th>Người viết</th><th>Bình luận</th><th>Trong bài</th><th>Lúc</th><th>Đánh giá theo quy tắc</th><th class="act">Thao tác</th></tr>
+          </thead>
+          <tbody id="comments-body"></tbody>
+        </table>
+      </div>
+      <button id="btn-comments-more" class="ghost more" hidden>Xem thêm</button>
+    </section>
+
     <section class="card span-3" id="chat-card" data-tab="content">
       <div class="card-head">
         <h2>💬 Tin nhắn chat</h2>
@@ -424,37 +456,6 @@
       <button id="btn-chat-more" class="ghost more" hidden>Xem thêm</button>
     </section>
 
-    <section class="card span-3" id="comments" data-tab="content">
-      <div class="card-head">
-        <h2>Bình luận mới</h2>
-        <div class="review-tools">
-          <div class="seg" id="comment-filter">
-            <button data-f="flagged" class="active">Cần xử lý <span id="ccnt-flagged"></span></button>
-            <button data-f="all">Tất cả <span id="ccnt-all"></span></button>
-            <button data-f="dismissed">Đã bỏ qua <span id="ccnt-dismissed"></span></button>
-            <button data-f="hidden">Đã ẩn <span id="ccnt-hidden"></span></button>
-          </div>
-          <input type="search" id="comment-q" class="list-q" placeholder="Lọc: @tên, chữ…" aria-label="Lọc bình luận theo người viết hoặc nội dung" />
-        </div>
-      </div>
-      <div id="comments-note" class="muted small review-note"></div>
-      <div class="bulk-bar">
-        <label class="check"><input type="checkbox" id="comments-check-all" /> Chọn tất cả đang hiện</label>
-        <span class="muted small" id="comments-selected">Đã chọn 0</span>
-        <span class="spacer"></span>
-        <button id="btn-dismiss-comments" class="ghost" disabled>Bỏ qua đã chọn</button>
-        <button id="btn-hide-comments" class="danger" disabled>Ẩn đã chọn</button>
-      </div>
-      <div class="table-wrap">
-        <table class="requests posts">
-          <thead>
-            <tr><th class="cb"></th><th>Người viết</th><th>Bình luận</th><th>Trong bài</th><th>Lúc</th><th>Đánh giá theo quy tắc</th><th class="act">Thao tác</th></tr>
-          </thead>
-          <tbody id="comments-body"></tbody>
-        </table>
-      </div>
-      <button id="btn-comments-more" class="ghost more" hidden>Xem thêm</button>
-    </section>
 
     <section class="card span-3" id="sweep" data-tab="content">
       <div class="card-head">
@@ -1526,6 +1527,32 @@
     </section>
   </main>
 
+  <!-- Bài viết & bình luận (dash/postview.js): cửa sổ lớn khi bấm 💬 Bình luận / Trả lời -->
+  <dialog id="postview" class="postview" aria-labelledby="pv-title">
+    <div class="pv-head">
+      <h3 id="pv-title">Bài viết</h3>
+      <a id="pv-open" target="_blank" rel="noreferrer">Mở trên Beincom ↗</a>
+      <button type="button" class="ghost sm" id="pv-close" aria-label="Đóng">✕</button>
+    </div>
+    <div class="pv-body">
+      <div id="pv-post" class="pv-post"></div>
+      <div class="pv-ctitle"><b id="pv-count"></b><button type="button" class="link-btn" id="pv-reload">↻ Tải lại</button></div>
+      <button type="button" class="link-btn pv-older" id="pv-older" hidden>Xem bình luận cũ hơn</button>
+      <div id="pv-list" class="pv-list"></div>
+    </div>
+    <form id="pv-form" class="pv-form">
+      <div class="pv-to" id="pv-to" hidden><span id="pv-to-text"></span> <button type="button" class="link-btn" id="pv-to-x">Huỷ trả lời</button></div>
+      <textarea id="pv-text" rows="3" placeholder="Viết bình luận… (gõ @username để nhắc tên người đăng hoặc người đã bình luận)"></textarea>
+      <div class="pv-actions"><span class="muted small">Đăng lên Beincom ngay, dưới tên tài khoản của bạn · Ctrl + Enter để gửi</span><button type="submit" class="primary" id="pv-send">Gửi bình luận</button></div>
+    </form>
+  </dialog>
+  <!-- Hồ sơ một người (dash/person.js): bấm tên người, huy hiệu ⚠, hoặc mở từ trang Chat -->
+  <dialog id="person-card" class="person-card" aria-labelledby="pcd-title">
+    <h3 id="pcd-title" class="sr-only">Hồ sơ</h3>
+    <div class="pcd-head" id="pcd-head"></div>
+    <div class="pcd-body" id="pcd-body"></div>
+    <div class="dialog-actions pcd-actions" id="pcd-actions"></div>
+  </dialog>
   <dialog id="confirm">
     <form method="dialog">
       <h3 id="confirm-title">Xác nhận</h3>
@@ -1629,6 +1656,8 @@
   <script src="dash/members.js"></script>
   <script src="dash/guard.js"></script>
   <script src="dash/content.js"></script>
+  <script src="dash/postview.js"></script>
+  <script src="dash/person.js"></script>
   <script src="dash/sweep.js"></script>
   <script src="dash/tags.js"></script>
   <script src="dash/reports.js"></script>

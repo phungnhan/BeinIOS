@@ -45,6 +45,8 @@ async function openChat(id, { fromHash = false } = {}) {
   S.posts = new Map();
   S.hasMore = false;
   S.reply = null;
+  S.quote = null;
+  renderQuote();
   S.newBelow = 0;
   S.lastSync = 0;
   S.dividerId = '';
@@ -153,7 +155,7 @@ async function reqAction(action) {
 function renderHead() {
   const c = S.sel;
   const dm = c.kind === 'dm';
-  $('conv-avatar').replaceWith(Object.assign(dm ? avatar({ name: chatTitle(c), chatId: c.other?.chatId, pictureAt: c.other?.pictureAt, size: 'lg' }) : avatar({ name: chatTitle(c), seed: c.id, channel: true, locked: c.type === 'P', size: 'lg' }), { id: 'conv-avatar', onclick: dm && c.other && !c.self ? () => openPerson(c.other) : null, title: dm && c.other && !c.self ? 'Hồ sơ, vi phạm, xử lý' : '' }));
+  $('conv-avatar').replaceWith(Object.assign(dm ? avatar({ name: chatTitle(c), chatId: c.other?.chatId, pictureAt: c.other?.pictureAt, size: 'lg' }) : avatar({ name: chatTitle(c), seed: c.id, channel: true, locked: c.type === 'P', size: 'lg', src: c.main ? c.teamIcon || S.teams.find((t) => t.id === c.teamId)?.icon || '' : '' }), { id: 'conv-avatar', onclick: dm && c.other && !c.self ? () => openPerson(c.other) : null, title: dm && c.other && !c.self ? 'Hồ sơ, vi phạm, xử lý' : '' }));
   $('conv-title').replaceChildren(el('span', { class: 'nm' }, chatTitle(c)), ...(dm && !c.self ? badges(c.other) : []));
   $('conv-sub').textContent = dm ? (c.self ? SELF_SUB + ' — chỉ bạn xem được' : c.type === 'G' ? 'Nhóm chat' : c.other?.username ? '@' + c.other.username + (c.req ? ' · lời mời trò chuyện' : ' · tin nhắn riêng') : c.req ? 'Lời mời trò chuyện' : 'Tin nhắn riêng') : [c.teamTitle, c.type === 'P' ? 'kênh riêng' : 'kênh chung', c.canDelete ? 'bạn là admin kênh' : ''].filter(Boolean).join(' · ');
   const team = dm ? (S.dmTeamName || '') : S.teams.find((t) => t.channels.some((x) => x.id === c.id))?.name || '';
@@ -210,23 +212,30 @@ function messageEl(p, { first, last, mine, inThread = false, mode = inThread ? '
   else {
     if (p.pinned && mode !== 'pins') bubble.append(el('span', { class: 'pin-tag' }, svgPin(), 'Đã ghim'));
     if (p.priority) bubble.append(el('span', { class: 'prio ' + p.priority }, svgPrio(p.priority), PRIO_LABEL[p.priority].toUpperCase()));
+    // Tin trả lời: khung trích tin được trả lời ở đầu bong bóng (như web)
+    if (p.quote) bubble.append(quoteEl(p));
     if (p.message) bubble.append(...msgBody(p.message));
-    if (p.files.length) bubble.append(filesEl(p.files, p));
+    if (p.files.length) bubble.append(filesEl(p.files, p, mode));
+    if (p.og) bubble.append(ogEl(p.og));
     bubble.append(el('span', { class: 'meta', title: fullTime(p.createAt) }, p.editAt ? 'đã sửa · ' : '', hm(p.createAt)));
   }
+  // Nút khi rê chuột vào tin: biểu tượng một màu, rê chuột hiện ghi chú (data-tip)
+  const live = mode === 'main' || mode === 'thread';
+  const canQuote = live && !p.system && !!S.sel && $(mode === 'thread' ? 't-text' : 'text').disabled === false;
   const tools = p.deleted
     ? null
     : el(
         'div',
         { class: 'tools' },
-        mode === 'search' ? el('button', { type: 'button', onclick: () => openSearchResult(p) }, 'Mở') : null,
-        mode === 'main' || mode === 'thread' ? el('button', { type: 'button', title: 'Thả biểu cảm', onclick: (e) => openReactPop(p, e.currentTarget) }, '😊') : null,
-        mode === 'main' ? el('button', { type: 'button', onclick: () => openThread(p) }, 'Bình luận') : null,
-        mode === 'pins' && S.posts.has(p.id) ? el('button', { type: 'button', onclick: () => (innerWidth <= 1180 && closePins(), flashTo(p.id)) }, 'Tới tin nhắn') : null,
-        mine && p.message && (mode === 'main' || mode === 'thread') ? el('button', { type: 'button', onclick: () => startEdit(p, mode === 'thread') }, 'Sửa') : null,
-        p.message ? el('button', { type: 'button', onclick: () => copyMsg(p) }, 'Sao chép') : null,
-        canPin(p) && !p.rootId && mode !== 'search' ? el('button', { type: 'button', onclick: () => togglePin(p) }, p.pinned ? 'Bỏ ghim' : 'Ghim') : null,
-        canDel && (mode === 'main' || mode === 'thread') ? el('button', { type: 'button', class: 'del', onclick: () => deleteMsg(p, mine) }, 'Xoá') : null,
+        mode === 'search' ? toolBtn(ICON.open, 'Mở', () => openSearchResult(p)) : null,
+        live ? toolBtn(ICON.react, 'Thả biểu cảm', (e) => openReactPop(p, e.currentTarget)) : null,
+        canQuote ? toolBtn(ICON.reply, 'Trả lời', () => startQuote(p, mode === 'thread')) : null,
+        mode === 'main' ? toolBtn(ICON.thread, 'Bình luận', () => openThread(p)) : null,
+        mode === 'pins' && S.posts.has(p.id) ? toolBtn(ICON.open, 'Tới tin nhắn', () => (innerWidth <= 1180 && closePins(), flashTo(p.id))) : null,
+        mine && p.message && live ? toolBtn(ICON.edit, 'Sửa', () => startEdit(p, mode === 'thread')) : null,
+        p.message ? toolBtn(ICON.copy, 'Sao chép', () => copyMsg(p)) : null,
+        canPin(p) && !p.rootId && mode !== 'search' ? toolBtn(ICON.pin, p.pinned ? 'Bỏ ghim' : 'Ghim', () => togglePin(p)) : null,
+        canDel && live ? toolBtn(ICON.del, 'Xoá', () => deleteMsg(p, mine), 'del') : null,
       );
   return el(
     'div',
@@ -239,14 +248,15 @@ function messageEl(p, { first, last, mine, inThread = false, mode = inThread ? '
 
 // Ảnh và tệp đính kèm. Nhiều ảnh trong một tin: lưới gọn (tối đa 4 ô, ô cuối "+N"); bấm ảnh để phóng to ngay trong trang
 const ALBUM_MAX = 4;
-function filesEl(files, post) {
+// mode: nơi tin đang hiện (main / thread / pins / search) — trình xem ảnh lấy ảnh của đúng nơi đó
+function filesEl(files, post, mode = 'main') {
   const web = $('conv-web').href;
   const pics = files.filter(isImage);
   const shot = (f, more = 0) => {
     const open = (e) => {
       if (e.button || e.ctrlKey || e.metaKey || e.shiftKey) return; // Ctrl / Shift / chuột giữa: mở tab như link thường
       e.preventDefault();
-      openViewer(post?.id, f.id);
+      openViewer(post, f.id, mode);
     };
     const style = [f.mini ? `--mini: url("${miniSrc(f)}")` : '', f.width && f.height ? `--ar: ${f.width} / ${f.height}` : ''].filter(Boolean).join('; ');
     const box = el('a', { class: 'shot' + (f.url ? '' : ' mini-only'), href: f.url || web, target: '_blank', rel: 'noopener noreferrer', title: (f.name ? f.name + ' — ' : '') + 'Bấm để phóng to', onclick: open, style: style || null }, more ? el('span', { class: 'more' }, '+' + more) : null);
@@ -266,6 +276,85 @@ function filesEl(files, post) {
       .filter((f) => !isImage(f))
       .map((f) => el('a', { class: 'file-chip', href: f.url || web, target: '_blank', rel: 'noopener noreferrer', title: 'Mở tệp' }, svgFile(), el('span', {}, f.name || 'Tệp'), f.size ? el('small', {}, sizeText(f.size)) : null)),
   );
+}
+
+// ---------- Nút biểu tượng của tin; Trả lời trích tin (như web Beincom) ----------
+const ICON = {
+  // Cùng một bộ (Material Symbols, kiểu viền) để các biểu tượng cân đối với nhau
+  react: 'M15.5 11q.625 0 1.063-.437Q17 10.125 17 9.5t-.437-1.062Q16.125 8 15.5 8t-1.062.438Q14 8.875 14 9.5t.438 1.063Q14.875 11 15.5 11Zm-7 0q.625 0 1.062-.437Q10 10.125 10 9.5t-.438-1.062Q9.125 8 8.5 8t-1.062.438Q7 8.875 7 9.5t.438 1.063Q7.875 11 8.5 11Zm3.5 6.5q1.7 0 3.088-.963Q16.475 15.575 17.1 14H6.9q.625 1.575 2.013 2.537Q10.3 17.5 12 17.5Zm0 4.5q-2.075 0-3.9-.788-1.825-.787-3.175-2.137-1.35-1.35-2.137-3.175Q2 14.075 2 12t.788-3.9q.787-1.825 2.137-3.175 1.35-1.35 3.175-2.138Q9.925 2 12 2t3.9.787q1.825.788 3.175 2.138 1.35 1.35 2.137 3.175Q22 9.925 22 12t-.788 3.9q-.787 1.825-2.137 3.175-1.35 1.35-3.175 2.137Q14.075 22 12 22Zm0-2q3.35 0 5.675-2.325Q20 15.35 20 12q0-3.35-2.325-5.675Q15.35 4 12 4 8.65 4 6.325 6.325 4 8.65 4 12q0 3.35 2.325 5.675Q8.65 20 12 20Z',
+  reply: 'M19 19v-4q0-1.25-.875-2.125T16 12H6.825l3.6 3.6L9 17l-6-6 6-6 1.425 1.4-3.6 3.6H16q2.075 0 3.538 1.463Q21 12.925 21 15v4Z',
+  thread: 'M2 22V4q0-.825.588-1.413Q3.175 2 4 2h16q.825 0 1.413.587Q22 3.175 22 4v12q0 .825-.587 1.413Q20.825 18 20 18H6Zm2-4.825L5.175 16H20V4H4Z',
+  edit: 'M5 19h1.425L16.2 9.225 14.775 7.8 5 17.575Zm-2 2v-4.25L16.2 3.575q.3-.275.663-.425Q17.225 3 17.625 3t.775.15q.375.15.65.45L20.425 5q.3.275.438.65Q21 6.025 21 6.4t-.137.763q-.138.362-.438.662L7.25 21Z',
+  copy: 'M9 18q-.825 0-1.412-.587Q7 16.825 7 16V4q0-.825.588-1.413Q8.175 2 9 2h9q.825 0 1.413.587Q20 3.175 20 4v12q0 .825-.587 1.413Q18.825 18 18 18Zm0-2h9V4H9Zm-4 6q-.825 0-1.413-.587Q3 20.825 3 20V6h2v14h11v2Z',
+  pin: 'm16 12 2 2v2h-5v6l-1 1-1-1v-6H6v-2l2-2V5H7V3h10v2h-1Zm-7.15 2h6.3L14 12.85V5h-4v7.85Z',
+  del: 'M7 21q-.825 0-1.412-.587Q5 19.825 5 19V6H4V4h5V3h6v1h5v2h-1v13q0 .825-.587 1.413Q17.825 21 17 21ZM17 6H7v13h10ZM9 17h2V8H9Zm4 0h2V8h-2Z',
+  open: 'M16.175 13H4v-2h12.175l-5.6-5.6L12 4l8 8-8 8-1.425-1.4Z',
+};
+const toolBtn = (icon, tip, onclick, cls = '') => el('button', { type: 'button', class: cls || null, 'aria-label': tip, 'data-tip': tip, onclick }, svg(icon));
+
+// Thanh nút sát bong bóng tin: tin mình -> ngay bên trái bong bóng, tin người khác -> ngay bên phải; không đủ chỗ (khung
+// bình luận hẹp…) thì nằm ngay trên bong bóng. Tính khi rê chuột / chọn bằng bàn phím vào tin
+function placeTools(m, retry = true) {
+  const tools = m?.querySelector(':scope > .tools');
+  const bubble = m?.querySelector('.bubble');
+  if (!tools || !bubble) return;
+  const box = (m.closest('.msgs, .t-body') || document.body).getBoundingClientRect();
+  const mr = m.getBoundingClientRect();
+  const br = bubble.getBoundingClientRect();
+  const tw = tools.offsetWidth;
+  const th = tools.offsetHeight;
+  // Thanh chưa kịp hiện (đang ẩn): đo lại ở khung hình sau
+  if (!tw) return void (retry && requestAnimationFrame(() => placeTools(m, false)));
+  const gap = 6;
+  const mine = m.classList.contains('me');
+  let left = mine ? br.left - gap - tw : br.right + gap;
+  let top = br.top;
+  // Bên cạnh không đủ chỗ: lên trên bong bóng, canh theo mép ngoài của bong bóng, không ra ngoài khung
+  if (left < box.left + 4 || left + tw > box.right - 4) {
+    left = mine ? br.right - tw : br.left;
+    left = Math.max(box.left + 4, Math.min(left, box.right - 4 - tw));
+    top = br.top - th - 4;
+  }
+  tools.style.left = `${Math.round(left - mr.left)}px`;
+  tools.style.top = `${Math.round(top - mr.top)}px`;
+  tools.style.right = 'auto';
+}
+function onToolsHover(e) {
+  const m = e.target.closest?.('.msg');
+  if (m) placeTools(m);
+}
+document.addEventListener('mouseover', onToolsHover);
+document.addEventListener('focusin', onToolsHover);
+
+// Phần đánh dấu tin trả lời của Beincom: [](bein.mm.reply)<link tin>[](bein.mm.reply) + xuống dòng (máy chủ tự gắn
+// tin được trích vào tin trả lời qua link này)
+// Như web (getCurrentTeamUrl): kênh dùng tên team của community, tin nhắn riêng dùng team "direct-message"
+function quoteMarker(p) {
+  const team = S.sel?.teamName || S.dmTeamName || 'direct-message';
+  return `[](bein.mm.reply) https://chat.beincom.com/${team}/pl/${p.id} [](bein.mm.reply)\n`;
+}
+// Trả lời một tin: dòng "Trả lời …" trên ô gõ (Esc / ✕ để huỷ)
+function startQuote(p, inThread = false) {
+  if (inThread) {
+    if (S.tEditing) cancelEdit(true);
+    S.tQuote = p;
+  } else {
+    if (S.editing) cancelEdit();
+    S.quote = p;
+  }
+  renderQuote(inThread);
+  $(inThread ? 't-text' : 'text').focus();
+}
+function cancelQuote(inThread = false) {
+  if (inThread) S.tQuote = null;
+  else S.quote = null;
+  renderQuote(inThread);
+}
+function renderQuote(inThread = false) {
+  const p = inThread ? S.tQuote : S.quote;
+  const bar = $(inThread ? 't-quote' : 'quote-bar');
+  bar.hidden = !p;
+  $(inThread ? 't-quote-text' : 'quote-bar-text').textContent = p ? `Trả lời ${p.user.fullname || p.user.username || 'tin nhắn'}: ${BG.chatPlain(p.message).slice(0, 90) || '📎 tệp'}` : '';
 }
 
 // ---------- Trả lời, sao chép, xoá ----------
