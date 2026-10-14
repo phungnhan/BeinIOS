@@ -12,7 +12,7 @@ const ACTION_LABELS = {
   comment: { hide: 'Ẩn bình luận', reply: 'Trả lời bình luận', comment: 'Bình luận vào bài' },
   report: { ignore: 'Bỏ qua báo cáo', hide: 'Ẩn nội dung bị báo cáo', hidePost: 'Ẩn bài gắn cờ' },
   tag: { create: 'Tạo tag', rename: 'Đổi tên tag', delete: 'Xoá tag' },
-  chat: { delete: 'Xoá tin chat', pin: 'Ghim tin chat', unpin: 'Bỏ ghim tin chat' },
+  chat: { delete: 'Xoá tin chat', pin: 'Ghim tin chat', unpin: 'Bỏ ghim tin chat', reportHide: 'Ẩn tin chat bị báo cáo', reportIgnore: 'Bỏ qua báo cáo tin chat' },
 };
 const STATUS_TAGS = { ok: ['ok', 'Thành công'], dry: ['warn', 'Chạy thử'], error: ['err', 'Lỗi'] };
 

@@ -2,6 +2,36 @@
 
 Mỗi bản một mục, bản mới nhất ở trên. Dashboard tự hiện các mục mới sau khi cập nhật (bấm "Có gì mới" ở cuối trang để xem lại).
 
+## v0.43.0 — 14/10/2026
+- **Tự kiểm tra có thêm nhóm Chat Beincom** (Nhật ký → Tự kiểm tra, khi đã bật Chat). Addon gọi thử, chỉ đọc, từng phần mà trang Chat và lần quét dùng:
+  - đăng nhập chat, danh sách cộng đồng và kênh, số tin đã đọc;
+  - nhắc tên và thread chưa đọc (kiểm tra nhanh mỗi phút);
+  - vai trò và quyền (nút Xoá tin, Ghim);
+  - tin nhắn bị báo cáo, tin trong kênh, bình luận (thread);
+  - biểu cảm, tin đã ghim, gợi ý @tên, thread đang theo dõi.
+
+  Mục nào hỏng thì biết ngay, kèm lý do. Nếu chat chưa nhận phiên đăng nhập, chỉ báo một dòng.
+- **Câu trả lời mẫu trong Chat**:
+  - Gõ **/** ở đầu ô chat (hoặc bấm nút câu mẫu cạnh nút Aa) để hiện danh sách câu soạn sẵn. Gõ thêm vài chữ để lọc, không cần dấu: "/luadao" ra câu cảnh báo lừa đảo. Chọn bằng mũi tên, Enter hoặc Tab để chèn. Dùng được cả ở ô bình luận thread.
+  - Có sẵn 5 câu cho admin: nội quy, cảnh báo lừa đảo, chào người mới, đã xoá quảng cáo, cảm ơn đã báo.
+  - Mục **Sửa câu trả lời mẫu…** cuối danh sách mở hộp để thêm, sửa, xoá câu, thêm câu từ ô đang gõ, hoặc khôi phục bộ mặc định.
+  - Câu mẫu lưu trong máy và có trong bản sao lưu.
+
+## v0.42.1 — 14/10/2026
+- **Nhật ký cá nhân** (trang Chat): tin nhắn riêng với chính mình hiện tên "Nhật ký cá nhân" với ảnh đại diện của tài khoản bạn (trước đây chỉ ghi "Tin nhắn riêng"). Không có huy hiệu hay nút hồ sơ, và không bị tính là tin nhắn mới.
+- **Popup mở nhanh hơn**:
+  - Popup vẽ ngay số của lần mở trước rồi cập nhật, và chỉ nạp phần mã cần thiết.
+  - Phần nền tính số trên icon không còn đọc cả nhật ký (nhanh gấp đôi khi nhật ký lớn).
+  - Nếu popup vẫn mở chậm hơn 1,5 giây, addon ghi một dòng "Popup mở chậm" ở Nhật ký → Lỗi kỹ thuật, kèm thời gian từng phần, để tìm nguyên nhân.
+
+## v0.42.0 — 14/10/2026
+- **Tin nhắn chat bị báo cáo** (chủ / admin community, cần bật Chat Beincom):
+  - Tab **Báo cáo** có thêm loại **Tin nhắn chat**, như mục "Tin nhắn bị báo cáo" ở trang quản trị của web. Mỗi tin có kênh, nội dung, tệp đính kèm, người gửi, lý do và số lượt báo cáo, lúc báo cáo đầu tiên.
+  - **Ẩn** (ẩn tin khỏi kênh chat) hoặc **Bỏ qua** (giữ tin, đóng báo cáo), từng tin hoặc chọn nhiều. Theo Chạy thử, ghi Nhật ký. Tin bị ẩn được ghi vào hồ sơ vi phạm của người gửi. Có nút **Dọn tài khoản** khi báo cáo kèm mã Beincom của người gửi.
+  - Mỗi lần quét, addon đọc danh sách này ở mọi community bạn làm chủ / admin. Có báo cáo mới thì có thông báo (Telegram loại "Báo cáo / gắn cờ"); bấm thông báo để mở thẳng mục này. Số tin được cộng vào huy hiệu tab Báo cáo, số trên icon và popup. **Việc cần làm** có từng tin, kèm nút Ẩn tin / Bỏ qua.
+- **Báo tin nhắn riêng, nhắc tên, bình luận thread nhanh hơn**: addon kiểm tra nhẹ mỗi phút, không chờ tới lần quét. Mỗi lần chỉ vài lệnh đọc tới chat.beincom.com và không đọc nội dung tin nhắn. Lần quét và lần kiểm tra nhanh dùng chung mốc nên không báo trùng. Tắt ở Quy tắc & cài đặt → 💬 Chat Beincom → **Kiểm tra nhanh mỗi phút**.
+- Bên trong: mã trang Chat tách thành nhiều tệp nhỏ trong thư mục `chat/`. Giao diện không đổi.
+
 ## v0.41.0 — 14/10/2026
 - **Biểu cảm dưới tin** (trang Chat):
   - Mỗi tin hiện các biểu cảm và số lượt; biểu cảm bạn đã thả được tô màu. Rê chuột vào để xem ai đã thả.

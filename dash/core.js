@@ -16,7 +16,7 @@ window.addEventListener('unhandledrejection', (e) => reportDiag(WHERE_PAGE, { me
 const RULE_BOOLS = ['requireAvatar', 'requireAnswers', 'requireVerified', 'declineDeactivated', 'reviewViolators', 'reviewImpersonation'];
 const RULE_LISTS = { bannedKeywords: false, allowUsernames: true, blockUsernames: true }; // true = danh sách username
 const POST_RULE_LISTS = ['bannedKeywords', 'reviewKeywords', 'blockedDomains', 'allowedDomains'];
-const SETTING_BOOLS = ['active', 'dryRun', 'notify', 'scanPosts', 'scanComments', 'scanReports', 'trackViolations', 'spamWaves', 'welcomeReminder', 'remindUnanswered', 'remindPending', 'guardJoins', 'chatEnabled', 'chatScan', 'chatUnread', 'chatThreads', 'weeklyReport', 'monthlyReport', 'autoApprove', 'autoDecline', 'autoHideSpam', 'autoApprovePosts'];
+const SETTING_BOOLS = ['active', 'dryRun', 'notify', 'scanPosts', 'scanComments', 'scanReports', 'trackViolations', 'spamWaves', 'welcomeReminder', 'remindUnanswered', 'remindPending', 'guardJoins', 'chatEnabled', 'chatScan', 'chatUnread', 'chatThreads', 'chatFast', 'weeklyReport', 'monthlyReport', 'autoApprove', 'autoDecline', 'autoHideSpam', 'autoApprovePosts'];
 const SETTING_NUMS = ['intervalMin', 'actionDelaySec', 'unansweredHours', 'pendingHours', 'burstJoins', 'trustAfterApproved'];
 const LOG_PAGE = 50;
 const RECENT_PAGE = 30;
@@ -421,7 +421,7 @@ function renderBadges() {
   set('badge-content', t.posts + flaggedRecent().length + flaggedComments().length);
   set('badge-compose', sched.loaded ? sched.items.length : 0);
   // Báo cáo chờ xử lý + bài bị gắn cờ, theo lần quét gần nhất (mở tab Báo cáo cũng cập nhật số này)
-  set('badge-reports', t.reports + t.autoFlagged);
+  set('badge-reports', t.reports + t.autoFlagged + (data.settings.chatEnabled && data.settings.scanReports ? BG.chatReportsCount(data.state.chatReports) : 0));
 }
 
 function evaluated(g) {

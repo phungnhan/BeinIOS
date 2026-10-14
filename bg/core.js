@@ -449,8 +449,14 @@ function notify(id, title, message, url = '') {
   forwardTelegram(id, title, message, url).catch(() => {});
 }
 
+// Như load() nhưng không đọc nhật ký: huy hiệu tính lại sau mỗi lần ghi kết quả quét, không cần nhật ký (có thể vài MB)
+async function loadForBadge() {
+  const { settings, rules, postRules, groupRules, state } = await chrome.storage.local.get(['settings', 'rules', 'postRules', 'groupRules', 'state']);
+  return { settings: { ...BG.DEFAULT_SETTINGS, ...settings }, rules: { ...BG.DEFAULT_RULES, ...rules }, postRules: { ...BG.DEFAULT_POST_RULES, ...postRules }, groupRules: groupRules || {}, state: state || {} };
+}
+
 async function updateBadge() {
-  const loaded = await load();
+  const loaded = await loadForBadge();
   const { settings, state } = loaded;
   let text = '';
   let color = '#6c3cf0';
@@ -459,7 +465,7 @@ async function updateBadge() {
   // Bài vi phạm quy tắc và bài Beincom gắn cờ có thể trùng nhau: đếm một lần
   const badPosts = flaggedPosts(state.recentPosts, rulesCtx(loaded, groups));
   const badComments = settings.scanComments ? flaggedComments(state.recentComments, rulesCtx(loaded, groups)).length : 0;
-  const info = { totals: t, flaggedPosts: badPosts.length, flaggedComments: badComments };
+  const info = { totals: t, flaggedPosts: badPosts.length, flaggedComments: badComments, chatReports: settings.chatEnabled ? BG.chatReportsCount(state.chatReports) : 0 };
   if (!settings.active) {
     text = 'OFF';
     color = '#c62828';
@@ -468,7 +474,7 @@ async function updateBadge() {
     color = '#c62828';
   } else {
     const flagged = new Set([...badPosts.map((p) => p.id), ...BG.autoFlaggedIds(groups)]);
-    const n = t.requests + t.posts + t.reports + flagged.size + badComments;
+    const n = t.requests + t.posts + t.reports + flagged.size + badComments + (settings.chatEnabled ? BG.chatReportsCount(state.chatReports) : 0);
     text = n > 999 ? '999+' : n ? String(n) : '';
   }
   await chrome.action.setBadgeText({ text });
@@ -489,6 +495,7 @@ async function savePopupInfo(state, info) {
     totals: { requests: t.requests, posts: t.posts, reports: t.reports, autoFlagged: t.autoFlagged },
     flaggedPosts: info.flaggedPosts,
     flaggedComments: info.flaggedComments,
+    chatReports: info.chatReports || 0,
     todo: groups
       .filter((g) => g.pendingTotal || g.approvalCount)
       .slice(0, 5)
@@ -559,11 +566,15 @@ function summary(r, settings) {
 
 // Không chạy chồng nhau
 let queue = Promise.resolve();
+let exclusiveRunning = 0;
+const exclusiveBusy = () => exclusiveRunning > 0;
 function exclusive(fn) {
   const p = queue.then(async () => {
+    exclusiveRunning++;
     try {
       return await fn();
     } finally {
+      exclusiveRunning--;
       await flushViolations().catch(() => {});
     }
   });

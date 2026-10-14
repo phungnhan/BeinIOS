@@ -55,6 +55,7 @@ chrome.runtime.onInstalled.addListener(async () => {
   });
   await scheduleAlarm();
   await scheduleTelegramPoll();
+  await scheduleChatAlarm();
   await updateBadge();
   exclusive(() => doScan({ source: 'install' }));
 });
@@ -62,6 +63,7 @@ chrome.runtime.onInstalled.addListener(async () => {
 chrome.runtime.onStartup.addListener(async () => {
   await scheduleAlarm();
   await scheduleTelegramPoll();
+  await scheduleChatAlarm();
   await updateBadge();
   exclusive(() => doScan({ source: 'startup' }));
 });
@@ -69,6 +71,7 @@ chrome.runtime.onStartup.addListener(async () => {
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === ALARM) exclusive(() => doScan({ source: 'alarm' }));
   if (alarm.name === TG_POLL_ALARM) pollTelegram().catch(() => {}); // nút bấm trong tin Telegram (bg/telegram.js)
+  if (alarm.name === CHAT_ALARM) chatQuickCheck().catch(() => {}); // tin nhắn riêng / nhắc tên / thread mỗi phút (bg/chat.js)
 });
 
 // Kết quả quét / quy tắc đổi ở bất kỳ đâu (Dashboard, khôi phục bản sao lưu…): tính lại huy hiệu và gói số đếm của popup,
@@ -90,6 +93,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
   if (!changes.settings) return;
   const { oldValue = {}, newValue = {} } = changes.settings;
   if (oldValue.intervalMin !== newValue.intervalMin) scheduleAlarm(true);
+  if (['active', 'chatEnabled', 'chatFast', 'chatUnread', 'chatThreads'].some((k) => oldValue[k] !== newValue[k])) scheduleChatAlarm();
   if (oldValue.scanComments !== newValue.scanComments) updateBadge();
   if (oldValue.active !== newValue.active) {
     updateBadge();
@@ -112,6 +116,7 @@ function notificationTab(id) {
   if (id === 'bg-impostor' || id.startsWith('bg-burst-')) return 'members&guard=1';
   if (id === 'bg-chat') return 'content&chat=1';
   if (id === 'bg-reports' || id === 'bg-autoflag') return 'reports';
+  if (id === 'bg-chat-reports') return 'reports&kind=chat';
   return '';
 }
 
@@ -181,6 +186,8 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     chatReact: () => doChatReact(msg),
     chatReactions: () => doChatReactions(msg),
     chatSearch: () => doChatSearch(msg),
+    // Kiểm tra nhanh tin nhắn riêng / nhắc tên / thread (hẹn giờ mỗi phút; Tự kiểm tra / kiểm thử gọi thẳng)
+    chatQuick: () => chatQuickCheck(),
     chatFollow: () => doChatFollow(msg),
     chatThreadRead: () => doChatThreadRead(msg),
     chatView: () => doChatView(msg),
@@ -223,6 +230,9 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     scheduleAct: () => doScheduleAct(msg),
     restoreBackup: () => doRestore(msg),
     reportAct: () => doReportAct(msg),
+    // Tin nhắn chat bị báo cáo: đọc lại (ghi kết quả quét) / Ẩn / Bỏ qua
+    chatReports: () => doChatReports(msg),
+    chatReportAct: () => doChatReportAct(msg),
     profileAct: () => doProfileAct(msg),
     editPost: () => doEditPost(msg),
     editScheduled: () => doEditScheduled(msg),

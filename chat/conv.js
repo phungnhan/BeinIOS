@@ -1,0 +1,447 @@
+// Trang Chat — cuộc trò chuyện: mở, đầu trang, tin nhắn (bong bóng, tệp, biểu cảm, thanh thread), sao chép / xoá, đọc tin mới,
+// tin cũ hơn, đánh dấu đã đọc, nạp danh sách (nhanh rồi đủ).
+
+// ---------- Mở cuộc trò chuyện, tin nhắn ----------
+
+function sortedPosts() {
+  return [...S.posts.values()].sort((a, b) => a.createAt - b.createAt);
+}
+
+function addPosts(list) {
+  for (const p of list || []) {
+    if (p.rootId) addReply(p);
+    else {
+      // Tin đọc lại từ lần trước (sửa / xoá) không kèm người tham gia, theo dõi: giữ cái đã biết
+      const o = S.posts.get(p.id);
+      S.posts.set(p.id, o ? { ...p, replyCount: Math.max(o.replyCount || 0, p.replyCount || 0), following: o.following || p.following, participants: p.participants?.length ? p.participants : o.participants } : p);
+    }
+    S.lastSync = Math.max(S.lastSync, p.updateAt || 0, p.createAt || 0, p.editAt || 0);
+  }
+}
+
+async function openChat(id, { fromHash = false } = {}) {
+  const c = findChat(id);
+  if (!c) return;
+  if (S.view === 'threads') hideThreads();
+  if (S.sel?.id !== c.id) {
+    resetComposer();
+    closeThread();
+    closePins();
+    closeMention();
+    S.editing = null;
+    renderReply();
+    $('text').value = draftOf(c.id);
+    S.pinned = null;
+    renderPinnedCount();
+    closeReactPop();
+    if (!$('search').hidden && S.sScope === 'channel') closeSearch();
+    S.seenReplies = new Set();
+    loadPinned(c);
+  }
+  S.loadedAt = Date.now();
+  // Tab Tin nhắn riêng / Lời mời theo cuộc trò chuyện đang mở (mở từ thông báo, từ kết quả tìm)
+  if (c.kind === 'dm' && S.dmTab !== (c.req ? 'req' : 'dm')) setDmTab(c.req ? 'req' : 'dm', false);
+  S.sel = c;
+  S.posts = new Map();
+  S.hasMore = false;
+  S.reply = null;
+  S.newBelow = 0;
+  S.lastSync = 0;
+  S.dividerId = '';
+  if (!fromHash) history.replaceState(null, '', location.href.split('#')[0] + '#c=' + encodeURIComponent(c.id));
+  $('app').classList.add('open');
+  $('empty').hidden = true;
+  for (const x of ['conv-head', 'msgs', 'composer']) $(x).hidden = false;
+  $('jump').hidden = true;
+  renderHead();
+  renderReply();
+  renderList();
+  $('msg-list').replaceChildren(el('div', { class: 'sys' }, 'Đang tải tin nhắn…'));
+  $('older').hidden = true;
+  applyComposer(c);
+  // Tin đã tải trước lúc mở trang (song song với danh sách) thì dùng luôn
+  const pre = S.prefetch?.id === c.id ? S.prefetch.promise : null;
+  S.prefetch = null;
+  const r = await (pre || call('chatPosts', { channelId: c.id, perPage: PAGE }));
+  if (S.sel?.id !== c.id) return;
+  if (r.status !== 'ok') {
+    $('msg-list').replaceChildren(el('div', { class: 'sys' }, 'Không tải được tin nhắn: ' + (r.message || 'lỗi')));
+    return;
+  }
+  addPosts(r.posts);
+  S.hasMore = r.hasMore;
+  // Vạch "Tin chưa đọc": trước tin thứ `unread` tính từ cuối (tin của người khác)
+  if (c.unread) {
+    const others = sortedPosts().filter((p) => !p.system && p.user.chatId !== S.me?.chatId);
+    S.dividerId = others[Math.max(0, others.length - c.unread)]?.id || '';
+  }
+  renderMsgs({ scroll: S.dividerId ? 'divider' : 'bottom' });
+  markRead(true);
+  if (!fromHash) $('text').focus();
+}
+
+// Ô gõ tin theo quyền của kênh. Quyền chưa rõ (canPost = null, lần đọc nhanh): cho gõ, Beincom tự từ chối nếu không được
+function applyComposer(c) {
+  // Lời mời bạn gửi đi: chờ người nhận chấp nhận (hoặc họ đã bỏ qua) thì chưa gửi tiếp được, như web
+  const waiting = !!(c.contact?.sent || c.contact?.ignoredByOther);
+  const canPost = !waiting && (c.kind === 'dm' || c.canPost !== false);
+  $('text').disabled = !canPost;
+  $('text').placeholder = canPost ? (c.kind === 'dm' ? `Nhắn cho ${chatTitle(c)}…` : `Nhắn vào ${chatTitle(c)}…`) : waiting ? 'Chờ người nhận chấp nhận lời mời…' : 'Bạn chỉ xem được kênh này';
+  $('hint').textContent = canPost ? 'Enter để gửi · Shift + Enter xuống dòng' : waiting ? 'Beincom chỉ cho gửi tiếp khi người nhận chấp nhận lời mời trò chuyện.' : 'Beincom không cho tài khoản của bạn gửi tin vào kênh này.';
+  renderReqBar(c);
+  updateSend();
+}
+
+// Thanh lời mời trò chuyện phía trên ô gõ
+function renderReqBar(c) {
+  const k = c?.contact;
+  const name = chatTitle(c || {});
+  let text = '';
+  let actions = false;
+  if (k?.incoming && k.status !== 'ignored') {
+    text = `${name} chưa kết nối với bạn và đã gửi lời mời trò chuyện.${k.status === 'spammed' ? ' Beincom xếp lời mời này vào Spam (gửi lặp lại nhiều lần).' : ''} Nếu bạn trả lời, bạn cũng chấp nhận lời mời này.`;
+    actions = true;
+  } else if (k?.incoming) {
+    text = `Bạn đã bỏ qua lời mời trò chuyện của ${name}. Bấm Chấp nhận nếu muốn trò chuyện.`;
+    actions = true;
+  } else if (k?.sent) text = 'Bạn đã gửi lời mời trò chuyện. Chờ người nhận chấp nhận trước khi gửi tin tiếp theo.';
+  else if (k?.ignoredByOther) text = 'Người nhận hiện không nhận lời mời trò chuyện của bạn. Bạn có thể thử lại sau trên web Beincom.';
+  $('req-bar').hidden = !text;
+  $('req-text').textContent = text;
+  $('req-actions').hidden = !actions;
+  $('req-ignore').hidden = k?.status === 'ignored';
+}
+
+// Lời mời đã được chấp nhận (bấm Chấp nhận, hoặc trả lời): chuyển sang Tin nhắn riêng
+function acceptedLocally(id) {
+  const c = S.requests.find((x) => x.id === id);
+  if (!c) return;
+  S.requests = S.requests.filter((x) => x.id !== id);
+  const moved = { ...c, contact: { ...c.contact, status: 'accepted', incoming: false } };
+  S.dms = [moved, ...S.dms].sort((a, b) => (b.lastPostAt || 0) - (a.lastPostAt || 0));
+  if (S.sel?.id === id) {
+    setDmTab('dm', false);
+    S.sel = Object.assign(S.sel, { contact: moved.contact, req: false });
+    renderHead();
+    applyComposer(S.sel);
+  }
+  renderList();
+}
+
+async function reqAction(action) {
+  const c = S.sel;
+  const k = c?.contact;
+  if (!k?.id) return;
+  if (action === 'ignore' && !(await ask({ title: 'Bỏ qua lời mời trò chuyện?', text: `Lời mời của ${chatTitle(c)} sẽ không còn ở mục đang chờ trên Beincom. Cuộc trò chuyện vẫn nằm trong Lời mời trò chuyện ở đây.`, ok: 'Bỏ qua' }))) return;
+  for (const b of ['req-accept', 'req-ignore']) $(b).disabled = true;
+  const r = await call('chatContact', { contactId: k.id, action });
+  for (const b of ['req-accept', 'req-ignore']) $(b).disabled = false;
+  if (r.status !== 'ok') return toast(r.message || 'Không làm được', 'err');
+  if (action === 'accept') {
+    acceptedLocally(c.id);
+    toast('Đã chấp nhận lời mời trò chuyện');
+  } else {
+    const upd = (x) => (x.id === c.id ? Object.assign(x, { contact: { ...x.contact, status: 'ignored' } }) : x);
+    S.requests.forEach(upd);
+    if (S.sel?.id === c.id) upd(S.sel);
+    applyComposer(S.sel);
+    renderList();
+    toast('Đã bỏ qua lời mời trò chuyện');
+  }
+}
+
+function renderHead() {
+  const c = S.sel;
+  const dm = c.kind === 'dm';
+  $('conv-avatar').replaceWith(Object.assign(dm ? avatar({ name: chatTitle(c), chatId: c.other?.chatId, pictureAt: c.other?.pictureAt, size: 'lg' }) : avatar({ name: chatTitle(c), seed: c.id, channel: true, locked: c.type === 'P', size: 'lg' }), { id: 'conv-avatar', onclick: dm && c.other && !c.self ? () => openPerson(c.other) : null, title: dm && c.other && !c.self ? 'Hồ sơ, vi phạm, xử lý' : '' }));
+  $('conv-title').replaceChildren(el('span', { class: 'nm' }, chatTitle(c)), ...(dm && !c.self ? badges(c.other) : []));
+  $('conv-sub').textContent = dm ? (c.self ? SELF_SUB + ' — chỉ bạn xem được' : c.type === 'G' ? 'Nhóm chat' : c.other?.username ? '@' + c.other.username + (c.req ? ' · lời mời trò chuyện' : ' · tin nhắn riêng') : c.req ? 'Lời mời trò chuyện' : 'Tin nhắn riêng') : [c.teamTitle, c.type === 'P' ? 'kênh riêng' : 'kênh chung', c.canDelete ? 'bạn là admin kênh' : ''].filter(Boolean).join(' · ');
+  const team = dm ? (S.dmTeamName || '') : S.teams.find((t) => t.channels.some((x) => x.id === c.id))?.name || '';
+  $('conv-web').href = BG.chatUrl(team, c.id);
+}
+
+function nearBottom() {
+  const m = $('msgs');
+  return m.scrollHeight - m.scrollTop - m.clientHeight < 140;
+}
+
+function renderMsgs({ scroll = 'auto' } = {}) {
+  const box = $('msgs');
+  const fromBottom = box.scrollHeight - box.scrollTop;
+  const stick = scroll === 'auto' ? nearBottom() : false;
+  const list = sortedPosts();
+  const meId = S.me?.chatId;
+  const out = [];
+  let prev = null;
+  for (let i = 0; i < list.length; i++) {
+    const p = list[i];
+    const next = list[i + 1];
+    if (!prev || dayKey(prev.createAt) !== dayKey(p.createAt)) out.push(el('div', { class: 'day' }, dayLabel(p.createAt)));
+    if (p.id === S.dividerId) out.push(el('div', { class: 'unread-line' }, 'Tin chưa đọc'));
+    if (p.system) {
+      out.push(el('div', { class: 'sys' }, p.message || 'Thông báo của hệ thống'));
+      prev = p;
+      continue;
+    }
+    const same = (a, b) => a && b && !a.system && !b.system && a.user.chatId === b.user.chatId && Math.abs(b.createAt - a.createAt) < GROUP_GAP && dayKey(a.createAt) === dayKey(b.createAt) && b.id !== S.dividerId;
+    const first = !same(prev, p);
+    const last = !same(p, next);
+    out.push(messageEl(p, { first, last, mine: p.user.chatId === meId }));
+    prev = p;
+  }
+  $('msg-list').replaceChildren(...(out.length ? out : [el('div', { class: 'sys' }, 'Chưa có tin nhắn nào. Hãy gửi lời chào 👋')]));
+  $('older').hidden = !S.hasMore;
+  $('older').disabled = S.loadingOlder;
+  $('older').textContent = S.loadingOlder ? 'Đang tải…' : 'Tải tin cũ hơn';
+  if (scroll === 'bottom' || stick) box.scrollTop = box.scrollHeight;
+  else if (scroll === 'divider') document.querySelector('.unread-line')?.scrollIntoView({ block: 'center' });
+  else box.scrollTop = box.scrollHeight - fromBottom;
+  updateJump();
+}
+
+// inThread: tin trong khung bình luận (mã phần tử 't-…', không có nút Bình luận / thanh thread)
+// mode: 'main' (cuộc trò chuyện) | 'thread' (khung bình luận) | 'pins' (tin đã ghim)
+function messageEl(p, { first, last, mine, inThread = false, mode = inThread ? 'thread' : 'main' }) {
+  inThread = mode !== 'main';
+  const name = p.user.fullname || p.user.username || 'Người dùng';
+  const canDel = !p.deleted && (mine || S.sel?.canDelete);
+  const bubble = el('div', { class: 'bubble' });
+  if (p.deleted) bubble.append('Tin nhắn đã bị xoá');
+  else {
+    if (p.pinned && mode !== 'pins') bubble.append(el('span', { class: 'pin-tag' }, svgPin(), 'Đã ghim'));
+    if (p.priority) bubble.append(el('span', { class: 'prio ' + p.priority }, svgPrio(p.priority), PRIO_LABEL[p.priority].toUpperCase()));
+    if (p.message) bubble.append(...msgBody(p.message));
+    if (p.files.length) bubble.append(filesEl(p.files, p));
+    bubble.append(el('span', { class: 'meta', title: fullTime(p.createAt) }, p.editAt ? 'đã sửa · ' : '', hm(p.createAt)));
+  }
+  const tools = p.deleted
+    ? null
+    : el(
+        'div',
+        { class: 'tools' },
+        mode === 'search' ? el('button', { type: 'button', onclick: () => openSearchResult(p) }, 'Mở') : null,
+        mode === 'main' || mode === 'thread' ? el('button', { type: 'button', title: 'Thả biểu cảm', onclick: (e) => openReactPop(p, e.currentTarget) }, '😊') : null,
+        mode === 'main' ? el('button', { type: 'button', onclick: () => openThread(p) }, 'Bình luận') : null,
+        mode === 'pins' && S.posts.has(p.id) ? el('button', { type: 'button', onclick: () => (innerWidth <= 1180 && closePins(), flashTo(p.id)) }, 'Tới tin nhắn') : null,
+        mine && p.message && (mode === 'main' || mode === 'thread') ? el('button', { type: 'button', onclick: () => startEdit(p, mode === 'thread') }, 'Sửa') : null,
+        p.message ? el('button', { type: 'button', onclick: () => copyMsg(p) }, 'Sao chép') : null,
+        canPin(p) && !p.rootId && mode !== 'search' ? el('button', { type: 'button', onclick: () => togglePin(p) }, p.pinned ? 'Bỏ ghim' : 'Ghim') : null,
+        canDel && (mode === 'main' || mode === 'thread') ? el('button', { type: 'button', class: 'del', onclick: () => deleteMsg(p, mine) }, 'Xoá') : null,
+      );
+  return el(
+    'div',
+    { class: `msg${mine ? ' me' : ''}${first ? ' first' : ''}${last ? ' last' : ''}${p.deleted ? ' deleted' : ''}${!mine && mentionsMe(p.message) ? ' mentioned' : ''}`, id: { main: 'm-', thread: 't-', pins: 'p-', search: 's-' }[mode] + p.id },
+    mine ? null : Object.assign(avatar({ name, chatId: p.user.chatId, pictureAt: p.user.pictureAt, size: 'sm' }), { onclick: () => openPerson(p.user), title: 'Xem ' + name }),
+    el('div', { class: 'msg-col' }, (first || mode === 'pins' || mode === 'search') && !mine ? el('div', { class: 'msg-name', style: nameColor(p.user.chatId) }, el('button', { type: 'button', class: 'nm-btn', title: 'Hồ sơ, vi phạm, xử lý', onclick: () => openPerson(p.user) }, name), ...badges(p.user), el('time', { title: fullTime(p.createAt) }, mode === 'pins' ? shortTime(p.createAt) + ' ' + hm(p.createAt) : hm(p.createAt))) : null, bubble, mode === 'search' ? null : reactsEl(p), mode === 'main' && !p.deleted && p.replyCount > 0 ? threadBar(p) : null),
+    tools,
+  );
+}
+
+// Ảnh và tệp đính kèm. Nhiều ảnh trong một tin: lưới gọn (tối đa 4 ô, ô cuối "+N"); bấm ảnh để phóng to ngay trong trang
+const ALBUM_MAX = 4;
+function filesEl(files, post) {
+  const web = $('conv-web').href;
+  const pics = files.filter(isImage);
+  const shot = (f, more = 0) => {
+    const open = (e) => {
+      if (e.button || e.ctrlKey || e.metaKey || e.shiftKey) return; // Ctrl / Shift / chuột giữa: mở tab như link thường
+      e.preventDefault();
+      openViewer(post?.id, f.id);
+    };
+    const style = [f.mini ? `--mini: url("${miniSrc(f)}")` : '', f.width && f.height ? `--ar: ${f.width} / ${f.height}` : ''].filter(Boolean).join('; ');
+    const box = el('a', { class: 'shot' + (f.url ? '' : ' mini-only'), href: f.url || web, target: '_blank', rel: 'noopener noreferrer', title: (f.name ? f.name + ' — ' : '') + 'Bấm để phóng to', onclick: open, style: style || null }, more ? el('span', { class: 'more' }, '+' + more) : null);
+    if (f.url) {
+      const img = el('img', { src: f.url, alt: f.name, loading: 'lazy', draggable: 'false', width: pics.length === 1 && f.width && f.height ? Math.min(280, f.width) : null });
+      img.addEventListener('error', () => img.remove());
+      box.prepend(img);
+    }
+    return box;
+  };
+  const n = Math.min(pics.length, ALBUM_MAX);
+  return el(
+    'div',
+    { class: 'files' },
+    pics.length ? el('div', { class: 'album' + (n > 1 ? ' grid n' + n : '') }, pics.slice(0, n).map((f, k) => shot(f, k === n - 1 && pics.length > n ? pics.length - n : 0))) : null,
+    files
+      .filter((f) => !isImage(f))
+      .map((f) => el('a', { class: 'file-chip', href: f.url || web, target: '_blank', rel: 'noopener noreferrer', title: 'Mở tệp' }, svgFile(), el('span', {}, f.name || 'Tệp'), f.size ? el('small', {}, sizeText(f.size)) : null)),
+  );
+}
+
+// ---------- Trả lời, sao chép, xoá ----------
+
+// Thanh trên ô gõ khi đang sửa tin (Esc hoặc ✕ để huỷ); lúc sửa không đính kèm / đặt độ ưu tiên
+function renderReply() {
+  const p = S.editing;
+  $('reply').hidden = !p;
+  $('reply').classList.toggle('editing', !!p);
+  $('reply-text').textContent = p ? `Sửa tin nhắn: ${(BG.chatPlain(p.message) || '📎 tệp').slice(0, 100)}` : '';
+  $('btn-attach').disabled = $('btn-prio').disabled = !!p;
+  if (p) $('text').placeholder = 'Sửa tin nhắn… (Enter lưu, Esc huỷ)';
+  else if (S.sel) applyComposer(S.sel);
+}
+
+async function copyMsg(p) {
+  try {
+    await navigator.clipboard.writeText(p.message);
+    toast('Đã sao chép tin nhắn.');
+  } catch {
+    toast('Không sao chép được', 'err');
+  }
+}
+
+function ask({ title, text, note, ok = 'Xoá' }) {
+  const d = $('ask');
+  $('ask-title').textContent = title;
+  $('ask-text').textContent = text;
+  $('ask-note').textContent = note || '';
+  $('ask-ok').textContent = ok;
+  d.returnValue = '';
+  d.showModal();
+  return new Promise((resolve) => d.addEventListener('close', () => resolve(d.returnValue === 'ok'), { once: true }));
+}
+
+async function deleteMsg(p, mine) {
+  const name = p.user.fullname || p.user.username || 'người dùng';
+  const ok = await ask({
+    title: mine ? 'Xoá tin nhắn của bạn?' : `Xoá tin nhắn của ${name}?`,
+    text: String(p.message || '📎 tệp').replace(/\s+/g, ' ').slice(0, 200),
+    note: mine ? 'Tin bị xoá với mọi người, không khôi phục được.' : 'Tin bị xoá khỏi kênh với mọi người, không khôi phục được. Việc kiểm duyệt này theo Chạy thử và được ghi Nhật ký.',
+  });
+  if (!ok) return;
+  const r = await call('chatDeleteMsg', { postId: p.id, channelId: S.sel.id, own: mine, groupName: chatTitle(S.sel), snippet: p.message, user: { id: p.user.id, username: p.user.username, fullname: p.user.fullname } });
+  if (r.status !== 'ok') return toast(r.message || (r.errors || []).join('; ') || 'Không xoá được', 'err');
+  if (r.dryRun) return toast('Chạy thử: đã ghi vào Nhật ký, chưa xoá trên Beincom.');
+  if (r.failed) return toast('Không xoá được: ' + (r.errors || []).join('; '), 'err');
+  if (S.posts.has(p.id)) S.posts.set(p.id, { ...S.posts.get(p.id), deleted: true });
+  if (S.thread?.posts.has(p.id)) S.thread.posts.set(p.id, { ...S.thread.posts.get(p.id), deleted: true });
+  if (S.thread?.root.id === p.id) S.thread.root = S.posts.get(p.id) || { ...p, deleted: true };
+  renderMsgs({ scroll: 'keep' });
+  renderThread();
+  toast('Đã xoá tin nhắn.');
+}
+
+// ---------- Tải lại ----------
+
+async function loadOlder() {
+  const c = S.sel;
+  const oldest = sortedPosts()[0];
+  if (!c || !S.hasMore || S.loadingOlder || !oldest) return;
+  S.loadingOlder = true;
+  renderMsgs({ scroll: 'keep' });
+  const r = await call('chatPosts', { channelId: c.id, before: oldest.id, perPage: PAGE });
+  S.loadingOlder = false;
+  if (S.sel?.id !== c.id) return;
+  if (r.status !== 'ok') return toast('Không tải được tin cũ: ' + (r.message || 'lỗi'), 'err');
+  addPosts(r.posts);
+  S.hasMore = r.hasMore && r.posts.length > 0;
+  renderMsgs({ scroll: 'keep' });
+}
+
+async function pollChat() {
+  const c = S.sel;
+  if (!c || S.polling || document.hidden || !S.lastSync) return;
+  S.polling = true;
+  const r = await call('chatPosts', { channelId: c.id, since: S.lastSync });
+  S.polling = false;
+  if (S.sel?.id !== c.id || r.status !== 'ok') return;
+  // Tin gốc mới / sửa / xoá hiện ở cuộc trò chuyện; bình luận cập nhật số bình luận và thread đang mở
+  const changed = r.posts.filter((p) => {
+    if (p.rootId) return !S.seenReplies.has(p.id) || !!S.thread?.posts.has(p.id);
+    const o = S.posts.get(p.id);
+    return !o || o.message !== p.message || o.deleted !== p.deleted || o.editAt !== p.editAt;
+  });
+  if (!changed.length) return;
+  const incoming = changed.filter((p) => !p.rootId && !S.posts.has(p.id) && !p.system && p.user.chatId !== S.me?.chatId).length;
+  const inThread = S.thread && changed.some((p) => p.rootId === S.thread.root.id);
+  const stick = nearBottom();
+  addPosts(r.posts);
+  renderMsgs({ scroll: stick ? 'bottom' : 'keep' });
+  if (inThread) renderThread();
+  if (incoming) {
+    if (!stick) S.newBelow += incoming;
+    updateJump();
+    bumpChat(c.id, { lastPostAt: Math.max(...r.posts.map((p) => p.createAt)) });
+    if (document.hasFocus()) markRead();
+  }
+}
+
+// quick: nền chỉ đọc một lượt (tên người của các tin nhắn riêng gần nhất, quyền đã nhớ) để danh sách hiện ngay;
+// lần đọc đủ chạy ngay sau đó và điền nốt
+async function loadOverview({ quiet = false, quick = false } = {}) {
+  const r = await call('chatOverview', { quick });
+  if (r.status === 'off') {
+    S.on = false;
+    S.loaded = true;
+    renderList();
+    renderMe();
+    return showEmpty('Kết nối Chat Beincom', 'Trang Chat dùng chính phiên đăng nhập Beincom của bạn để đọc và gửi tin nhắn. Bấm nút dưới đây và cho phép addon kết nối chat.beincom.com.', { enable: true });
+  }
+  S.on = true;
+  if (r.status !== 'ok') {
+    S.loaded = true;
+    S.error = r.message || 'Không đọc được chat';
+    renderMe();
+    if (!quiet) {
+      renderList();
+      showEmpty('Chưa kết nối được chat', S.error, { web: r.status === 'need_login' });
+    }
+    return;
+  }
+  applyOverview(r);
+  afterOverview();
+  try {
+    await chrome.storage.session?.set({ [CACHE_KEY]: { at: Date.now(), me: S.me, teams: S.teams, dms: S.dms, requests: S.requests, dmTeam: r.dmTeam } });
+  } catch {}
+  return r;
+}
+
+// Lần đọc nhanh thiếu tên người / quyền của một số cuộc trò chuyện: giữ cái đã biết (danh sách lần trước, lần đọc đủ)
+function applyOverview(r) {
+  const old = new Map([...S.dms, ...S.requests, ...S.teams.flatMap((t) => t.channels)].map((c) => [c.id, c]));
+  const keep = (c) => {
+    const o = old.get(c.id);
+    if (!o) return c;
+    const x = { ...c };
+    if (!x.title && o.title) x.title = o.title;
+    if (x.other && !x.other.username && o.other?.username) x.other = o.other;
+    if (x.canPost == null && o.canPost != null) Object.assign(x, { canPost: o.canPost, canDelete: o.canDelete });
+    return x;
+  };
+  S.on = true;
+  S.loaded = true;
+  S.error = '';
+  S.me = r.me;
+  S.teams = (r.teams || []).map((t) => ({ ...t, channels: (t.channels || []).map(keep) }));
+  S.dms = (r.dms || []).map(keep);
+  S.requests = (r.requests || []).map(keep);
+  S.dmTeamName = r.dmTeam?.name || '';
+  if (r.threads) {
+    S.threadUnread = r.threads.unread;
+    S.threadMentions = r.threads.mentions;
+  }
+}
+
+function afterOverview() {
+  // Đang xem kênh thì coi như đã đọc
+  if (S.sel && !document.hidden) bumpChat(S.sel.id, { unread: 0, mentions: 0 });
+  if (S.sel) {
+    const was = S.sel;
+    const now = findChat(S.sel.id);
+    S.sel = Object.assign(now || S.sel, { kind: S.sel.kind, teamTitle: S.sel.teamTitle, req: now ? !!now.req : S.sel.req });
+    // Lần đọc đủ mới biết quyền / tên, lời mời đã được chấp nhận ở nơi khác: cập nhật đầu trang, ô gõ, nút Xoá
+    if (was.canPost !== S.sel.canPost || was.canDelete !== S.sel.canDelete || was.title !== S.sel.title || was.contact?.status !== S.sel.contact?.status || was.req !== S.sel.req) {
+      renderHead();
+      applyComposer(S.sel);
+      if (was.canDelete !== S.sel.canDelete && S.posts.size) renderMsgs({ scroll: 'keep' });
+    }
+  }
+  renderMe();
+  renderList();
+  if (!S.sel && S.view !== 'threads') {
+    const want = new URLSearchParams(location.hash.slice(1)).get('c');
+    if (want && findChat(want)) openChat(want, { fromHash: true });
+    else if (new URLSearchParams(location.hash.slice(1)).has('threads')) showThreads({ fromHash: true });
+    else showEmpty('Chọn một cuộc trò chuyện', 'Tin nhắn riêng và kênh chat của các group bạn tham gia ở bên trái. Tin mới tự hiện khi trang đang mở.');
+  }
+}

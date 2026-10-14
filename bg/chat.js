@@ -8,7 +8,6 @@
 
 const CHAT_MAP_TTL = 6 * 3600e3;
 const CHAT_FIRST_MS = 6 * 3600e3; // lần đầu: đọc tin trong 6 giờ qua
-const CHAT_USERS_PER_SCAN = 10;
 const CHAT_MONTH_PAGES = 10; // tối đa 2000 tin mỗi kênh cho báo cáo tháng
 
 const chatGet = (client, path, timeoutMs = 20000) => client.call('GET', BG.CHAT_API + path, null, '', timeoutMs);
@@ -64,30 +63,209 @@ async function chatMapOf(client, state, groups, now, force = false) {
   return r;
 }
 
-// Tin nhắn riêng chưa đọc + số lần được nhắc tên trong kênh (không đọc nội dung tin nhắn riêng)
+// Tin nhắn riêng chưa đọc + số lần được nhắc tên trong kênh (không đọc nội dung tin nhắn riêng). Số chưa đọc theo team đọc trước:
+// team tin nhắn riêng báo không có tin chưa đọc (msg_count = 0, nếu máy chủ có trường này) thì khỏi đọc từng kênh. Tên người
+// lấy từ bản ghi nhớ (chatUsersOf) nên lần kiểm tra nhanh mỗi phút không đọc lại.
 async function readChatUnread(client, map, prevUsers = {}) {
-  const users = { ...prevUsers };
+  const un = await chatGet(client, 'v5/users/me/teams/unread?include_collapsed_threads=true');
+  const teams = BG.chatOk(un) && Array.isArray(un.body) ? un.body : null;
+  const mentions = teams ? teams.filter((t) => t.team_id !== map.dmTeam?.id).reduce((s, t) => s + (t.total_unread_mentions || 0), 0) : 0;
+  const dmT = teams?.find((t) => t.team_id === map.dmTeam?.id);
+  const noneUnread = !!dmT && typeof dmT.msg_count === 'number' && !dmT.msg_count && !dmT.mention_count && !dmT.total_unread_mentions;
   let dms = [];
-  if (map.dmTeam) {
+  if (map.dmTeam && teams && !noneUnread) {
     const [chs, mem] = await Promise.all([chatGet(client, `v4/users/me/teams/${map.dmTeam.id}/channels`), chatGet(client, `v4/users/me/teams/${map.dmTeam.id}/channels/members`)]);
     if (BG.chatOk(chs)) dms = BG.dmUnread(chs.body, BG.chatOk(mem) ? mem.body : [], map.me.chatId);
-    const need = [...new Set(dms.map((d) => d.otherId).filter((id) => id && !users[id]))].slice(0, CHAT_USERS_PER_SCAN);
-    await mapLimit(need, PARALLEL, async (id) => {
-      const r = await chatGet(client, `v4/users/${id}`);
-      if (BG.chatOk(r)) users[id] = BG.chatPerson(r.body);
-    });
   }
-  const un = await chatGet(client, 'v5/users/me/teams/unread?include_collapsed_threads=true');
-  const mentions = BG.chatOk(un) ? (un.body || []).filter((t) => t.team_id !== map.dmTeam?.id).reduce((s, t) => s + (t.total_unread_mentions || 0), 0) : 0;
+  const found = await chatUsersOf(client, dms.map((d) => d.otherId).filter((id) => id && !prevUsers[id]));
+  const users = { ...prevUsers, ...Object.fromEntries(Object.entries(found).filter(([, u]) => u)) };
   return {
+    ok: !!teams,
     users,
-    teamsUnread: BG.chatOk(un) && Array.isArray(un.body) ? un.body : null,
+    teamsUnread: teams,
     unread: {
       at: Date.now(),
       mentions,
       dms: dms.map((d) => ({ ...d, user: users[d.otherId] || null, url: BG.chatUrl(map.dmTeam?.name, d.channelId) })),
     },
   };
+}
+
+// ---------- Tin nhắn chat bị báo cáo (community bạn là chủ / admin) ----------
+// Đọc GET chat v4/communities/{community}/reports?per_page=50; xử lý POST …/reports/{báo cáo} { action: hide | ignore } (như
+// nút Ẩn / Bỏ qua ở trang quản trị của web — đọc từ mã web, chưa gọi thật). Ẩn / Bỏ qua theo Chạy thử, ghi Nhật ký.
+const communityOk = (id) => /^[\w-]{1,64}$/.test(String(id || ''));
+async function readChatReports(client, communityId) {
+  const r = await chatGet(client, `v4/communities/${communityId}/reports?per_page=50`);
+  if (!BG.chatOk(r)) return { ok: false, status: r.status, message: BG.errMsg(r) };
+  const b = r.body || {};
+  const list = Array.isArray(b.reports) ? b.reports : Array.isArray(b.data?.reports) ? b.data.reports : Array.isArray(b) ? b : [];
+  return { ok: true, items: list.map(BG.chatReportItem).filter(Boolean), more: !!(b.has_next_page ?? b.hasNextPage) };
+}
+
+// Mỗi lần quét: mọi community bạn là chủ / admin (group gốc); báo cáo mới so với lần trước thì thông báo (lần đầu chỉ ghi nhận)
+async function syncChatReports(client, { state, next, notifyAllowed, now = Date.now() }) {
+  const prev = state.chatReports || {};
+  const out = {};
+  const fresh = [];
+  const roots = (next.snapshot?.groups || []).filter((g) => g.isCommunity && g.isCommunityAdmin && communityOk(g.communityId));
+  await mapLimit(roots, PARALLEL, async (g) => {
+    const old = prev[g.communityId];
+    // Không có quyền đọc (403): một ngày mới thử lại một lần
+    if (old?.error === 'denied' && now - (old.errorAt || 0) < 864e5) return void (out[g.communityId] = { ...old, name: g.name });
+    const r = await readChatReports(client, g.communityId);
+    if (!r.ok) {
+      // Lỗi đọc: giữ danh sách cũ, ghi lỗi
+      out[g.communityId] = { ...(old || { items: [] }), name: g.name, error: r.status === 403 ? 'denied' : r.message || 'lỗi', errorAt: now };
+      return;
+    }
+    if (old && !old.error) {
+      const known = new Set((old.items || []).map((x) => x.id));
+      fresh.push(...r.items.filter((x) => !known.has(x.id)).map((x) => ({ ...x, communityName: g.name })));
+    }
+    out[g.communityId] = { at: now, name: g.name, items: r.items, more: r.more };
+  });
+  next.chatReports = out;
+  if (notifyAllowed && fresh.length) {
+    const f = fresh[0];
+    notify('bg-chat-reports', `BeinGroup: ${fresh.length} tin chat bị báo cáo mới`, `${f.communityName}${f.channel ? ' · ' + f.channel : ''} — ${f.member.fullname || f.member.username || 'người dùng'}: ${(f.message || (f.files ? '📎 tệp' : '')).replace(/\s+/g, ' ').slice(0, 100)}`);
+  }
+  return fresh.length;
+}
+
+// Tab Báo cáo (loại Tin nhắn chat): đọc lại một community, ghi vào kết quả quét
+async function doChatReports({ communityId }) {
+  const settings = await chatSettings();
+  if (!settings.chatEnabled) return chatOff();
+  if (!communityOk(communityId)) return { status: 'error', message: 'Thiếu community' };
+  return withChatRead(async (client) => {
+    const r = await readChatReports(client, communityId);
+    if (r.status === 401) return { ...chatLoginErr };
+    if (!r.ok) return { status: 'error', code: r.status === 403 ? 'not_admin' : '', message: r.status === 403 ? 'Chỉ chủ / admin community đọc được tin nhắn chat bị báo cáo' : 'Đọc báo cáo chat lỗi: ' + r.message };
+    const { state } = await chrome.storage.local.get('state');
+    if (state) {
+      const name = state.chatReports?.[communityId]?.name || (state.snapshot?.groups || []).find((g) => g.communityId === communityId && g.isCommunity)?.name || '';
+      state.chatReports = { ...(state.chatReports || {}), [communityId]: { at: Date.now(), name, items: r.items, more: r.more } };
+      await chrome.storage.local.set({ state });
+      await updateBadge();
+    }
+    return { status: 'ok', items: r.items, more: r.more };
+  });
+}
+
+async function doChatReportAct({ communityId, action, items = [], communityName = '' }) {
+  const { settings: raw, log = [] } = await chrome.storage.local.get(['settings', 'log']);
+  const settings = { ...BG.DEFAULT_SETTINGS, ...raw };
+  if (!settings.chatEnabled) return chatOff();
+  if (!communityOk(communityId) || !['hide', 'ignore'].includes(action)) return { status: 'error', message: 'Thiếu community hoặc thao tác' };
+  const list = (items || []).filter((x) => communityOk(x?.id)).slice(0, 100);
+  if (!list.length) return { status: 'error', message: 'Chưa chọn tin nào' };
+  return withClient(async (client) => {
+    const acts = list.map((x) => ({
+      log: { kind: 'chat', source: 'manual', action: action === 'hide' ? 'reportHide' : 'reportIgnore', groupName: communityName, contentId: x.id, snippet: String(x.snippet || '').slice(0, 120), userId: x.member?.id || '', username: x.member?.username || '', fullname: x.member?.fullname || '' },
+      call: (c) => c.call('POST', BG.CHAT_API + `v4/communities/${communityId}/reports/${x.id}`, { action }, ''),
+      ok: BG.chatOk,
+      gone: true,
+      goneIf: (r) => r.status === 404,
+    }));
+    const r = await performActions(acts, settings);
+    pushLog(log, r.entries);
+    // Báo cáo đã xử lý (hoặc tin đã bị xoá) rời khỏi danh sách đang chờ
+    const done = new Set(r.entries.filter((e) => e.status === 'ok').map((e) => e.contentId));
+    const { state } = await chrome.storage.local.get('state');
+    if (state?.chatReports?.[communityId] && done.size) {
+      const c = state.chatReports[communityId];
+      state.chatReports = { ...state.chatReports, [communityId]: { ...c, items: (c.items || []).filter((x) => !done.has(x.id)) } };
+      await chrome.storage.local.set({ state, log });
+    } else await chrome.storage.local.set({ log });
+    await updateBadge();
+    return { ...summary(r, settings), done: [...done] };
+  });
+}
+
+// ---------- Báo tin nhắn riêng, nhắc tên, bình luận thread (dùng chung: lần quét và kiểm tra nhanh mỗi phút) ----------
+// Mốc đã báo lưu riêng ở khoá chatNotify { at, me, dmTeam, dm: { kênh: last_post_at đã báo }, mentions, threads: { thread:
+// last_reply_at } } để lần kiểm tra nhanh không phải đọc cả kết quả quét. Phần nào chưa có mốc (lần đầu, vừa bật) chỉ ghi nhận.
+// Lệnh đọc lỗi (hết phiên…) thì giữ mốc cũ, không báo nhầm. Không đọc nội dung tin nhắn riêng.
+async function chatNotices(client, { settings, me, dmTeam, prevUsers = {}, notifyAllowed = true, legacy = null, quick = false }) {
+  const stored = (await chrome.storage.local.get('chatNotify')).chatNotify;
+  const prev = stored || (legacy && (legacy.dm || legacy.threads) ? legacy : null); // bản cũ ghi mốc trong state
+  const cur = { at: Date.now(), me: me || prev?.me || null, dmTeam: dmTeam || prev?.dmTeam || null, dm: prev?.dm, mentions: prev?.mentions, threads: prev?.threads };
+  let unread = null;
+  let users = prevUsers;
+  let teamsUnread = null;
+  if (settings.chatUnread && cur.me?.chatId) {
+    const u = await readChatUnread(client, { dmTeam: cur.dmTeam, me: cur.me }, prevUsers);
+    teamsUnread = u.teamsUnread;
+    if (u.ok) {
+      users = u.users;
+      unread = u.unread;
+      const seen = { ...(cur.dm || {}) };
+      const newDm = cur.dm ? u.unread.dms.filter((d) => d.unread > 0 && d.lastPostAt > (seen[d.channelId] || 0)) : [];
+      for (const d of u.unread.dms) seen[d.channelId] = Math.max(seen[d.channelId] || 0, d.lastPostAt);
+      cur.dm = seen;
+      if (notifyAllowed && newDm.length) {
+        // Lời mời trò chuyện (người chưa kết nối nhắn cho bạn) báo riêng với tin nhắn riêng
+        const reqN = newDm.filter((d) => d.request).length;
+        const head = [newDm.length - reqN ? `${newDm.length - reqN} tin nhắn riêng mới` : '', reqN ? `${reqN} lời mời trò chuyện mới` : ''].filter(Boolean).join(', ');
+        notify('bg-chat-dm', `BeinGroup: ${head}`, 'Từ: ' + newDm.map((d) => (d.user?.fullname || d.user?.username || d.title || 'người dùng') + (d.request ? ' (lời mời)' : '')).slice(0, 5).join(', ') + '. Bấm để mở chat.', BG.SITE + '/chat-home');
+      }
+      if (notifyAllowed && typeof cur.mentions === 'number' && u.unread.mentions > cur.mentions) {
+        notify('bg-chat-mention', `BeinGroup: bạn được nhắc tên ${u.unread.mentions} lần trong chat`, 'Bấm để mở chat.', BG.SITE + '/chat-home');
+      }
+      cur.mentions = u.unread.mentions;
+    }
+  }
+  // Bình luận mới ở thread bạn theo dõi: chỉ số thread và tên người tham gia
+  if (settings.chatThreads) {
+    if (!teamsUnread) {
+      const un = await chatGet(client, 'v5/users/me/teams/unread?include_collapsed_threads=true');
+      teamsUnread = BG.chatOk(un) && Array.isArray(un.body) ? un.body : null;
+    }
+    // Kiểm tra nhanh: chỉ khi máy chủ cho số thread chưa đọc theo team (không thì phải đọc mọi team — để lần quét làm)
+    if (teamsUnread && (!quick || teamsUnread.some((t) => typeof t.thread_count === 'number'))) {
+      const tn = BG.threadNotice(await readThreadUpdates(client, teamsUnread), cur.threads, !cur.threads);
+      cur.threads = tn.seen;
+      if (notifyAllowed && tn.fresh.length) {
+        const mentions = tn.fresh.reduce((s, t) => s + (t.unreadMentions || 0), 0);
+        const people = [...new Set(tn.fresh.flatMap((t) => t.people))].slice(0, 5);
+        notify('bg-chat-thread', `BeinGroup: ${tn.fresh.length} thread bạn theo dõi có bình luận mới${mentions ? ` (${mentions} lần nhắc bạn)` : ''}`, (people.length ? 'Người tham gia: ' + people.join(', ') + '. ' : '') + 'Bấm để xem.', BG.SITE + '/chat-home');
+      }
+    }
+  }
+  await chrome.storage.local.set({ chatNotify: cur });
+  return { users, unread };
+}
+
+// Kiểm tra nhanh mỗi phút (cài đặt chatFast): chỉ tin nhắn riêng / nhắc tên / thread, vài lệnh đọc nhẹ. Chỉ gọi thẳng chat
+// (không mở tab Beincom); đang quét thì bỏ lượt; chưa có mốc từ lần quét đầu (biết mình là ai, team tin nhắn riêng) thì chờ.
+const CHAT_ALARM = 'beingroup-chat';
+let chatQuickBusy = false;
+async function chatQuickCheck() {
+  if (chatQuickBusy || exclusiveBusy()) return { status: 'ok', skipped: 'busy' };
+  const { settings: raw, chatNotify } = await chrome.storage.local.get(['settings', 'chatNotify']);
+  const settings = { ...BG.DEFAULT_SETTINGS, ...raw };
+  if (!settings.active || !settings.chatEnabled || !settings.chatFast || !(settings.chatUnread || settings.chatThreads)) return { status: 'ok', skipped: 'off' };
+  if (!chatNotify?.me?.chatId) return { status: 'ok', skipped: 'no-map' };
+  if (!(await chrome.permissions.contains({ origins: [BG.CHAT_ORIGIN] }).catch(() => false))) return { status: 'ok', skipped: 'no-permission' };
+  chatQuickBusy = true;
+  try {
+    const r = await chatNotices(directClient(), { settings, notifyAllowed: true, quick: true });
+    return { status: 'ok', checked: true, dms: r.unread?.dms.length ?? null };
+  } catch (e) {
+    return { status: 'error', message: String(e?.message || e) };
+  } finally {
+    chatQuickBusy = false;
+  }
+}
+
+async function scheduleChatAlarm() {
+  const { settings: raw } = await chrome.storage.local.get('settings');
+  const s = { ...BG.DEFAULT_SETTINGS, ...raw };
+  const on = s.active && s.chatEnabled && s.chatFast && (s.chatUnread || s.chatThreads);
+  const alarm = await chrome.alarms.get(CHAT_ALARM);
+  if (on && !alarm) chrome.alarms.create(CHAT_ALARM, { delayInMinutes: 1, periodInMinutes: 1 });
+  if (!on && alarm) await chrome.alarms.clear(CHAT_ALARM);
 }
 
 // Sau mỗi lần quét (cài đặt chatEnabled): tin mới trong kênh chat group, tin nhắn riêng chưa đọc. Ghi vào next (state).
@@ -163,40 +341,18 @@ async function syncChat(client, { settings, state, next, notifyAllowed, ctx, now
       notify('bg-chat', `BeinGroup: ${parts.join(', ')} trong chat`, first ? `${first.groupName} — ${first.user.fullname || first.user.username}: ${first.text.replace(/\s+/g, ' ').slice(0, 100)}` : 'Bấm để xem.');
     }
   }
-  let teamsUnread = null;
-  if (settings.chatUnread) {
-    const u = await readChatUnread(client, map, state.chatUsers);
-    teamsUnread = u.teamsUnread;
-    next.chatUsers = u.users;
-    next.chatUnread = u.unread;
-    // Báo tin nhắn riêng mới (mỗi cuộc trò chuyện khi có tin mới hơn lần báo trước) và lần nhắc tên tăng
-    const notified = { ...(state.chatNotified || {}) };
-    const newDm = u.unread.dms.filter((d) => d.unread > 0 && d.lastPostAt > (notified[d.channelId] || 0));
-    for (const d of u.unread.dms) notified[d.channelId] = Math.max(notified[d.channelId] || 0, d.lastPostAt);
-    next.chatNotified = notified;
-    if (notifyAllowed && newDm.length && state.chatUnread) {
-      // Lời mời trò chuyện (người chưa kết nối nhắn cho bạn) báo riêng với tin nhắn riêng
-      const reqN = newDm.filter((d) => d.request).length;
-      const head = [newDm.length - reqN ? `${newDm.length - reqN} tin nhắn riêng mới` : '', reqN ? `${reqN} lời mời trò chuyện mới` : ''].filter(Boolean).join(', ');
-      notify('bg-chat-dm', `BeinGroup: ${head}`, 'Từ: ' + newDm.map((d) => (d.user?.fullname || d.user?.username || d.title || 'người dùng') + (d.request ? ' (lời mời)' : '')).slice(0, 5).join(', ') + '. Bấm để mở chat.', BG.SITE + '/chat-home');
+  // Tin nhắn chat bị báo cáo ở community bạn là chủ / admin (cùng công tắc quét báo cáo)
+  if (settings.scanReports) await syncChatReports(client, { state, next, notifyAllowed, now });
+  else delete next.chatReports;
+  // Tin nhắn riêng, nhắc tên, bình luận thread: báo cái mới so với mốc đã báo (chatNotify, dùng chung với kiểm tra nhanh)
+  if (settings.chatUnread || settings.chatThreads) {
+    const r = await chatNotices(client, { settings, me: map.me, dmTeam: map.dmTeam, prevUsers: state.chatUsers || {}, notifyAllowed, legacy: state.chatNotified || state.chatThreadSeen ? { dm: state.chatNotified, mentions: state.chatUnread?.mentions, threads: state.chatThreadSeen } : null });
+    if (r.unread) {
+      next.chatUsers = r.users;
+      next.chatUnread = r.unread;
     }
-    if (notifyAllowed && state.chatUnread && u.unread.mentions > (state.chatUnread.mentions || 0)) {
-      notify('bg-chat-mention', `BeinGroup: bạn được nhắc tên ${u.unread.mentions} lần trong chat`, 'Bấm để mở chat.', BG.SITE + '/chat-home');
-    }
-  }
-  // Bình luận mới ở thread bạn theo dõi (trang Chat đang đóng vẫn biết): chỉ số thread và tên người tham gia
-  if (settings.chatThreads) {
-    if (!teamsUnread) {
-      const un = await chatGet(client, 'v5/users/me/teams/unread?include_collapsed_threads=true');
-      teamsUnread = BG.chatOk(un) && Array.isArray(un.body) ? un.body : null;
-    }
-    const tn = BG.threadNotice(await readThreadUpdates(client, teamsUnread), state.chatThreadSeen, !state.chatThreadSeen);
-    next.chatThreadSeen = tn.seen;
-    if (notifyAllowed && tn.fresh.length) {
-      const mentions = tn.fresh.reduce((s, t) => s + (t.unreadMentions || 0), 0);
-      const people = [...new Set(tn.fresh.flatMap((t) => t.people))].slice(0, 5);
-      notify('bg-chat-thread', `BeinGroup: ${tn.fresh.length} thread bạn theo dõi có bình luận mới${mentions ? ` (${mentions} lần nhắc bạn)` : ''}`, (people.length ? 'Người tham gia: ' + people.join(', ') + '. ' : '') + 'Bấm để xem.', BG.SITE + '/chat-home');
-    }
+    delete next.chatNotified;
+    delete next.chatThreadSeen;
   }
   return { status: 'ok', fresh: fresh.length };
 }
@@ -463,6 +619,7 @@ async function doChatOverview({ quick = false } = {}) {
     }
     const teamById = new Map(teamList.map((t) => [t.id, t]));
     const dmTeamRaw = teamList.find((t) => t.props?.bic_group_team_id === 'unknown');
+    const meP = { ...BG.chatPerson(me.body), chatId: me.body.id, pictureAt: me.body.last_picture_update || 0 };
     const item = (c) => {
       const t = teamById.get(c.team_id) || dmTeamRaw || { id: c.team_id || '', name: '', props: {} };
       const m = memOf.get(c.id);
@@ -472,6 +629,8 @@ async function doChatOverview({ quick = false } = {}) {
       const otherId = otherOf(c);
       const other = otherId ? users[otherId] : null;
       const contact = BG.chatContact(c, me.body.id);
+      // Nhắn cho chính mình: "Nhật ký cá nhân" kèm ảnh đại diện của tài khoản
+      if (BG.chatSelfDm(c, me.body.id)) return { ...ch, self: true, canPost: sure ? ch.canPost : null, canDelete: false, title: BG.SELF_DM_TITLE, purpose: '', other: meP, unread: Math.max(0, (c.total_msg_count || 0) - (m?.msg_count || 0)), mentions: m?.mention_count || 0 };
       return {
         ...ch,
         ...(contact ? { contact } : {}),

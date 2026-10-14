@@ -77,9 +77,23 @@ function renderTodo(groups, flagged, reports, comments = 0) {
   }
 }
 
+// Phần còn lại của BG (lib/*.js theo BG.PARTS): chỉ cần khi chưa có gói số đếm
+async function loadLib() {
+  if (BG.totals) return;
+  for (const p of BG.PARTS)
+    await new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = `lib/${p}.js`;
+      s.onload = resolve;
+      s.onerror = reject;
+      document.body.append(s);
+    });
+}
+
 // Số đếm cho popup: nền ghi sẵn gói nhỏ popupInfo (bg/core.js savePopupInfo) nên popup không phải đọc cả kết quả quét
 // rồi chấm lại từng bài. Chưa có gói (vừa nâng cấp addon): tính tại chỗ một lần và nhờ nền ghi gói cho lần sau.
 async function countsFromState() {
+  await loadLib();
   const { rules, postRules, groupRules, state } = await chrome.storage.local.get(['rules', 'postRules', 'groupRules', 'state']);
   const st = state || {};
   const groups = st.snapshot?.groups || [];
@@ -98,10 +112,31 @@ async function countsFromState() {
   };
 }
 
+// Bản sao số đếm lần trước trong localStorage của popup (đọc đồng bộ): vẽ ngay khi mở, rồi vẽ lại khi đọc xong storage
+const CACHE_KEY = 'popupLast';
+function readCache() {
+  try {
+    const c = JSON.parse(localStorage.getItem(CACHE_KEY) || 'null');
+    return c?.info?.totals && c.s ? c : null;
+  } catch {
+    return null;
+  }
+}
+
+let readMs = 0;
 async function refresh() {
+  const t0 = performance.now();
   const { settings, popupInfo } = await chrome.storage.local.get(['settings', 'popupInfo']);
+  readMs = Math.round(performance.now() - t0);
   const s = { ...BG.DEFAULT_SETTINGS, ...settings };
   const info = popupInfo || (await countsFromState());
+  render(s, info);
+  try {
+    localStorage.setItem(CACHE_KEY, JSON.stringify({ s, info }));
+  } catch {}
+}
+
+function render(s, info) {
   for (const key of POPUP_SETTINGS) $(key).checked = !!s[key];
   $('master').classList.toggle('off', !s.active);
   $('master-text').textContent = s.active ? 'Addon đang hoạt động' : 'Đã tắt tất cả chức năng';
@@ -116,7 +151,7 @@ async function refresh() {
   $('requests').textContent = info.hasSnapshot ? t.requests : '–';
   $('posts').textContent = info.hasSnapshot ? t.posts : '–';
   $('flagged').textContent = info.hasRecent && s.scanPosts ? flagged : '–';
-  const reports = t.reports + t.autoFlagged;
+  const reports = t.reports + t.autoFlagged + (s.chatEnabled ? info.chatReports || 0 : 0);
   $('reports').textContent = info.hasSnapshot && s.scanReports ? reports : '–';
   $('reports').classList.toggle('hot', reports > 0);
   $('requests').classList.toggle('hot', t.requests > 0);
@@ -156,4 +191,13 @@ chrome.storage.onChanged.addListener((changes, area) => {
   if (area === 'local' && (changes.settings || changes.popupInfo)) refresh();
 });
 $('version').textContent = 'v' + chrome.runtime.getManifest().version;
-refresh();
+const early = readCache();
+if (early) render(early.s, early.info);
+// Mở chậm (quá 1,5 giây tới khi có số liệu thật): ghi vào Nhật ký → Lỗi kỹ thuật để biết chậm ở đâu
+refresh().then(() => {
+  const ms = Math.round(performance.now());
+  if (ms < 1500) return;
+  const nav = performance.getEntriesByType('navigation')[0];
+  const views = chrome.extension?.getViews?.().length || 0;
+  reportDiag(WHERE_PAGE, { message: `Popup mở chậm: khoảng ${Math.round(ms / 1000)} giây`, stack: `tới khi trang sẵn sàng ${Math.round(nav?.domInteractive || 0)} ms · đọc số liệu ${readMs} ms · tổng ${ms} ms · trang addon đang mở: ${views}` });
+});

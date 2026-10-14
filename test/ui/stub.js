@@ -211,6 +211,20 @@
         }
         if (m.type === 'reportDetail') { await new Promise((res) => setTimeout(res, 150)); return { status: 'ok', reasons: [{ label: 'Spam / quảng cáo', total: 3, reporters: [{ username: 'minhanh' }, { username: 'quang' }, { username: 'thu' }] }] }; }
         if (m.type === 'reportAct') { window.__lastReportAct = m; return { status: 'ok', dryRun: false, ok: m.items.length, dry: 0, failed: 0, errors: [], done: m.items.map((x) => x.targetId) }; }
+        // Tin nhắn chat bị báo cáo: đọc lại theo state, Ẩn / Bỏ qua bỏ khỏi danh sách
+        if (m.type === 'chatReports') {
+          await new Promise((res) => setTimeout(res, 100));
+          window.__chatReportReads = (window.__chatReportReads || 0) + 1;
+          return { status: 'ok', items: store.state.chatReports?.[m.communityId]?.items || [], more: false };
+        }
+        if (m.type === 'chatReportAct') {
+          (window.__chatReportActs = window.__chatReportActs || []).push(m);
+          const ids = new Set(m.items.map((x) => x.id));
+          const c = store.state.chatReports?.[m.communityId];
+          if (c) store.state.chatReports = { ...store.state.chatReports, [m.communityId]: { ...c, items: c.items.filter((x) => !ids.has(x.id)) } };
+          fire();
+          return { status: 'ok', dryRun: false, ok: m.items.length, dry: 0, failed: 0, errors: [], done: [...ids] };
+        }
         if (m.type === 'scheduled') return { status: 'ok', items: scheduled, errors: [] };
         if (m.type === 'refresh') {
           await new Promise((res) => setTimeout(res, 300));
@@ -317,6 +331,8 @@
             threads: { unread: Math.max(0, 2 - (window.__threadSeen || []).length), mentions: (window.__threadSeen || []).includes('n2') ? 0 : 1 },
             teams: [{ id: 'tCL', name: 'crypto-life', title: 'Crypto Life', communityId: 'cCL', channels: [ch('chMain', 'Crypto Life', 'O', { canDelete: true, unread: window.__chatRead ? 0 : 2, lastPostAt: now - 30e3 }), ch('chSub', 'Hỏi đáp', 'P', { canPost: false, purpose: 'Kênh hỏi đáp', lastPostAt: now - 3600e3 })] }],
             dms: [
+              // Nhắn cho chính mình (#…&self=1): Nhật ký cá nhân
+              ...(new URLSearchParams(location.hash.slice(1)).get('self') ? [{ ...ch('dmSelf', 'Nhật ký cá nhân', 'D'), teamId: 'tDM', teamName: 'direct', groupId: '', self: true, other: { ...cu(1, 'Kai Crypto', 'kaicrypto'), id: 'me1', verified: true }, lastPostAt: now - 30 * 864e5 }] : []),
               { ...ch('dm1', 'Lan Anh', 'D'), teamId: 'tDM', teamName: 'direct', groupId: '', other: { ...cu(50, 'Lan Anh', 'lananh'), verified: true, premium: 'lifetime' }, unread: 1, lastPostAt: now - 120e3 },
               // Lời mời mình gửi đi, chờ người nhận chấp nhận (#…&req=1)
               ...(reqs ? [{ ...ch('sent1', 'Hải Yến', 'D'), teamId: 'tDM', teamName: 'direct', groupId: '', other: cu(55, 'Hải Yến', 'haiyen'), lastPostAt: now - 5 * 3600e3, contact: { id: 'ct9', status: 'pending', incoming: false, sent: true, ignoredByOther: false } }] : []),
@@ -695,8 +711,11 @@
             it('search', 'Tìm bài theo thời gian', 'báo cáo tháng, thành viên mới', 'ok', '1 bài trong 30 ngày'),
             it('reports', 'Báo cáo của người dùng', 'tab Báo cáo', 'skip', 'chỉ chủ / admin community xem được'),
             it('pinned', 'Bài ghim', 'ghim bài', 'fail', 'Không thấy API (404) — Beincom có thể đã đổi đường dẫn', { httpStatus: 404, path: 'content/contents/pinned-content/groups/' + m.groupId }),
+            // Nhóm Chat Beincom
+            it('chat', 'Chat: đăng nhập', 'mọi phần Chat', 'ok', '@kaicrypto', { section: 'chat' }),
+            it('chatReports', 'Chat: tin nhắn bị báo cáo', 'tab Báo cáo → Tin nhắn chat', 'skip', 'chỉ chủ / admin community (chọn group gốc)', { section: 'chat' }),
           ];
-          const r = { status: 'ok', at: Date.now(), group: { id: m.groupId, name: (groups.find((g) => g.id === m.groupId) || {}).name || '' }, mode: 'direct', items, summary: { ok: 4, skip: 1, fail: 1 } };
+          const r = { status: 'ok', at: Date.now(), group: { id: m.groupId, name: (groups.find((g) => g.id === m.groupId) || {}).name || '' }, mode: 'direct', items, summary: { ok: 5, skip: 2, fail: 1 } };
           store.selfCheck = r;
           return r;
         }

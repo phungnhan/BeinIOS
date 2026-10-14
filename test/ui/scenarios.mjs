@@ -566,7 +566,7 @@ export const scenarios = [
       await page.ev(`document.getElementById('onb-next').click(); true`);
       assert.equal(await page.ev(`document.getElementById('onb-progress').textContent`), 'Bước 2/3');
       await page.ev(`document.getElementById('onb-check-group').value = 'gCL'; document.getElementById('onb-check-run').click(); true`);
-      await page.until(() => /^4 dùng được · 1 bỏ qua \(không có quyền\) · 1 lỗi: Bài ghim — xem chi tiết/.test(document.getElementById('onb-check-out').textContent));
+      await page.until(() => /^5 dùng được · 2 bỏ qua \(không có quyền\) · 1 lỗi: Bài ghim — xem chi tiết/.test(document.getElementById('onb-check-out').textContent));
       assert.deepEqual(await page.ev(`window.__selfCheck`), { type: 'selfCheck', groupId: 'gCL' });
       // Bước 3: chọn tính năng (giữ Chạy thử, bật bài nhắc và bài thảo luận cho Crypto Life)
       await page.ev(`document.getElementById('onb-next').click(); true`);
@@ -877,6 +877,66 @@ export const scenarios = [
     },
   },
   {
+    name: 'Báo cáo: tin nhắn chat bị báo cáo',
+    async run({ page, url, assert }) {
+      await page.open(url('dashboard', 'tab=overview'));
+      const badge0 = Number(await page.ev(`document.getElementById('badge-reports').textContent || 0`));
+      // Lần quét ghi 2 tin chat bị báo cáo ở Food Research (bạn là chủ): một tin có chữ, một tin chỉ có tệp (người gửi chỉ có mã chat)
+      await page.ev(`(() => {
+        const now = Date.now();
+        const r = (id, n, name, text, min, extra = {}) => ({ id, message: text, files: 0, member: { id: 'a' + n, chatId: '', username: 'user' + n, fullname: name, avatar: '' }, reasons: [{ type: 'SPAM', total: 2 }], total: 2, firstAt: now - min * 60e3, postAt: now - (min + 5) * 60e3, channel: 'Food Research', ...extra });
+        return chrome.storage.local.get(['settings', 'state']).then(({ settings, state }) => chrome.storage.local.set({
+          settings: { ...settings, chatEnabled: true },
+          state: { ...state, chatReports: { cFood: { at: now - 10 * 60e3, name: 'Food Research', items: [
+            r('cr1', 1, 'Kèo Thơm', 'Vào nhóm kèo VIP t.me/keo', 30),
+            r('cr2', 2, 'Quà Tặng', '', 60, { files: 2, member: { id: '', chatId: 'abcdefghijklmnopqrstuvwxyz', username: 'qua', fullname: 'Quà Tặng', avatar: '' }, reasons: [] }),
+          ] } } },
+        }));
+      })().then(() => true)`);
+      // Huy hiệu tab Báo cáo cộng 2; Việc cần làm có từng tin
+      await page.until(() => /Chat bị báo cáo/.test(document.getElementById('todo-list').textContent));
+      assert.equal(Number(await page.ev(`document.getElementById('badge-reports').textContent`)), badge0 + 2);
+      // Mở từ thông báo: #tab=reports&kind=chat -> đúng loại, đúng community; bảng hiện ngay theo lần quét rồi đọc lại
+      await page.ev(`location.hash = 'tab=reports&kind=chat'; true`);
+      await page.until(() => document.querySelector('#reports-kind button.active')?.dataset.f === 'chat' && document.querySelectorAll('#reports-body tr:not(.empty-row)').length === 2);
+      await page.until(() => (window.__chatReportReads || 0) >= 1 && !/Đang tải/.test(document.getElementById('reports-note').textContent));
+      assert.equal(await page.ev(`document.getElementById('reports-group').selectedOptions[0].value`), 'gFood');
+      assert.equal(await page.ev(`document.getElementById('rk-chat').textContent`), '(2)');
+      assert.ok(await page.ev(`document.getElementById('reports-status').hidden && !document.getElementById('btn-reports-ignore').hidden`));
+      assert.match(await page.ev(`document.getElementById('reports-note').textContent`), /Tin nhắn trong chat của community bị thành viên báo cáo/);
+      assert.deepEqual(await page.ev(`[...document.querySelectorAll('#reports-head th')].map((th) => th.textContent)`), ['', 'Tin nhắn bị báo cáo', 'Người gửi', 'Lý do báo cáo', 'Báo cáo đầu', 'Thao tác']);
+      const rows = await page.ev(`[...document.querySelectorAll('#reports-body tr')].map((tr) => [tr.children[1].textContent, tr.children[2].textContent, tr.children[3].textContent, [...tr.querySelectorAll('td.act button')].map((b) => b.textContent)])`);
+      assert.match(rows[0][0], /# Food Research.*Vào nhóm kèo VIP t\.me\/keo.*Gửi 35 phút trước/);
+      assert.match(rows[0][1], /Kèo Thơm@user1/);
+      assert.equal(rows[0][2], 'Spam / quảng cáo ×2');
+      assert.deepEqual(rows[0][3], ['Bỏ qua', 'Ẩn', 'Dọn tài khoản']);
+      assert.match(rows[1][0], /\(chỉ có tệp\).*📎 2 tệp/);
+      assert.equal(rows[1][2], 'Không rõ lý do ×2');
+      assert.deepEqual(rows[1][3], ['Bỏ qua', 'Ẩn']); // chỉ có mã chat: không dọn tài khoản được
+      // Ẩn một tin: hộp xác nhận, gửi đúng community / mục, tin rời bảng
+      await page.ev(`[...document.querySelectorAll('#reports-body tr')][0].querySelector('td.act button.danger').click(); true`);
+      await page.until(() => document.getElementById('confirm').open);
+      assert.equal(await page.ev(`document.getElementById('confirm-title').textContent`), 'Ẩn 1 tin nhắn chat bị báo cáo?');
+      await confirmOk(page);
+      await page.until(() => (window.__chatReportActs || []).length === 1);
+      assert.deepEqual(await page.ev(`window.__chatReportActs[0]`), { type: 'chatReportAct', action: 'hide', communityId: 'cFood', communityName: 'Food Research', items: [{ id: 'cr1', snippet: 'Vào nhóm kèo VIP t.me/keo', member: { id: 'a1', username: 'user1', fullname: 'Kèo Thơm' } }] });
+      await page.until(() => document.querySelectorAll('#reports-body tr:not(.empty-row)').length === 1 && document.getElementById('rk-chat').textContent === '(1)');
+      // Bỏ qua hàng loạt: chọn tất cả -> Bỏ qua đã chọn
+      await page.ev(`document.getElementById('reports-check-all').click(); true`);
+      await page.until(() => !document.getElementById('btn-reports-ignore').disabled);
+      await page.ev(`document.getElementById('btn-reports-ignore').click(); true`);
+      await page.until(() => document.getElementById('confirm').open);
+      assert.equal(await page.ev(`document.getElementById('confirm-title').textContent`), 'Bỏ qua 1 báo cáo tin nhắn chat?');
+      await confirmOk(page);
+      await page.until(() => (window.__chatReportActs || []).length === 2 && /Không có tin nhắn chat nào bị báo cáo/.test(document.getElementById('reports-body').textContent));
+      assert.deepEqual(await page.ev(`[window.__chatReportActs[1].action, window.__chatReportActs[1].items.map((x) => x.id)]`), ['ignore', ['cr2']]);
+      assert.equal(Number(await page.ev(`document.getElementById('badge-reports').textContent || 0`)), badge0);
+      // Tắt chat: ẩn loại Tin nhắn chat, quay về Người dùng báo cáo
+      await page.ev(`chrome.storage.local.get('settings').then(({ settings }) => chrome.storage.local.set({ settings: { ...settings, chatEnabled: false } })).then(() => true)`);
+      await page.until(() => document.getElementById('rk-chat-btn').hidden && document.querySelector('#reports-kind button.active')?.dataset.f === 'reported');
+    },
+  },
+  {
     name: 'Trang Chat',
     async run({ page, url, assert }) {
       // Chưa bật: nút Kết nối, bấm thì xin quyền và bật
@@ -1026,6 +1086,80 @@ export const scenarios = [
       await page.open(url('chat', 'chat=1&req=1&c=rq2'), { width: 1280, height: 820 });
       await page.until(() => !document.getElementById('req-bar').hidden && document.querySelectorAll('.sec-tabs .tab')[1].classList.contains('on'));
       await page.ev(`localStorage.removeItem('beingroup-chat-dmtab'); true`);
+    },
+  },
+  {
+    name: 'Trang Chat: câu trả lời mẫu',
+    async run({ page, url, assert }) {
+      await page.open(url('chat', 'chat=1&c=chMain'));
+      await page.ev(`chrome.storage.local.remove('chatReplies').then(() => true)`);
+      await page.open(url('chat', 'chat=1&c=chMain'));
+      await page.until(() => document.querySelectorAll('#msg-list .msg').length > 0 && !document.getElementById('text').disabled);
+      const rows = () => [...document.querySelectorAll('#mention-pop .mi .mi-name')].map((x) => x.textContent);
+      // Gõ "/" ở đầu ô chat: 5 câu mặc định + mục Sửa
+      await setValue(page, 'text', '/');
+      await page.ev(`(() => { const t = document.getElementById('text'); t.setSelectionRange(1, 1); t.dispatchEvent(new Event('input')); return true; })()`);
+      await page.until(() => !document.getElementById('mention-pop').hidden);
+      assert.deepEqual(await page.call(rows), ['Nội quy', 'Cảnh báo lừa đảo', 'Chào người mới', 'Đã xoá quảng cáo', 'Cảm ơn đã báo', 'Sửa câu trả lời mẫu…']);
+      assert.equal(await page.ev(`document.getElementById('mention-pop').getAttribute('aria-label')`), 'Câu trả lời mẫu');
+      // "/lua" (không dấu) + Enter: thay bằng câu cảnh báo lừa đảo, không gửi tin
+      await setValue(page, 'text', '/lua');
+      await page.ev(`(() => { const t = document.getElementById('text'); t.setSelectionRange(4, 4); t.dispatchEvent(new Event('input')); return true; })()`);
+      await page.until(() => document.querySelector('#mention-pop .mi.on .mi-name')?.textContent === 'Cảnh báo lừa đảo');
+      const sent = await page.ev(`(window.__chatSends || []).length`);
+      await page.ev(`document.getElementById('text').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); true`);
+      await page.until(() => document.getElementById('text').value.startsWith('⚠️ Admin KHÔNG BAO GIỜ'));
+      assert.equal(await page.ev(`document.getElementById('mention-pop').hidden`), true);
+      assert.equal(await page.ev(`(window.__chatSends || []).length`), sent);
+      // Không câu nào khớp: không mở danh sách (Enter vẫn gửi như thường)
+      await setValue(page, 'text', '/xyz');
+      await page.ev(`(() => { const t = document.getElementById('text'); t.setSelectionRange(4, 4); t.dispatchEvent(new Event('input')); return true; })()`);
+      await new Promise((r) => setTimeout(r, 150));
+      assert.equal(await page.ev(`document.getElementById('mention-pop').hidden`), true);
+      // Nút câu mẫu: mở danh sách, chọn mục Sửa → hộp sửa; thêm câu từ ô đang gõ rồi Lưu
+      await setValue(page, 'text', 'Nhóm chỉ bàn về crypto, vui lòng không nói chuyện chính trị.');
+      await page.ev(`document.getElementById('btn-replies').click(); true`);
+      await page.until(() => !document.getElementById('mention-pop').hidden && document.querySelectorAll('#mention-pop .mi').length === 6);
+      await page.ev(`[...document.querySelectorAll('#mention-pop .mi')].at(-1).dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true })); true`);
+      await page.until(() => document.getElementById('replies').open && document.querySelectorAll('#rp-list .rp-row').length === 5);
+      await page.ev(`document.getElementById('rp-from').click(); true`);
+      await page.until(() => document.querySelectorAll('#rp-list .rp-row').length === 6);
+      await page.ev(`(() => { const n = [...document.querySelectorAll('#rp-list .rp-name')].at(-1); n.value = 'Chủ đề nhóm'; n.dispatchEvent(new Event('input')); return true; })()`);
+      // Xoá câu "Chào người mới"
+      await page.ev(`[...document.querySelectorAll('#rp-list .rp-row')].find((r) => r.querySelector('.rp-name').value === 'Chào người mới').querySelector('.rp-del').click(); true`);
+      await page.ev(`document.getElementById('rp-save').click(); true`);
+      await page.until(() => chrome.storage.local.get('chatReplies').then((o) => o.chatReplies?.length === 5));
+      const saved = await page.ev(`chrome.storage.local.get('chatReplies').then((o) => o.chatReplies.map((x) => x.name))`);
+      assert.deepEqual(saved, ['Nội quy', 'Cảnh báo lừa đảo', 'Đã xoá quảng cáo', 'Cảm ơn đã báo', 'Chủ đề nhóm']);
+      // Câu mới dùng được ngay: "/chude" chèn đúng nội dung
+      await setValue(page, 'text', '/chude');
+      await page.ev(`(() => { const t = document.getElementById('text'); t.setSelectionRange(6, 6); t.dispatchEvent(new Event('input')); return true; })()`);
+      await page.until(() => document.querySelector('#mention-pop .mi.on .mi-name')?.textContent === 'Chủ đề nhóm');
+      await page.ev(`document.getElementById('text').dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true })); true`);
+      await page.until(() => document.getElementById('text').value === 'Nhóm chỉ bàn về crypto, vui lòng không nói chuyện chính trị.');
+      await page.ev(`chrome.storage.local.remove('chatReplies').then(() => true)`);
+    },
+  },
+  {
+    name: 'Trang Chat: Nhật ký cá nhân',
+    async run({ page, url, assert }) {
+      await page.open(url('chat', 'chat=1&self=1'));
+      await page.ev(`localStorage.removeItem('beingroup-chat-dmtab'); localStorage.removeItem('beingroup-chat-closed'); true`); // kịch bản trước để lại tab / mục thu gọn
+      await page.open(url('chat', 'chat=1&self=1'));
+      await page.until(() => [...document.querySelectorAll('#list .item-title')].some((x) => x.textContent === 'Nhật ký cá nhân'));
+      const item = await page.ev(`(() => { const it = [...document.querySelectorAll('#list .item')].find((x) => x.querySelector('.item-title')?.textContent === 'Nhật ký cá nhân'); return { sub: it.querySelector('.item-sub').textContent, badges: it.querySelectorAll('.vb').length }; })()`);
+      assert.equal(item.sub, 'Ghi chú của riêng bạn');
+      assert.equal(item.badges, 0); // không huy hiệu cạnh "Nhật ký cá nhân"
+      // Ảnh đại diện của chính tài khoản (ảnh thật không tải được ở bản giả lập nên ghi lại mã người được xin ảnh)
+      await page.ev(`window.__av = []; const f = BG.chatAvatarUrl; BG.chatAvatarUrl = (id, at) => (window.__av.push(id), f(id, at)); true`);
+      await page.ev(`[...document.querySelectorAll('#list .item')].find((x) => x.querySelector('.item-title')?.textContent === 'Nhật ký cá nhân').click(); true`);
+      await page.until(() => document.getElementById('conv-title').textContent === 'Nhật ký cá nhân');
+      assert.equal(await page.ev(`document.getElementById('conv-sub').textContent`), 'Ghi chú của riêng bạn — chỉ bạn xem được');
+      assert.ok((await page.ev(`window.__av`)).includes('cu1'));
+      // Ảnh đầu cuộc trò chuyện không mở hồ sơ / xử lý vi phạm của chính mình
+      await page.ev(`document.getElementById('conv-avatar').click(); true`);
+      await new Promise((r) => setTimeout(r, 200));
+      assert.ok(!(await page.ev(`!!document.querySelector('dialog[open]')`)));
     },
   },
   {
@@ -1458,19 +1592,21 @@ export const scenarios = [
       await page.until(() => chrome.storage.local.get('settings').then((o) => o.settings.selfCheckDaily === false));
       await setValue(page, 'check-group', 'gCL');
       await page.ev(`document.getElementById('btn-check-run').click(); true`);
-      await page.until(() => document.querySelectorAll('#check-body tr:not(.empty-row)').length === 6);
+      await page.until(() => document.querySelectorAll('#check-body tr:not(.empty-row)').length === 9); // 8 mục + dòng tiêu đề nhóm Chat
       assert.deepEqual(await page.ev(`window.__selfCheck`), { type: 'selfCheck', groupId: 'gCL' });
       const info = await page.call(() => ({
         tags: [...document.querySelectorAll('#check-body .tag')].map((t) => t.textContent),
         note: document.getElementById('check-note').textContent,
+        sec: [...document.querySelectorAll('#check-body tr.check-sec')].map((t) => [t.textContent, t.nextElementSibling?.querySelector('b')?.textContent]),
       }));
-      assert.deepEqual(info.tags, ['✓ Dùng được', '✓ Dùng được', '✓ Dùng được', '✓ Dùng được', 'Bỏ qua', '✗ Lỗi']);
-      assert.match(info.note, /^Crypto Life · lúc .* · 4 dùng được · 1 bỏ qua · 1 lỗi\. Bấm Sao chép kết quả/);
+      assert.deepEqual(info.tags, ['✓ Dùng được', '✓ Dùng được', '✓ Dùng được', '✓ Dùng được', 'Bỏ qua', '✗ Lỗi', '✓ Dùng được', 'Bỏ qua']);
+      assert.deepEqual(info.sec, [['💬 Chat Beincom (chat.beincom.com)', 'Chat: đăng nhập']]);
+      assert.match(info.note, /^Crypto Life · lúc .* · 5 dùng được · 2 bỏ qua · 1 lỗi\. Bấm Sao chép kết quả/);
       await page.ev(`navigator.clipboard.writeText = async (t) => { window.__clip = t; }; document.getElementById('btn-check-copy').click(); true`);
       await page.until(() => !!window.__clip);
       const clip = await page.ev(`window.__clip`);
       assert.match(clip.split('\n')[0], /^BeinGroup v\d+\.\d+\.\d+ · .* · tự kiểm tra Crypto Life lúc /);
-      assert.match(clip, /\n✗ Bài ghim: Không thấy API \(404\) — Beincom có thể đã đổi đường dẫn \[404 content\/contents\/pinned-content\/groups\/gCL\]$/);
+      assert.match(clip, /\n✗ Bài ghim: Không thấy API \(404\) — Beincom có thể đã đổi đường dẫn \[404 content\/contents\/pinned-content\/groups\/gCL\]\n— Chat Beincom —\n✓ Chat: đăng nhập: @kaicrypto\n– Chat: tin nhắn bị báo cáo: chỉ chủ/);
       // Gửi về Telegram: tiêu đề có tên group và số lỗi, nội dung là bản chữ đầy đủ
       await page.ev(`document.getElementById('btn-check-tg').click(); true`);
       await page.until(() => !!window.__tgReport);

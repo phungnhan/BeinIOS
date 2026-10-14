@@ -188,7 +188,7 @@ function fileStamp(d = new Date()) {
 }
 
 $('btn-backup').addEventListener('click', async () => {
-  const store = await chrome.storage.local.get(['settings', 'rules', 'postRules', 'groupRules', 'templates', 'promptBank', 'profiles', 'postStats', 'nudges', 'log', 'state']);
+  const store = await chrome.storage.local.get(['settings', 'rules', 'postRules', 'groupRules', 'templates', 'promptBank', 'chatReplies', 'profiles', 'postStats', 'nudges', 'log', 'state']);
   const backup = BG.makeBackup(store, { profiles: $('backup-profiles').checked, history: $('backup-history').checked, version: chrome.runtime.getManifest().version });
   const url = URL.createObjectURL(new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' }));
   const a = el('a', { href: url, download: `beingroup-sao-luu-${fileStamp()}.json` });

@@ -152,7 +152,7 @@ function makeEnv({ data = fixture(), settings = {}, rules = {}, postRules = {}, 
       headers[`${method} chat:${p}`] = opts.headers;
       const res = (status, body) => ({ status, json: async () => body });
       const c = data.chat;
-      if (!c || !loggedIn) return res(401, { id: 'api.context.session_expired.app_error', message: 'Invalid or expired session, please login again.', status_code: 401 });
+      if (!c || !loggedIn || data.chatLoggedOut) return res(401, { id: 'api.context.session_expired.app_error', message: 'Invalid or expired session, please login again.', status_code: 401 });
       const [path, query = ''] = p.split('?');
       const q = Object.fromEntries(new URLSearchParams(query));
       let m;
@@ -208,6 +208,18 @@ function makeEnv({ data = fixture(), settings = {}, rules = {}, postRules = {}, 
         return res(200, { threads: list.slice(0, Number(q.per_page || 25)), total: all.length, total_unread_threads: all.filter((x) => x.unread_replies > 0).length, total_unread_mentions: all.reduce((n, x) => n + (x.unread_mentions || 0), 0) });
       }
       if (path === 'v5/users/me/teams/unread') return res(200, c.unread || []);
+      // Tin nhắn chat bị báo cáo (trang quản trị community): danh sách, Ẩn / Bỏ qua; c.reportsDenied: không có quyền
+      if ((m = path.match(/^v4\/communities\/([\w-]+)\/reports$/))) {
+        if ((c.reportsDenied || []).includes(m[1])) return res(403, { id: 'api.context.permissions.app_error', message: 'You do not have the appropriate permissions.', status_code: 403 });
+        return res(200, { reports: (c.chatReports || {})[m[1]] || [], has_next_page: false, before: '' });
+      }
+      if ((m = path.match(/^v4\/communities\/([\w-]+)\/reports\/([\w-]+)$/)) && method === 'POST') {
+        const l = (c.chatReports || {})[m[1]] || [];
+        const i = l.findIndex((x) => x.id === m[2]);
+        if (i < 0) return res(404, { id: 'app.report.not_found', message: 'Report not found', status_code: 404 });
+        l.splice(i, 1);
+        return res(200, { status: 'OK' });
+      }
       // Mọi kênh / mọi thành viên kênh của mình (trang Chat); c.noAllChannels: máy chủ cũ không có
       if (path === 'v4/users/me/channels') return c.noAllChannels ? res(404, { id: 'api.context.404.app_error', message: 'Not found', status_code: 404 }) : res(200, Object.entries(c.channels).flatMap(([tid, l]) => l.map((x) => ({ team_id: tid, ...x }))));
       if (path === 'v4/users/me/channel_members') {
@@ -2973,6 +2985,28 @@ test('trang Chat: danh sách cuộc trò chuyện trong một lượt (mọi kê
   assert.equal((await makeEnv({ data }).send({ type: 'chatOverview' })).status, 'off');
 });
 
+test('trang Chat: tin nhắn riêng với chính mình là "Nhật ký cá nhân" kèm ảnh đại diện của tài khoản; không tính là tin nhắn mới', async () => {
+  const now = Date.parse('2026-10-14T03:00:00Z');
+  const data = fixture();
+  const c = (data.chat = chatFixture(now));
+  c.me = { ...c.me, last_picture_update: 77 };
+  c.channels.tDM.push({ id: 'dmSelf', type: 'D', name: 'cu1__cu1', total_msg_count: 3, last_post_at: now - 60e3 });
+  c.channelMembers.tDM.push({ channel_id: 'dmSelf', msg_count: 1, mention_count: 0 });
+  const env = makeEnv({ data, now, settings: { chatEnabled: true } });
+  for (const quick of [true, false]) {
+    const r = await env.send({ type: 'chatOverview', quick });
+    const self = r.dms.find((d) => d.id === 'dmSelf');
+    assert.deepEqual([self.self, self.title, self.other.chatId, self.other.id, self.other.username, self.other.pictureAt, self.canDelete], [true, 'Nhật ký cá nhân', 'cu1', 'me1', 'kai', 77, false]);
+    assert.equal(r.dms.filter((d) => d.self).length, 1);
+  }
+  assert.ok(!env.calls.includes('GET chat:v4/users/cu1')); // dùng thông tin tài khoản đã đọc, không gọi thêm
+  // Quét: ghi chú của chính mình không phải "tin nhắn riêng mới"
+  env.listeners.alarm({ name: 'beingroup-scan' });
+  await scan(env, 'popup');
+  assert.ok(!env.storage.state.chatUnread.dms.some((d) => d.channelId === 'dmSelf'));
+  assert.ok(!('dmSelf' in env.storage.chatNotify.dm));
+});
+
 test('trang Chat: đọc nhanh — tên 8 tin nhắn riêng gần nhất, quyền chỉ lấy từ bộ nhớ; cộng đồng đã ghim lên đầu (thứ tự ghim lưu trong máy, đọc lại ngầm)', async () => {
   const now = Date.parse('2026-10-14T03:00:00Z');
   const data = fixture();
@@ -3245,7 +3279,7 @@ test('chat Beincom: báo bình luận mới ở thread đang theo dõi (lần đ
   await scan(env, 'popup');
   const n = () => env.notifications.filter((x) => x.id === 'bg-chat-thread');
   assert.equal(n().length, 0); // lần đầu chỉ ghi nhận
-  assert.deepEqual(env.storage.state.chatThreadSeen, { t1: now - 60e3 });
+  assert.deepEqual(env.storage.chatNotify.threads, { t1: now - 60e3 }); // mốc đã báo lưu riêng (kiểm tra nhanh dùng chung)
   assert.ok(env.calls.includes('GET chat:v4/users/me/teams/tCL/threads?per_page=10&extended=true&unread=true'));
   assert.ok(!env.calls.includes('GET chat:v4/users/me/teams/tX/threads?per_page=10&extended=true&unread=true')); // team không có thread chưa đọc
   // Bình luận mới: báo một lần, có số lần nhắc tên, tên người tham gia, không có nội dung tin
@@ -3253,7 +3287,7 @@ test('chat Beincom: báo bình luận mới ở thread đang theo dõi (lần đ
   env.listeners.alarm({ name: 'beingroup-scan' });
   await scan(env, 'popup');
   assert.deepEqual([n().length, n()[0].title, n()[0].message], [1, 'BeinGroup: 2 thread bạn theo dõi có bình luận mới (1 lần nhắc bạn)', 'Người tham gia: Người 70, Người 71. Bấm để xem.']);
-  assert.ok(!JSON.stringify(env.notifications).includes('bí mật') && !JSON.stringify(env.storage.state).includes('bí mật'));
+  assert.ok(!JSON.stringify(env.notifications).includes('bí mật') && !JSON.stringify(env.storage.state).includes('bí mật') && !JSON.stringify(env.storage.chatNotify).includes('bí mật'));
   env.listeners.alarm({ name: 'beingroup-scan' });
   await scan(env, 'popup');
   assert.equal(n().length, 1); // không báo lại
@@ -3261,6 +3295,101 @@ test('chat Beincom: báo bình luận mới ở thread đang theo dõi (lần đ
   const off = makeEnv({ data, now, settings: { chatEnabled: true, chatThreads: false } });
   await scan(off);
   assert.ok(!off.calls.some((x) => x.includes('/threads?')));
+});
+
+test('chat Beincom: tin nhắn chat bị báo cáo ở community mình làm chủ / admin — quét ghi nhận, báo cái mới, Ẩn / Bỏ qua theo Chạy thử, ghi Nhật ký', async () => {
+  const now = Date.parse('2026-10-14T03:00:00Z');
+  const data = fixture();
+  const c = (data.chat = chatFixture(now));
+  const rp = (id, n, extra = {}) => ({ id, message: 'Tin quảng cáo ' + id, files: [], type: 'message', reported_member: { id: `000000${n}-0000-4000-8000-000000000000`, username: 'user' + n, fullname: 'Người ' + n, avatar: '', is_verified: true, subscriptions: [{ type: 'premium', term: 'annual' }] }, create_at: now - 3600e3, reason_stats: [{ reason_type: 'SPAM', total: 2 }], total: 2, target_create_at: now - 7200e3, channel_display_name: 'Food Research', ...extra });
+  c.chatReports = { cFood: [rp('r1', 80)], cCL: [rp('rX', 90)] };
+  const env = makeEnv({ data, now, settings: { chatEnabled: true, dryRun: true } });
+  env.listeners.alarm({ name: 'beingroup-scan' });
+  await scan(env, 'popup');
+  const st = env.storage.state;
+  // Chỉ community mình làm chủ / admin (cFood); cCL chỉ là thành viên: không đọc
+  assert.deepEqual(Object.keys(st.chatReports), ['cFood']);
+  assert.ok(env.calls.includes('GET chat:v4/communities/cFood/reports?per_page=50') && !env.calls.some((x) => x.includes('communities/cCL/reports')));
+  const r1 = st.chatReports.cFood.items[0];
+  assert.deepEqual([r1.id, r1.member.id, r1.member.fullname, r1.member.verified, r1.member.premium, r1.reasons, r1.total, r1.channel, r1.firstAt, r1.postAt], ['r1', '00000080-0000-4000-8000-000000000000', 'Người 80', true, 'annual', [{ type: 'SPAM', total: 2 }], 2, 'Food Research', now - 3600e3, now - 7200e3]);
+  assert.equal(st.chatReports.cFood.name, 'Food Research');
+  assert.equal(env.storage.popupInfo.chatReports, 1); // popup / huy hiệu cộng tin chat bị báo cáo
+  const n = (id) => env.notifications.filter((x) => x.id === id);
+  assert.equal(n('bg-chat-reports').length, 0); // lần đầu chỉ ghi nhận
+  // Báo cáo mới ở lần quét sau: thông báo (cộng đồng · kênh — người gửi: đoạn tin)
+  c.chatReports.cFood.push(rp('r2', 81, { message: 'Inbox  nhận\nquà' }));
+  env.listeners.alarm({ name: 'beingroup-scan' });
+  await scan(env, 'popup');
+  assert.deepEqual([n('bg-chat-reports').length, n('bg-chat-reports')[0].title, n('bg-chat-reports')[0].message], [1, 'BeinGroup: 1 tin chat bị báo cáo mới', 'Food Research · Food Research — Người 81: Inbox nhận quà']);
+  // Ẩn: theo Chạy thử (không gọi), ghi Nhật ký
+  const item = (id, n) => ({ id, snippet: 'Tin ' + id, member: { id: 'u' + n, username: 'user' + n, fullname: 'Người ' + n } });
+  const dry = await env.send({ type: 'chatReportAct', communityId: 'cFood', communityName: 'Food Research', action: 'hide', items: [item('r1', 80)] });
+  assert.deepEqual([dry.dryRun, env.calls.some((x) => x.startsWith('POST chat:v4/communities')), env.storage.log[0].kind, env.storage.log[0].action, env.storage.log[0].status, env.storage.log[0].groupName], [true, false, 'chat', 'reportHide', 'dry', 'Food Research']);
+  assert.equal(env.storage.state.chatReports.cFood.items.length, 2);
+  // Tắt Chạy thử: Bỏ qua gọi thật, báo cáo rời danh sách; báo cáo đã bị xử lý ở nơi khác (404) cũng tính xong
+  env.storage.settings = { ...env.storage.settings, dryRun: false };
+  const real = await env.send({ type: 'chatReportAct', communityId: 'cFood', communityName: 'Food Research', action: 'ignore', items: [item('r2', 81), item('r9', 82)] });
+  assert.deepEqual([real.ok, real.done], [2, ['r2', 'r9']]);
+  assert.deepEqual(env.bodies.find(([k]) => k === 'POST chat:v4/communities/cFood/reports/r2')[1], { action: 'ignore' });
+  assert.deepEqual([env.storage.log[0].action, env.storage.state.chatReports.cFood.items.map((x) => x.id)], ['reportIgnore', ['r1']]);
+  // Ẩn thật: vào hồ sơ vi phạm của người gửi
+  await env.send({ type: 'chatReportAct', communityId: 'cFood', action: 'hide', items: [item('r1', 80)] });
+  assert.deepEqual([env.storage.log[0].action, env.storage.log[0].status, env.storage.state.chatReports.cFood.items.length, env.storage.popupInfo.chatReports], ['reportHide', 'ok', 0, 0]);
+  // Tab Báo cáo đọc lại một community; không có quyền thì báo rõ
+  c.chatReports.cFood.push(rp('r3', 83));
+  const re = await env.send({ type: 'chatReports', communityId: 'cFood' });
+  assert.deepEqual([re.status, re.items.map((x) => x.id), env.storage.state.chatReports.cFood.items.map((x) => x.id)], ['ok', ['r3'], ['r3']]);
+  c.reportsDenied = ['cFood'];
+  const den = await env.send({ type: 'chatReports', communityId: 'cFood' });
+  assert.deepEqual([den.status, den.code], ['error', 'not_admin']);
+  // Mã lạ / thao tác lạ: không gọi
+  assert.match((await env.send({ type: 'chatReportAct', communityId: '../x', action: 'hide', items: [item('r3', 83)] })).message, /Thiếu/);
+  assert.match((await env.send({ type: 'chatReportAct', communityId: 'cFood', action: 'delete', items: [item('r3', 83)] })).message, /Thiếu/);
+  // Quét khi không có quyền: giữ danh sách cũ, ghi lỗi, một ngày mới thử lại
+  env.listeners.alarm({ name: 'beingroup-scan' });
+  await scan(env, 'popup');
+  assert.deepEqual([env.storage.state.chatReports.cFood.error, env.storage.state.chatReports.cFood.items.map((x) => x.id)], ['denied', ['r3']]);
+  const reads = env.calls.filter((x) => x.includes('communities/cFood/reports?')).length;
+  env.listeners.alarm({ name: 'beingroup-scan' });
+  await scan(env, 'popup');
+  assert.equal(env.calls.filter((x) => x.includes('communities/cFood/reports?')).length, reads);
+});
+
+test('chat Beincom: kiểm tra nhanh mỗi phút — tin nhắn riêng / nhắc tên / thread báo ngay, dùng chung mốc với lần quét; chỉ gọi thẳng', async () => {
+  const now = Date.parse('2026-10-14T03:00:00Z');
+  const data = fixture();
+  const c = (data.chat = chatFixture(now));
+  const env = makeEnv({ data, now, settings: { chatEnabled: true } });
+  // Chưa quét lần nào: chưa biết mình / team tin nhắn riêng -> chờ
+  assert.deepEqual(await env.send({ type: 'chatQuick' }), { status: 'ok', skipped: 'no-map' });
+  env.listeners.alarm({ name: 'beingroup-scan' });
+  await scan(env, 'popup');
+  assert.deepEqual([env.storage.chatNotify.me.chatId, env.storage.chatNotify.dmTeam.id, env.storage.chatNotify.dm, env.storage.chatNotify.mentions], ['cu1', 'tDM', { dm1: now - 120e3 }, 2]); // chỉ tin nhắn riêng còn chưa đọc
+  assert.ok(!('chatNotified' in env.storage.state) && !('chatThreadSeen' in env.storage.state));
+  const n = (id) => env.notifications.filter((x) => x.id === id);
+  // Có tin nhắn riêng mới, nhắc tên tăng: lần kiểm tra nhanh báo luôn (không chờ quét), chỉ vài lệnh đọc chat, không gọi api.beincom.com
+  c.channels.tDM[1] = { ...c.channels.tDM[1], total_msg_count: 4, last_post_at: now + 60e3 };
+  c.unread[0].total_unread_mentions = 4;
+  const before = env.calls.length;
+  const q = await env.send({ type: 'chatQuick' });
+  assert.deepEqual([q.status, q.checked], ['ok', true]);
+  assert.deepEqual([n('bg-chat-dm').length, n('bg-chat-dm')[0].title, n('bg-chat-dm')[0].message], [1, 'BeinGroup: 1 tin nhắn riêng mới', 'Từ: Người 51. Bấm để mở chat.']);
+  assert.deepEqual([n('bg-chat-mention').length, n('bg-chat-mention')[0].title], [1, 'BeinGroup: bạn được nhắc tên 4 lần trong chat']);
+  const quick = env.calls.slice(before);
+  assert.ok(quick.every((x) => x.startsWith('GET chat:')) && quick.length <= 8, quick.join('\n'));
+  // Lần quét sau không báo lại cùng tin
+  env.listeners.alarm({ name: 'beingroup-scan' });
+  await scan(env, 'popup');
+  assert.deepEqual([n('bg-chat-dm').length, n('bg-chat-mention').length], [1, 1]);
+  // Hết phiên chat: không báo nhầm, giữ mốc
+  data.chatLoggedOut = true;
+  c.unread[0].total_unread_mentions = 0;
+  const saved = JSON.stringify(env.storage.chatNotify.dm);
+  assert.equal((await env.send({ type: 'chatQuick' })).status, 'ok');
+  assert.deepEqual([JSON.stringify(env.storage.chatNotify.dm), env.storage.chatNotify.mentions], [saved, 4]);
+  // Tắt kiểm tra nhanh / tắt addon: không đọc
+  env.storage.settings = { ...env.storage.settings, chatFast: false };
+  assert.deepEqual(await env.send({ type: 'chatQuick' }), { status: 'ok', skipped: 'off' });
 });
 
 test('chat Beincom: thông báo tách lời mời trò chuyện với tin nhắn riêng', async () => {
@@ -3804,6 +3933,53 @@ test('Tự kiểm tra: gọi thử các API đọc (chỉ GET), báo dùng đư�
   const out = makeEnv({ loggedIn: false });
   out.storage.state = env.storage.state;
   assert.equal((await out.send({ type: 'selfCheck', groupId: 'gFood' })).status, 'need_login');
+});
+
+test('Tự kiểm tra: nhóm Chat Beincom — mỗi phần của trang Chat một mục (chỉ GET tới chat.beincom.com); hết phiên chat thì một dòng lỗi, các mục khác bỏ qua', async () => {
+  const now = Date.parse('2026-10-14T03:00:00Z');
+  const data = fixture();
+  const c = (data.chat = chatFixture(now));
+  c.teams.push({ id: 'tFood', name: 'food', display_name: 'Food Research', props: { bic_group_team_id: 'cFood' } });
+  c.teamMembers.push({ team_id: 'tFood', roles: 'team_user team_admin' });
+  c.roles.team_admin = ['delete_others_posts', 'create_post'];
+  c.channels.tFood = [{ id: 'chFood', type: 'O', name: 'town-square', display_name: 'Food Research', props: { bic_group_id: 'gFood' }, last_post_at: now - 60e3, total_msg_count: 1 }];
+  c.channelMembers.tFood = [{ channel_id: 'chFood', roles: 'channel_user', msg_count: 1 }];
+  c.posts.chFood = [chatPost('fp1', 'chFood', chatUser(60), 'Xin chào', now - 60e3, { is_pinned: true })];
+  c.threads = { tFood: [] };
+  c.chatReports = { cFood: [] };
+  // Chưa bật chat: một dòng bỏ qua
+  const off = makeEnv({ data, now });
+  await scan(off);
+  const r0 = await off.send({ type: 'selfCheck', groupId: 'gFood' });
+  assert.deepEqual(r0.items.filter((x) => x.section === 'chat').map((x) => [x.id, x.status, x.detail]), [['chat', 'skip', 'chưa bật Chat Beincom ở Cài đặt']]);
+  // Đã bật: từng phần dùng được, nhóm chat nằm cuối
+  const env = makeEnv({ data, now, settings: { chatEnabled: true } });
+  await scan(env);
+  const before = env.calls.length;
+  const r = await env.send({ type: 'selfCheck', groupId: 'gFood' });
+  const chat = r.items.filter((x) => x.section === 'chat');
+  assert.deepEqual(chat.map((x) => [x.id, x.status]), ['chat', 'chatTeams', 'chatChannels', 'chatRead', 'chatUnread', 'chatTeamRoles', 'chatReports', 'chatPosts', 'chatThread', 'chatReactions', 'chatPinned', 'chatMention', 'chatRoles', 'chatThreads'].map((id) => [id, 'ok']));
+  const by = Object.fromEntries(chat.map((x) => [x.id, x.detail]));
+  assert.deepEqual([by.chat, by.chatTeams, by.chatPinned, by.chatReports, by.chatRoles, by.chatThreads], ['@kai', '4 cộng đồng', '1 tin đã ghim', 'không có tin nào chờ', 'vai trò này xoá được tin người khác', '0 thread']);
+  assert.equal(r.items.at(-1).id, 'chatThreads');
+  assert.deepEqual(r.items.filter((x) => x.status === 'fail'), []);
+  const calls = env.calls.slice(before);
+  assert.ok(calls.every((x) => x.startsWith('GET ')));
+  assert.ok(calls.includes('GET chat:v5/channels/chFood/posts?page=0&per_page=1&skipFetchThreads=false&collapsedThreads=true&collapsedThreadsExtended=true'));
+  assert.ok(calls.includes('GET chat:v4/roles/name/team_admin') && calls.includes('GET chat:v4/posts/fp1/reactions'));
+  assert.match(BG.selfCheckText(r, { version: '0.43.0' }), /\n— Chat Beincom —\n✓ Chat: đăng nhập: @kai\n/);
+  // Group không có kênh chat của mình (community chưa có chat): các mục cần kênh bỏ qua, ghi rõ lý do
+  const other = await env.send({ type: 'selfCheck', groupId: 'gCL' });
+  const ob = Object.fromEntries(other.items.filter((x) => x.section === 'chat').map((x) => [x.id, x]));
+  assert.deepEqual([ob.chatPosts.status, ob.chatReports.status, ob.chatThreads.status], ['ok', 'skip', 'ok']);
+  // Hết phiên chat: chỉ mục đăng nhập lỗi, các mục chat khác bỏ qua và không gọi
+  data.chatLoggedOut = true;
+  const n0 = env.calls.length;
+  const lo = await env.send({ type: 'selfCheck', groupId: 'gFood' });
+  const lc = lo.items.filter((x) => x.section === 'chat');
+  assert.deepEqual([lc[0].status, lc[0].detail], ['fail', 'Chat chưa nhận phiên đăng nhập — mở chat trên web một lần rồi thử lại']);
+  assert.ok(lc.slice(1).every((x) => x.status === 'skip' && /Chat: đăng nhập/.test(x.detail)));
+  assert.equal(env.calls.slice(n0).filter((x) => x.includes(' chat:')).length, 1);
 });
 
 // ---------- Nhắc người mới chưa hoạt động ----------

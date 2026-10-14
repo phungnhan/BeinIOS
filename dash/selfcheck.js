@@ -34,7 +34,7 @@ async function renderCheck() {
 
   const note = $('check-note');
   note.classList.toggle('err-text', !!check.error);
-  if (check.running) note.textContent = 'Đang gọi thử các API của Beincom (chỉ đọc, khoảng 5–20 giây)…';
+  if (check.running) note.textContent = `Đang gọi thử các API của Beincom${data.settings.chatEnabled ? ' và Chat' : ''} (chỉ đọc, khoảng 5–25 giây)…`;
   else if (check.error) note.textContent = check.error;
   else if (!g) note.textContent = data.state.snapshot ? 'Không có group nào để kiểm tra.' : 'Chưa quét lần nào — bấm Quét ngay trước.';
   else if (!r) note.textContent = 'Bấm Chạy kiểm tra: addon gọi thử (chỉ đọc) các API mà từng tính năng dùng với group đã chọn, rồi báo mục nào dùng được. Nên chạy sau khi cài / cập nhật, hoặc khi có tính năng không chạy.';
@@ -46,7 +46,9 @@ async function renderCheck() {
   const body = $('check-body');
   body.replaceChildren();
   if (!r) body.append(el('tr', { class: 'empty-row' }, el('td', { colspan: 4, text: 'Chưa chạy lần nào' })));
-  for (const x of r?.items || []) {
+  (r?.items || []).forEach((x, i, all) => {
+    // Nhóm Chat Beincom: một dòng tiêu đề
+    if (x.section === 'chat' && all[i - 1]?.section !== 'chat') body.append(el('tr', { class: 'check-sec' }, el('td', { colspan: 4, text: '💬 Chat Beincom (chat.beincom.com)' })));
     const [cls, text] = CHECK_TAG[x.status] || ['info', x.status];
     body.append(
       el(
@@ -58,7 +60,7 @@ async function renderCheck() {
         el('td', { class: 'small', title: x.path ? `${x.httpStatus || ''} ${x.path} · ${x.ms} ms` : '', text: x.detail || '' }),
       ),
     );
-  }
+  });
 }
 
 async function runCheck() {

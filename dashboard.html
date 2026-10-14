@@ -544,6 +544,7 @@
             <button data-f="reported" class="active">Người dùng báo cáo <span id="rk-reported"></span></button>
             <button data-f="flagged">Gắn cờ tự động <span id="rk-flagged"></span></button>
             <button data-f="hidden">Đã ẩn <span id="rk-hidden"></span></button>
+            <button data-f="chat" id="rk-chat-btn" title="Tin nhắn chat bị thành viên báo cáo (chủ / admin community)">Tin nhắn chat <span id="rk-chat"></span></button>
           </div>
           <div class="seg" id="reports-status" aria-label="Trạng thái">
             <button data-f="CREATED" class="active">Chờ xử lý</button>
@@ -1383,6 +1384,7 @@
         <label class="switch-row" data-requires="chatEnabled"><input type="checkbox" id="chatScan" /><span><b>Quét tin nhắn kênh chat</b><br /><span class="muted small">Sau mỗi lần quét: chấm tin mới theo quy tắc bài viết, tìm tài khoản giống admin và đợt spam. Xem ở Bài viết → Tin nhắn chat.</span></span></label>
         <label class="switch-row" data-requires="chatEnabled"><input type="checkbox" id="chatUnread" /><span><b>Báo tin nhắn riêng và nhắc tên</b><br /><span class="muted small">Thông báo (và Telegram loại "Tin nhắn riêng, nhắc tên trong chat") khi có tin nhắn riêng mới hoặc bạn được nhắc tên — chỉ tên người gửi, không kèm nội dung.</span></span></label>
         <label class="switch-row" data-requires="chatEnabled"><input type="checkbox" id="chatThreads" /><span><b>Báo bình luận mới ở thread bạn theo dõi</b><br /><span class="muted small">Sau mỗi lần quét: thông báo (và Telegram loại "Tin nhắn riêng, nhắc tên trong chat") khi tin bạn theo dõi có bình luận mới — số thread và tên người tham gia, không kèm nội dung. Bấm để mở trang Thread đang theo dõi.</span></span></label>
+        <label class="switch-row" data-requires="chatEnabled"><input type="checkbox" id="chatFast" /><span><b>Kiểm tra nhanh mỗi phút</b><br /><span class="muted small">Tin nhắn riêng, nhắc tên, bình luận thread được báo trong khoảng 1 phút thay vì chờ lần quét. Mỗi lần chỉ vài lệnh đọc nhẹ, không mở tab Beincom; đang quét thì bỏ lượt.</span></span></label>
       </div>
       <div class="group tg-group">
         <div class="group-title">📱 Gửi thông báo về Telegram</div>

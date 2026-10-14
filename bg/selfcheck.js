@@ -25,7 +25,7 @@ function selfCheckProbes(g, { root, now, tg, settings = null }) {
     { id: 'joinLog', label: 'Nhật ký người vào', uses: 'tài khoản giống admin, đợt vào ồ ạt', path: `group/groups/${g.id}/activity-logs?limit=1&page=1&sort=desc&useCase=${encodeURIComponent(JOIN_CASES)}&from=${Math.floor(now - 864e5)}&to=${Math.ceil(now)}`, shape: isArr, detail: (d, b) => (b.meta?.total != null ? `${b.meta.total} người vào trong 24 giờ` : '') },
     { id: 'timeline', label: 'Bài mới đăng', uses: 'quét bài, thống kê', path: `content/timeline/${g.id}?limit=1`, shape: isList },
     { id: 'search', label: 'Tìm bài theo thời gian', uses: 'báo cáo tháng, thành viên mới, Tìm & dọn bài, dọn tài khoản', path: `content/contents?groupId=${g.id}&isIncludedInnerGroups=true&startTime=${iso(from)}&endTime=${iso(now)}&limit=1`, shape: (d) => isList(d) && d.meta?.total != null, detail: (d) => `${d.meta.total} bài trong 30 ngày` },
-    { id: 'comments', label: 'Bình luận', uses: 'quét bình luận', after: 'timeline', path: (ctx) => (ctx.timeline?.list?.[0]?.id ? `content/comments?postId=${ctx.timeline.list[0].id}&limit=1` : null), why: 'group chưa có bài nào để thử', shape: isList },
+    { id: 'comments', label: 'Bình luận', uses: 'quét bình luận', after: true, path: (ctx) => (ctx.timeline?.list?.[0]?.id ? `content/comments?postId=${ctx.timeline.list[0].id}&limit=1` : null), why: 'group chưa có bài nào để thử', shape: isList },
     { id: 'approvals', label: 'Bài chờ duyệt', uses: 'duyệt bài', path: `content/manage/communities/${rootId}/approval-contents/count?approvalStatus=WAITING_APPROVAL`, need: !!g.isCommunity, why: 'chỉ đọc ở group gốc của community', shape: (d) => typeof d === 'number', detail: (d) => `${d} bài đang chờ` },
     { id: 'reports', label: 'Báo cáo của người dùng', uses: 'tab Báo cáo', path: `content/manage/communities/${rootId}/content-reports/count`, timeout: CHECK_TIMEOUT, need: !!(g.isCommunity && g.isCommunityAdmin), why: 'chỉ chủ / admin community xem được', shape: (d) => d != null, detail: (d) => (d?.total != null ? `${d.total} chờ xử lý` : '') },
     { id: 'flagged', label: 'Bài Beincom gắn cờ', uses: 'tab Báo cáo', path: `content/manage/groups/${g.id}/contents/flagged?limit=1`, shape: isList },
@@ -40,8 +40,50 @@ function selfCheckProbes(g, { root, now, tg, settings = null }) {
     { id: 'banned', label: 'Danh sách bị cấm', uses: 'gỡ cấm, cấm ở mọi community', path: `group/communities/${g.communityId}/banned-members?limit=1&offset=0`, need: !!g.canBan, why: 'chỉ chủ / admin community', shape: (d) => d != null },
     { id: 'officialStats', label: 'Thống kê chính thức', uses: 'Thống kê', path: `group/manage/communities/${g.communityId}/stats/member-count?from=${iso(from)}&to=${iso(now)}`, need: !!(g.isCommunity && g.isCommunityAdmin), why: 'chỉ chủ / admin community — addon tự tính từ nhật ký', shape: isArr },
     { id: 'telegram', label: 'Bot Telegram', uses: 'gửi thông báo về Telegram', telegram: true, need: telegramOn(tg), why: 'chưa bật gửi về Telegram' },
-    { id: 'chat', label: 'Chat Beincom', uses: 'quét tin nhắn kênh chat, tin nhắn riêng, gửi tin kèm bài', chat: true, path: BG.CHAT_API + 'v4/users/me', need: !!settings?.chatEnabled, why: 'chưa bật chat Beincom ở Cài đặt', shape: (d) => !!d?.id, detail: (d) => (d.username ? '@' + d.username : '') },
     { id: 'storage', label: 'Bộ nhớ của addon', uses: 'lưu kết quả quét, nhật ký, số liệu', local: true },
+    ...chatProbes(g, settings),
+  ];
+}
+
+// Chat Beincom (chỉ GET tới chat.beincom.com, JSON thường): mỗi phần của trang Chat / quét chat một mục. path tương đối
+// với BG.CHAT_API; ctx.<id> là thân trả về của mục trước. Chưa bật chat: chỉ một dòng "bỏ qua".
+function chatProbes(g, settings) {
+  const login = { id: 'chat', label: 'Chat: đăng nhập', uses: 'mọi phần Chat', path: 'v4/users/me', shape: (d) => !!d?.id, detail: (d) => (d.username ? '@' + d.username : '') };
+  const P = (x) => ({ chat: true, section: 'chat', ...x });
+  if (!settings?.chatEnabled) return [P({ ...login, need: false, why: 'chưa bật Chat Beincom ở Cài đặt' })];
+  const arr = Array.isArray;
+  const mine = (t) => t?.props?.bic_group_team_id === g.communityId;
+  const team = (ctx) => (arr(ctx.chatTeams) ? ctx.chatTeams.find(mine) || null : null);
+  // Kênh để thử: kênh của chính group này, không có thì kênh có tin mới nhất của community
+  const channel = (ctx) => {
+    const t = team(ctx);
+    const list = t && arr(ctx.chatChannels) ? ctx.chatChannels.filter((c) => c.team_id === t.id && !c.delete_at && (c.type === 'O' || c.type === 'P')) : [];
+    return list.find((c) => c.props?.bic_group_id === g.id) || list.sort((a, b) => (b.last_post_at || 0) - (a.last_post_at || 0))[0] || null;
+  };
+  // Một vai trò của mình ở team của community (vd team_user / team_admin)
+  const role = (ctx) => {
+    const t = team(ctx);
+    const m = t && arr(ctx.chatTeamRoles) ? ctx.chatTeamRoles.find((x) => x.team_id === t.id) : null;
+    return String(m?.roles || '').split(/\s+/).filter(Boolean).pop() || '';
+  };
+  const post = (ctx) => (arr(ctx.chatPosts?.order) ? ctx.chatPosts.order[0] || '' : '');
+  const noTeam = 'bạn không có trong chat của community này';
+  const crt = 'skipFetchThreads=false&collapsedThreads=true&collapsedThreadsExtended=true';
+  return [
+    P(login),
+    P({ id: 'chatTeams', label: 'Chat: cộng đồng', uses: 'trang Chat, quét kênh chat', path: 'v4/users/me/teams', shape: arr, detail: (d) => `${d.length} cộng đồng${d.some(mine) ? '' : ' — không có chat của community này'}` }),
+    P({ id: 'chatChannels', label: 'Chat: danh sách kênh', uses: 'danh sách bên trái trang Chat', path: 'v4/users/me/channels', shape: arr, detail: (d) => `${d.filter((c) => !c.delete_at).length} kênh và tin nhắn riêng` }),
+    P({ id: 'chatRead', label: 'Chat: số tin đã đọc', uses: 'số chưa đọc, tin nhắn riêng mới', path: 'v4/users/me/channel_members?page=0&per_page=1', shape: arr }),
+    P({ id: 'chatUnread', label: 'Chat: nhắc tên, thread chưa đọc', uses: 'kiểm tra nhanh mỗi phút, số Thread', path: 'v5/users/me/teams/unread?include_collapsed_threads=true', shape: arr, detail: (d) => (d.some((t) => typeof t.thread_count === 'number') ? 'có đếm thread' : 'không đếm thread — số Thread để trống') }),
+    P({ id: 'chatTeamRoles', label: 'Chat: vai trò của bạn', uses: 'quyền xoá tin, ghim, gửi tin', path: 'v4/users/me/teams/members', shape: arr }),
+    P({ id: 'chatReports', label: 'Chat: tin nhắn bị báo cáo', uses: 'tab Báo cáo → Tin nhắn chat', path: `v4/communities/${g.communityId}/reports?per_page=1`, need: !!(g.isCommunity && g.isCommunityAdmin && g.communityId), why: 'chỉ chủ / admin community (chọn group gốc)', shape: (d) => arr(d?.reports) || arr(d?.data?.reports), detail: (d) => ((d.reports || d.data?.reports).length ? 'có tin đang chờ xử lý' : 'không có tin nào chờ') }),
+    P({ id: 'chatPosts', label: 'Chat: tin trong kênh', uses: 'đọc tin, quét tin vi phạm', after: true, path: (ctx) => (channel(ctx) ? `v5/channels/${channel(ctx).id}/posts?page=0&per_page=1&${crt}` : null), why: noTeam, shape: (d) => arr(d?.order) && !!d.posts, detail: (d) => (d.order.length ? '' : 'kênh chưa có tin') }),
+    P({ id: 'chatThread', label: 'Chat: bình luận (thread)', uses: 'khung bình luận', after: true, path: (ctx) => (post(ctx) ? `v5/posts/${post(ctx)}/thread?${crt}&direction=down&perPage=1` : null), why: 'kênh chưa có tin để thử', shape: (d) => arr(d?.order) }),
+    P({ id: 'chatReactions', label: 'Chat: biểu cảm', uses: 'xem ai đã thả biểu cảm', after: true, path: (ctx) => (post(ctx) ? `v4/posts/${post(ctx)}/reactions` : null), why: 'kênh chưa có tin để thử', shape: arr }),
+    P({ id: 'chatPinned', label: 'Chat: tin đã ghim', uses: 'khung Tin nhắn đã ghim', after: true, path: (ctx) => (channel(ctx) ? `v4/channels/${channel(ctx).id}/pinned` : null), why: noTeam, shape: (d) => arr(d?.order), detail: (d) => `${d.order.length} tin đã ghim` }),
+    P({ id: 'chatMention', label: 'Chat: gợi ý @tên', uses: 'gõ @ trong ô chat', after: true, path: (ctx) => (channel(ctx) ? `v4/users/autocomplete?in_team=${channel(ctx).team_id}&in_channel=${channel(ctx).id}&name=a&limit=1` : null), why: noTeam, shape: (d) => arr(d?.users) }),
+    P({ id: 'chatRoles', label: 'Chat: quyền theo vai trò', uses: 'nút Xoá tin, Ghim, gửi tin', after: true, path: (ctx) => (role(ctx) ? `v4/roles/name/${encodeURIComponent(role(ctx))}` : null), why: noTeam, shape: (d) => arr(d?.permissions), detail: (d) => (d.permissions.includes('delete_others_posts') ? 'vai trò này xoá được tin người khác' : '') }),
+    P({ id: 'chatThreads', label: 'Chat: thread đang theo dõi', uses: 'trang Thread, báo bình luận mới', after: true, path: (ctx) => (team(ctx) ? `v4/users/me/teams/${team(ctx).id}/threads?per_page=1&extended=true` : null), why: noTeam, shape: (d) => arr(d?.threads), detail: (d) => (d.total != null ? `${d.total} thread` : '') }),
   ];
 }
 
@@ -87,9 +129,13 @@ async function runSelfCheck(g) {
   const probes = selfCheckProbes(g, { root, now, tg, settings });
   const r = await withClient(async (client) => {
     const ctx = {};
-    const run = async (p) => {
+    const results = new Map();
+    const run = async (p) => ({ ...(await run1(p)), ...(p.section ? { section: p.section } : {}) });
+    const run1 = async (p) => {
       const t0 = Date.now();
       if (p.need === false) return { id: p.id, label: p.label, uses: p.uses, status: 'skip', detail: p.why, ms: 0 };
+      // Chưa đọc được tài khoản chat: các mục chat khác bỏ qua, không gọi
+      if (p.chat && p.id !== 'chat' && results.get('chat')?.status !== 'ok') return { id: p.id, label: p.label, uses: p.uses, status: 'skip', detail: 'chưa đọc được chat (xem mục Chat: đăng nhập)', ms: 0 };
       if (p.local) return { id: p.id, label: p.label, uses: p.uses, ...BG.storageVerdict(await storageUsage()), ms: Date.now() - t0 };
       if (p.telegram) {
         const t = await tgApi(tg.token, 'getMe');
@@ -99,17 +145,30 @@ async function runSelfCheck(g) {
       if (!path) return { id: p.id, label: p.label, uses: p.uses, status: 'skip', detail: p.why, ms: 0 };
       // Chat Beincom: trả JSON thường (không có code api.ok)
       if (p.chat) {
-        const res = await client.call('GET', path, null, '', CHECK_TIMEOUT, { quiet: true });
-        const good = BG.chatOk(res) && p.shape(res.body);
-        return { id: p.id, label: p.label, uses: p.uses, path: path.split('?')[0], status: res.status === 401 ? 'fail' : good ? 'ok' : 'fail', detail: good ? p.detail(res.body) : res.status === 401 ? 'Chat chưa nhận phiên đăng nhập — mở chat trên web một lần rồi thử lại' : BG.errMsg(res), httpStatus: res.status, ms: Date.now() - t0 };
+        const res = await client.call('GET', BG.CHAT_API + path, null, '', CHECK_TIMEOUT, { quiet: true });
+        let good = false;
+        try {
+          good = BG.chatOk(res) && !!p.shape(res.body);
+        } catch {}
+        if (good) ctx[p.id] = res.body;
+        let detail = '';
+        try {
+          detail = good ? (p.detail ? p.detail(res.body) || '' : '') : res.status === 401 ? 'Chat chưa nhận phiên đăng nhập — mở chat trên web một lần rồi thử lại' : BG.chatOk(res) ? 'Chat trả dữ liệu khác trước — có thể đã đổi API' : res.status === 404 ? 'Không thấy API (404) — có thể đã đổi đường dẫn' : res.status === 403 ? 'Tài khoản không có quyền với mục này' : BG.errMsg(res);
+        } catch {}
+        return { id: p.id, label: p.label, uses: p.uses, path: 'chat:' + path.split('?')[0], status: good ? 'ok' : res.status === 403 ? 'skip' : 'fail', detail, httpStatus: res.status, ms: Date.now() - t0 };
       }
       const res = await client.call('GET', path, null, p.version ?? '2.0.0', p.timeout || CHECK_TIMEOUT, { quiet: true });
       if (BG.isOk(res)) ctx[p.id] = res.body.data;
       return { id: p.id, label: p.label, uses: p.uses, path: path.split('?')[0], ...checkVerdict(res, p), httpStatus: res.status, ms: Date.now() - t0 };
     };
-    const first = probes.filter((p) => !p.after);
-    const items = await mapLimit(first, PARALLEL, run);
-    for (const p of probes.filter((x) => x.after)) items.splice(probes.indexOf(p), 0, await run(p));
+    // Ba lượt: (0) Beincom + tài khoản chat, song song; (1) các mục chat khác, song song; (2) mục cần kết quả mục trước, lần lượt
+    const stage = (p) => (p.after ? 2 : p.chat && p.id !== 'chat' ? 1 : 0);
+    for (const s of [0, 1]) {
+      const list = probes.filter((p) => stage(p) === s);
+      (await mapLimit(list, PARALLEL, run)).forEach((x, i) => results.set(list[i].id, x));
+    }
+    for (const p of probes.filter((x) => stage(x) === 2)) results.set(p.id, await run(p));
+    const items = probes.map((p) => results.get(p.id));
     if (items.some((x) => x.status === 'login')) return { ...NEED_LOGIN };
     return { status: 'ok', items };
   });

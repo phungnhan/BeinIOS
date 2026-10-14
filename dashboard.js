@@ -17,6 +17,10 @@ $('btn-scan').addEventListener('click', async () => {
 window.addEventListener('hashchange', () => {
   const p = hashParams();
   if (p.get('group') && p.get('group') !== selectedGroupId) selectGroup(p.get('group'));
+  if (p.get('kind')) {
+    pickReportKind(p);
+    if (currentTab === 'reports') rep.data[repKey()]?.loaded ? renderReports() : loadReports();
+  }
   if (p.get('tab') && p.get('tab') !== currentTab) showTab(p.get('tab'));
   if (p.get('welcome')) openWelcome();
   if (p.get('monthly')) openMonthly();
@@ -162,6 +166,7 @@ async function loadAll() {
   if (!loadAll.started) {
     loadAll.started = true;
     const p = hashParams(); // đọc trước: showTab ghi lại hash chỉ còn tab / group
+    pickReportKind(p); // mở từ thông báo tin nhắn chat bị báo cáo: đúng loại trong tab Báo cáo
     showTab(currentTab);
     if (p.get('welcome')) openWelcome(); // mở từ thông báo nhắc chào thành viên mới
     if (p.get('monthly')) openMonthly(); // mở từ thông báo đầu tháng
@@ -188,7 +193,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
   // Nút Telegram: offset đọc nút bấm / danh sách việc đã gửi đổi thường xuyên, không cần vẽ lại (thao tác thật sẽ đổi state / log)
   // Tiến độ thao tác hàng loạt (bg/core.js ghi sau mỗi mục): chỉ cập nhật thanh tiến độ
   if (changes.actionJournal && run) renderRun(changes.actionJournal.newValue?.entries?.length || 0);
-  if (Object.keys(changes).every((k) => ['activitySeen', 'composeDraft', 'articleDraft', 'telegramPoll', 'tgActions', 'diagLog', 'seenVersion', 'usage', 'usageNote', 'usageConsent', 'usageSent', 'actionJournal', 'popupInfo', 'chatRoles', 'chatPeople', 'chatPins'].includes(k))) return;
+  if (Object.keys(changes).every((k) => ['activitySeen', 'composeDraft', 'articleDraft', 'telegramPoll', 'tgActions', 'diagLog', 'seenVersion', 'usage', 'usageNote', 'usageConsent', 'usageSent', 'actionJournal', 'popupInfo', 'chatRoles', 'chatPeople', 'chatPins', 'chatNotify', 'chatReplies'].includes(k))) return;
   loadAll();
 });
 $('version').textContent = 'v' + chrome.runtime.getManifest().version;

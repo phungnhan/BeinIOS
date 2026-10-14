@@ -7,6 +7,7 @@ const TODO_FILTERS = { all: 'Tất cả', urgent: 'Gấp', members: 'Thành viê
 const todo = { filter: 'all', limit: TODO_PAGE, sel: '', lastIndex: -1 };
 
 function openReports(g, kind) {
+  if (!g) return;
   rep.groupId = g.id;
   rep.kind = kind;
   selectedReports.clear();
@@ -111,6 +112,13 @@ function todoItems() {
     for (const { m, ev } of chatRows().filter((r) => chatInFilter(r, 'flagged') && r.ev.verdict === 'bad')) {
       const ch = chatChannel(m.channelId);
       out.push({ key: 'chat:' + m.id, cat: 'comments', pri: 0, time: m.createdAt, tag: ['err', 'Chat vi phạm'], who: m.user, text: m.text, meta: [m.groupName, reasonsText(ev)].filter(Boolean).join(' · '), url: BG.chatUrl(ch?.teamName || m.teamName, m.channelId), actions: [...(ch?.canDelete ? [['Xoá tin', 'danger', () => chatDelete([m.id])]] : []), ['Bỏ qua', 'ghost', () => chatAct('dismiss', [m.id])]] });
+    }
+    // Tin nhắn chat bị thành viên báo cáo (community bạn là chủ / admin, theo lần quét)
+    for (const [cid, c] of data.settings.scanReports ? Object.entries(data.state.chatReports || {}) : []) {
+      const root = gs.find((g) => g.isCommunity && g.communityId === cid);
+      for (const x of c.items || []) {
+        out.push({ key: 'chatrep:' + x.id, cat: 'comments', pri: 0, time: new Date(x.firstAt || data.state.lastScan || Date.now()).toISOString(), tag: ['err', 'Chat bị báo cáo'], who: x.member, text: x.message || (x.files ? `📎 ${x.files} tệp` : ''), meta: [c.name, x.channel && '# ' + x.channel, `${x.total} lượt báo cáo`].filter(Boolean).join(' · '), actions: [['Ẩn tin', 'danger', () => actChatReports('hide', [x], cid)], ['Bỏ qua', 'ghost', () => actChatReports('ignore', [x], cid)], ['Xem', 'ghost', () => openReports(root, 'chat')]] });
+      }
     }
     for (const d of data.settings.chatUnread ? data.state.chatUnread?.dms || [] : []) {
       out.push({ key: 'dm:' + d.channelId, cat: 'comments', pri: 1, time: new Date(d.lastPostAt).toISOString(), tag: ['info', d.request ? 'Lời mời trò chuyện' : 'Tin nhắn riêng'], who: d.user || null, title: d.user ? '' : d.title || 'Nhóm chat', meta: `${d.unread} tin chưa đọc`, url: 'chat.html#c=' + encodeURIComponent(d.channelId), actions: [['Mở chat', 'primary', () => window.open('chat.html#c=' + encodeURIComponent(d.channelId), '_blank')]] });

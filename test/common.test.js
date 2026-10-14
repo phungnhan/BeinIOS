@@ -664,6 +664,15 @@ test('bình luận: thu gọn, trả lời đi kèm, chọn bài cần đọc, g
   assert.deepEqual(m.list.map((c) => [c.id, c.dismissed, c.firstSeen]), [['c2', false, 99], ['c1', true, 1], ['c3', false, 99]]);
   assert.deepEqual(BG.violationsFromComments([list[0], list[2]], () => 'link cấm').map((v) => [v.user.id, v.key, v.group, v.reason]), [['u1', 'rule:c:c1', 'G1', 'link cấm']]);
   assert.deepEqual(BG.violationsFromLog([{ kind: 'comment', action: 'hide', status: 'ok', contentId: 'c1', userId: 'u1', time: 1 }]).map((v) => [v.type, v.key]), [['hidden', 'hidden:c:c1']]);
+  // Tin chat bị ẩn do báo cáo / bị xoá: vào hồ sơ vi phạm; Bỏ qua báo cáo thì không
+  assert.deepEqual(
+    BG.violationsFromLog([
+      { kind: 'chat', action: 'reportHide', status: 'ok', contentId: 'r1', userId: 'u1', time: 1 },
+      { kind: 'chat', action: 'reportIgnore', status: 'ok', contentId: 'r2', userId: 'u1', time: 2 },
+      { kind: 'chat', action: 'reportHide', status: 'dry', contentId: 'r3', userId: 'u1', time: 3 },
+    ]).map((v) => [v.type, v.key]),
+    [['hidden', 'hidden:chat:r1']],
+  );
   assert.equal(BG.isContentGone({ body: { code: 'comment.not_found' } }), true);
   // Đọc trả lời: bình luận gốc có số trả lời tăng
   const tops = [{ id: 'a', parentId: '', totalReply: 2, createdAt: '1' }, { id: 'b', parentId: '', totalReply: 1, createdAt: '3' }, { id: 'r', parentId: 'a', totalReply: 0 }, { id: 'c', parentId: '', totalReply: 4, createdAt: '2', isHidden: true }];
@@ -1402,11 +1411,64 @@ test('BG chia thành common.js + lib/*.js: mọi nơi nạp đúng thứ tự BG
   const expected = ['common.js', ...BG.PARTS.map((p) => `lib/${p}.js`)];
   const tags = (f) => [...fs.readFileSync(path.join(root, f), 'utf8').matchAll(/<script src="((?:common|lib\/[\w-]+)\.js)"><\/script>/g)].map((m) => m[1]);
   assert.deepEqual(tags('dashboard.html'), expected);
-  assert.deepEqual(tags('popup.html'), expected);
+  assert.deepEqual(tags('popup.html'), ['common.js']); // popup chỉ nạp lõi; lib/*.js nạp khi cần (popup.js loadLib theo BG.PARTS)
+  assert.match(fs.readFileSync(path.join(root, 'popup.js'), 'utf8'), /for \(const p of BG\.PARTS\)/);
   assert.deepEqual(tags('chat.html'), expected);
   assert.match(fs.readFileSync(path.join(root, 'background.js'), 'utf8'), /importScripts\('common\.js'\);\nimportScripts\(\.\.\.BG\.PARTS\.map\(\(p\) => `lib\/\$\{p\}\.js`\)\);/);
   assert.deepEqual(fs.readdirSync(path.join(root, 'lib')).sort(), BG.PARTS.map((p) => p + '.js').sort());
   for (const f of ['norm', 'slimPerson', 'evaluateRequest', 'evaluatePostIn', 'validateCompose', 'mdToPlate', 'readBackup', 'monthlyReport', 'tgKeyboard', 'pushDiag']) assert.equal(typeof BG[f], 'function', f);
+});
+
+test('Chat: câu trả lời mẫu — "/chữ" ở đầu dòng, khớp không dấu, làm sạch, bộ mặc định, có trong bản sao lưu', () => {
+  assert.deepEqual(BG.chatSlashQuery('/noi', 4), { start: 0, term: 'noi' });
+  assert.deepEqual(BG.chatSlashQuery('Chào\n/', 6), { start: 5, term: '' });
+  assert.equal(BG.chatSlashQuery('a /noi', 6), null); // giữa dòng: không
+  assert.equal(BG.chatSlashQuery('/noi quy', 8), null); // đã gõ khoảng trắng
+  assert.equal(BG.chatSlashQuery('http://x', 8), null);
+  const list = BG.chatRepliesOf(null);
+  assert.deepEqual(list.map((x) => x.name), ['Nội quy', 'Cảnh báo lừa đảo', 'Chào người mới', 'Đã xoá quảng cáo', 'Cảm ơn đã báo']);
+  assert.notEqual(list[0], BG.DEFAULT_CHAT_REPLIES[0]); // bản sao, sửa không đụng bộ mặc định
+  assert.deepEqual(BG.matchChatReplies(list, 'noiquy').map((x) => x.name), ['Nội quy']);
+  assert.deepEqual(BG.matchChatReplies(list, 'NOI').map((x) => x.name), ['Nội quy', 'Đã xoá quảng cáo']); // tên trước, rồi câu có chữ đó trong nội dung
+  assert.equal(BG.matchChatReplies(list, 'lua')[0].name, 'Cảnh báo lừa đảo');
+  assert.deepEqual(BG.matchChatReplies(list, 'otp').map((x) => x.name), ['Cảnh báo lừa đảo']); // khớp nội dung
+  assert.equal(BG.matchChatReplies(list, '').length, 5);
+  assert.deepEqual(BG.matchChatReplies(list, 'xyz'), []);
+  assert.deepEqual(BG.cleanChatReplies([{ name: ' A ', text: ' x ' }, { name: '', text: 'y' }, { id: 'r-noiquy', name: 'B', text: 'z' }, { id: 'r-noiquy', name: 'C', text: 'w' }, 'lạ', { id: '../x', name: 'D'.repeat(60), text: 'v' }]), [
+    { id: 'r0', name: 'A', text: 'x' },
+    { id: 'r-noiquy', name: 'B', text: 'z' },
+    { id: 'r-noiquyx', name: 'C', text: 'w' },
+    { id: 'r3', name: 'D'.repeat(40), text: 'v' },
+  ]);
+  assert.deepEqual(BG.chatRepliesOf([]), []); // xoá hết thì giữ trống, không tự thêm lại bộ mặc định
+  assert.equal(BG.chatRepliesOf('lạ').length, 5);
+  // Sao lưu / khôi phục
+  const b = BG.makeBackup({ chatReplies: [{ id: 'r1', name: 'Nội quy', text: 'Đọc nội quy nhé' }] });
+  const r = BG.readBackup(JSON.parse(JSON.stringify(b)));
+  assert.deepEqual(r.data.chatReplies, [{ id: 'r1', name: 'Nội quy', text: 'Đọc nội quy nhé' }]);
+  assert.deepEqual(BG.backupSummary(r.data), ['Câu trả lời mẫu (Chat): 1']);
+});
+
+test('trang Chat chia thành chat/*.js: chat.html nạp đủ (sau lib, app.js cuối), không trùng tên khai báo giữa các tệp', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const root = path.join(__dirname, '..');
+  const html = fs.readFileSync(path.join(root, 'chat.html'), 'utf8');
+  const loaded = [...html.matchAll(/<script src="(chat\/[\w-]+\.js)"><\/script>/g)].map((m) => m[1]);
+  assert.deepEqual(loaded.slice().sort(), fs.readdirSync(path.join(root, 'chat')).filter((f) => f.endsWith('.js')).map((f) => 'chat/' + f).sort());
+  assert.equal(loaded[0], 'chat/core.js');
+  assert.equal(loaded.at(-1), 'chat/app.js');
+  assert.ok(html.indexOf('lib/chat.js') < html.indexOf('chat/core.js'));
+  assert.ok(!fs.existsSync(path.join(root, 'chat-app.js')));
+  // Script thường dùng chung phạm vi: trùng const / let / function giữa hai tệp là lỗi ngay khi nạp
+  const seen = new Map();
+  for (const f of loaded) {
+    for (const m of fs.readFileSync(path.join(root, f), 'utf8').matchAll(/^(?:const|let|var|function|async function|class) (\w+)/gm)) {
+      assert.ok(!seen.has(m[1]), `${m[1]} khai báo ở cả ${seen.get(m[1])} và ${f}`);
+      seen.set(m[1], f);
+    }
+  }
+  assert.ok(seen.size > 150);
 });
 
 test('Có gì mới: so sánh phiên bản, tách mục CHANGELOG.md, chọn mục cần hiện; CHANGELOG có mục cho bản trong manifest', () => {
@@ -1718,6 +1780,18 @@ test('đợt vào ồ ạt: đếm người vào trong 60 phút, người không
   assert.deepEqual([BG.telegramKind('bg-impostor'), BG.telegramKind('bg-burst-g1'), BG.DEFAULT_TELEGRAM.kinds.security], ['security', 'security', true]);
 });
 
+test('chat Beincom: tin nhắn chat bị báo cáo — nhận cả snake_case / camelCase, mã Beincom hay mã chat, đếm', () => {
+  const snake = BG.chatReportItem({ id: 'r1', message: 'x'.repeat(600), files: [{}, {}], reported_member: { id: 'abcdefghijklmnopqrstuvwxyz', username: 'a', first_name: 'An', last_name: 'B' }, create_at: '2026-10-14T03:00:00Z', reason_stats: [{ reason_type: 'SPAM', total: 2 }, { reason_type: 'OTHERS', total: 1 }, {}] });
+  assert.deepEqual([snake.message.length, snake.files, snake.member.id, snake.member.chatId, snake.member.fullname, snake.reasons.length, snake.total, snake.firstAt, snake.channel], [500, 2, '', 'abcdefghijklmnopqrstuvwxyz', 'An B', 2, 3, Date.parse('2026-10-14T03:00:00Z'), '']);
+  const camel = BG.chatReportItem({ id: 7, message: 'hi', reportedMember: { id: '0f1e2d3c-1111-4222-8333-944455556666', fullname: 'C', isVerified: true }, createAt: 5, targetCreateAt: 4, reasonStats: [{ reasonType: 'ILLEGAL', total: 1 }], total: 4, channelDisplayName: 'Kênh' });
+  assert.deepEqual([camel.id, camel.member.id, camel.member.verified, camel.reasons, camel.total, camel.firstAt, camel.postAt, camel.channel], ['7', '0f1e2d3c-1111-4222-8333-944455556666', true, [{ type: 'ILLEGAL', total: 1 }], 4, 5, 4, 'Kênh']);
+  assert.equal(BG.chatReportItem({ message: 'không mã' }), null);
+  assert.equal(BG.chatReportItem({ id: 'r', reported_member: null }).total, 1);
+  assert.equal(BG.chatReportsCount({ a: { items: [1, 2] }, b: { items: [] }, c: { error: 'denied' } }), 2);
+  assert.equal(BG.chatReportsCount(undefined), 0);
+  assert.equal(BG.telegramKind('bg-chat-reports'), 'reports');
+});
+
 test('chat Beincom: người dùng chat -> người Beincom, quyền kênh, thu gọn tin, gộp tin, tin nhắn riêng chưa đọc, lời nhắn kèm bài, số liệu', () => {
   const u = { id: 'c1', username: 'kai', first_name: 'Kai', last_name: 'Crypto', props: { bic_user_id: 'b1' } };
   assert.deepEqual(BG.chatPerson(u), { id: 'b1', chatId: 'c1', username: 'kai', fullname: 'Kai Crypto', avatar: '' });
@@ -1818,6 +1892,9 @@ test('chat Beincom: người dùng chat -> người Beincom, quyền kênh, thu 
   assert.equal(ct({}), null); // tin nhắn riêng cũ (không có trạng thái)
   assert.equal(BG.chatContact({ type: 'G', props: { contact_status: 'pending' } }, 'me'), null);
   assert.deepEqual(BG.dmUnread([{ id: 'r1', type: 'D', name: 'me__c9', total_msg_count: 1, props: { contact_requester_id: 'c9', contact_status: 'pending' } }], [], 'me').map((d) => [d.channelId, d.request]), [['r1', true]]);
+  // Nhật ký cá nhân (nhắn cho chính mình): không phải tin nhắn riêng chưa đọc
+  assert.deepEqual(BG.dmUnread([{ id: 's1', type: 'D', name: 'me__me', total_msg_count: 5 }], [], 'me'), []);
+  assert.deepEqual([BG.chatSelfDm({ type: 'D', name: 'me__me' }, 'me'), BG.chatSelfDm({ type: 'D', name: 'me__c9' }, 'me'), BG.chatSelfDm({ type: 'G', name: 'me__me' }, 'me'), BG.chatSelfDm({ type: 'D', name: '__' }, '')], [true, false, false, false]);
   assert.equal(BG.chatShareText('## Tiêu đề **đậm**\nThân bài', 'https://x/p/1'), '📢 Tiêu đề đậm\nhttps://x/p/1');
   assert.equal(BG.chatShareText('a', 'https://x/p/1', ' Lời nhắn '), '📢 Lời nhắn\nhttps://x/p/1');
   const st = BG.chatStats([{ t: 5, ch: 'k1', u: { id: 'a' } }, { t: 6, ch: 'k1', u: { id: 'a' } }, { t: 7, ch: 'k2', u: { id: 'b' } }, { t: 50, ch: 'k1', u: { id: 'a' } }], { from: 0, to: 10 }, [{ id: 'k1', name: 'A' }, { id: 'k2', name: 'B' }]);
