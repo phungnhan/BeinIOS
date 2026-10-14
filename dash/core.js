@@ -16,7 +16,7 @@ window.addEventListener('unhandledrejection', (e) => reportDiag(WHERE_PAGE, { me
 const RULE_BOOLS = ['requireAvatar', 'requireAnswers', 'requireVerified', 'declineDeactivated', 'reviewViolators', 'reviewImpersonation'];
 const RULE_LISTS = { bannedKeywords: false, allowUsernames: true, blockUsernames: true }; // true = danh sách username
 const POST_RULE_LISTS = ['bannedKeywords', 'reviewKeywords', 'blockedDomains', 'allowedDomains'];
-const SETTING_BOOLS = ['active', 'dryRun', 'notify', 'scanPosts', 'scanComments', 'scanReports', 'trackViolations', 'spamWaves', 'welcomeReminder', 'remindUnanswered', 'remindPending', 'guardJoins', 'chatEnabled', 'chatScan', 'chatUnread', 'weeklyReport', 'monthlyReport', 'autoApprove', 'autoDecline', 'autoHideSpam', 'autoApprovePosts'];
+const SETTING_BOOLS = ['active', 'dryRun', 'notify', 'scanPosts', 'scanComments', 'scanReports', 'trackViolations', 'spamWaves', 'welcomeReminder', 'remindUnanswered', 'remindPending', 'guardJoins', 'chatEnabled', 'chatScan', 'chatUnread', 'chatThreads', 'weeklyReport', 'monthlyReport', 'autoApprove', 'autoDecline', 'autoHideSpam', 'autoApprovePosts'];
 const SETTING_NUMS = ['intervalMin', 'actionDelaySec', 'unansweredHours', 'pendingHours', 'burstJoins', 'trustAfterApproved'];
 const LOG_PAGE = 50;
 const RECENT_PAGE = 30;

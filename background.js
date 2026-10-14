@@ -118,8 +118,8 @@ function notificationTab(id) {
 chrome.notifications.onClicked.addListener((id) => {
   const tab = notificationTab(id);
   // Tin nhắn riêng / nhắc tên: mở trang Chat của addon
-  const chat = id === 'bg-chat-dm' || id === 'bg-chat-mention';
-  chrome.tabs.create({ url: id === 'bg-login' ? BG.SITE + '/' : chat ? chrome.runtime.getURL('chat.html') : chrome.runtime.getURL(DASHBOARD + (tab ? '#tab=' + tab : '')) });
+  const chat = id === 'bg-chat-dm' || id === 'bg-chat-mention' || id === 'bg-chat-thread';
+  chrome.tabs.create({ url: id === 'bg-login' ? BG.SITE + '/' : chat ? chrome.runtime.getURL('chat.html' + (id === 'bg-chat-thread' ? '#threads' : '')) : chrome.runtime.getURL(DASHBOARD + (tab ? '#tab=' + tab : '')) });
   chrome.notifications.clear(id);
 });
 
@@ -173,6 +173,14 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     chatContact: () => doChatContact(msg),
     chatUpload: () => doChatUpload(msg),
     chatThread: () => doChatThread(msg),
+    chatThreads: () => doChatThreads(msg),
+    chatEdit: () => doChatEdit(msg),
+    chatPin: () => doChatPin(msg),
+    chatPinned: () => doChatPinned(msg),
+    chatMentions: () => doChatMentions(msg),
+    chatReact: () => doChatReact(msg),
+    chatReactions: () => doChatReactions(msg),
+    chatSearch: () => doChatSearch(msg),
     chatFollow: () => doChatFollow(msg),
     chatThreadRead: () => doChatThreadRead(msg),
     chatView: () => doChatView(msg),

@@ -43,6 +43,7 @@
     chatEnabled: false, // kết nối chat Beincom (cần cho phép addon kết nối chat.beincom.com)
     chatScan: true, // quét tin nhắn mới trong kênh chat của group sau mỗi lần quét
     chatUnread: true, // báo tin nhắn riêng chưa đọc / nhắc tên mình trong chat
+    chatThreads: true, // báo bình luận mới ở thread mình theo dõi
     syncSettings: false, // đồng bộ cài đặt, quy tắc qua tài khoản Chrome / Edge (chrome.storage.sync)
     autoApprovePosts: false, // tự duyệt bài chờ duyệt đạt mọi quy tắc của thành viên tin cậy
     trustedMembers: [], // username thành viên tin cậy

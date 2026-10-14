@@ -314,6 +314,7 @@
             status: 'ok',
             me: cu(1, 'Kai Crypto', 'kaicrypto'),
             dmTeam: { id: 'tDM', name: 'direct' },
+            threads: { unread: Math.max(0, 2 - (window.__threadSeen || []).length), mentions: (window.__threadSeen || []).includes('n2') ? 0 : 1 },
             teams: [{ id: 'tCL', name: 'crypto-life', title: 'Crypto Life', communityId: 'cCL', channels: [ch('chMain', 'Crypto Life', 'O', { canDelete: true, unread: window.__chatRead ? 0 : 2, lastPostAt: now - 30e3 }), ch('chSub', 'Hỏi đáp', 'P', { canPost: false, purpose: 'Kênh hỏi đáp', lastPostAt: now - 3600e3 })] }],
             dms: [
               { ...ch('dm1', 'Lan Anh', 'D'), teamId: 'tDM', teamName: 'direct', groupId: '', other: { ...cu(50, 'Lan Anh', 'lananh'), verified: true, premium: 'lifetime' }, unread: 1, lastPostAt: now - 120e3 },
@@ -338,19 +339,69 @@
           if (m.rootId !== 'n2') return { status: 'ok', posts: [], hasNext: false };
           return { status: 'ok', posts: [tp('n2', 62, 'Lan Anh', 'lananh', '@kaicrypto ơi cho em hỏi **ví lạnh** nào tốt?', 29, { replyCount: 1 }), tp('n3', 1, 'Kai Crypto', 'kaicrypto', 'Ledger hoặc Trezor đều ổn', 5, { rootId: 'n2' })], hasNext: false };
         }
+        // Thread đang theo dõi: tin n2 (Crypto Life, 1 bình luận chưa đọc, có nhắc tên), tin nhắn riêng với Lan Anh (chưa đọc),
+        // kênh Hỏi đáp (đã đọc)
+        if (m.type === 'chatThreads') {
+          window.__chatThreadsCalls = [...(window.__chatThreadsCalls || []), { unread: !!m.unread }];
+          const u = (n, name, un, extra = {}) => ({ id: 'u' + n, chatId: 'cu' + n, username: un, fullname: name, pictureAt: 0, ...extra });
+          const root = (id, ch, user, text, min) => ({ id, channelId: ch, user, createAt: now - min * 60e3, updateAt: now - min * 60e3, editAt: 0, deleted: false, system: false, message: text, rootId: '', replyCount: 1, pinned: false, files: [], participants: [], following: true });
+          const all = [
+            { id: 'n2', teamId: 'tCL', channelId: 'chMain', replyCount: 1, lastReplyAt: now - 5 * 60e3, unreadReplies: 1, unreadMentions: 1, participants: [u(1, 'Kai Crypto', 'kaicrypto')], root: root('n2', 'chMain', u(62, 'Lan Anh', 'lananh', { verified: true, premium: 'lifetime' }), '@kaicrypto ơi cho em hỏi **ví lạnh** nào tốt?', 29) },
+            { id: 'd1', teamId: 'tDM', channelId: 'dm1', replyCount: 2, lastReplyAt: now - 20 * 60e3, unreadReplies: 2, unreadMentions: 0, participants: [u(50, 'Lan Anh', 'lananh')], root: root('d1', 'dm1', u(50, 'Lan Anh', 'lananh'), 'Chào anh!', 3) },
+            { id: 'q1', teamId: 'tCL', channelId: 'chSub', replyCount: 4, lastReplyAt: now - 3 * 3600e3, unreadReplies: 0, unreadMentions: 0, participants: [], root: root('q1', 'chSub', u(64, 'Bảo Ngọc', 'baongoc'), 'Hỏi về ví lạnh', 300) },
+          ];
+          const list = m.unread ? all.filter((t) => t.unreadReplies && !(window.__threadSeen || []).includes(t.id)) : all.map((t) => ((window.__threadSeen || []).includes(t.id) ? { ...t, unreadReplies: 0, unreadMentions: 0 } : t));
+          return { status: 'ok', threads: list, total: 3, unreadThreads: list.filter((t) => t.unreadReplies).length, failed: 0 };
+        }
+        // Tin đã ghim (o1 của Hoa Mai, trừ khi đã bỏ ghim), ghim / bỏ ghim, sửa tin, gợi ý tên
+        // Biểu cảm: thả / bỏ, ai đã thả; tìm tin (n1 ở Crypto Life, bình luận n3, tin nhắn riêng d1)
+        if (m.type === 'chatReact') {
+          (window.__chatReacts = window.__chatReacts || []).push({ postId: m.postId, emoji: m.emoji, add: m.add });
+          return { status: 'ok', added: m.add };
+        }
+        if (m.type === 'chatReactions') return { status: 'ok', reactions: { '+1': [{ chatId: 'cu60', fullname: 'Hoa Mai' }, { chatId: 'cu63', fullname: 'Minh' }], heart: [{ chatId: 'cu1', fullname: 'Kai Crypto' }], bic_star: [{ chatId: 'cu60', fullname: 'Hoa Mai' }] } };
+        if (m.type === 'chatSearch') {
+          window.__chatSearches = [...(window.__chatSearches || []), { terms: m.terms, channelId: m.channelId || '' }];
+          const sp = (id, ch, n, name, un, text, min, extra = {}) => ({ id, channelId: ch, user: { id: 'u' + n, chatId: 'cu' + n, username: un, fullname: name, pictureAt: 0 }, createAt: now - min * 60e3, updateAt: now - min * 60e3, editAt: 0, deleted: false, system: false, message: text, rootId: '', replyCount: 0, pinned: false, files: [], participants: [], following: false, reactions: [], ...extra });
+          const all = [sp('n1', 'chMain', 62, 'Lan Anh', 'lananh', 'Mọi người xem bài này https://group.beincom.com/posts/abc nhé', 30), sp('n3', 'chMain', 1, 'Kai Crypto', 'kaicrypto', 'Ledger hoặc Trezor đều ổn', 5, { rootId: 'n2' }), sp('d1', 'dm1', 50, 'Lan Anh', 'lananh', 'Chào anh!', 3)];
+          const t = String(m.terms || '').toLowerCase();
+          return { status: 'ok', posts: all.filter((p) => p.message.toLowerCase().includes(t) && (!m.channelId || p.channelId === m.channelId)) };
+        }
+        if (m.type === 'chatPinned') {
+          const pins = (window.__unpinned || []).includes('o1') || m.channelId !== 'chMain' ? [] : [{ id: 'o1', channelId: 'chMain', user: { id: 'u60', chatId: 'cu60', username: 'hoamai', fullname: 'Hoa Mai', pictureAt: 0 }, createAt: now - 26 * 3600e3, updateAt: now - 26 * 3600e3, editAt: 0, deleted: false, system: false, message: 'Tin hôm qua', rootId: '', replyCount: 0, pinned: true, files: [], participants: [], following: false }];
+          return { status: 'ok', posts: [...(window.__pinnedNew || []), ...pins] };
+        }
+        if (m.type === 'chatPin') {
+          (window.__chatPins = window.__chatPins || []).push({ postId: m.postId, pin: m.pin });
+          if (!m.pin) window.__unpinned = [...(window.__unpinned || []), m.postId];
+          return { status: 'ok', ok: 1, dry: 0, failed: 0, errors: [], dryRun: false, pinned: m.pin };
+        }
+        if (m.type === 'chatEdit') {
+          (window.__chatEdits = window.__chatEdits || []).push({ postId: m.postId, message: m.message });
+          return { status: 'ok', post: { id: m.postId, message: m.message, editAt: Date.now() } };
+        }
+        if (m.type === 'chatMentions') {
+          window.__mentionCalls = (window.__mentionCalls || 0) + 1;
+          const people = [['cu62', 'u62', 'lananh', 'Lan Anh', { verified: true, premium: 'lifetime' }], ['cu60', 'u60', 'hoamai', 'Hoa Mai', {}], ['cu63', 'u63', 'minh', 'Minh', {}], ['cu1', 'u1', 'kaicrypto', 'Kai Crypto', {}]];
+          const t = String(m.term || '').toLowerCase();
+          return { status: 'ok', users: people.filter(([, , un, fn]) => un.startsWith(t) || fn.toLowerCase().startsWith(t)).map(([chatId, id, username, fullname, x]) => ({ id, chatId, username, fullname, pictureAt: 0, ...x })) };
+        }
         if (m.type === 'chatFollow') {
           (window.__chatFollows = window.__chatFollows || []).push({ teamId: m.teamId, rootId: m.rootId, follow: m.follow });
           return { status: 'ok', following: m.follow };
         }
-        if (m.type === 'chatThreadRead') return { status: 'ok' };
+        if (m.type === 'chatThreadRead') {
+          window.__threadSeen = [...(window.__threadSeen || []), m.rootId];
+          return { status: 'ok' };
+        }
         if (m.type === 'chatPosts') {
           // Lan Anh (cu62): đã xác minh, Premium trọn đời
           const cp = (id, n, name, un, text, min, extra = {}) => ({ id, channelId: m.channelId, user: { id: 'u' + n, chatId: 'cu' + n, username: un, fullname: name, pictureAt: 0, ...(n === 62 ? { verified: true, premium: 'lifetime' } : {}) }, createAt: now - min * 60e3, updateAt: now - min * 60e3, editAt: 0, deleted: false, system: false, message: text, rootId: '', replyCount: 0, pinned: false, files: [], participants: [], following: false, ...extra });
           const base = [
-            cp('o1', 60, 'Hoa Mai', 'hoamai', 'Tin hôm qua', 26 * 60),
+            cp('o1', 60, 'Hoa Mai', 'hoamai', 'Tin hôm qua', 26 * 60, { pinned: !(window.__unpinned || []).includes('o1') }),
             cp('o2', 1, 'Kai Crypto', 'kaicrypto', 'Chào cả nhà, tối nay có AMA nhé', 25 * 60),
             cp('sys1', 61, 'Tuấn', 'tuan', 'tuan đã vào kênh', 40, { system: true }),
-            cp('n1', 62, 'Lan Anh', 'lananh', 'Mọi người xem bài này https://group.beincom.com/posts/abc nhé', 30),
+            cp('n1', 62, 'Lan Anh', 'lananh', 'Mọi người xem bài này https://group.beincom.com/posts/abc nhé', 30, { reactions: [{ name: '+1', count: 2, mine: false, top: ['cu60', 'cu63'] }, { name: 'heart', count: 1, mine: true, top: ['cu1'] }, { name: 'bic_star', count: 1, mine: false, top: ['cu60'] }] }),
             cp('n2', 62, 'Lan Anh', 'lananh', '@kaicrypto ơi cho em hỏi **ví lạnh** nào tốt?', 29),
             cp('n3', 1, 'Kai Crypto', 'kaicrypto', 'Ledger hoặc Trezor đều ổn', 5, { rootId: 'n2' }),
             cp('n4', 63, 'Minh', 'minh', '', 2, { files: [{ id: 'f1', name: 'bieu-do.png', mime: 'image/png', size: 120000, url: '', mini: '', width: 400, height: 300 }, { id: 'f2', name: 'bao-cao.pdf', mime: 'application/pdf', size: 2400000, url: '', mini: '' }] }),

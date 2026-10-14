@@ -1787,6 +1787,24 @@ test('chat Beincom: người dùng chat -> người Beincom, quyền kênh, thu 
   // Thread của tin: số bình luận, đang theo dõi, người tham gia
   const tp = BG.chatPagePost({ id: 'p1', channel_id: 'k', user_id: 'c1', message: 'x', reply_count: 3, last_reply_at: 9, is_following: true, participants: [{ id: 'c2', username: 'v', last_picture_update: 5 }] });
   assert.deepEqual([tp.replyCount, tp.lastReplyAt, tp.following, tp.participants.map((u) => [u.chatId, u.pictureAt])], [3, 9, true, [['c2', 5]]]);
+  // Biểu cảm: tên emoji -> hình; Beincom reaction_stats hoặc reactions gốc
+  assert.deepEqual([BG.chatEmoji('+1'), BG.chatEmoji('heart'), BG.chatEmoji('bic_custom'), BG.chatEmojiName('🔥')], ['👍', '❤️', '', 'fire']);
+  assert.deepEqual(BG.chatReactions({ reaction_stats: [{ emoji_name: 'joy', count: 3, top_reactors: ['a'], user_reacted: false }, { emoji_name: 'x', count: 0 }] }), [{ name: 'joy', count: 3, mine: false, top: ['a'] }]);
+  assert.deepEqual(BG.chatReactions({ reactions: [{ user_id: 'me', emoji_name: '+1' }, { user_id: 'b', emoji_name: '+1' }, { user_id: 'b', emoji_name: 'fire' }] }, 'me'), [{ name: '+1', count: 2, mine: true, top: ['me', 'b'] }, { name: 'fire', count: 1, mine: false, top: ['b'] }]);
+  assert.deepEqual(BG.chatReactions(undefined), []);
+  // Báo thread có bình luận mới: lần đầu chỉ ghi nhận, sau đó chỉ cái mới hơn lần báo trước
+  const tA = { id: 'a', lastReplyAt: 10, unreadReplies: 1 };
+  const n1 = BG.threadNotice([tA], null, true);
+  assert.deepEqual([n1.fresh, n1.seen], [[], { a: 10 }]);
+  const n2 = BG.threadNotice([tA, { id: 'b', lastReplyAt: 20, unreadReplies: 2 }, { id: 'c', lastReplyAt: 30, unreadReplies: 0 }], n1.seen);
+  assert.deepEqual([n2.fresh.map((t) => t.id), n2.seen], [['b'], { a: 10, b: 20, c: 30 }]);
+  // Gợi ý @tên: đoạn @chữ ngay trước con trỏ
+  assert.deepEqual([BG.chatMentionQuery('chào @ka', 8), BG.chatMentionQuery('@', 1), BG.chatMentionQuery('(@lan.anh', 9)], [{ start: 5, term: 'ka' }, { start: 0, term: '' }, { start: 1, term: 'lan.anh' }]);
+  assert.deepEqual([BG.chatMentionQuery('mail a@b', 8), BG.chatMentionQuery('@ka xong', 8), BG.chatMentionQuery('chào @ka', 6)], [null, null, { start: 5, term: '' }]);
+  // Bản nháp: bỏ trống, quá 7 ngày, giữ 50 bản mới nhất
+  const nowD = 10 * 864e5;
+  const dr = BG.pruneDrafts({ a: { t: 'x', at: nowD - 1000 }, b: { t: '  ', at: nowD }, c: { t: 'cũ', at: nowD - 8 * 864e5 }, ...Object.fromEntries(Array.from({ length: 55 }, (_, i) => ['k' + i, { t: 'n', at: nowD - i * 10 }])) }, nowD);
+  assert.deepEqual([Object.keys(dr).length, 'a' in dr, 'b' in dr, 'c' in dr, 'k54' in dr], [50, false, false, false, false]);
   // Độ ưu tiên của tin
   assert.deepEqual([BG.chatPriority({ metadata: { priority: { priority: 'urgent' } } }), BG.chatPriority({ metadata: { priority: { priority: 'lạ' } } }), BG.chatPriority({})], ['urgent', '', '']);
   // Lời mời trò chuyện: người kia gửi (contact_requester_id, không có thì creator_id) và chưa chấp nhận

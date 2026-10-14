@@ -2,6 +2,34 @@
 
 Mỗi bản một mục, bản mới nhất ở trên. Dashboard tự hiện các mục mới sau khi cập nhật (bấm "Có gì mới" ở cuối trang để xem lại).
 
+## v0.41.0 — 14/10/2026
+- **Biểu cảm dưới tin** (trang Chat):
+  - Mỗi tin hiện các biểu cảm và số lượt; biểu cảm bạn đã thả được tô màu. Rê chuột vào để xem ai đã thả.
+  - Bấm một biểu cảm để thả / bỏ. Nút **😊** (rê chuột vào tin) hoặc **+** mở hộp chọn: 8 biểu cảm nhanh, bấm … để xem thêm.
+- **Tìm tin nhắn**: nút 🔍 ở đầu cuộc trò chuyện mở khung tìm **Kênh này / Mọi nơi**. Kết quả ghi rõ kênh, có nút **Mở**: tới đúng tin (bình luận thì mở khung bình luận và nháy tin đó). Gõ ở ô tìm bên trái rồi **Enter** cũng tìm trong tin nhắn ở mọi nơi.
+- **Báo bình luận mới ở thread bạn theo dõi** khi trang Chat đang đóng: sau mỗi lần quét có thông báo (và Telegram loại "Tin nhắn riêng, nhắc tên trong chat") — số thread, số lần nhắc bạn, tên người tham gia, không kèm nội dung. Bấm để mở trang Thread đang theo dõi. Bật / tắt ở Quy tắc & cài đặt → 💬 Chat Beincom.
+
+## v0.40.0 — 14/10/2026
+- **Bấm tên người trong trang Chat** (tên hoặc ảnh đại diện ở tin nhắn, ở bình luận, đầu tin nhắn riêng) để mở hồ sơ:
+  - Tên, huy hiệu, link trang cá nhân, nút nhắn riêng (nếu đã có tin nhắn riêng với người đó).
+  - **Hồ sơ vi phạm** addon đã ghi nhận: tóm tắt và 3 lần gần nhất.
+  - **Tìm bài** của người này còn hiện trong các community bạn quản trị.
+  - Admin kênh: **xoá một lần các tin của người này** đang hiện trong kênh (theo Chạy thử, ghi Nhật ký).
+  - **🧹 Dọn tài khoản…** mở thẳng hộp Dọn tài khoản trên Dashboard (ẩn bài / bình luận, tuỳ chọn cấm). **Hồ sơ trên Dashboard** mở thẳng hồ sơ vi phạm.
+- **Ghim tin**: admin kênh (và trong tin nhắn riêng) có nút **Ghim / Bỏ ghim** khi rê chuột vào tin; tin đã ghim có nhãn. Nút 📌 ở đầu cuộc trò chuyện (có số tin đã ghim) mở khung **Tin nhắn đã ghim**, có nút Tới tin nhắn. Ghim theo Chạy thử và ghi Nhật ký.
+- **Gợi ý @tên khi gõ** (ô gõ và ô bình luận): gõ @ và vài chữ thì hiện người trong kênh (kèm huy hiệu). Mũi tên chọn, Enter / Tab chèn, Esc đóng. Ở kênh có thêm @all / @channel / @here.
+- **Sửa tin của mình**: nút **Sửa** (hoặc bấm mũi tên lên khi ô gõ trống), Enter lưu, Esc huỷ; tin hiện "đã sửa".
+- **Bản nháp**: chữ đang gõ được giữ riêng cho từng cuộc trò chuyện và từng thread khi chuyển qua lại. Danh sách bên trái ghi "✏ Nháp: …". Nháp chỉ lưu trong máy, tự xoá sau 7 ngày.
+- Sửa: Nhật ký ghi "Xoá tin chat" thay vì chữ "delete".
+
+## v0.39.0 — 14/10/2026
+- **Thread đang theo dõi** trong trang Chat, như nút "Thread" trên web Beincom:
+  - Mục **Thread** ở đầu danh sách bên trái, có số thread có bình luận chưa đọc (đỏ khi có người nhắc tên bạn).
+  - Bấm vào: danh sách các tin bạn đang theo dõi ở mọi cộng đồng và tin nhắn riêng, mới nhất trước. Mỗi tin có kênh, người viết, đoạn đầu tin, người tham gia, số bình luận, số bình luận mới / số lần nhắc tên.
+  - Lọc **Tất cả / Chưa đọc**, nút đọc lại.
+  - Bấm một thread: mở cuộc trò chuyện và khung bình luận của tin đó; số chưa đọc giảm.
+  - Mở thẳng bằng địa chỉ `chat.html#threads`. Dùng được trên điện thoại.
+
 ## v0.38.0 — 14/10/2026
 - **Thread (bình luận) trong trang Chat**, như web Beincom: mỗi tin nhắn có thể bình luận và theo dõi như một nhóm chat nhỏ.
   - Cuộc trò chuyện chỉ hiện tin gốc. Tin có bình luận có thanh dưới tin: ảnh người tham gia, **N bình luận**, **Theo dõi / Đang theo dõi**.

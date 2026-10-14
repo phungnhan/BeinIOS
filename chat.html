@@ -42,6 +42,24 @@
         <button type="button" class="primary" id="btn-enable" hidden>Kết nối Chat Beincom</button>
       </section>
 
+      <!-- Thread đang theo dõi (như nút "Thread" trên web Beincom) -->
+      <section class="tview" id="tview" aria-label="Thread đang theo dõi" hidden>
+        <header class="conv-head tv-head">
+          <button type="button" class="icon-btn back" id="tv-back" aria-label="Quay lại danh sách">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14.7 5.3 1.4 1.4L10.8 12l5.3 5.3-1.4 1.4L8 12l6.7-6.7Z" /></svg>
+          </button>
+          <div class="conv-title"><b><span class="nm">Thread<span class="tv-long"> đang theo dõi</span></span></b><span id="tv-sub"></span></div>
+          <div class="chips tv-chips" id="tv-filters">
+            <button type="button" data-f="all" class="on">Tất cả</button>
+            <button type="button" data-f="unread">Chưa đọc</button>
+          </div>
+          <button type="button" class="icon-btn" id="tv-refresh" title="Đọc lại" aria-label="Đọc lại danh sách thread">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.65 6.35A7.96 7.96 0 0 0 12 4a8 8 0 1 0 7.73 10h-2.08A6 6 0 1 1 12 6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35Z" /></svg>
+          </button>
+        </header>
+        <div class="tv-list" id="tv-list"></div>
+      </section>
+
       <header class="conv-head" id="conv-head" hidden>
         <button type="button" class="icon-btn back" id="back" aria-label="Quay lại danh sách">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14.7 5.3 1.4 1.4L10.8 12l5.3 5.3-1.4 1.4L8 12l6.7-6.7Z" /></svg>
@@ -51,6 +69,13 @@
           <b id="conv-title"></b>
           <span id="conv-sub"></span>
         </div>
+        <button type="button" class="icon-btn" id="btn-search" title="Tìm tin nhắn" aria-label="Tìm tin nhắn">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5Zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14Z" /></svg>
+        </button>
+        <button type="button" class="icon-btn pin-btn" id="btn-pinned" title="Tin nhắn đã ghim" aria-label="Tin nhắn đã ghim">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 9V4h1c.55 0 1-.45 1-1s-.45-1-1-1H7c-.55 0-1 .45-1 1s.45 1 1 1h1v5c0 1.66-1.34 3-3 3v2h5.97v7l1 1 1-1v-7H19v-2c-1.66 0-3-1.34-3-3Z" /></svg>
+          <span id="pinned-n"></span>
+        </button>
         <a class="icon-btn" id="conv-web" target="_blank" title="Mở trên web Beincom" aria-label="Mở trên web Beincom">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h6v6h-2V7.4l-7.3 7.3-1.4-1.4L16.6 6H14V4ZM5 6h6v2H6v10h10v-5h2v6a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1Z" /></svg>
         </a>
@@ -147,6 +172,11 @@
         <button type="button" class="older" id="t-more" hidden>Tải thêm bình luận</button>
       </div>
       <form class="t-composer" id="t-composer">
+        <div class="reply" id="t-edit" hidden>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25ZM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83Z" /></svg>
+          <span id="t-edit-text"></span>
+          <button type="button" class="icon-btn sm" id="t-edit-x" aria-label="Huỷ sửa">✕</button>
+        </div>
         <div class="t-box">
           <textarea id="t-text" rows="1" maxlength="4000" placeholder="Viết bình luận…" aria-label="Nội dung bình luận"></textarea>
           <button type="submit" class="send" id="t-send" aria-label="Gửi bình luận" disabled>
@@ -156,7 +186,48 @@
         <div class="hint">Enter để gửi · Shift + Enter xuống dòng</div>
       </form>
     </aside>
+
+    <!-- Tìm tin nhắn -->
+    <aside class="thread s-panel" id="search" aria-label="Tìm tin nhắn" hidden>
+      <header class="t-head">
+        <div class="t-title"><b>Tìm tin nhắn</b><span id="s-sub"></span></div>
+        <button type="button" class="icon-btn" id="s-close" title="Đóng (Esc)" aria-label="Đóng tìm tin nhắn">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.4 5 12 10.6 17.6 5 19 6.4 13.4 12l5.6 5.6-1.4 1.4-5.6-5.6L6.4 19 5 17.6 10.6 12 5 6.4 6.4 5Z" /></svg>
+        </button>
+      </header>
+      <form class="s-form" id="s-form">
+        <input type="search" id="s-q" placeholder="Tìm chữ trong tin nhắn…" aria-label="Từ cần tìm" maxlength="100" />
+        <div class="chips s-scope" id="s-scope">
+          <button type="button" data-s="channel" class="on">Kênh này</button>
+          <button type="button" data-s="all">Mọi nơi</button>
+        </div>
+      </form>
+      <div class="t-body" id="s-body"><div id="s-list"></div></div>
+    </aside>
+
+    <!-- Tin nhắn đã ghim của kênh -->
+    <aside class="thread pins" id="pins" aria-label="Tin nhắn đã ghim" hidden>
+      <header class="t-head">
+        <div class="t-title"><b>Tin nhắn đã ghim</b><span id="p-sub"></span></div>
+        <button type="button" class="icon-btn" id="p-close" title="Đóng (Esc)" aria-label="Đóng tin đã ghim">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.4 5 12 10.6 17.6 5 19 6.4 13.4 12l5.6 5.6-1.4 1.4-5.6-5.6L6.4 19 5 17.6 10.6 12 5 6.4 6.4 5Z" /></svg>
+        </button>
+      </header>
+      <div class="t-body" id="p-body"><div id="p-list"></div></div>
+    </aside>
   </div>
+
+  <!-- Thả biểu cảm -->
+  <div class="react-pop" id="react-pop" role="dialog" aria-label="Thả biểu cảm" hidden></div>
+
+  <!-- Bấm tên người: hồ sơ, vi phạm, xử lý -->
+  <dialog id="person" class="person" aria-label="Thông tin người dùng">
+    <div class="pc-head" id="pc-head"></div>
+    <div class="pc-body" id="pc-body"></div>
+  </dialog>
+
+  <!-- Gợi ý @tên khi gõ -->
+  <div class="mention-pop" id="mention-pop" role="listbox" aria-label="Gợi ý tên" hidden></div>
 
   <!-- Xem ảnh phóng to: bấm ảnh trong tin nhắn; nhiều ảnh thì chuyển qua lại như playlist -->
   <dialog id="viewer" class="viewer" aria-label="Xem ảnh">

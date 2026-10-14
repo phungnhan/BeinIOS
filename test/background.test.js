@@ -175,6 +175,38 @@ function makeEnv({ data = fixture(), settings = {}, rules = {}, postRules = {}, 
         return res(200, { order: all.map((x) => x.id), posts: Object.fromEntries(all.map((x) => [x.id, x])), has_next: !!c.threadMore });
       }
       if ((m = path.match(/^v4\/users\/me\/teams\/(\w+)\/threads\/(\w+)\/(following|read\/\d+)$/)) && (method === 'PUT' || method === 'DELETE')) return res(200, { status: 'OK' });
+      // Biểu cảm: thả / bỏ / ai đã thả; tìm tin (theo team, mọi nơi — c.noGlobalSearch: máy chủ không có)
+      if (path === 'v4/reactions' && method === 'POST') return res(201, { ...JSON.parse(opts.body), create_at: 1 });
+      if ((m = path.match(/^v5\/users\/(\w+)\/posts\/(\w+)\/reactions\/([\w+%-]+)$/)) && method === 'DELETE') return res(200, { status: 'OK' });
+      if ((m = path.match(/^v4\/posts\/(\w+)\/reactions$/))) return res(200, (c.reactions || {})[m[1]] || []);
+      const searchIn = (teamIds, terms) => {
+        const chans = new Set(Object.entries(c.channels).filter(([t]) => !teamIds || teamIds.includes(t)).flatMap(([, l]) => l.map((x) => x.id)));
+        const list = Object.values(c.posts).flat().filter((x) => chans.has(x.channel_id) && x.message.toLowerCase().includes(terms.toLowerCase()));
+        return res(200, { order: list.map((x) => x.id), posts: Object.fromEntries(list.map((x) => [x.id, x])) });
+      };
+      if ((m = path.match(/^v4\/teams\/(\w+)\/posts\/search$/)) && method === 'POST') return searchIn([m[1]], JSON.parse(opts.body).terms);
+      if (path === 'v4/posts/search' && method === 'POST') return c.noGlobalSearch ? res(404, { id: 'api.context.404.app_error', message: 'Sorry, we could not find the page.', status_code: 404 }) : searchIn(null, JSON.parse(opts.body).terms);
+      // Sửa tin, ghim / bỏ ghim, tin đã ghim, gợi ý tên
+      if ((m = path.match(/^v4\/posts\/(\w+)\/patch$/)) && method === 'PUT') {
+        const x = Object.values(c.posts).flat().find((y) => y.id === m[1]);
+        return x ? res(200, { ...x, ...JSON.parse(opts.body), edit_at: 123 }) : res(404, { id: 'app.post.get.app_error', message: 'Unable to get the post.', status_code: 404 });
+      }
+      if ((m = path.match(/^v4\/posts\/(\w+)\/(pin|unpin)$/)) && method === 'POST') return res(200, { status: 'OK' });
+      if ((m = path.match(/^v4\/channels\/(\w+)\/pinned$/))) {
+        const list = (c.posts[m[1]] || []).filter((x) => x.is_pinned);
+        return res(200, { order: list.map((x) => x.id), posts: Object.fromEntries(list.map((x) => [x.id, x])) });
+      }
+      if (path === 'v4/users/autocomplete') {
+        const term = String(q.name || '').toLowerCase();
+        return res(200, { users: Object.values(c.users).filter((u) => u.username.startsWith(term) || u.first_name.toLowerCase().startsWith(term)), out_of_channel: [] });
+      }
+      // Thread đang theo dõi theo team (c.threads[team]); unread=true chỉ thread có bình luận chưa đọc
+      if ((m = path.match(/^v4\/users\/me\/teams\/(\w+)\/threads$/))) {
+        if ((c.threadsDenied || []).includes(m[1])) return res(403, { id: 'api.context.permissions.app_error', message: 'You do not have the appropriate permissions.', status_code: 403 });
+        const all = (c.threads || {})[m[1]] || [];
+        const list = q.unread === 'true' ? all.filter((x) => x.unread_replies > 0) : all;
+        return res(200, { threads: list.slice(0, Number(q.per_page || 25)), total: all.length, total_unread_threads: all.filter((x) => x.unread_replies > 0).length, total_unread_mentions: all.reduce((n, x) => n + (x.unread_mentions || 0), 0) });
+      }
       if (path === 'v5/users/me/teams/unread') return res(200, c.unread || []);
       // Mọi kênh / mọi thành viên kênh của mình (trang Chat); c.noAllChannels: máy chủ cũ không có
       if (path === 'v4/users/me/channels') return c.noAllChannels ? res(404, { id: 'api.context.404.app_error', message: 'Not found', status_code: 404 }) : res(200, Object.entries(c.channels).flatMap(([tid, l]) => l.map((x) => ({ team_id: tid, ...x }))));
@@ -3102,6 +3134,133 @@ test('trang Chat: thread — bình luận của một tin, theo dõi / bỏ theo
   const ov = await env2.send({ type: 'chatOverview' });
   assert.deepEqual([ov.dms[0].other.verified, ov.dms[0].other.premium], [true, 'annual']);
   assert.ok(env2.calls.includes('GET chat:v4/users/cu50'));
+});
+
+test('trang Chat: thread đang theo dõi — gộp các team, bỏ trùng, mới nhất trước, chỉ chưa đọc; số thread chưa đọc trong danh sách', async () => {
+  const now = Date.parse('2026-10-14T03:00:00Z');
+  const data = fixture();
+  const c = (data.chat = chatFixture(now));
+  const th = (id, ch, u, at, extra = {}) => ({ id, reply_count: 3, last_reply_at: at, last_viewed_at: 0, unread_replies: 0, unread_mentions: 0, is_urgent: false, participants: [chatUser(70), chatUser(71)], post: { id, channel_id: ch, user_id: u.id, create_at: at - 3600e3, update_at: at, message: 'Tin gốc ' + id, root_id: '', type: '', metadata: {} }, ...extra });
+  c.threads = {
+    tCL: [th('t1', 'chMain', chatUser(50), now - 60e3, { unread_replies: 2, unread_mentions: 1 }), th('t2', 'chSub', chatUser(51), now - 3600e3)],
+    tDM: [th('t3', 'dm1', chatUser(50), now - 120e3, { unread_replies: 1 }), th('t1', 'chMain', chatUser(50), now - 60e3)], // trùng t1
+    tX: [th('t4', 'chX', chatUser(52), now - 7200e3, { delete_at: now })], // đã xoá
+  };
+  c.users.cu52 = chatUser(52);
+  c.unread = [{ team_id: 'tCL', total_unread_mentions: 2, thread_count: 1, thread_mention_count: 1 }, { team_id: 'tDM', total_unread_mentions: 1, thread_count: 1, thread_mention_count: 0 }];
+  const env = makeEnv({ data, now, settings: { chatEnabled: true } });
+  const r = await env.send({ type: 'chatThreads' });
+  assert.deepEqual([r.status, r.threads.map((t) => [t.id, t.channelId, t.teamId, t.unreadReplies, t.unreadMentions]), r.unreadThreads, r.failed], ['ok', [['t1', 'chMain', 'tCL', 2, 1], ['t3', 'dm1', 'tDM', 1, 0], ['t2', 'chSub', 'tCL', 0, 0]], 2, 0]);
+  const t1 = r.threads[0];
+  assert.deepEqual([t1.root.id, t1.root.message, t1.root.following, t1.root.replyCount, t1.root.user.fullname, t1.participants.length], ['t1', 'Tin gốc t1', true, 3, 'Người 50', 2]); // tên người gửi tin gốc đọc thêm
+  assert.ok(env.calls.includes('GET chat:v4/users/me/teams/tCL/threads?per_page=25&extended=true'));
+  // Chỉ chưa đọc; team không đọc được thì bỏ qua và đếm
+  c.threadsDenied = ['tX'];
+  const u = await env.send({ type: 'chatThreads', unread: true });
+  assert.deepEqual([u.threads.map((t) => t.id), u.failed], [['t1', 't3'], 1]);
+  assert.ok(env.calls.includes('GET chat:v4/users/me/teams/tDM/threads?per_page=25&extended=true&unread=true'));
+  // Danh sách cuộc trò chuyện: số thread có bình luận chưa đọc (một lệnh cho cả tài khoản)
+  const ov = await env.send({ type: 'chatOverview', quick: true });
+  assert.deepEqual(ov.threads, { unread: 2, mentions: 1 });
+  c.unread = [{ team_id: 'tCL', total_unread_mentions: 2 }]; // máy chủ không có số thread
+  assert.equal((await env.send({ type: 'chatOverview', quick: true })).threads, null);
+});
+
+test('trang Chat: sửa tin của mình, ghim / bỏ ghim (theo Chạy thử, ghi Nhật ký), tin đã ghim, gợi ý @tên', async () => {
+  const now = Date.parse('2026-10-14T03:00:00Z');
+  const data = fixture();
+  const c = (data.chat = chatFixture(now));
+  c.posts.chMain = [chatPost('p1', 'chMain', c.me, 'Tin cũ', now - 60e3), chatPost('p2', 'chMain', chatUser(60), 'Nội quy nhóm', now - 3600e3, { is_pinned: true, author: undefined })];
+  c.users.cu60 = chatUser(60);
+  const env = makeEnv({ data, now, settings: { chatEnabled: true, dryRun: true } });
+  // Sửa tin của mình: thật kể cả Chạy thử
+  const ed = await env.send({ type: 'chatEdit', postId: 'p1', message: '  Tin đã sửa  ' });
+  assert.deepEqual([ed.status, ed.post.message, ed.post.editAt], ['ok', 'Tin đã sửa', 123]);
+  assert.deepEqual(env.bodies.find(([k]) => k === 'PUT chat:v4/posts/p1/patch')[1], { id: 'p1', message: 'Tin đã sửa' });
+  assert.match((await env.send({ type: 'chatEdit', postId: 'p1', message: '   ' })).message, /trống/);
+  assert.match((await env.send({ type: 'chatEdit', postId: '../x', message: 'a' })).message, /Thiếu/);
+  // Ghim: theo Chạy thử (không gọi), ghi Nhật ký; tắt Chạy thử thì gọi thật
+  const dry = await env.send({ type: 'chatPin', postId: 'p1', pin: true, groupName: 'Crypto Life', snippet: 'Tin đã sửa', user: { id: 'me1', username: 'kai' } });
+  assert.deepEqual([dry.dryRun, dry.pinned, env.calls.includes('POST chat:v4/posts/p1/pin'), env.storage.log[0].kind, env.storage.log[0].action, env.storage.log[0].status], [true, true, false, 'chat', 'pin', 'dry']);
+  env.storage.settings = { ...env.storage.settings, dryRun: false };
+  const real = await env.send({ type: 'chatPin', postId: 'p2', pin: false, groupName: 'Crypto Life' });
+  assert.deepEqual([real.ok, env.calls.includes('POST chat:v4/posts/p2/unpin'), env.storage.log[0].action], [1, true, 'unpin']);
+  // Tin đã ghim: mới nhất trước, tên người viết đọc thêm
+  const pinned = await env.send({ type: 'chatPinned', channelId: 'chMain' });
+  assert.deepEqual([pinned.status, pinned.posts.map((p) => [p.id, p.pinned, p.user.fullname])], ['ok', [['p2', true, 'Người 60']]]);
+  // Gợi ý @tên: người trong kênh
+  const men = await env.send({ type: 'chatMentions', channelId: 'chMain', teamId: 'tCL', term: 'user6' });
+  assert.deepEqual([men.status, men.users.map((u) => u.username)], ['ok', ['user60']]);
+  assert.ok(env.calls.includes('GET chat:v4/users/autocomplete?in_team=tCL&in_channel=chMain&name=user6&limit=8'));
+  await env.send({ type: 'chatMentions', channelId: 'chMain', term: 'a b<c>' });
+  assert.ok(env.calls.includes('GET chat:v4/users/autocomplete?in_channel=chMain&name=abc&limit=8')); // bỏ ký tự lạ
+});
+
+test('trang Chat: biểu cảm (thả / bỏ, ai đã thả), tìm tin trong kênh / mọi nơi', async () => {
+  const now = Date.parse('2026-10-14T03:00:00Z');
+  const data = fixture();
+  const c = (data.chat = chatFixture(now));
+  c.posts.chMain = [chatPost('p1', 'chMain', chatUser(60), 'Ví lạnh nào tốt?', now - 60e3, { metadata: { reaction_stats: [{ emoji_name: '+1', count: 2, top_reactors: ['cu60', 'cu61'], user_reacted: true }] } })];
+  c.posts.chSub = [chatPost('s1', 'chSub', chatUser(61), 'Mình dùng ví lạnh Ledger', now - 120e3, { author: undefined })];
+  c.posts.chX = [chatPost('x1', 'chX', chatUser(62), 'Ví lạnh ở kênh khác', now - 30e3)];
+  c.users.cu61 = chatUser(61);
+  c.reactions = { p1: [{ user_id: 'cu60', post_id: 'p1', emoji_name: '+1' }, { user_id: 'cu61', post_id: 'p1', emoji_name: '+1' }, { user_id: 'cu1', post_id: 'p1', emoji_name: 'heart' }] };
+  c.users.cu60 = chatUser(60);
+  const env = makeEnv({ data, now, settings: { chatEnabled: true, dryRun: true } });
+  // Biểu cảm của tin có sẵn trong trang tin
+  const page = await env.send({ type: 'chatPosts', channelId: 'chMain' });
+  assert.deepEqual(page.posts[0].reactions, [{ name: '+1', count: 2, mine: true, top: ['cu60', 'cu61'] }]);
+  // Thả / bỏ: việc của mình, thật kể cả Chạy thử
+  assert.deepEqual(await env.send({ type: 'chatReact', postId: 'p1', emoji: 'heart', add: true, meChatId: 'cu1' }), { status: 'ok', added: true, mode: 'direct' });
+  assert.deepEqual(env.bodies.find(([k]) => k === 'POST chat:v4/reactions')[1], { user_id: 'cu1', post_id: 'p1', emoji_name: 'heart' });
+  assert.equal((await env.send({ type: 'chatReact', postId: 'p1', emoji: '+1', add: false, meChatId: 'cu1' })).status, 'ok');
+  assert.ok(env.calls.includes('DELETE chat:v5/users/cu1/posts/p1/reactions/%2B1'));
+  assert.match((await env.send({ type: 'chatReact', postId: 'p1', emoji: 'a/b', meChatId: 'cu1' })).message, /Thiếu/);
+  // Ai đã thả: theo emoji, có tên
+  const who = await env.send({ type: 'chatReactions', postId: 'p1' });
+  assert.deepEqual(who.reactions, { '+1': [{ chatId: 'cu60', fullname: 'Người 60' }, { chatId: 'cu61', fullname: 'Người 61' }], heart: [{ chatId: 'cu1', fullname: '' }] }); // chính mình: trang ghi "Bạn"
+  // Tìm trong kênh: tìm trong team của kênh rồi lọc theo kênh
+  const inCh = await env.send({ type: 'chatSearch', terms: 'ví lạnh', channelId: 'chSub', teamId: 'tCL' });
+  assert.deepEqual([inCh.status, inCh.posts.map((p) => [p.id, p.user.fullname])], ['ok', [['s1', 'Người 61']]]);
+  assert.deepEqual(env.bodies.find(([k]) => k === 'POST chat:v4/teams/tCL/posts/search')[1].terms, 'ví lạnh');
+  // Mọi nơi: lệnh chung; máy chủ không có thì tìm từng team
+  const all = await env.send({ type: 'chatSearch', terms: '  ví   lạnh ' });
+  assert.deepEqual(all.posts.map((p) => p.id), ['x1', 'p1', 's1']);
+  c.noGlobalSearch = true;
+  const each = await env.send({ type: 'chatSearch', terms: 'ví lạnh' });
+  assert.deepEqual(each.posts.map((p) => p.id), ['x1', 'p1', 's1']);
+  assert.ok(env.calls.includes('POST chat:v4/teams/tX/posts/search'));
+  assert.match((await env.send({ type: 'chatSearch', terms: 'v' })).message, /ít nhất 2/);
+});
+
+test('chat Beincom: báo bình luận mới ở thread đang theo dõi (lần đầu chỉ ghi nhận; không kèm nội dung)', async () => {
+  const now = Date.parse('2026-10-14T03:00:00Z');
+  const data = fixture();
+  const c = (data.chat = chatFixture(now));
+  const th = (id, at, extra = {}) => ({ id, reply_count: 2, last_reply_at: at, unread_replies: 1, unread_mentions: 0, participants: [chatUser(70), chatUser(71)], post: { id, channel_id: 'chMain', message: 'Nội dung bí mật', create_at: at - 1, metadata: {} }, ...extra });
+  c.threads = { tCL: [th('t1', now - 60e3)] };
+  c.unread = [{ team_id: 'tCL', total_unread_mentions: 0, thread_count: 1, thread_mention_count: 0 }, { team_id: 'tX', total_unread_mentions: 0, thread_count: 0, thread_mention_count: 0 }];
+  const env = makeEnv({ data, now, settings: { chatEnabled: true } });
+  env.listeners.alarm({ name: 'beingroup-scan' });
+  await scan(env, 'popup');
+  const n = () => env.notifications.filter((x) => x.id === 'bg-chat-thread');
+  assert.equal(n().length, 0); // lần đầu chỉ ghi nhận
+  assert.deepEqual(env.storage.state.chatThreadSeen, { t1: now - 60e3 });
+  assert.ok(env.calls.includes('GET chat:v4/users/me/teams/tCL/threads?per_page=10&extended=true&unread=true'));
+  assert.ok(!env.calls.includes('GET chat:v4/users/me/teams/tX/threads?per_page=10&extended=true&unread=true')); // team không có thread chưa đọc
+  // Bình luận mới: báo một lần, có số lần nhắc tên, tên người tham gia, không có nội dung tin
+  c.threads.tCL = [th('t1', now + 5e3, { unread_replies: 2, unread_mentions: 1 }), th('t2', now + 6e3)];
+  env.listeners.alarm({ name: 'beingroup-scan' });
+  await scan(env, 'popup');
+  assert.deepEqual([n().length, n()[0].title, n()[0].message], [1, 'BeinGroup: 2 thread bạn theo dõi có bình luận mới (1 lần nhắc bạn)', 'Người tham gia: Người 70, Người 71. Bấm để xem.']);
+  assert.ok(!JSON.stringify(env.notifications).includes('bí mật') && !JSON.stringify(env.storage.state).includes('bí mật'));
+  env.listeners.alarm({ name: 'beingroup-scan' });
+  await scan(env, 'popup');
+  assert.equal(n().length, 1); // không báo lại
+  // Tắt: không đọc thread
+  const off = makeEnv({ data, now, settings: { chatEnabled: true, chatThreads: false } });
+  await scan(off);
+  assert.ok(!off.calls.some((x) => x.includes('/threads?')));
 });
 
 test('chat Beincom: thông báo tách lời mời trò chuyện với tin nhắn riêng', async () => {

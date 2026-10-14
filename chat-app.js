@@ -57,6 +57,14 @@ const S = {
   loaded: false,
   dmTab: 'dm', // tab Tin nhắn riêng / Lời mời
   thread: null, // thread đang mở: { root, posts, hasNext, loading }
+  view: '', // 'threads': trang Thread đang theo dõi
+  pinned: null, // tin đã ghim của kênh đang mở
+  editing: null, // tin đang sửa (ô gõ chính)
+  tEditing: null, // bình luận đang sửa
+  tlist: null, // thread đang theo dõi (đã đọc)
+  tlistFilter: 'all',
+  threadUnread: null, // số thread có bình luận chưa đọc (null: máy chủ không cho biết)
+  threadMentions: 0,
   seenReplies: new Set(), // bình luận đã tính vào số bình luận
   loadedAt: 0, // lúc mở cuộc trò chuyện: bình luận sau lúc này mới cộng vào số
   priority: '', // độ ưu tiên của tin đang soạn
@@ -123,6 +131,589 @@ function avatar({ name, chatId = '', pictureAt = 0, seed = '', channel = false, 
   return a;
 }
 
+// ---------- Bấm tên người: hồ sơ, vi phạm, xử lý (nối với công cụ quản trị của addon) ----------
+
+const dmWith = (chatId) => (chatId ? [...S.dms, ...S.requests].find((d) => d.other?.chatId === chatId) || null : null);
+const svgClose = () => svg('M6.4 5 12 10.6 17.6 5 19 6.4 13.4 12l5.6 5.6-1.4 1.4-5.6-5.6L6.4 19 5 17.6 10.6 12 5 6.4 6.4 5Z');
+
+async function openPerson(u) {
+  if (!u || (!u.chatId && !u.id)) return;
+  const d = $('person');
+  const me = !!u.chatId && u.chatId === S.me?.chatId;
+  const name = u.fullname || u.username || 'Người dùng';
+  $('pc-head').replaceChildren(
+    avatar({ name, chatId: u.chatId, pictureAt: u.pictureAt, size: 'xl' }),
+    el('div', { class: 'pc-who' }, el('b', {}, el('span', { class: 'nm' }, name), ...badges(u)), el('span', {}, [u.username ? '@' + u.username : '', u.verified ? (u.subProfile ? 'hồ sơ phụ đã xác minh' : 'đã xác minh') : '', u.premium ? 'Premium' : ''].filter(Boolean).join(' · '))),
+    el('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Đóng', title: 'Đóng (Esc)', onclick: () => d.close() }, svgClose()),
+  );
+  const dm = dmWith(u.chatId);
+  const body = [
+    el(
+      'div',
+      { class: 'pc-links' },
+      u.username ? el('a', { class: 'pc-btn', href: BG.userUrl(u.username), target: '_blank', rel: 'noopener noreferrer' }, 'Trang cá nhân ↗') : null,
+      dm && !me
+        ? el('button', { type: 'button', class: 'pc-btn', onclick: () => (d.close(), openChat(dm.id)) }, '✉ Nhắn riêng')
+        : null,
+    ),
+  ];
+  if (!me && u.id) {
+    const vio = el('div', { class: 'pc-sec' }, el('h4', {}, 'Hồ sơ vi phạm'), el('div', { class: 'muted' }, 'Đang đọc…'));
+    const posts = el('div', { class: 'pc-sec' }, el('h4', {}, 'Bài trong các community bạn quản trị'), el('button', { type: 'button', class: 'pc-btn', onclick: (e) => findPersonPosts(u, posts, e.currentTarget) }, 'Tìm bài của người này'));
+    body.push(vio, posts);
+    // Tin của người này đang hiện trong kênh: admin kênh xoá một lần (theo Chạy thử, ghi Nhật ký)
+    const theirs = [...S.posts.values(), ...(S.thread ? S.thread.posts.values() : [])].filter((p, i, a) => p.user.chatId === u.chatId && !p.deleted && !p.system && a.findIndex((x) => x.id === p.id) === i);
+    if (S.sel?.canDelete && S.sel.kind === 'ch' && theirs.length) body.push(el('div', { class: 'pc-sec' }, el('h4', {}, 'Trong kênh ' + chatTitle(S.sel)), el('button', { type: 'button', class: 'pc-btn danger', onclick: () => deleteAllOf(u, theirs) }, `Xoá ${theirs.length} tin của người này đang hiện`)));
+    const link = (k) => `dashboard.html#tab=${k === 'cleanup' ? 'content' : 'members'}&${k}=${encodeURIComponent(u.id)}&u=${encodeURIComponent(u.username || '')}&n=${encodeURIComponent(u.fullname || '')}`;
+    body.push(el('div', { class: 'pc-actions' }, el('a', { class: 'pc-btn danger', href: link('cleanup'), target: '_blank', title: 'Mở Dashboard: chọn bài / bình luận của người này để ẩn, tuỳ chọn cấm ở các community bạn quản trị' }, '🧹 Dọn tài khoản…'), el('a', { class: 'pc-btn', href: link('profile'), target: '_blank' }, '⚠ Hồ sơ trên Dashboard')));
+    readViolations(u.id).then((x) => vio.replaceChildren(el('h4', {}, 'Hồ sơ vi phạm'), ...x));
+  } else if (!me) body.push(el('p', { class: 'muted' }, 'Không có mã Beincom của người này nên chưa mở được công cụ quản trị.'));
+  $('pc-body').replaceChildren(...body.filter(Boolean));
+  if (!d.open) d.showModal();
+}
+
+// Hồ sơ vi phạm addon ghi nhận (Nhật ký, quét): tóm tắt + 3 lần gần nhất
+async function readViolations(userId) {
+  let p = null;
+  try {
+    p = (await chrome.storage.local.get('profiles')).profiles?.users?.[userId] || null;
+  } catch {}
+  if (!p?.events?.length) return [el('div', { class: 'muted' }, 'Chưa ghi nhận vi phạm nào.')];
+  const sum = BG.profileSummary(p);
+  return [
+    el('div', { class: 'pc-vio' + (sum.severe ? ' bad' : '') }, '⚠ ' + BG.profileText(sum)),
+    el('ul', { class: 'pc-events' }, p.events.slice(0, 3).map((e) => el('li', {}, el('b', {}, BG.VIOLATION_TYPES[e.type]?.label || e.type), ` · ${e.group || ''} · ${new Date(e.time).toLocaleDateString('vi-VN')}`, e.snippet ? el('span', { class: 'muted' }, ' — ' + String(e.snippet).slice(0, 80)) : null))),
+  ];
+}
+
+async function findPersonPosts(u, box, btn) {
+  btn.disabled = true;
+  btn.textContent = 'Đang tìm…';
+  const r = await call('userPosts', { userId: u.id });
+  if (r.status !== 'ok') {
+    btn.disabled = false;
+    btn.textContent = 'Tìm bài của người này';
+    return box.append(el('div', { class: 'muted' }, 'Không tìm được: ' + (r.message || 'lỗi')));
+  }
+  const list = (r.posts || []).slice().sort((a, b) => Date.parse(b.publishedAt || 0) - Date.parse(a.publishedAt || 0));
+  btn.remove();
+  box.append(
+    el('div', {}, list.length ? `${list.length} bài còn hiện${r.truncated ? ' (mới xem 200 bài mới nhất mỗi community)' : ''}:` : 'Không có bài nào còn hiện.'),
+    el('ul', { class: 'pc-events' }, list.slice(0, 5).map((p) => el('li', {}, el('a', { href: BG.postUrl(p), target: '_blank', rel: 'noopener noreferrer' }, BG.chatPlain(p.title || p.text || '').slice(0, 80) || 'Bài viết'), p.publishedAt ? ` · ${new Date(p.publishedAt).toLocaleDateString('vi-VN')}` : ''))),
+  );
+}
+
+async function deleteAllOf(u, list) {
+  const items = list.slice(0, 50);
+  const ok = await ask({ title: `Xoá ${items.length} tin của ${u.fullname || u.username}?`, text: 'Các tin đang hiện trong kênh này (và bình luận đang mở) của người này.', note: 'Tin bị xoá với mọi người, không khôi phục được. Theo Chạy thử và được ghi Nhật ký.' });
+  if (!ok) return;
+  let done = 0;
+  let dry = 0;
+  let failed = 0;
+  for (const p of items) {
+    const r = await call('chatDeleteMsg', { postId: p.id, channelId: S.sel.id, own: false, groupName: chatTitle(S.sel), snippet: p.message, user: { id: u.id, username: u.username, fullname: u.fullname } });
+    if (r.status !== 'ok' || r.failed) failed++;
+    else if (r.dryRun) dry++;
+    else {
+      done++;
+      if (S.posts.has(p.id)) S.posts.set(p.id, { ...S.posts.get(p.id), deleted: true });
+      if (S.thread?.posts.has(p.id)) S.thread.posts.set(p.id, { ...S.thread.posts.get(p.id), deleted: true });
+    }
+    if (r.status === 'error' && /quyền/.test(r.message || '')) break;
+  }
+  renderMsgs({ scroll: 'keep' });
+  renderThread();
+  $('person').close();
+  toast(dry ? `Chạy thử: đã ghi ${dry} tin vào Nhật ký, chưa xoá trên Beincom.` : `Đã xoá ${done} tin${failed ? `, ${failed} tin lỗi` : ''}.`, failed ? 'err' : '');
+}
+
+// ---------- Biểu cảm (reaction) dưới tin ----------
+// Bấm chip để thả / bỏ biểu cảm của mình; rê chuột xem ai đã thả; nút + (hoặc Biểu cảm khi rê chuột vào tin) để chọn.
+
+const QUICK_REACTS = ['+1', 'heart', 'joy', 'open_mouth', 'cry', 'pray', 'fire', 'tada'];
+const reactors = new Map(); // mã tin -> { tên emoji: [tên người] } (đọc khi rê chuột)
+
+function reactsEl(p) {
+  const list = (p.reactions || []).filter((r) => r.count > 0);
+  if (!list.length || p.deleted) return null;
+  const me = S.me?.chatId;
+  return el(
+    'div',
+    { class: 'reacts', onmouseenter: (e) => loadReactors(p, e.currentTarget) },
+    list.map((r) => {
+      const mine = !!(r.mine || (me && r.top?.includes(me)));
+      return el('button', { type: 'button', class: 'rc' + (mine ? ' mine' : ''), 'data-name': r.name, 'aria-pressed': String(mine), title: reactTitle(p.id, r, mine), onclick: () => toggleReaction(p, r.name) }, el('span', { class: 'rc-e' }, BG.chatEmoji(r.name) || `:${r.name}:`), el('span', {}, String(r.count)));
+    }),
+    el('button', { type: 'button', class: 'rc add', title: 'Thả biểu cảm', 'aria-label': 'Thả biểu cảm', onclick: (e) => openReactPop(p, e.currentTarget) }, '+'),
+  );
+}
+
+function reactTitle(postId, r, mine) {
+  const names = reactors.get(postId)?.[r.name];
+  if (names?.length) return `${BG.chatEmoji(r.name) || ':' + r.name + ':'} ${names.join(', ')}`;
+  return mine ? (r.count > 1 ? `Bạn và ${r.count - 1} người khác` : 'Bạn') : `${r.count} người`;
+}
+
+async function loadReactors(p, row) {
+  if (reactors.has(p.id) || row.dataset.loading) return;
+  row.dataset.loading = '1';
+  const r = await call('chatReactions', { postId: p.id });
+  if (r.status !== 'ok') return;
+  const me = S.me?.chatId;
+  reactors.set(p.id, Object.fromEntries(Object.entries(r.reactions).map(([k, v]) => [k, v.map((u) => (u.chatId === me ? 'Bạn' : u.fullname || 'người dùng'))])));
+  // Dòng biểu cảm có thể đã được vẽ lại trong lúc chờ: gắn tên vào các chip đang hiện của tin này
+  const id = CSS.escape(p.id);
+  for (const b of document.querySelectorAll(`#m-${id} .rc[data-name], #t-${id} .rc[data-name]`)) {
+    const x = (p.reactions || []).find((y) => y.name === b.dataset.name);
+    if (x) b.title = reactTitle(p.id, x, b.classList.contains('mine'));
+  }
+}
+
+async function toggleReaction(p, name) {
+  const me = S.me?.chatId;
+  const cur = S.posts.get(p.id) || S.thread?.posts.get(p.id) || p;
+  const r = (cur.reactions || []).find((x) => x.name === name);
+  const mine = !!(r && (r.mine || r.top?.includes(me)));
+  closeReactPop();
+  const res = await call('chatReact', { postId: p.id, emoji: name, add: !mine, meChatId: me });
+  if (res.status !== 'ok') return toast(res.message || 'Không thả được biểu cảm', 'err');
+  const next = (list) => {
+    const out = (list || []).map((x) => ({ ...x, top: [...(x.top || [])] }));
+    const x = out.find((y) => y.name === name);
+    if (!mine) {
+      if (x) Object.assign(x, { count: x.count + 1, mine: true, top: [me, ...x.top] });
+      else out.push({ name, count: 1, mine: true, top: [me] });
+    } else if (x) Object.assign(x, { count: x.count - 1, mine: false, top: x.top.filter((u) => u !== me) });
+    return out.filter((y) => y.count > 0);
+  };
+  const upd = (m) => (m ? { ...m, reactions: next(m.reactions) } : m);
+  if (S.posts.has(p.id)) S.posts.set(p.id, upd(S.posts.get(p.id)));
+  if (S.thread?.posts.has(p.id)) S.thread.posts.set(p.id, upd(S.thread.posts.get(p.id)));
+  if (S.thread?.root.id === p.id) S.thread.root = S.posts.get(p.id) || upd(S.thread.root);
+  reactors.delete(p.id);
+  renderMsgs({ scroll: 'keep' });
+  renderThread();
+}
+
+function openReactPop(p, btn) {
+  const pop = $('react-pop');
+  const all = [...new Map(Object.entries(BG.CHAT_EMOJI).map(([k, v]) => [v, k])).entries()].map(([emoji, name]) => [name, emoji]);
+  const item = (name) => el('button', { type: 'button', class: 'emo', title: ':' + name + ':', 'aria-label': name, onclick: () => toggleReaction(p, name) }, BG.chatEmoji(name));
+  pop.replaceChildren(
+    el('div', { class: 'rp-quick' }, QUICK_REACTS.map(item), el('button', { type: 'button', class: 'emo rp-more', title: 'Thêm biểu cảm', 'aria-expanded': 'false', onclick: (e) => (e.currentTarget.remove(), pop.append(el('div', { class: 'emoji-grid' }, all.filter(([n]) => !QUICK_REACTS.includes(n)).map(([n]) => item(n))))) }, '…')),
+  );
+  pop.hidden = false;
+  // Nút chỉ hiện khi rê chuột: không đo được thì lấy bong bóng tin làm mốc; thiếu chỗ phía trên thì hiện bên dưới
+  const anchor = btn.getBoundingClientRect().width ? btn : btn.closest('.msg')?.querySelector('.bubble') || btn;
+  const r = anchor.getBoundingClientRect();
+  const w = Math.min(340, innerWidth - 16);
+  pop.style.width = w + 'px';
+  pop.style.left = `${Math.round(Math.max(8, Math.min(r.left, innerWidth - w - 8)))}px`;
+  const below = r.top - pop.offsetHeight - 6 < 8;
+  pop.style.bottom = below ? '' : `${Math.round(innerHeight - r.top + 6)}px`;
+  pop.style.top = below ? `${Math.round(Math.min(r.bottom + 6, innerHeight - pop.offsetHeight - 8))}px` : '';
+  pop.querySelector('button')?.focus();
+}
+function closeReactPop() {
+  $('react-pop').hidden = true;
+}
+
+// ---------- Tìm tin nhắn (trong kênh / mọi nơi) ----------
+
+function syncSide() {
+  $('app').classList.toggle('thread-open', !$('thread').hidden || !$('pins').hidden || !$('search').hidden);
+}
+
+function openSearch(term = '', scope = S.sel ? 'channel' : 'all') {
+  closeThread();
+  closePins();
+  S.sScope = S.sel ? scope : 'all';
+  $('search').hidden = false;
+  syncSide();
+  $('s-q').value = term || $('s-q').value;
+  renderSearchScope();
+  if ($('s-q').value.trim().length >= 2) runSearch();
+  else $('s-list').replaceChildren(el('div', { class: 'list-empty' }, 'Gõ chữ cần tìm rồi Enter.'));
+  $('s-q').focus();
+}
+function closeSearch() {
+  $('search').hidden = true;
+  syncSide();
+}
+function renderSearchScope() {
+  for (const b of document.querySelectorAll('#s-scope button')) {
+    b.classList.toggle('on', b.dataset.s === S.sScope);
+    if (b.dataset.s === 'channel') b.disabled = !S.sel;
+  }
+  $('s-sub').textContent = S.sScope === 'channel' && S.sel ? 'Trong ' + chatTitle(S.sel) : 'Mọi cuộc trò chuyện của bạn';
+}
+
+async function runSearch() {
+  const q = $('s-q').value.trim();
+  if (q.length < 2) return toast('Gõ ít nhất 2 ký tự để tìm', 'warn');
+  const c = S.sScope === 'channel' ? S.sel : null;
+  const seq = (S.sSeq = (S.sSeq || 0) + 1);
+  $('s-list').replaceChildren(...skeleton());
+  const r = await call('chatSearch', c ? { terms: q, channelId: c.id, teamId: c.teamId || '' } : { terms: q });
+  if (seq !== S.sSeq) return;
+  if (r.status !== 'ok') return $('s-list').replaceChildren(el('div', { class: 'list-empty' }, r.message || 'Không tìm được'));
+  if (!r.posts.length) return $('s-list').replaceChildren(el('div', { class: 'list-empty' }, `Không có tin nào chứa "${q}".`));
+  const meId = S.me?.chatId;
+  $('s-list').replaceChildren(
+    el('div', { class: 't-sep' }, `${r.posts.length} tin${r.posts.length >= 60 ? ' (60 tin mới nhất)' : ''}`),
+    ...r.posts.map((p) => {
+      const ch = findChat(p.channelId);
+      const where = ch ? (ch.kind === 'dm' ? '✉ ' + chatTitle(ch) : '# ' + [...new Set([chatTitle(ch), ch.teamTitle].filter(Boolean))].join(' · ')) : 'Kênh chat';
+      return el('div', { class: 's-item' }, el('div', { class: 's-where' }, where, p.rootId ? ' · bình luận' : '', ' · ', shortTime(p.createAt)), messageEl(p, { first: true, last: true, mine: p.user.chatId === meId, mode: 'search' }));
+    }),
+  );
+}
+
+// Mở một kết quả: tới cuộc trò chuyện, nháy tin; bình luận / tin cũ chưa tải thì mở khung bình luận của tin đó
+async function openSearchResult(p) {
+  const ch = findChat(p.channelId);
+  if (!ch) return toast('Cuộc trò chuyện này không có trong danh sách của bạn', 'err');
+  if (innerWidth <= 1180) closeSearch();
+  if (S.sel?.id !== ch.id) await openChat(ch.id);
+  if (S.sel?.id !== ch.id) return;
+  if (!p.rootId && S.posts.has(p.id)) return flashTo(p.id);
+  const rootId = p.rootId || p.id;
+  const stub = S.posts.get(rootId) || (p.rootId ? { id: rootId, channelId: p.channelId, user: { chatId: '', id: '', username: '', fullname: '' }, createAt: p.createAt, updateAt: 0, editAt: 0, deleted: false, system: false, message: '', rootId: '', replyCount: 0, pinned: false, files: [], participants: [], following: false, reactions: [], stub: true } : p);
+  await openThread(stub);
+  const n = $('t-' + p.id);
+  if (n) {
+    n.scrollIntoView({ block: 'center' });
+    n.classList.add('flash');
+  }
+}
+
+// ---------- Ghim tin, tin đã ghim ----------
+
+const canPin = (p) => !!S.sel && !p.deleted && !p.system && (S.sel.canDelete || S.sel.kind === 'dm');
+
+async function togglePin(p) {
+  const pin = !p.pinned;
+  const r = await call('chatPin', { postId: p.id, pin, groupName: chatTitle(S.sel), snippet: BG.chatPlain(p.message).slice(0, 120), user: { id: p.user.id, username: p.user.username, fullname: p.user.fullname } });
+  if (r.status !== 'ok' || r.failed) return toast(r.message || (r.errors || []).join('; ') || 'Không ghim được', 'err');
+  if (r.dryRun) return toast('Chạy thử: đã ghi vào Nhật ký, chưa ' + (pin ? 'ghim' : 'bỏ ghim') + ' trên Beincom.');
+  const upd = (m) => (m ? { ...m, pinned: pin } : m);
+  if (S.posts.has(p.id)) S.posts.set(p.id, upd(S.posts.get(p.id)));
+  if (S.thread?.posts.has(p.id)) S.thread.posts.set(p.id, upd(S.thread.posts.get(p.id)));
+  if (S.thread?.root.id === p.id) S.thread.root = S.posts.get(p.id) || upd(S.thread.root);
+  S.pinned = pin ? [upd(p), ...(S.pinned || []).filter((x) => x.id !== p.id)] : (S.pinned || []).filter((x) => x.id !== p.id);
+  renderPinnedCount();
+  renderMsgs({ scroll: 'keep' });
+  renderThread();
+  if (!$('pins').hidden) renderPins();
+  toast(pin ? 'Đã ghim tin nhắn.' : 'Đã bỏ ghim.');
+}
+
+async function loadPinned(c) {
+  const r = await call('chatPinned', { channelId: c.id });
+  if (S.sel?.id !== c.id) return;
+  S.pinned = r.status === 'ok' ? r.posts : S.pinned;
+  S.pinnedError = r.status === 'ok' ? '' : r.message || 'Không đọc được tin đã ghim';
+  renderPinnedCount();
+  if (!$('pins').hidden) renderPins();
+}
+
+function renderPinnedCount() {
+  const n = (S.pinned || []).length;
+  $('pinned-n').textContent = n ? String(n) : '';
+  $('btn-pinned').classList.toggle('has', n > 0);
+}
+
+function openPins() {
+  if (!S.sel) return;
+  closeThread();
+  closeSearch();
+  $('pins').hidden = false;
+  syncSide();
+  $('p-sub').textContent = chatTitle(S.sel);
+  renderPins();
+  loadPinned(S.sel);
+}
+
+function closePins() {
+  $('pins').hidden = true;
+  syncSide();
+}
+
+function renderPins() {
+  const list = S.pinned;
+  const meId = S.me?.chatId;
+  if (!list) return $('p-list').replaceChildren(el('div', { class: 't-sep' }, 'Đang tải…'));
+  if (!list.length) return $('p-list').replaceChildren(el('div', { class: 'list-empty' }, S.pinnedError || 'Kênh này chưa có tin nào được ghim.' + (canPin({}) ? ' Rê chuột vào một tin → Ghim.' : '')));
+  $('p-list').replaceChildren(...list.map((p) => messageEl(p, { first: true, last: true, mine: p.user.chatId === meId, mode: 'pins' })));
+}
+
+// ---------- Gợi ý @tên khi gõ (ô gõ và ô bình luận) ----------
+
+const M = { t: null, items: [], i: 0, q: null, timer: 0, seq: 0, cache: new Map() };
+
+function mentionInput(t) {
+  const c = S.sel;
+  const q = c && t.selectionStart === t.selectionEnd ? BG.chatMentionQuery(t.value, t.selectionStart) : null;
+  if (!q) return closeMention();
+  M.t = t;
+  M.q = q;
+  clearTimeout(M.timer);
+  M.timer = setTimeout(() => fetchMentions(c, q), 120);
+}
+
+async function fetchMentions(c, q) {
+  const key = c.id + ':' + q.term.toLowerCase();
+  const seq = ++M.seq;
+  let users = M.cache.get(key);
+  if (!users) {
+    const r = await call('chatMentions', { channelId: c.id, teamId: c.teamId || '', term: q.term });
+    if (seq !== M.seq) return;
+    users = r.status === 'ok' ? r.users : [];
+    if (r.status === 'ok') M.cache.set(key, users);
+  }
+  if (seq !== M.seq || !M.q) return;
+  // @all / @channel / @here chỉ ở kênh (không ở tin nhắn riêng)
+  const special = c.kind === 'dm' ? [] : [['all', 'Báo cho mọi người trong kênh'], ['channel', 'Báo cho mọi người trong kênh'], ['here', 'Báo cho người đang trực tuyến']].filter(([k]) => q.term && k.startsWith(q.term.toLowerCase())).map(([k, desc]) => ({ special: k, desc }));
+  M.items = [...users.filter((u) => u.chatId !== S.me?.chatId && u.username), ...special].slice(0, 9);
+  M.i = 0;
+  renderMention();
+}
+
+function renderMention() {
+  const pop = $('mention-pop');
+  if (!M.items.length || !M.t) return closeMention();
+  pop.replaceChildren(
+    ...M.items.map((u, k) =>
+      el(
+        'div',
+        { role: 'option', class: 'mi' + (k === M.i ? ' on' : ''), 'aria-selected': String(k === M.i), onmousedown: (e) => (e.preventDefault(), pickMention(k)) },
+        u.special ? el('span', { class: 'avatar xs mi-at' }, '@') : avatar({ name: u.fullname || u.username, chatId: u.chatId, pictureAt: u.pictureAt, size: 'xs' }),
+        el('span', { class: 'mi-name' }, u.special ? '@' + u.special : u.fullname || u.username, ...(u.special ? [] : badges(u))),
+        el('span', { class: 'mi-sub' }, u.special ? u.desc : '@' + u.username),
+      ),
+    ),
+  );
+  const r = M.t.getBoundingClientRect();
+  pop.style.left = `${Math.round(Math.max(8, Math.min(r.left, innerWidth - 328)))}px`;
+  pop.style.bottom = `${Math.round(innerHeight - r.top + 8)}px`;
+  pop.hidden = false;
+}
+
+function closeMention() {
+  $('mention-pop').hidden = true;
+  M.items = [];
+  M.q = null;
+  M.seq++;
+}
+
+function pickMention(k) {
+  const u = M.items[k];
+  const t = M.t;
+  const q = t && (BG.chatMentionQuery(t.value, t.selectionStart) || M.q);
+  if (!u || !t || !q) return closeMention();
+  const name = u.special || u.username;
+  const end = t.selectionStart;
+  closeMention();
+  applyEdit({ from: q.start, to: end, text: `@${name} `, selStart: q.start + name.length + 2, selEnd: q.start + name.length + 2 }, t);
+}
+
+// Phím trong danh sách gợi ý: lên / xuống, Enter / Tab chọn, Esc đóng
+function mentionKey(e) {
+  if ($('mention-pop').hidden || !M.items.length) return false;
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    M.i = (M.i + (e.key === 'ArrowDown' ? 1 : -1) + M.items.length) % M.items.length;
+    renderMention();
+  } else if (e.key === 'Enter' || e.key === 'Tab') pickMention(M.i);
+  else if (e.key === 'Escape') closeMention();
+  else return false;
+  e.preventDefault();
+  return true;
+}
+
+// ---------- Sửa tin của mình; bản nháp theo cuộc trò chuyện / thread (lưu trong máy, 7 ngày) ----------
+
+const DRAFT_KEY = 'beingroup-chat-drafts';
+let drafts = {};
+try {
+  drafts = BG.pruneDrafts(JSON.parse(localStorage.getItem(DRAFT_KEY) || '{}'));
+} catch {}
+let draftTimer = 0;
+function setDraft(key, text) {
+  if (!key) return;
+  if (String(text || '').trim()) drafts[key] = { t: String(text).slice(0, 4000), at: Date.now() };
+  else delete drafts[key];
+  clearTimeout(draftTimer);
+  draftTimer = setTimeout(() => {
+    try {
+      localStorage.setItem(DRAFT_KEY, JSON.stringify(BG.pruneDrafts(drafts)));
+    } catch {}
+  }, 300);
+}
+const draftOf = (key) => drafts[key]?.t || '';
+const threadKey = () => (S.thread && S.sel ? `${S.sel.id}:${S.thread.root.id}` : '');
+
+function startEdit(p, inThread = false) {
+  if (inThread) {
+    S.tEditing = p;
+    $('t-text').value = p.message;
+    $('t-edit').hidden = false;
+    $('t-edit-text').textContent = 'Sửa bình luận: ' + BG.chatPlain(p.message).slice(0, 100);
+    tAutosize();
+    return $('t-text').focus();
+  }
+  if (S.preview) setPreview(false);
+  S.editing = p;
+  $('text').value = p.message;
+  renderReply();
+  autosize();
+  $('text').focus();
+}
+
+function cancelEdit(inThread = false) {
+  if (inThread) {
+    if (!S.tEditing) return;
+    S.tEditing = null;
+    $('t-edit').hidden = true;
+    $('t-text').value = draftOf(threadKey());
+    return tAutosize();
+  }
+  if (!S.editing) return;
+  S.editing = null;
+  $('text').value = S.sel ? draftOf(S.sel.id) : '';
+  renderReply();
+  autosize();
+}
+
+async function saveEdit(inThread = false) {
+  const p = inThread ? S.tEditing : S.editing;
+  const t = $(inThread ? 't-text' : 'text');
+  const text = t.value.trim();
+  if (!p) return;
+  if (!text) return toast('Tin nhắn trống', 'err');
+  if (text === String(p.message || '').trim()) return cancelEdit(inThread);
+  const r = await call('chatEdit', { postId: p.id, message: text });
+  if (r.status !== 'ok') return toast(r.message || 'Không sửa được', 'err');
+  const upd = (m) => (m ? { ...m, message: r.post?.message ?? text, editAt: r.post?.editAt || Date.now() } : m);
+  if (S.posts.has(p.id)) S.posts.set(p.id, upd(S.posts.get(p.id)));
+  if (S.thread?.posts.has(p.id)) S.thread.posts.set(p.id, upd(S.thread.posts.get(p.id)));
+  if (S.thread?.root.id === p.id) S.thread.root = S.posts.get(p.id) || upd(S.thread.root);
+  cancelEdit(inThread);
+  renderMsgs({ scroll: 'keep' });
+  renderThread();
+  toast('Đã sửa tin nhắn.');
+}
+
+// ---------- Thread đang theo dõi (như nút "Thread" trên web) ----------
+// Mục "Thread" đầu danh sách (số thread có bình luận chưa đọc); trang danh sách: Tất cả / Chưa đọc; bấm một thread thì mở
+// cuộc trò chuyện và khung bình luận của tin đó.
+
+const svgThreads = () => svg('M21 6h-2v9H6v2c0 .55.45 1 1 1h11l4 4V7c0-.55-.45-1-1-1Zm-4 6V3c0-.55-.45-1-1-1H3c-.55 0-1 .45-1 1v14l4-4h10c.55 0 1-.45 1-1Z');
+
+function threadsEntry() {
+  const n = S.threadUnread || 0;
+  if (S.q || S.filter === 'dm' || (S.filter === 'unread' && !n)) return null;
+  return el(
+    'button',
+    { type: 'button', class: 'tl-entry' + (S.view === 'threads' ? ' sel' : '') + (n ? ' unread' : ''), 'aria-current': S.view === 'threads' ? 'true' : null, onclick: () => showThreads() },
+    el('span', { class: 'avatar ch tl-ic', 'aria-hidden': 'true' }, svgThreads()),
+    el('span', { class: 'item-main' }, el('span', { class: 'item-title' }, el('span', { class: 'nm' }, 'Thread')), el('span', { class: 'item-sub' }, 'Bình luận ở các tin bạn theo dõi')),
+    el('span', { class: 'item-side' }, n ? el('span', { class: 'badge' + (S.threadMentions ? ' at' : ''), title: `${n} thread có bình luận chưa đọc` }, n > 99 ? '99+' : String(n)) : null),
+  );
+}
+
+async function showThreads({ fromHash = false } = {}) {
+  closeThread();
+  resetComposer();
+  S.sel = null;
+  S.view = 'threads';
+  if (!fromHash) history.replaceState(null, '', location.href.split('#')[0] + '#threads');
+  $('app').classList.add('open');
+  for (const id of ['empty', 'conv-head', 'msgs', 'composer', 'jump']) $(id).hidden = true;
+  $('tview').hidden = false;
+  renderList();
+  renderThreads();
+  await loadThreads();
+}
+
+function hideThreads() {
+  S.view = '';
+  $('tview').hidden = true;
+}
+
+async function loadThreads() {
+  if (S.tlistLoading) return;
+  S.tlistLoading = true;
+  renderThreads();
+  const filter = S.tlistFilter;
+  const r = await call('chatThreads', { unread: filter === 'unread' });
+  S.tlistLoading = false;
+  if (S.view !== 'threads') return;
+  if (r.status !== 'ok') {
+    S.tlistError = r.message || 'Không đọc được thread';
+    return renderThreads();
+  }
+  S.tlistError = '';
+  S.tlist = r.threads;
+  S.tlistOf = filter;
+  if (typeof r.unreadThreads === 'number') S.threadUnread = r.unreadThreads;
+  renderThreads();
+  renderList();
+}
+
+function threadCard(t) {
+  const ch = findChat(t.channelId);
+  const where = ch ? [...new Set([chatTitle(ch), ch.teamTitle].filter(Boolean))].join(' · ') : 'Kênh chat';
+  const u = t.root.user;
+  const name = u.fullname || u.username || 'Người dùng';
+  const at = t.lastReplyAt || t.root.createAt;
+  return el(
+    'button',
+    { type: 'button', class: 'tcard' + (t.unreadReplies ? ' unread' : ''), onclick: () => openFromThreads(t) },
+    avatar({ name, chatId: u.chatId, pictureAt: u.pictureAt, size: 'sm' }),
+    el(
+      'span',
+      { class: 'tc-main' },
+      el('span', { class: 'tc-top' }, el('span', { class: 'tc-where' }, ch?.kind === 'dm' ? '✉ ' + where : '# ' + where), el('time', { title: fullTime(at) }, shortTime(at))),
+      el('span', { class: 'tc-text' }, el('b', {}, name), ...badges(u), ': ', BG.chatPlain(t.root.message) || (t.root.files?.length ? '📎 tệp' : '')),
+      el(
+        'span',
+        { class: 'tc-meta' },
+        t.participants.length ? el('span', { class: 'tbar-people' }, t.participants.slice(0, 3).map((p) => avatar({ name: p.fullname || p.username, chatId: p.chatId, pictureAt: p.pictureAt, size: 'xs' }))) : null,
+        el('span', {}, `${t.replyCount} bình luận`),
+        t.unreadMentions ? el('span', { class: 'badge at' }, '@' + t.unreadMentions) : t.unreadReplies ? el('span', { class: 'badge' }, `${t.unreadReplies} mới`) : null,
+      ),
+    ),
+  );
+}
+
+function renderThreads() {
+  const list = $('tv-list');
+  for (const b of document.querySelectorAll('#tv-filters button')) b.classList.toggle('on', b.dataset.f === S.tlistFilter);
+  $('tv-sub').textContent = S.threadUnread ? `${S.threadUnread} thread có bình luận chưa đọc` : 'Bình luận ở các tin bạn đang theo dõi';
+  $('tv-refresh').disabled = !!S.tlistLoading;
+  if (S.tlistLoading && (!S.tlist || S.tlistOf !== S.tlistFilter)) return list.replaceChildren(...skeleton());
+  if (S.tlistError && !S.tlist) return list.replaceChildren(el('div', { class: 'list-empty' }, S.tlistError));
+  const items = (S.tlist || []).filter((t) => S.tlistFilter !== 'unread' || t.unreadReplies > 0);
+  if (!items.length) return list.replaceChildren(el('div', { class: 'list-empty' }, S.tlistFilter === 'unread' ? 'Đã đọc hết bình luận 🎉' : 'Bạn chưa theo dõi thread nào. Bấm "Theo dõi" dưới một tin có bình luận để theo dõi.'));
+  list.replaceChildren(...items.map(threadCard));
+}
+
+async function openFromThreads(t) {
+  if (!findChat(t.channelId)) return toast('Kênh này không có trong danh sách chat của bạn — mở trên web Beincom', 'err');
+  await openChat(t.channelId);
+  if (S.sel?.id === t.channelId) openThread(S.posts.get(t.root.id) || t.root);
+}
+
+// Mở thread (từ danh sách hay từ tin): bớt số thread chưa đọc
+function threadSeen(rootId) {
+  const it = (S.tlist || []).find((x) => x.id === rootId);
+  if (!it?.unreadReplies) return;
+  it.unreadReplies = 0;
+  it.unreadMentions = 0;
+  S.threadUnread = Math.max(0, (S.threadUnread || 0) - 1);
+  renderList();
+}
+
 // ---------- Thread: bình luận của một tin (như web Beincom) ----------
 // Trang tin chỉ có tin gốc; bình luận nằm trong thread. Tin có bình luận hiện thanh: người tham gia, "N bình luận", theo dõi.
 
@@ -156,11 +747,18 @@ async function openThread(p) {
   const c = S.sel;
   if (!c) return;
   const root = S.posts.get(p.id) || p;
+  threadSeen(root.id);
   S.thread = { root, posts: new Map([[root.id, root]]), hasNext: false, loading: true, channelId: c.id };
   $('thread').hidden = false;
-  $('app').classList.add('thread-open');
   $('t-sub').textContent = chatTitle(c);
+  closePins();
+  closeSearch();
+  syncSide();
+  S.tEditing = null;
+  $('t-edit').hidden = true;
+  $('t-text').value = draftOf(`${c.id}:${root.id}`);
   renderThread();
+  tAutosize();
   $('t-text').focus();
   const r = await call('chatThread', { rootId: root.id });
   if (S.thread?.root.id !== root.id) return;
@@ -170,7 +768,10 @@ async function openThread(p) {
     return toast(r.message || 'Không đọc được bình luận', 'err');
   }
   for (const x of r.posts) {
-    if (x.id === root.id) continue;
+    if (x.id === root.id) {
+      if (root.stub) S.thread.root = x; // mở từ kết quả tìm: tin gốc chưa có trong cuộc trò chuyện
+      continue;
+    }
     S.thread.posts.set(x.id, x);
     S.seenReplies.add(x.id);
   }
@@ -197,8 +798,10 @@ async function loadMoreThread() {
 
 function closeThread() {
   S.thread = null;
+  S.tEditing = null;
+  $('t-edit').hidden = true;
   $('thread').hidden = true;
-  $('app').classList.remove('thread-open');
+  syncSide();
   $('t-text').value = '';
 }
 
@@ -261,6 +864,7 @@ async function sendThread(e) {
   e?.preventDefault();
   const t = S.thread;
   const c = S.sel;
+  if (S.tEditing) return saveEdit(true);
   const text = $('t-text').value.trim();
   if (!t || !c || !text || S.tSending) return;
   S.tSending = true;
@@ -272,6 +876,7 @@ async function sendThread(e) {
     return toast(r.message || 'Gửi bình luận lỗi', 'err');
   }
   $('t-text').value = '';
+  setDraft(`${c.id}:${t.root.id}`, '');
   tAutosize();
   if (r.post && S.thread === t) {
     S.lastSync = Math.max(S.lastSync, r.post.updateAt || 0, r.post.createAt || 0);
@@ -426,7 +1031,7 @@ function listItem(c) {
     'button',
     { type: 'button', class: 'item' + (S.sel?.id === c.id ? ' sel' : '') + (unread ? ' unread' : ''), 'aria-current': S.sel?.id === c.id ? 'true' : null, onclick: () => openChat(c.id) },
     dm ? avatar({ name: chatTitle(c), chatId: c.other?.chatId, pictureAt: c.other?.pictureAt }) : avatar({ name: chatTitle(c), seed: c.id, channel: true, locked: c.type === 'P' }),
-    el('span', { class: 'item-main' }, el('span', { class: 'item-title' }, el('span', { class: 'nm' }, chatTitle(c)), dm ? badges(c.other) : null), el('span', { class: 'item-sub' }, dm ? (c.type === 'G' ? 'Nhóm chat' : [c.other?.username ? '@' + c.other.username : contactNote(c) ? '' : 'Tin nhắn riêng', contactNote(c)].filter(Boolean).join(' · ')) : c.purpose || c.teamTitle)),
+    el('span', { class: 'item-main' }, el('span', { class: 'item-title' }, el('span', { class: 'nm' }, chatTitle(c)), dm ? badges(c.other) : null), S.sel?.id !== c.id && draftOf(c.id) ? el('span', { class: 'item-sub draft' }, '✏ Nháp: ' + draftOf(c.id).replace(/\s+/g, ' ').slice(0, 60)) : el('span', { class: 'item-sub' }, dm ? (c.type === 'G' ? 'Nhóm chat' : [c.other?.username ? '@' + c.other.username : contactNote(c) ? '' : 'Tin nhắn riêng', contactNote(c)].filter(Boolean).join(' · ')) : c.purpose || c.teamTitle)),
     el('span', { class: 'item-side' }, el('span', { class: 'item-time' }, shortTime(c.lastPostAt)), c.mentions ? el('span', { class: 'badge at' }, '@' + c.mentions) : c.unread ? el('span', { class: 'badge' }, c.unread > 99 ? '99+' : c.unread) : null),
   );
 }
@@ -520,7 +1125,7 @@ function renderList() {
   for (const b of document.querySelectorAll('#filters button')) b.classList.toggle('on', b.dataset.f === S.filter);
   if (!S.loaded && !S.error) return box.replaceChildren(...skeleton());
   if (!S.on || S.error) return box.replaceChildren();
-  const parts = [dmSection()];
+  const parts = [threadsEntry(), dmSection()];
   if (S.filter !== 'dm') {
     // Cộng đồng: nền đã xếp (đã ghim trước theo thứ tự ghim, rồi có tin mới nhất); hiện 5, còn lại sau "Xem thêm"
     const all = !!S.q || S.filter !== 'all' || S.more.has('teams');
@@ -551,7 +1156,8 @@ function showEmpty(title, text, { enable = false, web = false } = {}) {
   $('btn-enable').hidden = !enable && !web;
   $('btn-enable').textContent = enable ? 'Kết nối Chat Beincom' : 'Mở chat trên web Beincom';
   $('btn-enable').dataset.mode = enable ? 'enable' : 'web';
-  for (const id of ['conv-head', 'msgs', 'composer', 'jump', 'req-bar']) $(id).hidden = true;
+  for (const id of ['conv-head', 'msgs', 'composer', 'jump', 'req-bar', 'tview']) $(id).hidden = true;
+  S.view = '';
 }
 
 // ---------- Mở cuộc trò chuyện, tin nhắn ----------
@@ -575,10 +1181,21 @@ function addPosts(list) {
 async function openChat(id, { fromHash = false } = {}) {
   const c = findChat(id);
   if (!c) return;
+  if (S.view === 'threads') hideThreads();
   if (S.sel?.id !== c.id) {
     resetComposer();
     closeThread();
+    closePins();
+    closeMention();
+    S.editing = null;
+    renderReply();
+    $('text').value = draftOf(c.id);
+    S.pinned = null;
+    renderPinnedCount();
+    closeReactPop();
+    if (!$('search').hidden && S.sScope === 'channel') closeSearch();
     S.seenReplies = new Set();
+    loadPinned(c);
   }
   S.loadedAt = Date.now();
   // Tab Tin nhắn riêng / Lời mời theo cuộc trò chuyện đang mở (mở từ thông báo, từ kết quả tìm)
@@ -695,7 +1312,7 @@ async function reqAction(action) {
 function renderHead() {
   const c = S.sel;
   const dm = c.kind === 'dm';
-  $('conv-avatar').replaceWith(Object.assign(dm ? avatar({ name: chatTitle(c), chatId: c.other?.chatId, pictureAt: c.other?.pictureAt, size: 'lg' }) : avatar({ name: chatTitle(c), seed: c.id, channel: true, locked: c.type === 'P', size: 'lg' }), { id: 'conv-avatar' }));
+  $('conv-avatar').replaceWith(Object.assign(dm ? avatar({ name: chatTitle(c), chatId: c.other?.chatId, pictureAt: c.other?.pictureAt, size: 'lg' }) : avatar({ name: chatTitle(c), seed: c.id, channel: true, locked: c.type === 'P', size: 'lg' }), { id: 'conv-avatar', onclick: dm && c.other ? () => openPerson(c.other) : null, title: dm && c.other ? 'Hồ sơ, vi phạm, xử lý' : '' }));
   $('conv-title').replaceChildren(el('span', { class: 'nm' }, chatTitle(c)), ...(dm ? badges(c.other) : []));
   $('conv-sub').textContent = dm ? (c.type === 'G' ? 'Nhóm chat' : c.other?.username ? '@' + c.other.username + (c.req ? ' · lời mời trò chuyện' : ' · tin nhắn riêng') : c.req ? 'Lời mời trò chuyện' : 'Tin nhắn riêng') : [c.teamTitle, c.type === 'P' ? 'kênh riêng' : 'kênh chung', c.canDelete ? 'bạn là admin kênh' : ''].filter(Boolean).join(' · ');
   const team = dm ? (S.dmTeamName || '') : S.teams.find((t) => t.channels.some((x) => x.id === c.id))?.name || '';
@@ -742,12 +1359,15 @@ function renderMsgs({ scroll = 'auto' } = {}) {
 }
 
 // inThread: tin trong khung bình luận (mã phần tử 't-…', không có nút Bình luận / thanh thread)
-function messageEl(p, { first, last, mine, inThread = false }) {
+// mode: 'main' (cuộc trò chuyện) | 'thread' (khung bình luận) | 'pins' (tin đã ghim)
+function messageEl(p, { first, last, mine, inThread = false, mode = inThread ? 'thread' : 'main' }) {
+  inThread = mode !== 'main';
   const name = p.user.fullname || p.user.username || 'Người dùng';
   const canDel = !p.deleted && (mine || S.sel?.canDelete);
   const bubble = el('div', { class: 'bubble' });
   if (p.deleted) bubble.append('Tin nhắn đã bị xoá');
   else {
+    if (p.pinned && mode !== 'pins') bubble.append(el('span', { class: 'pin-tag' }, svgPin(), 'Đã ghim'));
     if (p.priority) bubble.append(el('span', { class: 'prio ' + p.priority }, svgPrio(p.priority), PRIO_LABEL[p.priority].toUpperCase()));
     if (p.message) bubble.append(...msgBody(p.message));
     if (p.files.length) bubble.append(filesEl(p.files, p));
@@ -758,15 +1378,20 @@ function messageEl(p, { first, last, mine, inThread = false }) {
     : el(
         'div',
         { class: 'tools' },
-        inThread ? null : el('button', { type: 'button', onclick: () => openThread(p) }, 'Bình luận'),
+        mode === 'search' ? el('button', { type: 'button', onclick: () => openSearchResult(p) }, 'Mở') : null,
+        mode === 'main' || mode === 'thread' ? el('button', { type: 'button', title: 'Thả biểu cảm', onclick: (e) => openReactPop(p, e.currentTarget) }, '😊') : null,
+        mode === 'main' ? el('button', { type: 'button', onclick: () => openThread(p) }, 'Bình luận') : null,
+        mode === 'pins' && S.posts.has(p.id) ? el('button', { type: 'button', onclick: () => (innerWidth <= 1180 && closePins(), flashTo(p.id)) }, 'Tới tin nhắn') : null,
+        mine && p.message && (mode === 'main' || mode === 'thread') ? el('button', { type: 'button', onclick: () => startEdit(p, mode === 'thread') }, 'Sửa') : null,
         p.message ? el('button', { type: 'button', onclick: () => copyMsg(p) }, 'Sao chép') : null,
-        canDel ? el('button', { type: 'button', class: 'del', onclick: () => deleteMsg(p, mine) }, 'Xoá') : null,
+        canPin(p) && !p.rootId && mode !== 'search' ? el('button', { type: 'button', onclick: () => togglePin(p) }, p.pinned ? 'Bỏ ghim' : 'Ghim') : null,
+        canDel && (mode === 'main' || mode === 'thread') ? el('button', { type: 'button', class: 'del', onclick: () => deleteMsg(p, mine) }, 'Xoá') : null,
       );
   return el(
     'div',
-    { class: `msg${mine ? ' me' : ''}${first ? ' first' : ''}${last ? ' last' : ''}${p.deleted ? ' deleted' : ''}${!mine && mentionsMe(p.message) ? ' mentioned' : ''}`, id: (inThread ? 't-' : 'm-') + p.id },
-    mine ? null : avatar({ name, chatId: p.user.chatId, pictureAt: p.user.pictureAt, size: 'sm' }),
-    el('div', { class: 'msg-col' }, first && !mine ? el('div', { class: 'msg-name', style: nameColor(p.user.chatId) }, name, ...badges(p.user), el('time', { title: fullTime(p.createAt) }, hm(p.createAt))) : null, bubble, !inThread && !p.deleted && p.replyCount > 0 ? threadBar(p) : null),
+    { class: `msg${mine ? ' me' : ''}${first ? ' first' : ''}${last ? ' last' : ''}${p.deleted ? ' deleted' : ''}${!mine && mentionsMe(p.message) ? ' mentioned' : ''}`, id: { main: 'm-', thread: 't-', pins: 'p-', search: 's-' }[mode] + p.id },
+    mine ? null : Object.assign(avatar({ name, chatId: p.user.chatId, pictureAt: p.user.pictureAt, size: 'sm' }), { onclick: () => openPerson(p.user), title: 'Xem ' + name }),
+    el('div', { class: 'msg-col' }, (first || mode === 'pins' || mode === 'search') && !mine ? el('div', { class: 'msg-name', style: nameColor(p.user.chatId) }, el('button', { type: 'button', class: 'nm-btn', title: 'Hồ sơ, vi phạm, xử lý', onclick: () => openPerson(p.user) }, name), ...badges(p.user), el('time', { title: fullTime(p.createAt) }, mode === 'pins' ? shortTime(p.createAt) + ' ' + hm(p.createAt) : hm(p.createAt))) : null, bubble, mode === 'search' ? null : reactsEl(p), mode === 'main' && !p.deleted && p.replyCount > 0 ? threadBar(p) : null),
     tools,
   );
 }
@@ -890,10 +1515,15 @@ function updateJump() {
 
 // ---------- Trả lời, sao chép, xoá ----------
 
+// Thanh trên ô gõ khi đang sửa tin (Esc hoặc ✕ để huỷ); lúc sửa không đính kèm / đặt độ ưu tiên
 function renderReply() {
-  const p = S.reply;
+  const p = S.editing;
   $('reply').hidden = !p;
-  $('reply-text').textContent = p ? `Trả lời ${p.user.fullname || p.user.username}: ${(BG.chatPlain(p.message) || '📎 tệp').slice(0, 100)}` : '';
+  $('reply').classList.toggle('editing', !!p);
+  $('reply-text').textContent = p ? `Sửa tin nhắn: ${(BG.chatPlain(p.message) || '📎 tệp').slice(0, 100)}` : '';
+  $('btn-attach').disabled = $('btn-prio').disabled = !!p;
+  if (p) $('text').placeholder = 'Sửa tin nhắn… (Enter lưu, Esc huỷ)';
+  else if (S.sel) applyComposer(S.sel);
 }
 
 async function copyMsg(p) {
@@ -953,6 +1583,7 @@ function updateSend() {
 async function sendMsg(e) {
   e?.preventDefault();
   const c = S.sel;
+  if (S.editing) return saveEdit();
   const text = $('text').value.trim();
   const fileIds = S.attach.filter((a) => a.status === 'ok').map((a) => a.id);
   if (!c || (!text && !fileIds.length) || S.sending || $('send').disabled) return;
@@ -968,6 +1599,7 @@ async function sendMsg(e) {
     return toast(r.message || 'Gửi tin lỗi', 'err');
   }
   $('text').value = '';
+  setDraft(c.id, '');
   S.reply = null;
   renderReply();
   resetComposer();
@@ -1104,6 +1736,10 @@ function applyOverview(r) {
   S.dms = (r.dms || []).map(keep);
   S.requests = (r.requests || []).map(keep);
   S.dmTeamName = r.dmTeam?.name || '';
+  if (r.threads) {
+    S.threadUnread = r.threads.unread;
+    S.threadMentions = r.threads.mentions;
+  }
 }
 
 function afterOverview() {
@@ -1122,9 +1758,10 @@ function afterOverview() {
   }
   renderMe();
   renderList();
-  if (!S.sel) {
+  if (!S.sel && S.view !== 'threads') {
     const want = new URLSearchParams(location.hash.slice(1)).get('c');
     if (want && findChat(want)) openChat(want, { fromHash: true });
+    else if (new URLSearchParams(location.hash.slice(1)).has('threads')) showThreads({ fromHash: true });
     else showEmpty('Chọn một cuộc trò chuyện', 'Tin nhắn riêng và kênh chat của các group bạn tham gia ở bên trái. Tin mới tự hiện khi trang đang mở.');
   }
 }
@@ -1409,9 +2046,17 @@ $('t-close').addEventListener('click', closeThread);
 $('t-follow').addEventListener('click', () => S.thread && toggleFollow(S.thread.root));
 $('t-more').addEventListener('click', loadMoreThread);
 $('t-composer').addEventListener('submit', sendThread);
-$('t-text').addEventListener('input', tAutosize);
+$('t-text').addEventListener('input', () => {
+  tAutosize();
+  mentionInput($('t-text'));
+  if (!S.tEditing) setDraft(threadKey(), $('t-text').value);
+});
 $('t-text').addEventListener('keydown', (e) => {
-  if (e.isComposing) return;
+  if (e.isComposing || mentionKey(e)) return;
+  if (e.key === 'Escape' && S.tEditing) {
+    e.preventDefault();
+    return cancelEdit(true);
+  }
   const t = $('t-text');
   if (e.ctrlKey || e.metaKey) {
     const k = SHORTCUTS.find(([code, shift, alt]) => e.code === code && e.shiftKey === shift && e.altKey === alt);
@@ -1431,6 +2076,11 @@ $('t-text').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') sendThread(e);
   if (e.key === 'Escape') closeThread();
 });
+for (const id of ['text', 't-text']) $(id).addEventListener('blur', () => setTimeout(() => document.activeElement !== $(id) && closeMention(), 150));
+$('t-edit-x').addEventListener('click', () => (cancelEdit(true), $('t-text').focus()));
+$('btn-pinned').addEventListener('click', () => ($('pins').hidden ? openPins() : closePins()));
+$('p-close').addEventListener('click', closePins);
+$('person').addEventListener('click', (e) => e.target === $('person') && $('person').close());
 
 $('req-accept').addEventListener('click', () => reqAction('accept'));
 $('req-ignore').addEventListener('click', () => reqAction('ignore'));
@@ -1483,10 +2133,26 @@ $('v-stage').addEventListener('pointerup', (e) => {
 });
 
 $('composer').addEventListener('submit', sendMsg);
-$('text').addEventListener('input', autosize);
+$('text').addEventListener('input', () => {
+  autosize();
+  mentionInput($('text'));
+  if (S.sel && !S.editing) setDraft(S.sel.id, $('text').value);
+});
 $('text').addEventListener('blur', () => (S.caret = $('text').selectionStart));
 $('text').addEventListener('keydown', (e) => {
-  if (e.isComposing) return;
+  if (e.isComposing || mentionKey(e)) return;
+  // Mũi tên lên khi ô gõ trống: sửa tin gần nhất của mình (như Slack / Mattermost)
+  if (e.key === 'ArrowUp' && !$('text').value && !S.editing) {
+    const last = sortedPosts().filter((p) => p.user.chatId === S.me?.chatId && !p.deleted && !p.system && p.message).pop();
+    if (last) {
+      e.preventDefault();
+      return startEdit(last);
+    }
+  }
+  if (e.key === 'Escape' && S.editing) {
+    e.preventDefault();
+    return cancelEdit();
+  }
   // Phím tắt định dạng như web: Ctrl + B / I, Ctrl + Shift + X, Ctrl + Alt + K / C, Ctrl + Shift + 7 / 8 / 9; Ctrl + Alt + P xem trước
   if (e.ctrlKey || e.metaKey) {
     const k = SHORTCUTS.find(([code, shift, alt]) => e.code === code && e.shiftKey === shift && e.altKey === alt);
@@ -1515,8 +2181,7 @@ $('text').addEventListener('keydown', (e) => {
   }
 });
 $('reply-x').addEventListener('click', () => {
-  S.reply = null;
-  renderReply();
+  cancelEdit();
   $('text').focus();
 });
 $('older').addEventListener('click', loadOlder);
@@ -1529,6 +2194,22 @@ $('jump').addEventListener('click', () => {
   S.newBelow = 0;
   updateJump();
 });
+$('tv-back').addEventListener('click', () => {
+  hideThreads();
+  $('app').classList.remove('open');
+  history.replaceState(null, '', location.href.split('#')[0]);
+  renderList();
+  showEmpty('Chọn một cuộc trò chuyện', 'Tin nhắn riêng và kênh chat của các group bạn tham gia ở bên trái. Tin mới tự hiện khi trang đang mở.');
+});
+$('tv-refresh').addEventListener('click', loadThreads);
+for (const b of document.querySelectorAll('#tv-filters button')) {
+  b.addEventListener('click', () => {
+    if (S.tlistFilter === b.dataset.f) return;
+    S.tlistFilter = b.dataset.f;
+    renderThreads();
+    loadThreads();
+  });
+}
 $('back').addEventListener('click', () => {
   S.sel = null;
   $('app').classList.remove('open');
@@ -1539,6 +2220,28 @@ $('q').addEventListener('input', () => {
   S.q = $('q').value.trim();
   renderList();
 });
+// Enter ở ô tìm cuộc trò chuyện: tìm chữ đó trong tin nhắn ở mọi nơi
+$('q').addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter' || e.isComposing || $('q').value.trim().length < 2) return;
+  e.preventDefault();
+  if (!S.sel) $('app').classList.add('open');
+  openSearch($('q').value.trim(), 'all');
+});
+$('btn-search').addEventListener('click', () => ($('search').hidden ? openSearch('', 'channel') : closeSearch()));
+$('s-close').addEventListener('click', closeSearch);
+$('s-form').addEventListener('submit', (e) => (e.preventDefault(), runSearch()));
+$('s-q').addEventListener('keydown', (e) => e.key === 'Escape' && (e.preventDefault(), closeSearch()));
+for (const b of document.querySelectorAll('#s-scope button')) {
+  b.addEventListener('click', () => {
+    S.sScope = b.dataset.s;
+    renderSearchScope();
+    if ($('s-q').value.trim().length >= 2) runSearch();
+  });
+}
+document.addEventListener('mousedown', (e) => {
+  if (!$('react-pop').hidden && !e.target.closest?.('#react-pop, .rc.add, .tools button')) closeReactPop();
+});
+document.addEventListener('keydown', (e) => e.key === 'Escape' && closeReactPop());
 for (const b of document.querySelectorAll('#filters button')) {
   b.addEventListener('click', () => {
     S.filter = b.dataset.f;

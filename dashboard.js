@@ -171,6 +171,10 @@ async function loadAll() {
     if (p.get('todo')) openTodo(p.get('todo')); // mở từ thông báo việc chờ lâu
     if (p.get('guard')) openGuard(); // mở từ thông báo tài khoản giống admin / đợt vào ồ ạt
     if (p.get('chat')) openChat(); // mở từ thông báo tin nhắn chat vi phạm
+    // Từ trang Chat (bấm tên người): Dọn tài khoản / hồ sơ vi phạm của người đó
+    const who = { id: p.get('cleanup') || p.get('profile') || '', username: p.get('u') || '', fullname: p.get('n') || '' };
+    if (p.get('cleanup') && who.id) cleanupUser(who);
+    else if (p.get('profile') && who.id) openProfile(who);
     // Cài mới: Bắt đầu nhanh; vừa cập nhật: Có gì mới; chưa hỏi ý: gửi báo cáo sử dụng (mỗi lần mở chỉ một hộp)
     checkOnboarding()
       .then((shown) => shown || checkWhatsNew())
