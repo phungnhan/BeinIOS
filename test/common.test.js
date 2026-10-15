@@ -1417,7 +1417,7 @@ test('BG chia thành common.js + lib/*.js: mọi nơi nạp đúng thứ tự BG
   assert.deepEqual(tags('popup.html'), ['common.js']); // popup chỉ nạp lõi; lib/*.js nạp khi cần (popup.js loadLib theo BG.PARTS)
   assert.match(fs.readFileSync(path.join(root, 'popup.js'), 'utf8'), /for \(const p of BG\.PARTS\)/);
   assert.deepEqual(tags('chat.html'), expected);
-  assert.match(fs.readFileSync(path.join(root, 'background.js'), 'utf8'), /importScripts\('common\.js'\);\nimportScripts\(\.\.\.BG\.PARTS\.map\(\(p\) => `lib\/\$\{p\}\.js`\)\);/);
+  assert.match(fs.readFileSync(path.join(root, 'background.js'), 'utf8'), /importScripts\('common\.js'\);\r?\nimportScripts\(\.\.\.BG\.PARTS\.map\(\(p\) => `lib\/\$\{p\}\.js`\)\);/);
   assert.deepEqual(fs.readdirSync(path.join(root, 'lib')).sort(), BG.PARTS.map((p) => p + '.js').sort());
   for (const f of ['norm', 'slimPerson', 'evaluateRequest', 'evaluatePostIn', 'validateCompose', 'mdToPlate', 'readBackup', 'monthlyReport', 'tgKeyboard', 'pushDiag']) assert.equal(typeof BG[f], 'function', f);
 });
