@@ -235,9 +235,11 @@
           ok: res.ok || res.status === 401,
           status: res.status,
           latency,
-          message: res.status === 401 
-            ? `Proxy hoạt động tốt (${latency}ms)! Cần đăng nhập/cập nhật Token.` 
-            : `Kết nối thành công qua Cloudflare Proxy (${latency}ms)!`
+          message: res.ok
+            ? `Kết nối thành công qua Cloudflare Proxy (${latency}ms)!`
+            : res.status === 401
+              ? `Proxy hoạt động tốt (${latency}ms)! Cần đăng nhập/cập nhật Token.`
+              : `Proxy kết nối được (${latency}ms) nhưng API trả về lỗi ${res.status}. Kiểm tra lại Token.`
         };
       } catch (err) {
         return { ok: false, message: `Lỗi kết nối: ${err.message}` };
