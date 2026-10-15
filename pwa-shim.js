@@ -227,22 +227,50 @@
       if (!config.proxyUrl) {
         return { ok: false, message: 'Chưa cấu hình Cloudflare Proxy URL!' };
       }
+      const proxyUrl = config.proxyUrl.replace(/\/$/, '');
+      const start = Date.now();
+
       try {
-        const start = Date.now();
-        const res = await fetch('https://api.beincom.com/group/me/permissions');
+        // Bước 1: Kiểm tra proxy health endpoint
+        const healthRes = await originalFetch(`${proxyUrl}/health`);
+        if (!healthRes.ok) {
+          const ms = Date.now() - start;
+          return { ok: false, message: `Proxy không phản hồi (${ms}ms). Kiểm tra lại URL Worker.` };
+        }
+      } catch (err) {
+        return { ok: false, message: `Không kết nối được tới Proxy: ${err.message}` };
+      }
+
+      try {
+        // Bước 2: Kiểm tra API Beincom qua proxy với auth token
+        const headers = new Headers({
+          'x-application': 'BIC_GROUP',
+          'x-platform': 'WEB'
+        });
+        const authToken = config.authToken || '';
+        if (authToken) {
+          headers.set('Authorization', authToken.startsWith('Bearer ') ? authToken : `Bearer ${authToken}`);
+        }
+
+        const targetUrl = 'https://api.beincom.com/v1/community/communities';
+        const proxiedUrl = `${proxyUrl}/proxy?url=${encodeURIComponent(targetUrl)}`;
+        const res = await originalFetch(proxiedUrl, { headers });
         const latency = Date.now() - start;
+
         return {
-          ok: res.ok || res.status === 401,
+          ok: res.ok || res.status === 401 || res.status === 403,
           status: res.status,
           latency,
           message: res.ok
-            ? `Kết nối thành công qua Cloudflare Proxy (${latency}ms)!`
+            ? `✅ Kết nối thành công! Proxy ${latency}ms — Sẵn sàng dùng BeinIOS!`
             : res.status === 401
-              ? `Proxy hoạt động tốt (${latency}ms)! Cần đăng nhập/cập nhật Token.`
-              : `Proxy kết nối được (${latency}ms) nhưng API trả về lỗi ${res.status}. Kiểm tra lại Token.`
+              ? `⚠️ Proxy OK (${latency}ms) — Token hết hạn, cần lấy lại từ DevTools.`
+              : res.status === 403
+                ? `⚠️ Proxy OK (${latency}ms) — Token thiếu quyền truy cập.`
+                : `⚠️ Proxy OK (${latency}ms) — API trả về lỗi ${res.status}.`
         };
       } catch (err) {
-        return { ok: false, message: `Lỗi kết nối: ${err.message}` };
+        return { ok: false, message: `Proxy OK nhưng lỗi gọi API: ${err.message}` };
       }
     }
   };
