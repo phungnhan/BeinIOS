@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="referrer" content="no-referrer" />
+  <title>Nhận đăng nhập · BeinIOS</title>
+  <link rel="icon" href="icons/icon48.png" />
+  <!-- Trang mở khi quét mã QR của addon (Cài đặt → Chuyển đăng nhập sang BeinIOS). Đăng nhập nằm sau dấu # nên không gửi
+       lên máy chủ nào; trang xoá nó khỏi thanh địa chỉ ngay khi mở. -->
+  <script>
+    window.__BEIN_IMPORT__ = true;
+    window.__beinTransfer = location.hash.slice(1);
+    if (location.hash) history.replaceState(null, '', location.pathname);
+  </script>
+  <script src="pwa-shim.js"></script>
+  <style>
+    :root { --bg: #f4f5f9; --card: #fff; --line: #e3e5ee; --text: #171a24; --sub: #5d6375; --accent: #6b3fe7; --ok: #12a150; --bad: #d93a3a; color-scheme: light; }
+    @media (prefers-color-scheme: dark) {
+      :root { --bg: #0f1117; --card: #191c26; --line: #2b2f3d; --text: #eef0f6; --sub: #9aa1b5; --accent: #9d7bff; color-scheme: dark; }
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; padding: calc(20px + env(safe-area-inset-top, 0px)) 16px 32px; }
+    .card { max-width: 520px; margin: 0 auto; background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 18px; }
+    h1 { font-size: 19px; margin: 0 0 6px; }
+    p { margin: 8px 0; }
+    .sub { color: var(--sub); font-size: 13.5px; }
+    .ok { color: var(--ok); }
+    .bad { color: var(--bad); }
+    .btn { display: block; width: 100%; margin-top: 12px; padding: 13px 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--card); color: var(--text); font: 600 15px/1.2 inherit; font-family: inherit; text-align: center; text-decoration: none; cursor: pointer; }
+    .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+    ol { padding-left: 20px; margin: 8px 0; }
+    li { margin: 4px 0; }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <h1>Nhận đăng nhập từ addon</h1>
+    <p id="info" class="sub">Đang đọc…</p>
+    <div id="actions" hidden>
+      <button type="button" class="btn primary" id="copy">Chép để dán vào ứng dụng BeinIOS</button>
+      <p id="copied" class="sub" hidden></p>
+      <ol class="sub">
+        <li>Mở <b>BeinIOS</b> từ biểu tượng trên Màn hình chính.</li>
+        <li>Vào <b>Cài đặt</b> → bấm <b>Dán từ addon</b> (iPhone hỏi Dán thì bấm Dán).</li>
+      </ol>
+      <button type="button" class="btn" id="here">Dùng BeinIOS ngay trong Safari</button>
+      <p class="sub">Đoạn này là chìa khoá tài khoản Beincom: đóng trang sau khi xong, đừng gửi cho người khác.</p>
+    </div>
+  </main>
+  <script>
+    (() => {
+      const PWA = window.BeinPWA;
+      const $ = (id) => document.getElementById(id);
+      let text = window.__beinTransfer || '';
+      window.__beinTransfer = '';
+      const data = PWA.parseTransfer(text);
+      if (!data) {
+        $('info').className = 'bad';
+        $('info').textContent = 'Link không có đăng nhập hợp lệ. Trên máy tính, bấm lại "Chuyển đăng nhập sang BeinIOS" ở addon rồi quét mã mới.';
+        return;
+      }
+      const n = (k) => Object.keys(data[k]).length;
+      const when = data.at ? new Date(data.at).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' }) : '';
+      $('info').textContent = `Đăng nhập Beincom${when ? ' tạo lúc ' + when : ''}: ${n('api')} cookie Beincom · ${n('chat')} cookie Chat${n('auth') ? ' · ' + n('auth') + ' cookie máy chủ đăng nhập' : ''}.`;
+      $('actions').hidden = false;
+      $('copy').onclick = async () => {
+        try {
+          await navigator.clipboard.writeText(text);
+          $('copied').hidden = false;
+          $('copied').className = 'ok';
+          $('copied').textContent = 'Đã chép. Mở BeinIOS từ Màn hình chính → Cài đặt → Dán từ addon.';
+        } catch {
+          $('copied').hidden = false;
+          $('copied').className = 'bad';
+          $('copied').textContent = 'Không chép được — thử bấm lại.';
+        }
+      };
+      // Ứng dụng trên Màn hình chính có kho dữ liệu riêng với Safari; nút này chỉ để dùng BeinIOS trong chính Safari
+      $('here').onclick = async () => {
+        const { net } = PWA.shared();
+        await net.load();
+        await net.saveConfig({ jars: { api: data.api, chat: data.chat, auth: data.auth }, savedAt: Date.now(), status: null });
+        text = '';
+        location.href = 'index.html';
+      };
+    })();
+  </script>
+</body>
+</html>

@@ -156,6 +156,9 @@
     #result .ok { color: var(--ok); }
     #result .warn { color: var(--warn); }
     #result .bad { color: var(--bad); }
+    details.alt { margin-top: 12px; border-top: 1px solid var(--line); padding-top: 10px; }
+    details.alt summary { cursor: pointer; font-weight: 600; font-size: 13px; color: var(--sub); }
+    #addon-text { margin-top: 10px; }
     .note { border-left: 3px solid var(--warn); padding: 6px 10px; background: color-mix(in srgb, var(--warn) 9%, transparent); border-radius: 6px; font-size: 12.5px; color: var(--text); margin-top: 10px; }
     code { font-size: 12px; background: var(--field); border: 1px solid var(--line); border-radius: 5px; padding: 0 4px; }
     .ver { color: var(--sub); font-size: 12px; text-align: center; margin-top: 8px; }
@@ -199,23 +202,32 @@
       </div>
 
       <div class="card">
-        <h2>2. Cookie đăng nhập Beincom</h2>
+        <h2>2. Đăng nhập Beincom</h2>
         <div class="help">
-          Làm trên máy tính (một lần, khi hết phiên thì làm lại):
+          <b>Cách nhanh — addon BeinFusion trên máy tính</b> (bản 0.51.0 trở lên):
           <ol>
-            <li>Mở <b>cửa sổ ẩn danh</b> Chrome / Edge, đăng nhập <code>group.beincom.com</code>.</li>
+            <li>Mở <b>cửa sổ ẩn danh</b> Chrome / Edge, đăng nhập <code>group.beincom.com</code> (dùng Chat thì mở cả <code>chat.beincom.com</code>). Addon cần được bật "Cho phép ở chế độ ẩn danh".</li>
+            <li>Dashboard của addon → <b>Cài đặt</b> → 📱 BeinIOS → <b>Chuyển đăng nhập sang BeinIOS</b>.</li>
+            <li>Quét mã QR bằng Camera iPhone → mở link → bấm <b>Chép</b> (hoặc bấm Chép ngay trên máy tính rồi tự chuyển đoạn chữ sang iPhone).</li>
+            <li>Bấm <b>Dán từ addon</b> dưới đây. Đóng cửa sổ ẩn danh — <b>đừng bấm Đăng xuất</b>.</li>
+          </ol>
+        </div>
+        <div class="row"><button type="button" class="btn primary" id="paste-addon">Dán từ addon</button></div>
+        <textarea id="addon-text" hidden autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Không đọc được bộ nhớ tạm — dán đoạn BEINIOS1… vào đây rồi bấm Lưu &amp; kiểm tra"></textarea>
+        <div class="saved none" id="saved-all"></div>
+        <details class="alt" id="curl-box">
+          <summary>Cách khác: dán cURL từ F12 (không cần addon)</summary>
+          <ol class="help">
+            <li>Mở <b>cửa sổ ẩn danh</b>, đăng nhập <code>group.beincom.com</code>.</li>
             <li>Bấm F12 → thẻ <b>Network</b>, gõ <code>api.beincom.com</code> vào ô lọc, tải lại trang.</li>
             <li>Chuột phải một dòng (ví dụ <code>permissions</code>) → <b>Copy</b> → <b>Copy as cURL (bash)</b>, dán vào ô dưới.</li>
             <li>Dùng Chat: mở <code>chat.beincom.com</code> trong cùng cửa sổ, lọc <code>chat.beincom.com/api</code>, làm như trên với ô thứ hai.</li>
-            <li>Đóng cửa sổ ẩn danh — <b>đừng bấm Đăng xuất</b> (đăng xuất làm cookie hết hiệu lực).</li>
           </ol>
-        </div>
-        <label for="cookie-api">Beincom (api.beincom.com)</label>
-        <textarea id="cookie-api" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Dán cURL hoặc dòng Cookie… (để trống: giữ cookie đã lưu)"></textarea>
-        <div class="saved none" id="saved-api"></div>
-        <label for="cookie-chat">Chat (chat.beincom.com) — không bắt buộc</label>
-        <textarea id="cookie-chat" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Dán cURL hoặc dòng Cookie của chat.beincom.com…"></textarea>
-        <div class="saved none" id="saved-chat"></div>
+          <label for="cookie-api">Beincom (api.beincom.com)</label>
+          <textarea id="cookie-api" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Dán cURL hoặc dòng Cookie… (để trống: giữ cookie đã lưu)"></textarea>
+          <label for="cookie-chat">Chat (chat.beincom.com) — không bắt buộc</label>
+          <textarea id="cookie-chat" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Dán cURL hoặc dòng Cookie của chat.beincom.com…"></textarea>
+        </details>
         <label class="check"><input type="checkbox" id="refresh" checked /> Tự làm mới phiên khi Beincom báo hết hạn (như web Beincom)</label>
         <div class="note">Cookie là chìa khoá tài khoản: chỉ dán trên máy của bạn, xoá tin / ghi chú dùng để chuyển cookie sang điện thoại. Dữ liệu lưu trong trình duyệt theo địa chỉ <code id="origin"></code> — các trang GitHub Pages khác của bạn cùng địa chỉ này cũng đọc được, đừng đưa mã của người khác lên đó.</div>
       </div>
@@ -321,12 +333,10 @@
       // ---------- Cài đặt ----------
       const fmtTime = (t) => (t ? new Date(t).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' }) : '');
       function renderSaved(cfg) {
-        for (const k of ['api', 'chat']) {
-          const n = Object.keys(cfg.jars[k] || {}).length;
-          const el = $('saved-' + k);
-          el.className = 'saved' + (n ? '' : ' none');
-          el.textContent = n ? `Đã lưu ${n} cookie${cfg.savedAt ? ' (lúc ' + fmtTime(cfg.savedAt) + ')' : ''}.` : k === 'chat' ? 'Chưa có — Chat dùng cookie Beincom ở trên.' : 'Chưa có cookie.';
-        }
+        const n = (k) => Object.keys(cfg.jars[k] || {}).length;
+        const el = $('saved-all');
+        el.className = 'saved' + (n('api') ? '' : ' none');
+        el.textContent = n('api') ? `Đã lưu ${n('api')} cookie Beincom · ${n('chat') ? n('chat') + ' cookie Chat' : 'Chat dùng cookie Beincom'}${n('auth') ? ' · ' + n('auth') + ' cookie máy chủ đăng nhập' : ''}${cfg.savedAt ? ' (lúc ' + fmtTime(cfg.savedAt) + ')' : ''}.` : 'Chưa có cookie đăng nhập.';
       }
       function renderDot(cfg) {
         const dot = $('dot');
@@ -344,6 +354,8 @@
         $('refresh').checked = cfg.refresh !== false;
         $('cookie-api').value = '';
         $('cookie-chat').value = '';
+        $('addon-text').value = '';
+        $('addon-text').hidden = true;
         renderSaved(cfg);
         if (cfg.status && !cfg.status.ok) {
           $('result').innerHTML = '';
@@ -431,8 +443,19 @@
         $('result').innerHTML = '';
         try {
           const cfg = (await net.load(), net.config);
-          const jars = { api: { ...cfg.jars.api }, chat: { ...cfg.jars.chat } };
-          for (const k of ['api', 'chat']) {
+          let jars = { api: { ...cfg.jars.api }, chat: { ...cfg.jars.chat }, auth: { ...cfg.jars.auth } };
+          // Đoạn của addon (nút Dán từ addon, ô dự phòng, hoặc dán vào ô cURL): thay cả ba ô cookie
+          const addonText = pendingTransfer || [$('addon-text').value, $('cookie-api').value, $('cookie-chat').value].find((t) => t.includes('BEINIOS1.')) || '';
+          pendingTransfer = '';
+          const fromAddon = addonText ? PWA.parseTransfer(addonText) : null;
+          if (addonText && !fromAddon) line('Đoạn từ addon không đọc được (thiếu chữ hoặc mã cũ) — tạo mã mới ở addon rồi chép lại.', 'bad');
+          if (fromAddon) {
+            jars = { api: fromAddon.api, chat: fromAddon.chat, auth: fromAddon.auth };
+            const age = Date.now() - fromAddon.at;
+            line(`Đã nhận đăng nhập từ addon${fromAddon.at ? ' (tạo lúc ' + fmtTime(fromAddon.at) + ')' : ''}.`, 'ok');
+            if (age > 30 * 60e3) line('Đoạn này tạo đã lâu — nếu kiểm tra báo hết phiên, tạo mã mới ở addon.', 'warn');
+          }
+          for (const k of fromAddon ? [] : ['api', 'chat']) {
             const text = $('cookie-' + k).value.trim();
             if (!text) continue;
             const { jar, host } = PWA.parseCookieInput(text);
@@ -444,6 +467,7 @@
             const to = host === 'chat.beincom.com' ? 'chat' : host && host.endsWith('beincom.com') ? 'api' : k;
             if (to !== k) line(`Đoạn ở ô ${k === 'api' ? 'Beincom' : 'Chat'} là của ${host} — đã lưu vào ô ${to === 'api' ? 'Beincom' : 'Chat'}.`, 'warn');
             jars[to] = jar;
+            if (to === 'api') jars.auth = {}; // phiên mới dán tay: bỏ cookie máy chủ đăng nhập của phiên cũ (từ addon)
           }
           let proxyUrl = $('proxy-url').value.trim();
           if (proxyUrl && !/^(https:\/\/[^/\s]+|http:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/|$))/.test(proxyUrl)) {
@@ -457,6 +481,8 @@
           await net.saveConfig({ proxyUrl, proxyKey: $('proxy-key').value.trim(), jars, refresh: $('refresh').checked, status: null, ...(changedJar ? { savedAt: Date.now() } : {}) });
           $('cookie-api').value = '';
           $('cookie-chat').value = '';
+          $('addon-text').value = '';
+          $('addon-text').hidden = true;
           renderSaved(net.config);
           navigator.storage?.persist?.().catch(() => {});
           if (!proxyUrl || !net.config.proxyKey) return line('Đã lưu. Điền địa chỉ và khoá proxy để kiểm tra.', 'warn');
@@ -471,9 +497,26 @@
         }
       };
 
+      // Dán từ addon: đọc bộ nhớ tạm (iPhone hỏi "Dán" một lần); không đọc được thì hiện ô để dán tay
+      let pendingTransfer = '';
+      $('paste-addon').onclick = async () => {
+        $('result').innerHTML = '';
+        let text = '';
+        try {
+          text = await navigator.clipboard.readText();
+        } catch {}
+        if (!text.includes('BEINIOS1.')) {
+          $('addon-text').hidden = false;
+          $('addon-text').focus();
+          return line(text ? 'Bộ nhớ tạm không có đoạn của addon (BEINIOS1…). Chép lại ở addon / trang quét mã, hoặc dán vào ô vừa hiện.' : 'Dán đoạn của addon vào ô vừa hiện rồi bấm Lưu & kiểm tra.', 'warn');
+        }
+        pendingTransfer = text;
+        $('save').click();
+      };
+
       $('forget').onclick = async () => {
         if (!confirm('Xoá cookie Beincom khỏi máy này? (Proxy vẫn giữ nguyên.)')) return;
-        await net.saveConfig({ jars: { api: {}, chat: {} }, status: null, savedAt: 0 });
+        await net.saveConfig({ jars: { api: {}, chat: {}, auth: {} }, status: null, savedAt: 0 });
         renderSaved(net.config);
         $('result').innerHTML = '';
         line('Đã xoá cookie.', 'ok');

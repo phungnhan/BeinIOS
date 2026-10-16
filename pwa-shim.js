@@ -13,7 +13,7 @@
   'use strict';
   if (G.BeinPWA) return;
   const PWA = (G.BeinPWA = {});
-  const VERSION = '1.0.2';
+  const VERSION = '1.1.0';
   PWA.VERSION = VERSION;
 
   // ---------- 1. Kho lưu trữ ----------
@@ -282,8 +282,19 @@
       return false;
     }
   };
-  // Cookie gửi tới chat.beincom.com lấy từ ô "Cookie Chat" (trống thì dùng chung ô Beincom); máy chủ khác: ô Beincom
-  const jarOf = (host) => (host === CHAT_HOST ? 'chat' : 'api');
+  // Ba ô cookie như trình duyệt gửi tới từng máy chủ: api (api / group / upload .beincom.com), chat (chat.beincom.com),
+  // auth (auth.beincom.com — máy chủ đăng nhập, dùng khi làm mới phiên). Ô chat / auth trống thì dùng ô api
+  // (dán cURL chỉ có ô api; "Dán từ addon" có đủ ba ô).
+  const AUTH_HOST = 'auth.beincom.com';
+  const JAR_NAMES = ['api', 'chat', 'auth'];
+  const jarOf = (host) => (host === CHAT_HOST ? 'chat' : host === AUTH_HOST ? 'auth' : 'api');
+  const hasJar = (jars, j) => Object.keys(jars?.[j] || {}).length > 0;
+  const jarFor = (jars, host) => {
+    const j = jarOf(host);
+    return j !== 'api' && hasJar(jars, j) ? j : 'api';
+  };
+  // Phiên Beincom (group) hay phiên Chat: mỗi phiên làm mới riêng, báo hết hạn riêng
+  const sessionOf = (host) => (host === CHAT_HOST ? 'chat' : 'api');
 
   // Dán Cookie từ DevTools: chấp nhận "Cookie: a=b; c=d", "a=b; c=d", hoặc nguyên lệnh cURL (Copy as cURL)
   function parseCookieInput(text) {
@@ -309,6 +320,26 @@
     }
     return { jar, host };
   }
+  // Đoạn "Dán từ addon" (addon BeinFusion → Cài đặt → Chuyển đăng nhập sang BeinIOS, lib/transfer.js cùng định dạng):
+  // "BEINIOS1." + base64url(JSON { v: 1, t, c: [[tên, giá trị, ô]] }), ô: 1 = api, 2 = chat, 4 = auth. Nhận cả link nhap.html#…
+  const TRANSFER_PREFIX = 'BEINIOS1.';
+  function parseTransfer(text) {
+    const s = String(text || '').trim();
+    const i = s.indexOf(TRANSFER_PREFIX);
+    if (i < 0) return null;
+    try {
+      const b64 = s.slice(i + TRANSFER_PREFIX.length).split(/[\s#&]/)[0];
+      const bin = atob(b64.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - (b64.length % 4)) % 4));
+      const d = JSON.parse(new TextDecoder().decode(Uint8Array.from(bin, (ch) => ch.charCodeAt(0))));
+      if (d?.v !== 1 || !Array.isArray(d.c)) return null;
+      const out = { at: Number(d.t) || 0, api: {}, chat: {}, auth: {} };
+      for (const [name, value, mask] of d.c) JAR_NAMES.forEach((j, k) => mask & (1 << k) && (out[j][String(name)] = String(value)));
+      return Object.keys(out.api).length || Object.keys(out.chat).length ? out : null;
+    } catch {
+      return null;
+    }
+  }
+
   const cookieString = (jar) =>
     Object.entries(jar || {})
       .map(([k, v]) => `${k}=${v}`)
@@ -336,16 +367,17 @@
     return out;
   }
 
-  // Cập nhật hai ô cookie theo Set-Cookie của một máy chủ (trả về ô mới, không sửa ô cũ)
+  // Cập nhật các ô cookie theo Set-Cookie của một máy chủ (trả về ô mới, không sửa ô cũ)
   function applySetCookies(jars, host, lines, now = Date.now()) {
-    const next = { api: { ...(jars?.api || {}) }, chat: { ...(jars?.chat || {}) } };
+    const next = Object.fromEntries(JAR_NAMES.map((j) => [j, { ...(jars?.[j] || {}) }]));
     let changed = false;
     for (const line of lines || []) {
       const c = parseSetCookie(line, now);
       if (!c) continue;
       const shared = c.domain === 'beincom.com';
-      // Cookie chung .beincom.com: trình duyệt gửi cho mọi máy chủ Beincom -> cập nhật ô Beincom, và ô Chat nếu đang có tên đó
-      const targets = shared ? ['api', ...(c.name in next.chat ? ['chat'] : [])] : [jarOf(host)];
+      // Cookie chung .beincom.com: trình duyệt gửi cho mọi máy chủ Beincom -> cập nhật ô Beincom và các ô đang dùng;
+      // cookie riêng một máy chủ -> ô dùng cho máy chủ đó
+      const targets = shared ? JAR_NAMES.filter((j) => j === 'api' || hasJar(jars, j)) : [jarFor(jars, host)];
       for (const t of targets) {
         if (c.remove) {
           if (c.name in next[t]) {
@@ -425,8 +457,7 @@
     async function viaProxy(url, init = {}) {
       const host = new URL(url).hostname;
       const headers = new Headers(init.headers || {});
-      const jarName = jarOf(host);
-      const jar = jarName === 'chat' && Object.keys(cfg.jars.chat).length ? cfg.jars.chat : cfg.jars.api;
+      const jar = cfg.jars[jarFor(cfg.jars, host)];
       headers.set('x-beinios-key', cfg.proxyKey);
       const cookie = cookieString(jar);
       if (cookie) headers.set('x-bein-cookie', cookie);
@@ -437,12 +468,14 @@
       return res;
     }
 
-    // Làm mới phiên (như web Beincom khi gặp 401): mỗi ô cookie chỉ một lần cùng lúc
+    // Làm mới phiên (như web Beincom khi gặp 401): mỗi phiên chỉ một lần cùng lúc. Cookie gửi máy chủ đăng nhập: ô auth
+    // (có khi dán từ addon), không có thì ô của phiên
     const refreshing = new Map();
     function refreshSession(jarName) {
       if (refreshing.has(jarName)) return refreshing.get(jarName);
       const p = (async () => {
-        const jar = jarName === 'chat' && Object.keys(cfg.jars.chat).length ? cfg.jars.chat : cfg.jars.api;
+        const via = hasJar(cfg.jars, 'auth') ? AUTH_HOST : jarName === 'chat' ? CHAT_HOST : 'api.beincom.com';
+        const jar = cfg.jars[jarFor(cfg.jars, via)];
         if (!Object.keys(jar).length) return false;
         let deviceId = jar[DEVICE_COOKIE] ? decodeURIComponent(jar[DEVICE_COOKIE]) : cfg.deviceId;
         if (!deviceId) deviceId = (await saveConfig({ deviceId: newDeviceId() })).deviceId;
@@ -456,8 +489,8 @@
           try {
             lines = JSON.parse(raw || '[]');
           } catch {}
-          // Cookie mới của phiên: máy chủ đăng nhập đặt cho cả .beincom.com; host-only của auth thì gắn vào ô đang làm mới
-          const next = applySetCookies(cfg.jars, jarName === 'chat' ? CHAT_HOST : 'api.beincom.com', lines);
+          // Cookie mới của phiên: chung .beincom.com -> mọi ô đang dùng; riêng máy chủ đăng nhập -> ô vừa gửi đi
+          const next = applySetCookies(cfg.jars, via, lines);
           if (next) await saveConfig({ jars: next });
           return res.ok;
         } catch {
@@ -479,10 +512,10 @@
       const host = new URL(url).hostname;
       let res = await viaProxy(url, opts);
       if (res.status === 401 && cfg.refresh !== false && !res.headers.get('x-bein-proxy-error') && host !== 'auth.beincom.com') {
-        const ok = await refreshSession(jarOf(host));
+        const ok = await refreshSession(sessionOf(host));
         if (ok) res = await viaProxy(url, opts);
-        if (res.status === 401) await noteStatus({ ok: false, code: 'session', host: jarOf(host), at: Date.now() });
-      } else if (res.ok && cfg.status && !cfg.status.ok && (cfg.status.code !== 'session' || cfg.status.host === jarOf(host))) await noteStatus({ ok: true, at: Date.now() });
+        if (res.status === 401) await noteStatus({ ok: false, code: 'session', host: sessionOf(host), at: Date.now() });
+      } else if (res.ok && cfg.status && !cfg.status.ok && (cfg.status.code !== 'session' || cfg.status.host === sessionOf(host))) await noteStatus({ ok: true, at: Date.now() });
       return res;
     }
 
@@ -504,7 +537,7 @@
     return {
       proxyUrl: String(x.proxyUrl || ''),
       proxyKey: String(x.proxyKey || ''),
-      jars: { api: { ...(x.jars?.api || {}) }, chat: { ...(x.jars?.chat || {}) } },
+      jars: { api: { ...(x.jars?.api || {}) }, chat: { ...(x.jars?.chat || {}) }, auth: { ...(x.jars?.auth || {}) } },
       deviceId: String(x.deviceId || ''),
       refresh: x.refresh !== false,
       savedAt: Number(x.savedAt) || 0,
@@ -512,7 +545,7 @@
     };
   }
 
-  Object.assign(PWA, { idbBackend, memBackend, createStore, createNet, parseCookieInput, parseSetCookie, applySetCookies, cookieString, isBeincom, normConfig, AUTH_REFRESH, AREAS });
+  Object.assign(PWA, { idbBackend, memBackend, createStore, createNet, parseCookieInput, parseTransfer, parseSetCookie, applySetCookies, jarFor, cookieString, isBeincom, normConfig, AUTH_REFRESH, AREAS });
 
   // Bản dùng chung của trang / luồng nền này (tạo khi cần)
   let shared = null;
@@ -551,6 +584,7 @@
   if (typeof window === 'undefined' || G !== window) return;
   if (!/^https?:$/.test(location.protocol)) return; // addon thật / trang xem thử: giữ nguyên chrome.*
   if (G.chrome?.runtime?.id && !G.chrome.runtime.__bein) return;
+  if (G.__BEIN_IMPORT__) return; // trang nhận đăng nhập (nhap.html): chỉ cần kho, không chạy luồng nền
 
   const { store, net } = PWA.shared();
   const rawFetch = G.fetch.bind(G);
@@ -698,8 +732,7 @@
   XMLHttpRequest.prototype.send = function (body) {
     if (this.__beinTarget && net.configured()) {
       const cfg = net.config;
-      const host = new URL(this.__beinTarget).hostname;
-      const jar = host === CHAT_HOST && Object.keys(cfg.jars.chat).length ? cfg.jars.chat : cfg.jars.api;
+      const jar = cfg.jars[jarFor(cfg.jars, new URL(this.__beinTarget).hostname)];
       this.withCredentials = false;
       this.setRequestHeader('x-beinios-key', cfg.proxyKey);
       const cookie = cookieString(jar);

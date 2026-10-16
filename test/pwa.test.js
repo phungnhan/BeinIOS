@@ -102,11 +102,36 @@ test('cookie: Set-Cookie chung .beincom.com cập nhật cả hai ô; riêng cha
   const jars = { api: { sid: 'old', keep: '1' }, chat: { sid: 'old', MMAUTHTOKEN: 'c1' } };
   const now = Date.parse('2026-10-16T00:00:00Z');
   const next = PWA.applySetCookies(jars, 'auth.beincom.com', ['sid=new; Domain=.beincom.com; Path=/; HttpOnly; Secure', 'keep=; Max-Age=0; Domain=beincom.com'], now);
-  assert.deepEqual(next, { api: { sid: 'new' }, chat: { sid: 'new', MMAUTHTOKEN: 'c1' } });
+  assert.deepEqual(next, { api: { sid: 'new' }, chat: { sid: 'new', MMAUTHTOKEN: 'c1' }, auth: {} });
   assert.deepEqual(jars.api, { sid: 'old', keep: '1' }); // không sửa bản cũ
   const chat = PWA.applySetCookies(next, 'chat.beincom.com', ['MMAUTHTOKEN=c2; Path=/; HttpOnly', 'MMCSRF=z; Expires=Thu, 01 Jan 2026 00:00:00 GMT'], now);
   assert.deepEqual(chat.chat, { sid: 'new', MMAUTHTOKEN: 'c2' });
   assert.equal(PWA.applySetCookies(chat, 'api.beincom.com', ['sid=new; Domain=.beincom.com']), null); // không đổi gì
+});
+
+// Đoạn mẫu cố định: addon BeinFusion (test/transfer.test.js) tạo đúng đoạn này từ
+// api: sid=S1 · chat: MMAUTHTOKEN=M1 · auth: sid=S1, rt=R1 (t = 1792000000000)
+const ADDON_SAMPLE = 'BEINIOS1.eyJ2IjoxLCJ0IjoxNzkyMDAwMDAwMDAwLCJjIjpbWyJzaWQiLCJTMSIsNV0sWyJNTUFVVEhUT0tFTiIsIk0xIiwyXSxbInJ0IiwiUjEiLDRdXX0';
+
+test('dán từ addon: đọc đúng đoạn của addon (cả link nhap.html#…, chữ thừa), đoạn hỏng / không có cookie -> null', () => {
+  const want = { at: 1792000000000, api: { sid: 'S1' }, chat: { MMAUTHTOKEN: 'M1' }, auth: { sid: 'S1', rt: 'R1' } };
+  assert.deepEqual(PWA.parseTransfer(ADDON_SAMPLE), want);
+  assert.deepEqual(PWA.parseTransfer('https://phungnhan.github.io/BeinIOS/nhap.html#' + ADDON_SAMPLE), want);
+  assert.deepEqual(PWA.parseTransfer('Đăng nhập:\n ' + ADDON_SAMPLE + ' \n'), want);
+  assert.equal(PWA.parseTransfer('BEINIOS1.@@@'), null);
+  assert.equal(PWA.parseTransfer('sid=abc'), null);
+  assert.equal(PWA.parseTransfer('BEINIOS1.' + Buffer.from(JSON.stringify({ v: 1, t: 1, c: [['rt', 'x', 4]] })).toString('base64url')), null);
+});
+
+test('ô cookie theo máy chủ: chat / auth trống thì dùng ô Beincom; Set-Cookie chung cập nhật mọi ô đang dùng', () => {
+  const jars = { api: { sid: 'a' }, chat: {}, auth: { sid: 'a', rt: 'r' } };
+  assert.equal(PWA.jarFor(jars, 'api.beincom.com'), 'api');
+  assert.equal(PWA.jarFor(jars, 'group.beincom.com'), 'api');
+  assert.equal(PWA.jarFor(jars, 'chat.beincom.com'), 'api');
+  assert.equal(PWA.jarFor(jars, 'auth.beincom.com'), 'auth');
+  assert.equal(PWA.jarFor({ api: { sid: 'a' } }, 'auth.beincom.com'), 'api');
+  const next = PWA.applySetCookies(jars, 'auth.beincom.com', ['sid=b; Domain=.beincom.com', 'rt=r2; Path=/v1/auth']);
+  assert.deepEqual(next, { api: { sid: 'b' }, chat: {}, auth: { sid: 'b', rt: 'r2' } });
 });
 
 // ---------- Gọi Beincom qua proxy ----------
@@ -184,6 +209,26 @@ test('proxy: hết phiên (401) -> làm mới phiên một lần cho các lệnh
   assert.deepEqual(JSON.parse(refresh[0].body), { deviceId: 'dev 42', deviceName: 'BeinIOS', application: 'BIC_GROUP', platform: 'WEB' });
   assert.match(refresh[0].headers.get('x-bein-cookie'), /sid=a1/);
   assert.equal(f.net.config.jars.api.sid, 'fresh');
+});
+
+test('proxy: dán từ addon (có ô auth) -> làm mới phiên gửi cookie của máy chủ đăng nhập, cookie mới về đúng ô', async () => {
+  const f = fakeNet({
+    config: { ...CFG, jars: { api: { sid: 'a1' }, chat: { MMAUTHTOKEN: 'm1', sid: 'a1' }, auth: { sid: 'a1', rt: 'r1', 'Bic.Auth.deviceId': 'dev%20x' } } },
+    reply: (call) => {
+      const t = target(call);
+      if (t === PWA.AUTH_REFRESH) return json(200, {}, { 'x-bein-set-cookie': JSON.stringify(['sid=a2; Domain=.beincom.com; Path=/; HttpOnly', 'rt=r2; Path=/v1/auth; HttpOnly']) });
+      return /sid=a2/.test(call.headers.get('x-bein-cookie')) ? json(200, { ok: 1 }) : json(401, {});
+    },
+  });
+  await f.ready;
+  const r = await f.net.fetch('https://api.beincom.com/v1/x');
+  assert.equal(r.status, 200);
+  const refresh = f.calls.find((c) => target(c) === PWA.AUTH_REFRESH);
+  assert.equal(refresh.headers.get('x-bein-cookie'), 'sid=a1; rt=r1; Bic.Auth.deviceId=dev%20x');
+  assert.equal(JSON.parse(refresh.body).deviceId, 'dev x');
+  assert.deepEqual(f.net.config.jars, { api: { sid: 'a2' }, chat: { MMAUTHTOKEN: 'm1', sid: 'a2' }, auth: { sid: 'a2', rt: 'r2', 'Bic.Auth.deviceId': 'dev%20x' } });
+  await f.net.fetch('https://chat.beincom.com/api/v4/users/me');
+  assert.equal(f.calls.at(-1).headers.get('x-bein-cookie'), 'MMAUTHTOKEN=m1; sid=a2');
 });
 
 test('proxy: làm mới không được -> trả 401 và ghi trạng thái hết phiên; tắt tự làm mới thì không gọi', async () => {

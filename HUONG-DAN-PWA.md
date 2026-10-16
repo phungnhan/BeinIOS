@@ -48,23 +48,37 @@ Mỗi lần đẩy mã mới, ứng dụng tự nhận bản mới khi mở lạ
 2. Bấm **Chia sẻ** → **Thêm vào Màn hình chính** → **Thêm**.
 3. Từ nay mở BeinIOS từ biểu tượng trên Màn hình chính. Dữ liệu của ứng dụng tách riêng với Safari.
 
-## Bước 4: proxy và cookie đăng nhập
+## Bước 4: proxy và đăng nhập Beincom
 
-Lần đầu mở, ứng dụng tự hiện **Cài đặt**.
+Lần đầu mở, ứng dụng tự hiện **Cài đặt**. Dán **địa chỉ proxy** và **khoá proxy** trước.
 
-1. Dán **địa chỉ proxy** và **khoá proxy**.
-2. **Lấy cookie trên máy tính** (Chrome / Edge):
-   1. Mở **cửa sổ ẩn danh** và đăng nhập `group.beincom.com`.
-   2. Bấm F12 → thẻ **Network**, gõ `api.beincom.com` vào ô lọc, rồi tải lại trang.
-   3. Chuột phải một dòng (ví dụ `permissions`) → **Copy** → **Copy as cURL (bash)**.
-   4. Muốn dùng Chat: mở `chat.beincom.com` trong cùng cửa sổ, lọc `chat.beincom.com/api` và chép một dòng như trên.
-   5. Đóng cửa sổ ẩn danh. **Đừng bấm Đăng xuất**, vì đăng xuất làm cookie hết hiệu lực. Dùng cửa sổ ẩn danh để BeinIOS có phiên riêng, không giành phiên với trình duyệt bạn đang dùng.
-3. **Chuyển đoạn cURL sang iPhone** qua kênh riêng của bạn, ví dụ Ghi chú iCloud hoặc tin nhắn gửi chính mình. Dán vào ô **Beincom**; đoạn của chat dán vào ô **Chat**. Dán xong thì xoá tin hoặc ghi chú dùng để chuyển.
-4. Bấm **Lưu & kiểm tra**. Ứng dụng kiểm tra proxy, khoá, phiên Beincom và Chat. Kết quả chỉ hiện số đếm, không hiện tên.
+### Cách nhanh: nút trong addon BeinFusion trên máy tính (bản 0.51.0 trở lên)
+
+1. Trên máy tính, mở **cửa sổ ẩn danh** và đăng nhập `group.beincom.com`. Muốn dùng Chat thì mở thêm `chat.beincom.com`.
+   - Addon phải được bật **Cho phép ở chế độ ẩn danh**: trang Tiện ích → BeinFusion → Chi tiết.
+   - Dùng cửa sổ ẩn danh để BeinIOS có phiên riêng, không giành phiên với trình duyệt bạn đang dùng.
+2. Mở Dashboard của addon → **Cài đặt** → 📱 BeinIOS → **Chuyển đăng nhập sang BeinIOS**. Lần đầu bấm, addon xin quyền đọc cookie Beincom.
+3. Addon hiện **mã QR**. Quét bằng **Camera iPhone**, mở link, rồi bấm **Chép**.
+   - Trang `nhap.html` xoá đăng nhập khỏi thanh địa chỉ ngay khi mở.
+   - Đăng nhập dài quá cho mã QR thì addon báo. Khi đó bấm **Chép** trên máy tính rồi tự chuyển đoạn chữ sang iPhone, và xoá bản trung chuyển sau khi dán.
+4. Mở BeinIOS từ Màn hình chính → **Cài đặt** → **Dán từ addon**. iPhone hỏi "Dán" thì bấm **Dán**.
+5. Đóng cửa sổ ẩn danh. **Đừng bấm Đăng xuất**, vì đăng xuất làm phiên hết hiệu lực.
+
+Addon chép đủ ba nhóm cookie: Beincom, Chat, và máy chủ đăng nhập `auth.beincom.com`. Có nhóm cuối thì BeinIOS tự làm mới phiên được.
+
+### Cách khác: dán cURL từ F12 (không cần addon)
+
+1. Mở **cửa sổ ẩn danh** và đăng nhập `group.beincom.com`.
+2. Bấm F12 → thẻ **Network**, gõ `api.beincom.com` vào ô lọc, rồi tải lại trang.
+3. Chuột phải một dòng (ví dụ `permissions`) → **Copy** → **Copy as cURL (bash)**.
+4. Muốn dùng Chat: mở `chat.beincom.com` trong cùng cửa sổ, lọc `chat.beincom.com/api` và chép một dòng như trên.
+5. Chuyển đoạn cURL sang iPhone, rồi dán vào ô **Beincom** / **Chat** trong mục **Cách khác** ở Cài đặt.
+
+Cuối cùng bấm **Lưu & kiểm tra**. Ứng dụng kiểm tra proxy, khoá, phiên Beincom và Chat. Kết quả chỉ hiện số đếm, không hiện tên.
 
 Mọi thứ ổn thì ứng dụng quét Beincom lần đầu và hiện dữ liệu ở tab **Quản trị**.
 
-Khi phiên hết hạn hẳn: chấm ở tab **Cài đặt** chuyển đỏ, Dashboard báo "Phiên đăng nhập Beincom hết hạn". Lấy cookie mới theo bước 2 rồi dán lại.
+Khi phiên hết hạn hẳn: chấm ở tab **Cài đặt** chuyển đỏ, Dashboard báo "Phiên đăng nhập Beincom hết hạn". Chuyển đăng nhập lại theo bước 4.
 
 ## Bước 5: thông báo (không bắt buộc)
 
@@ -130,6 +144,11 @@ node test/pwa/pwa.e2e.mjs
 
 ## Lịch sử BeinIOS
 
+- **1.1.0 (16/10/2026).** Thêm cách đăng nhập bằng addon BeinFusion 0.51.0 (Cài đặt → Chuyển đăng nhập sang BeinIOS):
+  - nút **Dán từ addon** trong Cài đặt;
+  - trang nhận mã QR `nhap.html`;
+  - ô cookie riêng cho máy chủ đăng nhập (`auth.beincom.com`), dùng khi làm mới phiên;
+  - cách dán cURL chuyển xuống mục **Cách khác**.
 - **1.0.2 (16/10/2026).** Thêm `wrangler.toml` ở gốc repo. Worker nối repo GitHub giờ tự dựng đúng proxy, không còn đưa cả repo lên làm trang tĩnh.
 - **1.0.1 (16/10/2026).**
   - Màn hình Cài đặt chỉ đúng nguyên nhân khi proxy sai.

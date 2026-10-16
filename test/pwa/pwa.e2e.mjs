@@ -198,6 +198,7 @@ try {
   await page.ev("[...document.querySelectorAll('[role=status]')].find((x) => /yêu cầu tham gia mới/.test(x.textContent)).click(), true");
   await page.until(() => document.querySelector('nav button.on')?.dataset.tab === 'dash' && /tab=members/.test(document.getElementById('f-dash').contentWindow.location.hash), 8000);
   ok(true, 'bấm báo: chuyển sang Quản trị, tab Thành viên');
+  await page.until(() => /\d/.test(document.getElementById('badge').textContent), 8000).catch(() => {}); // nền gộp các lần ghi, 1,5 giây sau mới tính huy hiệu
   const badge = await page.ev("document.getElementById('badge').textContent");
   ok(/\d/.test(badge), `huy hiệu tab Quản trị: "${badge}"`);
 
@@ -206,6 +207,42 @@ try {
 
   const reg = await page.ev("navigator.serviceWorker.getRegistration().then((r) => !!r)");
   ok(reg, 'service worker đã đăng ký');
+
+  // ---------- Dán từ addon (addon BeinFusion → Chuyển đăng nhập sang BeinIOS) ----------
+  // Đoạn như addon tạo: phiên cũ (sid=old2) + cookie máy chủ đăng nhập (rt=r1) -> BeinIOS phải tự làm mới bằng ô auth
+  const transfer = 'BEINIOS1.' + Buffer.from(JSON.stringify({ v: 1, t: Date.now(), c: [['sid', 'old2', 5], ['Bic.Auth.deviceId', 'dev-addon', 5], ['rt', 'r1', 4], ['MMAUTHTOKEN', 'm1', 2]] })).toString('base64url');
+  await page.ev(`document.querySelector('nav button[data-tab="setup"]').click(); true`);
+  await page.until(() => document.getElementById('setup').classList.contains('open'), 5000);
+  await page.ev(`Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { readText: async () => '' } }); document.getElementById('paste-addon').click(); true`);
+  await page.until(() => !document.getElementById('addon-text').hidden, 5000);
+  ok(true, 'Dán từ addon khi bộ nhớ tạm trống: hiện ô để dán tay');
+  const n1 = upstream.length;
+  await page.call((t) => (Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { readText: async () => t } }), document.getElementById('paste-addon').click(), true), transfer);
+  await page.until(() => /Chat Beincom OK/.test(document.getElementById('result').textContent) && /Đang quét Beincom/.test(document.getElementById('result').textContent), 15000);
+  const res2 = await page.ev(`document.getElementById('result').textContent`);
+  ok(/Đã nhận đăng nhập từ addon/.test(res2) && /có quyền ở 1 cộng đồng/.test(res2), 'Dán từ addon: nhận đăng nhập, kiểm tra Beincom + Chat OK');
+  const jars = await page.ev('BeinPWA.page.net.config.jars');
+  ok(jars.api.sid === 'good' && jars.auth.rt === 'r1' && jars.auth.sid === 'good' && jars.chat.MMAUTHTOKEN === 'm1', 'phiên cũ từ addon được làm mới, cookie mới về đủ ba ô');
+  const ref2 = upstream.slice(n1).filter((x) => x.host === 'auth.beincom.com');
+  ok(ref2.length === 1 && COOKIE(ref2[0].headers).rt === 'r1' && JSON.parse(ref2[0].body).deviceId === 'dev-addon', 'làm mới phiên gửi cookie máy chủ đăng nhập (ô auth) và deviceId của addon');
+  const saved = await page.ev(`document.getElementById('saved-all').textContent`);
+  ok(/2 cookie Beincom · 2 cookie Chat · 3 cookie máy chủ đăng nhập/.test(saved), 'Cài đặt hiện số cookie đã lưu theo ô: ' + saved);
+  await page.ev(`document.getElementById('close').click(); true`);
+
+  // ---------- Trang nhận mã QR (nhap.html) ----------
+  await page.ev(`location.href = ${JSON.stringify(APP + '/BeinIOS/nhap.html#')} + ${JSON.stringify(transfer)}; true`);
+  await sleep(300);
+  await page.until(() => document.readyState === 'complete' && !document.getElementById('actions')?.hidden, 8000);
+  const nh = await page.ev(`({ hash: location.hash, href: location.href, info: document.getElementById('info').textContent, worker: !!window.BeinPWA.page })`);
+  ok(nh.hash === '' && !nh.href.includes('BEINIOS1'), 'nhap.html xoá đăng nhập khỏi thanh địa chỉ ngay khi mở');
+  ok(/2 cookie Beincom · 1 cookie Chat · 3 cookie máy chủ đăng nhập/.test(nh.info) && !nh.worker, 'nhap.html hiện số cookie, không chạy luồng nền');
+  await page.ev(`Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async (t) => (window.__copied = t) } }); document.getElementById('copy').click(); true`);
+  await page.until(() => !!window.__copied, 5000);
+  ok((await page.ev('window.__copied')) === transfer, 'nút Chép chép đúng đoạn để dán vào ứng dụng');
+  await page.ev(`location.href = ${JSON.stringify(APP + '/BeinIOS/nhap.html?lan=2#hong')}; true`); // ?: tải trang mới (đổi # thôi thì không tải lại)
+  await sleep(300);
+  await page.until(() => document.readyState === 'complete' && /không có đăng nhập hợp lệ/.test(document.getElementById('info')?.textContent || ''), 8000);
+  ok(true, 'nhap.html với link hỏng: báo tạo mã mới');
 
   console.log('Giai đoạn 2: không có SharedWorker (Worker thường do khung ứng dụng giữ)');
   noShared = true;
