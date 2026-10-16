@@ -88,6 +88,7 @@ export async function launch() {
 
   const page = {
     problems,
+    cdp: send, // lệnh DevTools thô (kiểm thử webapp BeinIOS: đặt cỡ màn hình điện thoại)
     // Chạy biểu thức trong trang; lỗi thì ném
     async ev(expression) {
       const r = await send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true });

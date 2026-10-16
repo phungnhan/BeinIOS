@@ -1,5 +1,7 @@
 # BeinFusion — Quản lý Group Beincom (Chrome/Edge, MV3)
 
+> **Repo này là BeinIOS**: addon BeinFusion chạy như webapp (PWA) cho iPhone tại https://phungnhan.github.io/BeinIOS/ (cần Cloudflare proxy của riêng bạn và cookie đăng nhập Beincom). Cài đặt và cách hoạt động: [HUONG-DAN-PWA.md](HUONG-DAN-PWA.md). Phần dưới là README của addon gốc (`phungnhan/beingroup`).
+
 Trước v0.48.0 addon tên **BeinGroup**. Đổi tên chỉ đổi phần hiển thị: khoá lưu trữ, hẹn giờ, bộ nhớ ảnh vẫn giữ mã cũ (`beingroup-…`) nên cập nhật không mất dữ liệu; tệp sao lưu cũ (`app: "BeinGroup"`) vẫn khôi phục được; báo cáo sử dụng vẫn gửi mã `BeinGroup` để nơi nhận đã triển khai không phải sửa. Giao diện trang Chat mặc định: **BeinFusion theme**; giao diện thứ hai **BeinFusion Silk (Lụa)** chọn ở nút Giao diện (v0.49.0, làm một lần — các bản sau không tự cập nhật theo code mới, chỉ khi được yêu cầu).
 
 Gom **yêu cầu tham gia**, **bài chờ duyệt**, **bài mới vi phạm** và **danh sách thành viên** của mọi Group/Community bạn quản trị trên https://group.beincom.com vào một Dashboard. Addon chấm từng mục theo quy tắc của bạn, rồi cho duyệt, từ chối, ẩn bài, xoá / gán admin / cấm thành viên hàng loạt, và xử lý **báo cáo vi phạm**. Addon còn soạn và đăng bài, hẹn giờ đăng vào nhiều group cùng lúc, và thống kê thành viên, bài viết theo ngày. Dữ liệu chỉ lưu trong trình duyệt của bạn.

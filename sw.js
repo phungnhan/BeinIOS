@@ -1,70 +1,66 @@
-// sw.js - Service Worker cho BeinIOS PWA
-const CACHE_NAME = 'beinios-pwa-v1.0';
-
-const PRECACHE_ASSETS = [
-  './',
-  './index.html',
-  './chat.html',
-  './dashboard.html',
-  './pwa-shim.js',
-  './manifest.webmanifest',
-  './icons/icon16.png',
-  './icons/icon48.png',
-  './icons/icon128.png'
-];
+// BeinIOS — service worker của webapp (khác luồng nền pwa-worker.js).
+// - Tệp của ứng dụng: lấy bản mới trên mạng trước (cập nhật tới ngay khi mở lại), mất mạng thì dùng bản đã lưu.
+// - Không đụng tới yêu cầu gửi Beincom / proxy (luôn đi thẳng ra mạng, không lưu).
+// - Bấm thông báo hệ thống: mở / đưa ứng dụng lên trước và báo cho trang biết thông báo nào được bấm.
+const CACHE = 'beinios-app';
+const SHELL = ['./', './index.html', './chat.html', './dashboard.html', './pwa-shim.js', './pwa-worker.js', './manifest.webmanifest', './manifest.json', './icons/icon128.png'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      console.log('📦 [BeinIOS PWA] Đang lưu trữ bộ nhớ đệm App Shell...');
-      return cache.addAll(PRECACHE_ASSETS).catch((err) => {
-        console.warn('Lỗi cache một số asset ban đầu:', err);
-      });
-    })
+    caches
+      .open(CACHE)
+      .then((c) => c.addAll(SHELL.map((u) => new Request(u, { cache: 'reload' }))))
+      .catch(() => {}),
   );
   self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
+  // Bản cũ (beinios-pwa-v1.0, lưu theo kiểu "có rồi thì không tải lại") gây kẹt phiên bản: xoá
   event.waitUntil(
-    caches.keys().then((cacheNames) => {
-      return Promise.all(
-        cacheNames.map((cache) => {
-          if (cache !== CACHE_NAME) {
-            console.log('🧹 [BeinIOS PWA] Xóa bộ nhớ đệm cũ:', cache);
-            return caches.delete(cache);
-          }
-        })
-      );
-    })
+    caches
+      .keys()
+      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE && k.startsWith('beinios-')).map((k) => caches.delete(k))))
+      .then(() => self.clients.claim()),
   );
-  self.clients.claim();
 });
 
 self.addEventListener('fetch', (event) => {
-  const url = new URL(event.request.url);
-
-  // 1. Không can thiệp các request không phải GET hoặc request API
-  if (event.request.method !== 'GET') return;
-  if (url.hostname.includes('beincom.com') || url.hostname.includes('workers.dev')) {
-    return; // Đi thẳng ra mạng (Network Only)
-  }
-
-  // 2. Với tài nguyên giao diện tĩnh (HTML/CSS/JS/Font/Icon): Cache-First, fallback to Network
+  const req = event.request;
+  if (req.method !== 'GET') return;
+  const url = new URL(req.url);
+  if (url.origin !== self.location.origin) return; // Beincom, proxy, font Google…: đi thẳng
+  const scope = new URL(self.registration.scope);
+  if (!url.pathname.startsWith(scope.pathname)) return;
   event.respondWith(
-    caches.match(event.request).then((cachedResponse) => {
-      if (cachedResponse) {
-        return cachedResponse;
+    (async () => {
+      const cache = await caches.open(CACHE);
+      try {
+        const res = await fetch(req, { cache: 'no-cache' });
+        if (res.ok && res.type === 'basic') cache.put(req, res.clone()).catch(() => {});
+        return res;
+      } catch (e) {
+        const hit = (await cache.match(req, { ignoreSearch: true })) || (req.mode === 'navigate' ? await cache.match('./index.html') : null);
+        if (hit) return hit;
+        throw e;
       }
-      return fetch(event.request).then((networkResponse) => {
-        if (networkResponse && networkResponse.status === 200) {
-          const responseToCache = networkResponse.clone();
-          caches.open(CACHE_NAME).then((cache) => {
-            cache.put(event.request, responseToCache);
-          });
-        }
-        return networkResponse;
-      });
-    })
+    })(),
+  );
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const id = event.notification.data?.id || event.notification.tag || '';
+  event.waitUntil(
+    (async () => {
+      const wins = (await self.clients.matchAll({ type: 'window', includeUncontrolled: true })).filter((w) => w.frameType !== 'nested');
+      const shell = wins.find((w) => /\/(index\.html)?$/.test(new URL(w.url).pathname)) || wins[0];
+      if (shell) {
+        await shell.focus().catch(() => {});
+        shell.postMessage({ type: 'bein-notification-click', id });
+        return;
+      }
+      await self.clients.openWindow(new URL('./index.html#notif=' + encodeURIComponent(id), self.registration.scope).href);
+    })(),
   );
 });

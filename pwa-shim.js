@@ -1,279 +1,817 @@
-// pwa-shim.js - Giả lập Chrome Extension API & Bộ định tuyến Cloudflare Proxy cho BeinIOS PWA
-(() => {
-  if (window.__BEIN_PWA_SHIM_LOADED__) return;
-  window.__BEIN_PWA_SHIM_LOADED__ = true;
+// BeinIOS — chạy addon BeinFusion như một webapp (PWA).
+//
+// Tệp này nạp ở mọi trang (index.html, chat.html, dashboard.html) và trong luồng nền pwa-worker.js:
+//   1. Kho lưu trữ chung (IndexedDB) thay chrome.storage: mọi trang và luồng nền đọc / ghi cùng một chỗ,
+//      báo thay đổi cho nhau qua BroadcastChannel (chrome.storage.onChanged).
+//   2. Gọi Beincom qua Cloudflare proxy của bạn (trình duyệt chặn gọi thẳng vì CORS): kèm khoá proxy và cookie
+//      đăng nhập đã dán ở Cài đặt; cookie Beincom gửi lại (Set-Cookie) được cập nhật vào kho; hết phiên (401) thì
+//      tự làm mới phiên một lần rồi gọi lại.
+//   3. Ở trang: chrome.runtime.sendMessage gửi tới luồng nền (SharedWorker pwa-worker.js — nơi chạy background.js
+//      của addon), chrome.storage, chrome.permissions…; link mở Chat / Dashboard ở lại trong khung ứng dụng.
+// Chạy như addon (chrome-extension://) hoặc trang xem thử (file://) thì chỉ khai báo, không đổi gì.
+(function (G) {
+  'use strict';
+  if (G.BeinPWA) return;
+  const PWA = (G.BeinPWA = {});
+  const VERSION = '1.0.0';
+  PWA.VERSION = VERSION;
 
-  console.log('🚀 Khởi tạo BeinIOS PWA Shim Layer...');
+  // ---------- 1. Kho lưu trữ ----------
+  // Mỗi mục lưu dạng chuỗi JSON (như chrome.storage) dưới khoá "<vùng>:<tên>". Vùng: local, sync (của addon),
+  // pwa (cấu hình webapp: proxy, cookie — không nằm trong chrome.storage nên không lọt vào bản sao lưu).
+  const AREAS = ['local', 'sync', 'pwa'];
+  const DB_NAME = 'beinios';
+  const DB_STORE = 'kv';
 
-  const STORAGE_PREFIX = 'beinios_';
-  const listeners = new Set();
-
-  // 1. Giả lập chrome.storage (bọc trên localStorage với Promise / Callback)
-  const storageArea = {
-    get(keys, callback) {
-      return new Promise((resolve) => {
-        const result = {};
-        if (typeof keys === 'string') {
-          keys = [keys];
-        }
-        if (Array.isArray(keys)) {
-          for (const k of keys) {
-            const raw = localStorage.getItem(STORAGE_PREFIX + k);
-            if (raw !== null) {
-              try { result[k] = JSON.parse(raw); } catch { result[k] = raw; }
-            }
+  function idbBackend(idb = G.indexedDB) {
+    let dbp = null;
+    const open = () =>
+      (dbp ||= new Promise((resolve, reject) => {
+        const req = idb.open(DB_NAME, 1);
+        req.onupgradeneeded = () => req.result.createObjectStore(DB_STORE);
+        req.onsuccess = () => {
+          const db = req.result;
+          db.onversionchange = () => {
+            db.close();
+            dbp = null;
+          };
+          resolve(db);
+        };
+        req.onerror = () => {
+          dbp = null;
+          reject(req.error);
+        };
+      }));
+    const run = async (mode, fn) => {
+      const db = await open();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(DB_STORE, mode);
+        const out = fn(tx.objectStore(DB_STORE));
+        tx.oncomplete = () => resolve(out);
+        tx.onerror = tx.onabort = () => reject(tx.error || new Error('IndexedDB lỗi'));
+      });
+    };
+    return {
+      // khoá đầy đủ -> chuỗi JSON (khoá chưa có: không trả)
+      getMany: (keys) =>
+        run('readonly', (s) => {
+          const out = new Map();
+          for (const k of keys) s.get(k).onsuccess = (e) => e.target.result !== undefined && out.set(k, e.target.result);
+          return out;
+        }),
+      getPrefix: (prefix) =>
+        run('readonly', (s) => {
+          const out = new Map();
+          const range = IDBKeyRange.bound(prefix, prefix + '￿');
+          s.openCursor(range).onsuccess = (e) => {
+            const c = e.target.result;
+            if (!c) return;
+            out.set(c.key, c.value);
+            c.continue();
+          };
+          return out;
+        }),
+      // puts: khoá -> chuỗi JSON | null (xoá). Đọc giá trị cũ và ghi trong cùng một giao dịch; trả về giá trị cũ
+      write: (puts) =>
+        run('readwrite', (s) => {
+          const old = new Map();
+          for (const [k, v] of puts) {
+            s.get(k).onsuccess = (e) => {
+              if (e.target.result !== undefined) old.set(k, e.target.result);
+              if (v === null) s.delete(k);
+              else s.put(v, k);
+            };
           }
-        } else if (typeof keys === 'object' && keys !== null) {
-          for (const k of Object.keys(keys)) {
-            const raw = localStorage.getItem(STORAGE_PREFIX + k);
-            if (raw !== null) {
-              try { result[k] = JSON.parse(raw); } catch { result[k] = raw; }
-            } else {
-              result[k] = keys[k];
-            }
-          }
-        } else {
-          // Lấy tất cả
-          for (let i = 0; i < localStorage.length; i++) {
-            const fullKey = localStorage.key(i);
-            if (fullKey && fullKey.startsWith(STORAGE_PREFIX)) {
-              const k = fullKey.slice(STORAGE_PREFIX.length);
-              const raw = localStorage.getItem(fullKey);
-              try { result[k] = JSON.parse(raw); } catch { result[k] = raw; }
-            }
-          }
-        }
-        if (typeof callback === 'function') callback(result);
-        resolve(result);
-      });
-    },
-    set(items, callback) {
-      return new Promise((resolve) => {
-        for (const [k, v] of Object.entries(items)) {
-          localStorage.setItem(STORAGE_PREFIX + k, JSON.stringify(v));
-        }
-        if (typeof callback === 'function') callback();
-        resolve();
-      });
-    },
-    remove(keys, callback) {
-      return new Promise((resolve) => {
-        const list = Array.isArray(keys) ? keys : [keys];
-        for (const k of list) {
-          localStorage.removeItem(STORAGE_PREFIX + k);
-        }
-        if (typeof callback === 'function') callback();
-        resolve();
-      });
-    },
-    clear(callback) {
-      return new Promise((resolve) => {
-        const toRemove = [];
-        for (let i = 0; i < localStorage.length; i++) {
-          const k = localStorage.key(i);
-          if (k && k.startsWith(STORAGE_PREFIX)) toRemove.push(k);
-        }
-        toRemove.forEach((k) => localStorage.removeItem(k));
-        if (typeof callback === 'function') callback();
-        resolve();
-      });
-    }
-  };
+          return old;
+        }),
+    };
+  }
 
-  // 2. Giả lập chrome.runtime
-  const runtime = {
-    id: 'beinios-pwa',
-    getURL(path) {
-      if (path.startsWith('http://') || path.startsWith('https://')) return path;
-      return new URL(path, window.location.href).href;
-    },
-    onMessage: {
-      addListener(fn) {
-        listeners.add(fn);
+  // Bộ nhớ tạm thay IndexedDB (kiểm thử bằng Node, hoặc trình duyệt chặn IndexedDB)
+  function memBackend(map = new Map()) {
+    return {
+      map,
+      getMany: async (keys) => new Map(keys.filter((k) => map.has(k)).map((k) => [k, map.get(k)])),
+      getPrefix: async (prefix) => new Map([...map].filter(([k]) => k.startsWith(prefix))),
+      write: async (puts) => {
+        const old = new Map();
+        for (const [k, v] of puts) {
+          if (map.has(k)) old.set(k, map.get(k));
+          if (v === null) map.delete(k);
+          else map.set(k, v);
+        }
+        return old;
       },
-      removeListener(fn) {
-        listeners.delete(fn);
-      }
-    },
-    sendMessage(message, callback) {
-      return new Promise((resolve) => {
-        let responded = false;
-        const sendResponse = (resp) => {
-          if (responded) return;
-          responded = true;
-          if (typeof callback === 'function') callback(resp);
-          resolve(resp);
-        };
+    };
+  }
 
-        let asyncResponse = false;
-        for (const listener of listeners) {
-          try {
-            const ret = listener(message, { id: runtime.id }, sendResponse);
-            if (ret === true) asyncResponse = true;
-          } catch (err) {
-            console.error('Lỗi listener message trong PWA:', err);
-          }
+  // Giá trị cũ / mới trong sự kiện thay đổi: chỉ đọc JSON khi có nơi dùng tới (state, nhật ký có thể vài MB)
+  function lazyJson(obj, prop, str) {
+    let done = false;
+    let val;
+    Object.defineProperty(obj, prop, {
+      enumerable: true,
+      configurable: true,
+      get() {
+        if (!done) {
+          val = JSON.parse(str);
+          done = true;
         }
-
-        if (!asyncResponse && !responded) {
-          sendResponse({ ok: true, note: 'pwa-handled-sync' });
-        }
-      });
+        return val;
+      },
+    });
+  }
+  function makeChanges(raw) {
+    const out = {};
+    for (const [k, { o, n }] of Object.entries(raw)) {
+      const c = {};
+      if (o !== undefined) lazyJson(c, 'oldValue', o);
+      if (n !== undefined) lazyJson(c, 'newValue', n);
+      out[k] = c;
     }
-  };
+    return out;
+  }
 
-  // 3. Giả lập chrome.action & chrome.notifications
-  const action = {
-    setBadgeText(details) {
-      if (window.parent && window.parent.BeinIOS && window.parent.BeinIOS.setBadge) {
-        window.parent.BeinIOS.setBadge(details?.text);
-      }
-    },
-    setBadgeBackgroundColor() {}
-  };
-
-  const notifications = {
-    create(id, options, callback) {
-      console.log('🔔 [PWA Notification]', options?.title, options?.message);
-      if ('Notification' in window && Notification.permission === 'granted') {
+  // channel: BroadcastChannel (hoặc đối tượng giả có postMessage / onmessage) để báo các trang khác
+  function createStore({ backend, channel = null } = {}) {
+    const listeners = new Set();
+    const emit = (area, raw) => {
+      if (!Object.keys(raw).length) return;
+      const changes = makeChanges(raw);
+      for (const fn of [...listeners]) {
         try {
-          new Notification(options?.title || 'BeinIOS', {
-            body: options?.message,
-            icon: options?.iconUrl || 'icons/icon128.png'
-          });
-        } catch {
-          // ignore
+          fn(changes, area);
+        } catch (e) {
+          console.error(e);
         }
       }
-      if (typeof callback === 'function') callback(id || 'note_' + Date.now());
-    }
-  };
+    };
+    if (channel) channel.onmessage = (e) => e.data?.bein === 'storage' && emit(e.data.area, e.data.raw);
 
-  window.chrome = window.chrome || {};
-  window.chrome.storage = {
-    local: storageArea,
-    sync: storageArea
-  };
-  window.chrome.runtime = runtime;
-  window.chrome.action = action;
-  window.chrome.notifications = notifications;
-
-  // 4. BỘ ĐỊNH TUYẾN FETCH QUA CLOUDFLARE PROXY ĐỂ CHỐNG CHẶN CORS
-  const originalFetch = window.fetch;
-  window.fetch = async function(resource, init = {}) {
-    let url = typeof resource === 'string' ? resource : resource?.url || '';
-
-    // Kiểm tra nếu request gọi tới hệ thống máy chủ Beincom
-    const isBeincom = url.includes('beincom.com');
-    if (isBeincom) {
-      init.headers = init.headers || {};
-      const headers = new Headers(init.headers);
-
-      // Thêm header định danh ứng dụng của Beincom
-      if (!headers.has('x-application')) headers.set('x-application', 'BIC_GROUP');
-      if (!headers.has('x-platform')) headers.set('x-platform', 'WEB');
-
-      // Đọc cấu hình proxy và auth token từ storage
-      let proxyUrl = localStorage.getItem(STORAGE_PREFIX + 'proxy_url') || '';
-      let authToken = localStorage.getItem(STORAGE_PREFIX + 'auth_token') || '';
-
-      // Tự động bỏ dấu gạch chéo cuối của proxy url
-      if (proxyUrl.endsWith('/')) {
-        proxyUrl = proxyUrl.slice(0, -1);
+    const full = (area, k) => area + ':' + k;
+    const parse = (s) => {
+      try {
+        return JSON.parse(s);
+      } catch {
+        return undefined;
       }
+    };
 
-      // Đính kèm token xác thực
-      if (authToken) {
-        if (authToken.startsWith('Bearer ') || authToken.length > 50) {
-          if (!headers.has('Authorization')) {
-            headers.set('Authorization', authToken.startsWith('Bearer ') ? authToken : `Bearer ${authToken}`);
-          }
-        } else if (authToken.includes('=')) {
-          // Token dạng cookie
-          if (!headers.has('x-bein-cookie')) {
-            headers.set('x-bein-cookie', authToken);
-          }
-        }
+    async function get(area, keys) {
+      const out = {};
+      if (keys === null || keys === undefined) {
+        const all = await backend.getPrefix(area + ':');
+        for (const [k, v] of all) out[k.slice(area.length + 1)] = parse(v);
+        return out;
       }
-
-      init.headers = headers;
-
-      // Nếu có Cloudflare Proxy URL, chuyển hướng request qua Proxy
-      if (proxyUrl) {
-        const targetUrl = url;
-        const proxiedUrl = `${proxyUrl}/proxy?url=${encodeURIComponent(targetUrl)}`;
-        return originalFetch.call(this, proxiedUrl, init);
+      const defaults = typeof keys === 'object' && !Array.isArray(keys) ? keys : null;
+      const names = typeof keys === 'string' ? [keys] : Array.isArray(keys) ? keys : Object.keys(keys);
+      const got = await backend.getMany(names.map((k) => full(area, k)));
+      for (const k of names) {
+        const v = got.get(full(area, k));
+        if (v !== undefined) out[k] = parse(v);
+        else if (defaults && defaults[k] !== undefined) out[k] = defaults[k];
       }
+      return out;
     }
 
-    return originalFetch.call(this, resource, init);
-  };
+    async function write(area, puts) {
+      if (!puts.size) return;
+      const old = await backend.write(puts);
+      const raw = {};
+      for (const [k, v] of puts) {
+        const o = old.get(k);
+        const n = v === null ? undefined : v;
+        if (o === n) continue; // như Chrome: không đổi thì không báo
+        raw[k.slice(area.length + 1)] = { o, n };
+      }
+      if (!Object.keys(raw).length) return;
+      try {
+        channel?.postMessage({ bein: 'storage', area, raw });
+      } catch {}
+      setTimeout(() => emit(area, raw), 0);
+    }
 
-  // 5. Đối tượng tiện ích hỗ trợ giao diện PWA
-  window.BeinIOS = {
-    version: '0.50.0-pwa',
-    getConfig() {
+    async function set(area, items) {
+      const puts = new Map();
+      for (const [k, v] of Object.entries(items || {})) {
+        if (v === undefined) continue;
+        const s = JSON.stringify(v);
+        if (s !== undefined) puts.set(full(area, k), s);
+      }
+      await write(area, puts);
+    }
+
+    async function remove(area, keys) {
+      const list = typeof keys === 'string' ? [keys] : keys || [];
+      await write(area, new Map(list.map((k) => [full(area, k), null])));
+    }
+
+    async function clear(area) {
+      const all = await backend.getPrefix(area + ':');
+      await write(area, new Map([...all.keys()].map((k) => [k, null])));
+    }
+
+    // Như Chrome: độ dài tên khoá + độ dài JSON
+    async function bytesInUse(area, keys) {
+      let map;
+      if (keys === null || keys === undefined) map = await backend.getPrefix(area + ':');
+      else map = await backend.getMany((typeof keys === 'string' ? [keys] : keys).map((k) => full(area, k)));
+      let n = 0;
+      for (const [k, v] of map) n += k.length - area.length - 1 + v.length;
+      return n;
+    }
+
+    // Có callback thì gọi callback (kiểu cũ của chrome.*), luôn trả Promise
+    const cbify = (p, cb) => {
+      if (typeof cb === 'function') p.then((v) => cb(v), () => cb(undefined));
+      return p;
+    };
+    function area(name) {
       return {
-        proxyUrl: localStorage.getItem(STORAGE_PREFIX + 'proxy_url') || '',
-        authToken: localStorage.getItem(STORAGE_PREFIX + 'auth_token') || ''
+        get: (keys, cb) => cbify(get(name, typeof keys === 'function' ? null : keys), typeof keys === 'function' ? keys : cb),
+        set: (items, cb) => cbify(set(name, items), cb),
+        remove: (keys, cb) => cbify(remove(name, keys), cb),
+        clear: (cb) => cbify(clear(name), cb),
+        getBytesInUse: (keys, cb) => cbify(bytesInUse(name, typeof keys === 'function' ? null : keys), typeof keys === 'function' ? keys : cb),
+        QUOTA_BYTES: name === 'sync' ? 102400 : 10485760,
+        ...(name === 'sync' ? { QUOTA_BYTES_PER_ITEM: 8192, MAX_ITEMS: 512 } : {}),
       };
-    },
-    setConfig({ proxyUrl, authToken }) {
-      if (proxyUrl !== undefined) localStorage.setItem(STORAGE_PREFIX + 'proxy_url', proxyUrl.trim());
-      if (authToken !== undefined) localStorage.setItem(STORAGE_PREFIX + 'auth_token', authToken.trim());
-    },
-    async testConnection() {
-      const config = this.getConfig();
-      if (!config.proxyUrl) {
-        return { ok: false, message: 'Chưa cấu hình Cloudflare Proxy URL!' };
-      }
-      const proxyUrl = config.proxyUrl.replace(/\/$/, '');
-      const start = Date.now();
+    }
 
+    const onChanged = {
+      addListener: (fn) => listeners.add(fn),
+      removeListener: (fn) => listeners.delete(fn),
+      hasListener: (fn) => listeners.has(fn),
+    };
+    // chrome.storage cho addon: chỉ hai vùng local / sync; trình nghe chrome.storage.onChanged không thấy vùng pwa
+    function chromeStorage() {
+      const wrap = new Map();
+      return {
+        local: area('local'),
+        sync: area('sync'),
+        onChanged: {
+          addListener(fn) {
+            const w = (changes, a) => a !== 'pwa' && fn(changes, a);
+            wrap.set(fn, w);
+            listeners.add(w);
+          },
+          removeListener(fn) {
+            listeners.delete(wrap.get(fn));
+            wrap.delete(fn);
+          },
+          hasListener: (fn) => wrap.has(fn),
+        },
+      };
+    }
+    return { area, onChanged, chromeStorage, get, set, remove };
+  }
+
+  // ---------- 2. Gọi Beincom qua proxy ----------
+  // Máy chủ Beincom đi qua proxy (khớp danh sách của cloudflare-proxy/worker.js); ảnh trên media.beincom.com… tải thẳng
+  const PROXY_HOSTS = new Set(['api.beincom.com', 'group.beincom.com', 'chat.beincom.com', 'upload.beincom.com', 'auth.beincom.com']);
+  const CHAT_HOST = 'chat.beincom.com';
+  const AUTH_REFRESH = 'https://auth.beincom.com/v1/auth/public/http/refresh-session';
+  const DEVICE_COOKIE = 'Bic.Auth.deviceId';
+
+  const isBeincom = (url) => {
+    try {
+      const u = new URL(url);
+      return u.protocol === 'https:' && PROXY_HOSTS.has(u.hostname) && !u.port;
+    } catch {
+      return false;
+    }
+  };
+  // Cookie gửi tới chat.beincom.com lấy từ ô "Cookie Chat" (trống thì dùng chung ô Beincom); máy chủ khác: ô Beincom
+  const jarOf = (host) => (host === CHAT_HOST ? 'chat' : 'api');
+
+  // Dán Cookie từ DevTools: chấp nhận "Cookie: a=b; c=d", "a=b; c=d", hoặc nguyên lệnh cURL (Copy as cURL)
+  function parseCookieInput(text) {
+    let s = String(text || '').trim();
+    if (!s) return { jar: {}, host: '' };
+    let host = '';
+    const urlM = s.match(/curl\s+(?:\^?["'])?(https?:\/\/[^\s"'^]+)/i);
+    if (urlM) {
       try {
-        // Bước 1: Kiểm tra proxy health endpoint
-        const healthRes = await originalFetch(`${proxyUrl}/health`);
-        if (!healthRes.ok) {
-          const ms = Date.now() - start;
-          return { ok: false, message: `Proxy không phản hồi (${ms}ms). Kiểm tra lại URL Worker.` };
-        }
-      } catch (err) {
-        return { ok: false, message: `Không kết nối được tới Proxy: ${err.message}` };
+        host = new URL(urlM[1]).hostname;
+      } catch {}
+    }
+    const fromCurl = s.match(/(?:-b|--cookie)\s+\^?(["'])([\s\S]*?)\^?\1/) || s.match(/-H\s+\^?(["'])cookie:\s*([\s\S]*?)\^?\1/i);
+    if (fromCurl) s = fromCurl[2];
+    s = s.replace(/^cookie:\s*/i, '').replace(/\^(.)/g, '$1'); // cURL của Windows (cmd) thêm ^ trước ký tự đặc biệt
+    const jar = {};
+    for (const part of s.split(/;\s*|\r?\n/)) {
+      const i = part.indexOf('=');
+      if (i <= 0) continue;
+      const name = part.slice(0, i).trim();
+      const value = part.slice(i + 1).trim();
+      if (name && !/\s/.test(name)) jar[name] = value;
+    }
+    return { jar, host };
+  }
+  const cookieString = (jar) =>
+    Object.entries(jar || {})
+      .map(([k, v]) => `${k}=${v}`)
+      .join('; ');
+
+  // Một dòng Set-Cookie -> { name, value, domain, remove }
+  function parseSetCookie(line, now = Date.now()) {
+    const parts = String(line).split(';');
+    const first = parts.shift() || '';
+    const i = first.indexOf('=');
+    if (i <= 0) return null;
+    const out = { name: first.slice(0, i).trim(), value: first.slice(i + 1).trim(), domain: '', remove: false };
+    for (const p of parts) {
+      const j = p.indexOf('=');
+      const key = (j < 0 ? p : p.slice(0, j)).trim().toLowerCase();
+      const val = j < 0 ? '' : p.slice(j + 1).trim();
+      if (key === 'domain') out.domain = val.replace(/^\./, '').toLowerCase();
+      if (key === 'max-age' && Number(val) <= 0) out.remove = true;
+      if (key === 'expires') {
+        const t = Date.parse(val);
+        if (t && t <= now) out.remove = true;
       }
+    }
+    if (out.value === '' || out.value === '""') out.remove = true;
+    return out;
+  }
 
-      try {
-        // Bước 2: Kiểm tra API Beincom qua proxy với auth token
-        const headers = new Headers({
-          'x-application': 'BIC_GROUP',
-          'x-platform': 'WEB'
-        });
-        const authToken = config.authToken || '';
-        if (authToken) {
-          headers.set('Authorization', authToken.startsWith('Bearer ') ? authToken : `Bearer ${authToken}`);
+  // Cập nhật hai ô cookie theo Set-Cookie của một máy chủ (trả về ô mới, không sửa ô cũ)
+  function applySetCookies(jars, host, lines, now = Date.now()) {
+    const next = { api: { ...(jars?.api || {}) }, chat: { ...(jars?.chat || {}) } };
+    let changed = false;
+    for (const line of lines || []) {
+      const c = parseSetCookie(line, now);
+      if (!c) continue;
+      const shared = c.domain === 'beincom.com';
+      // Cookie chung .beincom.com: trình duyệt gửi cho mọi máy chủ Beincom -> cập nhật ô Beincom, và ô Chat nếu đang có tên đó
+      const targets = shared ? ['api', ...(c.name in next.chat ? ['chat'] : [])] : [jarOf(host)];
+      for (const t of targets) {
+        if (c.remove) {
+          if (c.name in next[t]) {
+            delete next[t][c.name];
+            changed = true;
+          }
+        } else if (next[t][c.name] !== c.value) {
+          next[t][c.name] = c.value;
+          changed = true;
         }
-
-        const targetUrl = 'https://api.beincom.com/v1/community/communities';
-        const proxiedUrl = `${proxyUrl}/proxy?url=${encodeURIComponent(targetUrl)}`;
-        const res = await originalFetch(proxiedUrl, { headers });
-        const latency = Date.now() - start;
-
-        return {
-          ok: res.ok || res.status === 401 || res.status === 403,
-          status: res.status,
-          latency,
-          message: res.ok
-            ? `✅ Kết nối thành công! Proxy ${latency}ms — Sẵn sàng dùng BeinIOS!`
-            : res.status === 401
-              ? `⚠️ Proxy OK (${latency}ms) — Token hết hạn, cần lấy lại từ DevTools.`
-              : res.status === 403
-                ? `⚠️ Proxy OK (${latency}ms) — Token thiếu quyền truy cập.`
-                : `⚠️ Proxy OK (${latency}ms) — API trả về lỗi ${res.status}.`
-        };
-      } catch (err) {
-        return { ok: false, message: `Proxy OK nhưng lỗi gọi API: ${err.message}` };
       }
+    }
+    return changed ? next : null;
+  }
+
+  const newDeviceId = () => {
+    try {
+      return G.crypto.randomUUID();
+    } catch {
+      return 'xxxxxxxx-xxxx-4xxx-8xxx-xxxxxxxxxxxx'.replace(/x/g, () => ((Math.random() * 16) | 0).toString(16));
     }
   };
 
-  console.log('✅ Đã nạp thành công BeinIOS PWA Shim & Fetch Interceptor.');
-})();
+  // store: kho (createStore); rawFetch: fetch gốc của trình duyệt
+  function createNet({ store, rawFetch }) {
+    let cfg = null; // { proxyUrl, proxyKey, jars: { api, chat }, deviceId, refresh, savedAt, status }
+    let cfgP = null;
+    const load = () =>
+      (cfgP ||= store
+        .get('pwa', ['config'])
+        .then(({ config }) => (cfg = normConfig(config)))
+        .catch((e) => {
+          cfgP = null;
+          throw e;
+        }));
+    store.onChanged.addListener((changes, area) => {
+      if (area === 'pwa' && changes.config) cfg = normConfig(changes.config.newValue);
+    });
+
+    async function saveConfig(patch) {
+      await load();
+      cfg = normConfig({ ...cfg, ...patch });
+      await store.set('pwa', { config: cfg });
+      return cfg;
+    }
+
+    const proxyBase = () => String(cfg?.proxyUrl || '').trim().replace(/\/+$/, '');
+    const configured = () => !!(proxyBase() && cfg?.proxyKey);
+    const proxied = (url) => `${proxyBase()}/proxy?url=${encodeURIComponent(url)}`;
+
+    // Lỗi do proxy (sai khoá, sai địa chỉ…) ghi vào cấu hình để Cài đặt báo
+    async function noteStatus(status) {
+      if (cfg && JSON.stringify(cfg.status || null) !== JSON.stringify(status)) await saveConfig({ status }).catch(() => {});
+    }
+
+    async function absorbCookies(host, res) {
+      const raw = res.headers.get('x-bein-set-cookie');
+      if (!raw) return;
+      let lines;
+      try {
+        lines = JSON.parse(raw);
+      } catch {
+        return;
+      }
+      const next = applySetCookies(cfg.jars, host, Array.isArray(lines) ? lines : []);
+      if (next) await saveConfig({ jars: next });
+    }
+
+    // Gửi một yêu cầu tới Beincom qua proxy (url gốc của Beincom)
+    async function viaProxy(url, init = {}) {
+      const host = new URL(url).hostname;
+      const headers = new Headers(init.headers || {});
+      const jarName = jarOf(host);
+      const jar = jarName === 'chat' && Object.keys(cfg.jars.chat).length ? cfg.jars.chat : cfg.jars.api;
+      headers.set('x-beinios-key', cfg.proxyKey);
+      const cookie = cookieString(jar);
+      if (cookie) headers.set('x-bein-cookie', cookie);
+      const res = await rawFetch(proxied(url), { method: init.method || 'GET', headers, body: init.body, signal: init.signal, credentials: 'omit', mode: 'cors', cache: 'no-store' });
+      const perr = res.headers.get('x-bein-proxy-error');
+      if (perr) await noteStatus({ ok: false, code: perr, at: Date.now() });
+      await absorbCookies(host, res);
+      return res;
+    }
+
+    // Làm mới phiên (như web Beincom khi gặp 401): mỗi ô cookie chỉ một lần cùng lúc
+    const refreshing = new Map();
+    function refreshSession(jarName) {
+      if (refreshing.has(jarName)) return refreshing.get(jarName);
+      const p = (async () => {
+        const jar = jarName === 'chat' && Object.keys(cfg.jars.chat).length ? cfg.jars.chat : cfg.jars.api;
+        if (!Object.keys(jar).length) return false;
+        let deviceId = jar[DEVICE_COOKIE] ? decodeURIComponent(jar[DEVICE_COOKIE]) : cfg.deviceId;
+        if (!deviceId) deviceId = (await saveConfig({ deviceId: newDeviceId() })).deviceId;
+        const application = jarName === 'chat' ? 'BIC_CHAT' : 'BIC_GROUP';
+        const headers = { 'x-beinios-key': cfg.proxyKey, 'x-bein-cookie': cookieString(jar), 'Content-Type': 'application/json', Accept: 'application/json', 'x-application': application, 'x-platform': 'WEB' };
+        const body = JSON.stringify({ deviceId, deviceName: 'BeinIOS', application, platform: 'WEB' });
+        try {
+          const res = await rawFetch(proxied(AUTH_REFRESH), { method: 'POST', headers, body, credentials: 'omit', mode: 'cors', cache: 'no-store' });
+          const raw = res.headers.get('x-bein-set-cookie');
+          let lines = [];
+          try {
+            lines = JSON.parse(raw || '[]');
+          } catch {}
+          // Cookie mới của phiên: máy chủ đăng nhập đặt cho cả .beincom.com; host-only của auth thì gắn vào ô đang làm mới
+          const next = applySetCookies(cfg.jars, jarName === 'chat' ? CHAT_HOST : 'api.beincom.com', lines);
+          if (next) await saveConfig({ jars: next });
+          return res.ok;
+        } catch {
+          return false;
+        }
+      })().finally(() => setTimeout(() => refreshing.delete(jarName), 0));
+      refreshing.set(jarName, p);
+      return p;
+    }
+
+    // fetch thay thế: Beincom -> proxy (401 -> làm mới phiên rồi gọi lại một lần); địa chỉ khác -> fetch gốc
+    async function pwaFetch(resource, init) {
+      const isReq = typeof Request !== 'undefined' && resource instanceof Request;
+      const url = isReq ? resource.url : String(resource);
+      if (!isBeincom(url)) return rawFetch(resource, init);
+      await load();
+      if (!configured()) throw new TypeError('BeinIOS: chưa cài proxy (Cài đặt → Proxy & đăng nhập)');
+      const opts = isReq ? { method: resource.method, headers: resource.headers, body: init?.body, signal: resource.signal, ...init } : { ...(init || {}) };
+      const host = new URL(url).hostname;
+      let res = await viaProxy(url, opts);
+      if (res.status === 401 && cfg.refresh !== false && !res.headers.get('x-bein-proxy-error') && host !== 'auth.beincom.com') {
+        const ok = await refreshSession(jarOf(host));
+        if (ok) res = await viaProxy(url, opts);
+        if (res.status === 401) await noteStatus({ ok: false, code: 'session', host: jarOf(host), at: Date.now() });
+      } else if (res.ok && cfg.status && !cfg.status.ok && (cfg.status.code !== 'session' || cfg.status.host === jarOf(host))) await noteStatus({ ok: true, at: Date.now() });
+      return res;
+    }
+
+    return {
+      load,
+      saveConfig,
+      configured,
+      fetch: pwaFetch,
+      proxied,
+      refreshSession,
+      get config() {
+        return cfg;
+      },
+    };
+  }
+
+  function normConfig(c) {
+    const x = c && typeof c === 'object' ? c : {};
+    return {
+      proxyUrl: String(x.proxyUrl || ''),
+      proxyKey: String(x.proxyKey || ''),
+      jars: { api: { ...(x.jars?.api || {}) }, chat: { ...(x.jars?.chat || {}) } },
+      deviceId: String(x.deviceId || ''),
+      refresh: x.refresh !== false,
+      savedAt: Number(x.savedAt) || 0,
+      status: x.status && typeof x.status === 'object' ? x.status : null,
+    };
+  }
+
+  Object.assign(PWA, { idbBackend, memBackend, createStore, createNet, parseCookieInput, parseSetCookie, applySetCookies, cookieString, isBeincom, normConfig, AUTH_REFRESH, AREAS });
+
+  // Bản dùng chung của trang / luồng nền này (tạo khi cần)
+  let shared = null;
+  PWA.shared = () => {
+    if (shared) return shared;
+    const backend = G.indexedDB ? idbBackend() : memBackend();
+    const channel = typeof BroadcastChannel === 'function' ? new BroadcastChannel('beinios-storage') : null;
+    const store = createStore({ backend, channel });
+    const net = createNet({ store, rawFetch: G.fetch.bind(G) });
+    return (shared = { store, net });
+  };
+
+  // Phiên bản addon (manifest.json) — đọc đồng bộ một lần như chrome.runtime.getManifest()
+  let manifest = null;
+  PWA.manifest = () => {
+    if (manifest) return manifest;
+    try {
+      const x = new XMLHttpRequest();
+      x.open('GET', new URL('manifest.json', PWA.base()).href, false);
+      x.send();
+      manifest = JSON.parse(x.responseText);
+    } catch {
+      manifest = { name: 'BeinFusion', version: '0.0.0', manifest_version: 3 };
+    }
+    return manifest;
+  };
+  // Thư mục gốc của webapp (nơi có pwa-shim.js), ví dụ https://phungnhan.github.io/BeinIOS/
+  PWA.base = () => {
+    const here = G.location?.href || 'http://localhost/';
+    const script = G.document?.currentScript?.src || PWA._scriptSrc;
+    return script ? new URL('./', script).href : new URL('./', here).href;
+  };
+  if (G.document?.currentScript?.src) PWA._scriptSrc = G.document.currentScript.src;
+
+  // ---------- 3. Trang (index.html, chat.html, dashboard.html) ----------
+  if (typeof window === 'undefined' || G !== window) return;
+  if (!/^https?:$/.test(location.protocol)) return; // addon thật / trang xem thử: giữ nguyên chrome.*
+  if (G.chrome?.runtime?.id && !G.chrome.runtime.__bein) return;
+
+  const { store, net } = PWA.shared();
+  const rawFetch = G.fetch.bind(G);
+  const inShell = (() => {
+    try {
+      return G.top !== G && !!G.top.__BEIN_SHELL__;
+    } catch {
+      return false;
+    }
+  })();
+
+  // Kết nối luồng nền: SharedWorker (iPhone / máy tính); không có thì Worker thường do cửa sổ ngoài cùng giữ
+  function connectWorker() {
+    const url = new URL('pwa-worker.js', PWA.base()).href;
+    if (typeof SharedWorker === 'function') {
+      try {
+        const w = new SharedWorker(url, { name: 'beinios-bg' });
+        w.onerror = (e) => console.error('BeinIOS: luồng nền lỗi', e?.message || e);
+        return w.port;
+      } catch (e) {
+        console.warn('BeinIOS: không mở được SharedWorker, dùng Worker', e);
+      }
+    }
+    let host = null;
+    try {
+      host = G.top.__beinHost || null;
+    } catch {}
+    if (!host) {
+      const worker = new Worker(url, { name: 'beinios-bg' });
+      host = G.__beinHost = {
+        connect() {
+          const ch = new MessageChannel();
+          worker.postMessage({ type: 'bein-port' }, [ch.port2]);
+          return ch.port1;
+        },
+      };
+    }
+    return host.connect();
+  }
+
+  let port = null;
+  let seq = 0;
+  const pending = new Map();
+  const eventFns = new Set();
+  function onPortMessage(e) {
+    const m = e.data || {};
+    if (m.type === 'reply' && pending.has(m.id)) {
+      pending.get(m.id)(m.res);
+      pending.delete(m.id);
+    } else if (m.type === 'event') {
+      for (const fn of eventFns) {
+        try {
+          fn(m.ev);
+        } catch (err) {
+          console.error(err);
+        }
+      }
+    }
+  }
+  const ask = (payload) =>
+    new Promise((resolve) => {
+      const id = ++seq;
+      pending.set(id, resolve);
+      port.postMessage({ ...payload, id });
+    });
+  function connect() {
+    port = connectWorker();
+    port.onmessage = onPortMessage;
+    port.start?.();
+    ask({ type: 'hello', top: !inShell });
+  }
+  connect();
+  addEventListener('pagehide', () => {
+    try {
+      port.postMessage({ type: 'bye' });
+    } catch {}
+  });
+  // iPhone có thể tắt luồng nền khi ứng dụng chạy ngầm lâu: mở lại mà luồng nền không trả lời thì nối lại (luồng nền mới
+  // tự chạy lại addon); lệnh đang chờ báo lỗi để bấm lại, không tự gửi lại (tránh làm một thao tác hai lần)
+  let checking = false;
+  async function ensureWorker() {
+    if (checking || document.visibilityState !== 'visible') return;
+    checking = true;
+    try {
+      const alive = await Promise.race([ask({ type: 'ping' }).then(() => true), new Promise((r) => setTimeout(() => r(false), 4000))]);
+      if (alive) return;
+      console.warn('BeinIOS: luồng nền không trả lời — nối lại');
+      for (const fn of pending.values()) fn({ status: 'error', message: 'Luồng nền vừa khởi động lại — hãy thử lại.' });
+      pending.clear();
+      try {
+        port.close?.();
+      } catch {}
+      connect();
+    } finally {
+      checking = false;
+    }
+  }
+  document.addEventListener('visibilitychange', ensureWorker);
+  addEventListener('pageshow', (e) => e.persisted && ensureWorker());
+
+  const msgListeners = new Set();
+  const runtime = {
+    __bein: true,
+    id: 'beinios',
+    lastError: undefined,
+    getURL: (p) => new URL(String(p || ''), PWA.base()).href,
+    getManifest: () => PWA.manifest(),
+    sendMessage(msg, cb) {
+      const p = ask({ type: 'msg', msg });
+      if (typeof cb === 'function') p.then(cb);
+      return p;
+    },
+    onMessage: { addListener: (fn) => msgListeners.add(fn), removeListener: (fn) => msgListeners.delete(fn), hasListener: (fn) => msgListeners.has(fn) },
+    openOptionsPage: () => openPage(runtime.getURL('dashboard.html')),
+    getPlatformInfo: async () => ({ os: /iPhone|iPad|Mac/.test(navigator.userAgent) ? 'mac' : 'win', arch: 'x86-64', nacl_arch: 'x86-64' }),
+  };
+  const chromeApi = {
+    runtime,
+    storage: store.chromeStorage(),
+    permissions: { contains: async () => true, request: async () => true, getAll: async () => ({ origins: [], permissions: [] }) },
+    alarms: {
+      get: (name, cb) => {
+        const p = ask({ type: 'alarm-get', name });
+        if (typeof cb === 'function') p.then(cb);
+        return p;
+      },
+    },
+    tabs: { create: async ({ url } = {}) => (openPage(url), { id: 0, url }) },
+  };
+  try {
+    G.chrome = Object.assign(G.chrome || {}, chromeApi);
+  } catch {
+    Object.defineProperty(G, 'chrome', { value: chromeApi, configurable: true, writable: true });
+  }
+
+  // fetch / XMLHttpRequest tới Beincom (ảnh đại diện, tải tệp lên) đi qua proxy
+  G.fetch = (resource, init) => net.fetch(resource, init);
+  const xhrOpen = XMLHttpRequest.prototype.open;
+  const xhrSend = XMLHttpRequest.prototype.send;
+  XMLHttpRequest.prototype.open = function (method, url, ...rest) {
+    const abs = new URL(String(url), location.href).href;
+    this.__beinTarget = isBeincom(abs) ? abs : '';
+    return xhrOpen.call(this, method, this.__beinTarget && net.configured() ? net.proxied(abs) : url, ...rest);
+  };
+  XMLHttpRequest.prototype.send = function (body) {
+    if (this.__beinTarget && net.configured()) {
+      const cfg = net.config;
+      const host = new URL(this.__beinTarget).hostname;
+      const jar = host === CHAT_HOST && Object.keys(cfg.jars.chat).length ? cfg.jars.chat : cfg.jars.api;
+      this.withCredentials = false;
+      this.setRequestHeader('x-beinios-key', cfg.proxyKey);
+      const cookie = cookieString(jar);
+      if (cookie) this.setRequestHeader('x-bein-cookie', cookie);
+    }
+    return xhrSend.call(this, body);
+  };
+  net.load().catch(() => {});
+
+  // Mở trang của webapp: trong khung ứng dụng thì nhờ index.html chuyển tab, không mở cửa sổ mới (trên iPhone cửa
+  // sổ mới là Safari — không có dữ liệu của ứng dụng)
+  const OWN_PAGES = /\/(chat|dashboard|popup)\.html$/;
+  function ownPage(url) {
+    try {
+      const u = new URL(String(url), location.href);
+      return u.origin === location.origin && OWN_PAGES.test(u.pathname) ? u : null;
+    } catch {
+      return null;
+    }
+  }
+  // Link "đăng nhập Beincom": webapp không dùng phiên của Safari -> mở Cài đặt để dán cookie
+  const loginPage = (url) => /^https:\/\/group\.beincom\.com\/?(login\/?)?(\?.*)?$/.test(String(url || ''));
+  function openPage(url) {
+    const shell = inShell ? G.top.BeinShell : G.BeinShell;
+    if (shell && loginPage(url)) return void shell.setup();
+    const u = ownPage(url);
+    if (u && inShell) return void G.top.BeinShell.open(u.href);
+    if (u && G.BeinShell) return void G.BeinShell.open(u.href);
+    if (u) return void (location.href = u.href);
+    if (url) rawOpen(url, '_blank', 'noopener');
+  }
+  const rawOpen = G.open.bind(G);
+  if (inShell) {
+    G.open = (url, target, features) => (ownPage(url) || loginPage(url) ? (openPage(url), null) : rawOpen(url, target, features));
+    addEventListener(
+      'click',
+      (e) => {
+        if (e.defaultPrevented || e.button || e.ctrlKey || e.metaKey || e.shiftKey) return;
+        const a = e.target.closest?.('a[href]');
+        if (!a || !(ownPage(a.href) || loginPage(a.href))) return;
+        e.preventDefault();
+        openPage(a.href);
+      },
+      false,
+    );
+  }
+
+  // Câu chữ của addon nói "đăng nhập Beincom trên trình duyệt này": đổi sang cách làm của webapp (dán cookie ở Cài đặt).
+  // Chỉ theo dõi đúng vài phần tử của bảng Bắt đầu (Dashboard), không đụng phần còn lại của trang.
+  const WORDING = [
+    ['#onb-login', /^Chưa thấy phiên đăng nhập Beincom/, 'Chưa thấy phiên đăng nhập Beincom (hoặc chưa quét lần nào). Bấm "Mở Cài đặt", dán cookie Beincom, rồi bấm Quét lại.'],
+    ['#onb-open', /^Mở Beincom$/, 'Mở Cài đặt'],
+    ['#onb-login', null, 'BeinIOS dùng cookie đăng nhập bạn dán ở Cài đặt — không hỏi mật khẩu.', (el) => el.previousElementSibling],
+  ];
+  function applyWording() {
+    for (const [sel, re, text, pick] of WORDING) {
+      const base = document.querySelector(sel);
+      const el = base && pick ? pick(base) : base;
+      if (!el) continue;
+      const fix = () => {
+        if (re ? re.test(el.textContent) : !el.dataset.beinWording) {
+          el.dataset.beinWording = '1';
+          if (el.textContent !== text) el.textContent = text;
+        }
+      };
+      fix();
+      if (re && !el.__beinObs) (el.__beinObs = new MutationObserver(fix)).observe(el, { childList: true, characterData: true, subtree: true });
+    }
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', applyWording);
+  else applyWording();
+
+  // Báo nhỏ trên cùng màn hình (thông báo của addon khi đang mở ứng dụng): xếp thành cột, tối đa 3, cùng mã thì thay
+  PWA.toast = (title, message, onClick, id = '') => {
+    let wrap = document.getElementById('bein-toasts');
+    if (!wrap) {
+      wrap = document.createElement('div');
+      wrap.id = 'bein-toasts';
+      wrap.style.cssText = 'position:fixed;left:50%;top:calc(10px + env(safe-area-inset-top,0px));transform:translateX(-50%);z-index:2147483000;display:flex;flex-direction:column;gap:8px;width:min(92vw,440px);pointer-events:none';
+      document.body.append(wrap);
+    }
+    if (id) for (const old of wrap.querySelectorAll('[data-id]')) if (old.dataset.id === id) old.remove();
+    while (wrap.children.length >= 3) wrap.firstElementChild.remove();
+    const box = document.createElement('div');
+    box.setAttribute('role', 'status');
+    if (id) box.dataset.id = id;
+    box.style.cssText = 'pointer-events:auto;padding:10px 14px;border-radius:14px;background:rgba(20,24,38,.95);color:#fff;font:13px/1.4 -apple-system,system-ui,sans-serif;box-shadow:0 10px 30px rgba(0,0,0,.3);cursor:pointer';
+    const b = document.createElement('b');
+    b.textContent = title || 'BeinFusion';
+    const t = document.createElement('div');
+    t.textContent = message || '';
+    box.append(b, t);
+    box.onclick = () => {
+      box.remove();
+      onClick?.();
+    };
+    wrap.append(box);
+    setTimeout(() => box.remove(), 8000);
+  };
+
+  // Sự kiện của luồng nền (thông báo, huy hiệu, mở trang): chỉ cửa sổ ngoài cùng xử lý (khung ứng dụng tự xử lý;
+  // trang mở riêng ngoài khung thì trang tự xử lý)
+  PWA.page = {
+    ask,
+    get port() {
+      return port;
+    },
+    onEvent: (fn) => eventFns.add(fn),
+    inShell,
+    store,
+    net,
+    openPage,
+    ensureWorker,
+  };
+  if (!inShell && !G.__BEIN_SHELL__) {
+    eventFns.add((ev) => {
+      if (ev.type === 'open') openPage(ev.url);
+      if (ev.type === 'notify') PWA.toast(ev.title, ev.message, () => port.postMessage({ type: 'notification-click', nid: ev.id }), ev.id);
+      if (ev.type === 'notify-clear') document.querySelector(`#bein-toasts [data-id="${CSS.escape(ev.id)}"]`)?.remove();
+    });
+  }
+})(typeof self !== 'undefined' ? self : globalThis);

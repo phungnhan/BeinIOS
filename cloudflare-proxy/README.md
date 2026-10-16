@@ -1,46 +1,69 @@
-# 🌐 Hướng dẫn dựng Cloudflare Worker Proxy cho BeinIOS
+# Cloudflare proxy cho BeinIOS
 
-Proxy này giúp ứng dụng **BeinIOS (PWA)** gọi được toàn bộ API của Beincom (`api.beincom.com`, `group.beincom.com`, `chat.beincom.com`) mà **không bao giờ bị trình duyệt chặn CORS**.
+Webapp BeinIOS chạy trên GitHub Pages nên trình duyệt không cho gọi thẳng Beincom: Beincom chỉ cho phép trang `group.beincom.com` đọc kết quả (CORS). Proxy này là một Cloudflare Worker của riêng bạn. Nó nhận lệnh của webapp, chuyển tới Beincom kèm cookie đăng nhập, rồi trả kết quả lại cho webapp.
 
----
+Gói miễn phí của Cloudflare là đủ (100.000 lượt gọi mỗi ngày).
 
-## ⚡ Cách 1: Triển khai siêu nhanh qua Web Dashboard (Không cần cài đặt, mất 2 phút)
+## An toàn
 
-1. Đăng nhập vào trang quản trị Cloudflare: [dash.cloudflare.com](https://dash.cloudflare.com) (tạo tài khoản miễn phí nếu chưa có).
-2. Ở thanh menu bên trái, chọn **Workers & Pages** → Bấm **Create application** (hoặc **Create Worker**).
-3. Đặt tên cho Worker (ví dụ: `beinios-proxy`) → Bấm **Deploy**.
-4. Sau khi tạo xong, bấm vào nút **Edit code** (Chỉnh sửa mã).
-5. Xóa hết toàn bộ code mặc định trong ô biên tập, copy toàn bộ nội dung trong tệp [`worker.js`](worker.js) và dán vào.
-6. Bấm nút **Deploy** (hoặc **Save and deploy**) ở góc trên bên phải.
-7. **Lấy địa chỉ Proxy của bạn:**
-   * Địa chỉ có dạng: `https://beinios-proxy.<ten-subdomain-cua-ban>.workers.dev`
-   * Mở link này trên trình duyệt, nếu thấy hiện thông báo `{"status": "ok", "service": "BeinIOS Cloudflare Proxy"}` là thành công 100%!
+Proxy có một số lớp bảo vệ:
 
----
+- **Khoá bí mật `PROXY_KEY`.** Mọi lệnh phải kèm đúng khoá. Người khác biết địa chỉ proxy cũng không dùng được.
+- **`ALLOWED_ORIGIN`.** Chỉ trang của bạn (ví dụ `https://phungnhan.github.io`) đọc được kết quả.
+- **Chỉ chuyển tới máy chủ Beincom.** Danh sách gồm `api`, `group`, `chat`, `upload`, `auth` `.beincom.com`. Với `auth.beincom.com`, proxy chỉ cho làm mới phiên. Proxy không cho đăng nhập bằng mật khẩu.
+- **Chỉ chuyển các header cần thiết.** Proxy không giả `Origin`/`Referer` của Beincom và không đi theo chuyển hướng.
+- **Không ghi nhật ký, không lưu gì.** Trong lệnh có cookie đăng nhập, nên phải tắt observability: `wrangler.toml` đã có `enabled = false`. Nếu tạo Worker trên web, tắt Logs như ở bước 4 bên dưới.
 
-## 💻 Cách 2: Triển khai bằng dòng lệnh (Terminal / CLI)
+Cookie mới mà Beincom gửi về (Set-Cookie) được trả cho webapp trong header `x-bein-set-cookie`. Webapp cập nhật cookie đã lưu theo header này, nhờ đó phiên đăng nhập không hết hạn sớm.
 
-Nếu bạn đã quen dùng dòng lệnh trên máy tính:
+## Cách 1: tạo trên web (không cần cài gì)
+
+1. **Tạo Worker.**
+   1. Đăng nhập [dash.cloudflare.com](https://dash.cloudflare.com).
+   2. Vào **Workers & Pages** → **Create** → **Create Worker**.
+   3. Đặt tên `beinios-proxy` → **Deploy**.
+2. **Dán mã.**
+   1. Bấm **Edit code** và xoá hết mã mẫu.
+   2. Dán toàn bộ tệp [`worker.js`](worker.js) → **Deploy**.
+3. **Đặt khoá và trang được phép.** Vào **Settings** → **Variables and Secrets** → **Add**:
+   - `ALLOWED_ORIGIN`, kiểu **Text**: `https://phungnhan.github.io`. Ghi địa chỉ trang, không ghi đường dẫn `/BeinIOS/`.
+   - `PROXY_KEY`, kiểu **Secret**: một chuỗi ngẫu nhiên dài từ 32 ký tự trở lên. Có thể lấy từ trình tạo mật khẩu, hoặc mở F12 → Console và gõ `crypto.randomUUID() + crypto.randomUUID()`. Giữ kỹ chuỗi này để dán vào webapp.
+4. **Tắt nhật ký.** Vào **Settings** → **Observability**, tắt **Workers Logs** nếu đang bật.
+5. **Kiểm tra.** Mở `https://beinios-proxy.<tên của bạn>.workers.dev/health` trên trình duyệt. Thấy `"status": "ok"` là proxy đã chạy.
+
+## Cách 2: dòng lệnh
+
+Chạy trong thư mục `cloudflare-proxy`:
 
 ```bash
-cd "d:/KaiBrain/BeinIOS/cloudflare-proxy"
-
-# 1. Đăng nhập tài khoản Cloudflare (chỉ cần làm lần đầu)
 npx wrangler login
+```
 
-# 2. Triển khai Worker lên Cloudflare
+```bash
+npx wrangler secret put PROXY_KEY
+```
+
+```bash
 npx wrangler deploy
 ```
 
-Terminal sẽ in ra đường link worker của bạn, ví dụ:
-`https://beinios-proxy.<subdomain>.workers.dev`
+- `npx wrangler login` chỉ cần chạy lần đầu.
+- `npx wrangler secret put PROXY_KEY` hỏi khoá rồi lưu khoá ở Cloudflare, không ghi vào tệp nào.
+- Trước khi deploy, sửa `ALLOWED_ORIGIN` trong `wrangler.toml` nếu trang của bạn khác `https://phungnhan.github.io`.
 
----
+## Dùng với BeinIOS
 
-## 📱 Sử dụng với BeinIOS PWA
+Mở BeinIOS → **Cài đặt**, dán địa chỉ proxy và khoá `PROXY_KEY`, rồi làm tiếp theo [HUONG-DAN-PWA.md](../HUONG-DAN-PWA.md).
 
-1. Mở ứng dụng **BeinIOS** (trên iPhone 13 hoặc trình duyệt máy tính).
-2. Bấm vào biểu tượng **⚙️ Cài đặt & Proxy** ở góc trên màn hình.
-3. Dán địa chỉ Cloudflare Worker của bạn vào ô **Cloudflare Proxy URL**.
-4. Dán Token hoặc Cookie đăng nhập Beincom của bạn vào ô **Token / Cookie**.
-5. Bấm **Kiểm tra kết nối & Lưu**: Hệ thống sẽ test độ trễ (latency) và báo kết nối thành công!
+## Proxy trả lỗi
+
+Webapp đọc mã trong header `x-bein-proxy-error` và báo ở Cài đặt:
+
+| Mã | Nghĩa |
+|---|---|
+| `setup` | Chưa đặt `PROXY_KEY` hoặc `ALLOWED_ORIGIN` |
+| `key` | Sai khoá |
+| `origin` | Trang gọi không có trong `ALLOWED_ORIGIN` |
+| `host` / `auth` | Địa chỉ không được phép |
+| `upstream` | Không kết nối được Beincom |
+| `redirect` | Beincom trả chuyển hướng: phiên hỏng, hoặc Beincom đổi đường dẫn |
