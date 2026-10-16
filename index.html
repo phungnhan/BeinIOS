@@ -364,16 +364,36 @@
       // Kiểm tra: proxy (khoá đúng không), Beincom (cookie còn dùng được không), Chat. Chỉ in số đếm, không in tên.
       async function check() {
         const cfg = net.config;
-        const base = cfg.proxyUrl.trim().replace(/\/+$/, '');
+        const base = cfg.proxyUrl;
+        if (new URL(base).origin === location.origin) return line('Địa chỉ proxy đang là địa chỉ của chính BeinIOS (GitHub Pages). Dán địa chỉ Worker Cloudflare, dạng https://beinios-proxy.<tài khoản>.workers.dev', 'bad'), false;
+        // Lần 1: hỏi /health không kèm khoá (yêu cầu đơn giản, không cần preflight) để biết địa chỉ có phải proxy BeinIOS không
+        let r;
+        let j = null;
         try {
-          const r = await fetch(base + '/health', { headers: { 'x-beinios-key': cfg.proxyKey }, cache: 'no-store' });
-          const j = await r.json().catch(() => ({}));
-          if (!r.ok || j.status !== 'ok') return line(`Proxy trả lời lạ (mã ${r.status}${j.code ? ', ' + j.code : ''}). Xem lại cài đặt proxy (PROXY_KEY, ALLOWED_ORIGIN).`, 'bad'), false;
-          if (!j.key) return line('Proxy chạy, nhưng khoá proxy không đúng.', 'bad'), false;
-          line(`Proxy OK (phiên bản ${j.version || '?'}).`, 'ok');
+          r = await fetch(base + '/health', { cache: 'no-store' });
+          j = await r.json().catch(() => null);
         } catch {
-          return line(`Không gọi được proxy. Kiểm tra địa chỉ, và ALLOWED_ORIGIN của proxy có ${location.origin}.`, 'bad'), false;
+          line(`Không gọi được proxy. Mở thử ${base}/health bằng trình duyệt:`, 'bad');
+          line('• Thấy trang BeinIOS hoặc trang trắng / 404: Worker đang chạy cả repo (tạo bằng "Import a repository") chứ không phải mã proxy. Vào Worker → Settings → Build, đặt Root directory = cloudflare-proxy rồi Deploy lại; hoặc tạo Worker mới từ "Hello World" và dán cloudflare-proxy/worker.js.', 'bad');
+          line(`• Thấy "BeinIOS proxy": biến ALLOWED_ORIGIN của proxy phải đúng ${location.origin} (không thêm /BeinIOS).`, 'bad');
+          return false;
         }
+        // Proxy BeinIOS luôn trả JSON có service / code: đoán nguyên nhân theo câu trả lời
+        if (j?.code === 'setup') return line('Proxy chưa đặt đủ biến: vào Worker → Settings → Variables and Secrets, thêm PROXY_KEY (Secret) và ALLOWED_ORIGIN (Text), rồi thử lại.', 'bad'), false;
+        if (j?.status !== 'ok' || !/BeinIOS/i.test(j?.service || '')) {
+          if (r.status === 404) return line(`Địa chỉ này không phải proxy BeinIOS (trả 404). Hay gặp: Worker chạy cả repo thay vì mã proxy (đặt Root directory = cloudflare-proxy), tạo nhầm Cloudflare Pages, hoặc dán sai địa chỉ. Mở ${base}/health phải thấy "BeinIOS proxy".`, 'bad'), false;
+          if (r.ok) return line('Địa chỉ này trả lời nhưng không phải proxy BeinIOS — có thể Worker vẫn là mã mẫu (Hello World) hoặc đang chạy cả repo: dán cloudflare-proxy/worker.js (hoặc đặt Root directory = cloudflare-proxy) rồi Deploy.', 'bad'), false;
+          return line(`Proxy trả lỗi ${r.status}${j?.code ? ' (' + j.code + ')' : ''}. Mở ${base}/health bằng trình duyệt để xem.`, 'bad'), false;
+        }
+        if (!('key' in j)) return line('Proxy đang chạy mã cũ: dán lại toàn bộ cloudflare-proxy/worker.js mới nhất rồi Deploy.', 'bad'), false;
+        // Lần 2: kèm khoá
+        try {
+          j = await (await fetch(base + '/health', { headers: { 'x-beinios-key': cfg.proxyKey }, cache: 'no-store' })).json();
+        } catch {
+          return line(`Proxy trả lời nhưng chặn trang này: biến ALLOWED_ORIGIN phải đúng ${location.origin}.`, 'bad'), false;
+        }
+        if (!j?.key) return line('Proxy chạy, nhưng khoá proxy không khớp PROXY_KEY đã đặt ở Cloudflare.', 'bad'), false;
+        line(`Proxy OK (phiên bản ${j.version || '?'}).`, 'ok');
         let good = true;
         if (!Object.keys(cfg.jars.api).length) {
           line('Chưa có cookie Beincom.', 'warn');
@@ -425,11 +445,14 @@
             if (to !== k) line(`Đoạn ở ô ${k === 'api' ? 'Beincom' : 'Chat'} là của ${host} — đã lưu vào ô ${to === 'api' ? 'Beincom' : 'Chat'}.`, 'warn');
             jars[to] = jar;
           }
-          const proxyUrl = $('proxy-url').value.trim();
+          let proxyUrl = $('proxy-url').value.trim();
           if (proxyUrl && !/^(https:\/\/[^/\s]+|http:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/|$))/.test(proxyUrl)) {
             line('Địa chỉ proxy phải bắt đầu bằng https://', 'bad');
             return;
           }
+          // Proxy nằm ở gốc địa chỉ Worker: bỏ phần đường dẫn dán thừa (/proxy, /health…)
+          if (proxyUrl) proxyUrl = new URL(proxyUrl).origin;
+          $('proxy-url').value = proxyUrl;
           const changedJar = JSON.stringify(jars) !== JSON.stringify(cfg.jars);
           await net.saveConfig({ proxyUrl, proxyKey: $('proxy-key').value.trim(), jars, refresh: $('refresh').checked, status: null, ...(changedJar ? { savedAt: Date.now() } : {}) });
           $('cookie-api').value = '';

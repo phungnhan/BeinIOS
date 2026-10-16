@@ -51,6 +51,18 @@ npx wrangler deploy
 - `npx wrangler secret put PROXY_KEY` hỏi khoá rồi lưu khoá ở Cloudflare, không ghi vào tệp nào.
 - Trước khi deploy, sửa `ALLOWED_ORIGIN` trong `wrangler.toml` nếu trang của bạn khác `https://phungnhan.github.io`.
 
+## Cách 3: nối repo GitHub (tự cập nhật proxy mỗi lần đẩy mã)
+
+Khi tạo Worker bằng **Import a repository** và chọn repo `BeinIOS`, Cloudflare mặc định đưa **cả repo** lên làm trang tĩnh. Khi đó, mở `/` thấy trang BeinIOS, còn `/health` trả 404 trống: proxy **không** chạy. Sửa như sau:
+
+1. Vào Worker → **Settings** → **Build** → **Build configuration**, đặt **Root directory** là `cloudflare-proxy`. Giữ lệnh deploy `npx wrangler deploy`.
+2. **Save**, rồi chạy lại bản dựng: vào **Deployments** → **Retry build**, hoặc đẩy mã mới lên.
+3. Vào **Settings** → **Variables and Secrets**, thêm `PROXY_KEY` kiểu **Secret**. `ALLOWED_ORIGIN` đã có sẵn trong `wrangler.toml`.
+
+Tên Worker phải trùng `name` trong `wrangler.toml` (`beinios-proxy`). Nếu bạn đặt tên khác, sửa `name` trong tệp cho khớp.
+
+Mở `https://beinios-proxy.<tài khoản>.workers.dev/health`, thấy `"service": "BeinIOS proxy"` là đúng.
+
 ## Dùng với BeinIOS
 
 Mở BeinIOS → **Cài đặt**, dán địa chỉ proxy và khoá `PROXY_KEY`, rồi làm tiếp theo [HUONG-DAN-PWA.md](../HUONG-DAN-PWA.md).
@@ -61,6 +73,7 @@ Webapp đọc mã trong header `x-bein-proxy-error` và báo ở Cài đặt:
 
 | Mã | Nghĩa |
 |---|---|
+| (không có mã, 404) | Địa chỉ không phải proxy BeinIOS. Ví dụ: Worker chạy cả repo (xem Cách 3), là Cloudflare Pages, hoặc dán sai địa chỉ |
 | `setup` | Chưa đặt `PROXY_KEY` hoặc `ALLOWED_ORIGIN` |
 | `key` | Sai khoá |
 | `origin` | Trang gọi không có trong `ALLOWED_ORIGIN` |

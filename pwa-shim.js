@@ -392,7 +392,14 @@
       return cfg;
     }
 
-    const proxyBase = () => String(cfg?.proxyUrl || '').trim().replace(/\/+$/, '');
+    const proxyBase = () => {
+      const raw = String(cfg?.proxyUrl || '').trim();
+      try {
+        return raw ? new URL(raw).origin : '';
+      } catch {
+        return raw.replace(/\/+$/, '');
+      }
+    };
     const configured = () => !!(proxyBase() && cfg?.proxyKey);
     const proxied = (url) => `${proxyBase()}/proxy?url=${encodeURIComponent(url)}`;
 

@@ -78,9 +78,15 @@ const proxy = http.createServer(async (req, res) => {
   res.end(Buffer.from(await r.arrayBuffer()));
 });
 
+// Địa chỉ không phải proxy: notProxyCors -> 404 cho mọi trang đọc (như Cloudflare Pages); còn lại 404 trống không CORS
+// (như Worker chạy cả repo dạng trang tĩnh)
+let notProxyCors = false;
+const notProxy = http.createServer((req, res) => (notProxyCors ? res.writeHead(404, { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'text/html' }).end('<h1>404</h1>') : res.writeHead(404).end()));
+
 const listen = (srv) => new Promise((r) => srv.listen(0, '127.0.0.1', () => r(srv.address().port)));
 const sitePort = await listen(site);
 const proxyPort = await listen(proxy);
+const notProxyPort = await listen(notProxy);
 const APP = `http://127.0.0.1:${sitePort}`;
 ENV = { PROXY_KEY: KEY, ALLOWED_ORIGIN: APP };
 
@@ -105,7 +111,7 @@ try {
   await shot('1-cai-dat');
 
   // Sai khoá proxy -> báo rõ
-  const fill = (key, api, chat) =>
+  const fill = (key, api, chat, url = `http://127.0.0.1:${proxyPort}/`) =>
     page.call(
       (url, key, api, chat) => {
         const set = (id, v) => {
@@ -121,14 +127,21 @@ try {
         document.getElementById('save').click();
         return true;
       },
-      `http://127.0.0.1:${proxyPort}/`,
+      url,
       key,
       api,
       chat,
     );
-  await fill('sai-khoa', '', '');
-  await page.until(() => /khoá proxy không đúng/.test(document.getElementById('result').textContent), 8000);
-  ok(true, 'sai khoá proxy: Cài đặt báo "khoá proxy không đúng"');
+  await fill('sai-khoa', '', '', `http://127.0.0.1:${notProxyPort}/`);
+  await page.until(() => /Root directory = cloudflare-proxy/.test(document.getElementById('result').textContent), 8000);
+  ok(true, 'Worker chạy cả repo (404 trống): Cài đặt chỉ cách sửa (Root directory)');
+  notProxyCors = true;
+  await fill('sai-khoa', '', '', `http://127.0.0.1:${notProxyPort}/`);
+  await page.until(() => /không phải proxy BeinIOS \(trả 404\)/.test(document.getElementById('result').textContent), 8000);
+  ok(true, 'địa chỉ trả 404 đọc được (như Cloudflare Pages): báo "không phải proxy BeinIOS"');
+  await fill('sai-khoa', '', '', `http://127.0.0.1:${proxyPort}/proxy?x=1`);
+  await page.until(() => /khoá proxy không khớp/.test(document.getElementById('result').textContent), 8000);
+  ok((await page.ev("document.getElementById('proxy-url').value")) === `http://127.0.0.1:${proxyPort}`, 'sai khoá proxy: báo "không khớp"; địa chỉ dán thừa đường dẫn được rút về gốc');
 
   const curl = `curl 'https://api.beincom.com/v1/group/me/permissions' \\\n  -H 'accept: application/json' \\\n  -b 'sid=old; rt=r1; Bic.Auth.deviceId=dev-e2e' \\\n  -H 'x-application: BIC_GROUP'`;
   await fill(KEY, curl, 'Cookie: MMAUTHTOKEN=m1; MMUSERID=mm1');
@@ -208,6 +221,7 @@ try {
   fails.push(String(e?.message || e));
   console.log('  ✗ ' + (e?.message || e));
   try {
+    console.log('  Cài đặt đang báo: ' + (await page.ev("document.getElementById('result')?.textContent || ''").catch(() => '')));
     const file = path.join(SHOTS || tmpdir(), 'beinios-e2e-loi.png');
     await page.shot(file);
     console.log('  ảnh màn hình lúc lỗi: ' + file);
@@ -216,6 +230,7 @@ try {
   await page.close();
   site.close();
   proxy.close();
+  notProxy.close();
   globalThis.fetch = realFetch;
 }
 console.log(fails.length ? `\n${fails.length} lỗi` : '\nPWA e2e: tất cả đạt');

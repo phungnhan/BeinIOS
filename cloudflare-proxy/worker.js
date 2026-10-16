@@ -14,7 +14,7 @@
  * Tác giả: Kai | Crypto Life
  */
 
-const VERSION = '2.0.0';
+const VERSION = '2.0.1';
 
 const ALLOWED_HOSTS = ['api.beincom.com', 'group.beincom.com', 'chat.beincom.com', 'upload.beincom.com', 'auth.beincom.com'];
 // auth.beincom.com: chỉ làm mới phiên (không cho đăng nhập bằng mật khẩu qua proxy)
@@ -68,7 +68,8 @@ export default {
     const origin = origins.includes(reqOrigin) ? reqOrigin : '';
     const url = new URL(request.url);
 
-    if (!env.PROXY_KEY || !origins.length) return fail(500, 'setup', 'Proxy chưa cài PROXY_KEY và ALLOWED_ORIGIN (xem README).', origin);
+    // Thiếu biến: trả lời đọc được cho mọi trang để webapp báo đúng chỗ cần sửa (không chuyển gì đi)
+    if (!env.PROXY_KEY || !origins.length) return fail(500, 'setup', 'Proxy chưa cài PROXY_KEY và ALLOWED_ORIGIN (xem README).', reqOrigin);
 
     // Trang khác (không phải webapp của bạn): không trả lời CORS -> trình duyệt chặn đọc kết quả
     if (request.method === 'OPTIONS') {
