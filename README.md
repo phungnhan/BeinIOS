@@ -232,6 +232,11 @@ Tab Quy tắc & cài đặt và Nhật ký chỉ dùng dữ liệu trong máy n�
   - **Sao lưu cài đặt**: **Tải bản sao lưu** tạo tệp JSON gồm cài đặt, quy tắc (chung và riêng), mẫu bài, kho câu hỏi thảo luận, câu trả lời mẫu của Chat; tuỳ chọn kèm hồ sơ vi phạm và **lịch sử số liệu** (hiệu quả bài, các lần nhắc người mới, số thành viên theo ngày, nhật ký thao tác — khôi phục thì gộp với dữ liệu đang có, dữ liệu trong máy được ưu tiên khi trùng). Không chứa mật khẩu hay phiên đăng nhập.
     - **Khôi phục từ tệp…**: hộp xác nhận ghi rõ các mục sẽ thay; hồ sơ vi phạm thì gộp thêm, không trùng.
     - Bản sao lưu đang tắt Chạy thử thì addon hỏi có giữ Chạy thử không (mặc định giữ). Tệp lạ / sai kiểu bị bỏ qua.
+  - **📱 BeinIOS (iPhone)** (v0.51.0): nút **Chuyển đăng nhập sang BeinIOS** chép phiên đăng nhập Beincom sang BeinIOS (BeinFusion chạy như webapp trên iPhone, repo `phungnhan/BeinIOS`).
+    - Addon xin quyền tuỳ chọn `cookies` (cùng `beincom.com`, `auth.beincom.com`, `chat.beincom.com`) khi bấm lần đầu. Phải có quyền với chính `beincom.com` thì Chrome mới cho đọc cookie chung `.beincom.com`, tức phiên đăng nhập, rồi đọc cookie trình duyệt gửi tới api / chat / auth `.beincom.com`. Cookie thống kê được bỏ đi; cookie trùng nhau chỉ ghi một lần (`lib/transfer.js`, định dạng `BEINIOS1.` + base64url JSON).
+    - Kết quả hiện thành mã QR (`lib/qr.js`, tự tạo, không dùng thư viện hay dịch vụ ngoài) mở `nhap.html#…` của BeinIOS; phần sau `#` không gửi lên máy chủ. Kèm nút Chép.
+    - Nguồn nên dùng: cửa sổ ẩn danh, để BeinIOS có phiên riêng (cần bật "Cho phép ở chế độ ẩn danh"); hoặc phiên của trình duyệt đang dùng.
+    - Không gửi cookie đi đâu, không lưu lại; mã tự ẩn sau 2 phút hoặc khi đóng hộp. Trong chính BeinIOS nhóm này bị ẩn (webapp không đọc được cookie).
 - **Theo dõi** (Cài đặt → 🔔 Theo dõi):
   - **Từ khoá cần để ý** (không phải vi phạm, vd "lừa đảo", "mất tiền", tên dự án): bài / bình luận mới nhắc tới thì có thông báo và hiện ở Việc cần làm (trong 3 ngày) với nút Bình luận / Trả lời / Bỏ qua.
   - **Nhắc bài chưa ai trả lời**: bài của thành viên quá số giờ đã chọn mà chưa có bình luận thì thông báo, mỗi bài một lần.
@@ -410,6 +415,14 @@ node test/e2e/addon.e2e.mjs
 ```
 - Thêm đường dẫn một thư mục để thử addon ở đó (vd. bản giải nén từ `dist/*.zip`).
 - Nạp addon vào Chrome headless bằng CDP (`Extensions.loadUnpacked`), kiểm tra service worker có đủ hàm, nạp dữ liệu mẫu (qua hàng đợi của service worker), mở **Dashboard thật** đi qua cả 8 tab và **popup thật**, báo lỗi JavaScript ở mọi trang. Không đăng nhập Beincom, không thao tác gì lên tài khoản.
+
+Nút Chuyển đăng nhập sang BeinIOS trên addon thật:
+```
+node test/e2e/beinios.e2e.mjs
+```
+- Chạy trên một bản sao addon được cấp sẵn quyền `cookies` + `beincom.com` / chat / auth, với cookie giả.
+- Kiểm tra đọc đủ cookie chung `.beincom.com` và cookie riêng từng máy chủ, rồi kiểm tra mã QR.
+- Chạy cả addon nguyên bản: bấm nút thì trình duyệt phải hỏi quyền, không báo lỗi.
 
 Kiểm thử giao diện (cần Google Chrome, khoảng 20 giây):
 ```

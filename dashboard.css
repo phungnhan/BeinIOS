@@ -952,3 +952,11 @@ table.requests td.act-wrap button + button { margin-left: 0; }
 .chat-link:hover { border-color: var(--accent); color: var(--accent); text-decoration: none; }
 .chat-link .badge:empty { display: none; }
 .ghost-link { align-self: center; }
+
+/* Cài đặt → BeinIOS: hộp mã QR chuyển đăng nhập */
+.beinios-dialog { max-width: 560px; }
+.beinios-dialog.wide { max-width: min(96vw, 900px); }
+.beinios-src label { display: flex; gap: 8px; align-items: flex-start; margin: 6px 0; }
+.beinios-src .hint { margin: 2px 0 6px 24px; }
+.beinios-qr svg { display: block; width: 100%; max-width: 420px; margin: 10px auto; border-radius: 6px; }
+.beinios-dialog.wide .beinios-qr svg { max-width: min(82vh, 820px); }

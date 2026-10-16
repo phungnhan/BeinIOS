@@ -2,6 +2,15 @@
 
 Mỗi bản một mục, bản mới nhất ở trên. Dashboard tự hiện các mục mới sau khi cập nhật (bấm "Có gì mới" ở cuối trang để xem lại).
 
+## v0.51.0 — 16/10/2026
+- **Chuyển đăng nhập sang BeinIOS** (Cài đặt → 📱 BeinIOS). BeinIOS là BeinFusion chạy như ứng dụng trên iPhone, tại https://phungnhan.github.io/BeinIOS/.
+  - **Cách dùng**: bấm nút, quét mã QR bằng Camera iPhone, mở link, bấm Chép, rồi dán ở BeinIOS → Cài đặt → Dán từ addon. Có thể bấm **Chép** ngay trên máy tính rồi tự chuyển đoạn chữ sang iPhone.
+  - **Nên lấy từ cửa sổ ẩn danh**: BeinIOS có phiên riêng, không giành phiên với trình duyệt đang dùng. Cần bật "Cho phép ở chế độ ẩn danh" cho addon.
+  - **Quyền**: addon chỉ xin quyền đọc cookie Beincom khi bấm lần đầu, gồm cả `beincom.com` (phiên đăng nhập là cookie chung của cả miền).
+  - **Cookie gửi đi**: chỉ cookie phiên của Beincom, Chat và máy chủ đăng nhập; bỏ cookie thống kê.
+  - **An toàn**: không gửi cookie đi đâu, không lưu lại. Mã tự ẩn sau 2 phút hoặc khi đóng hộp.
+  - **Mã QR tạo ngay trong addon**, không dùng dịch vụ ngoài. Đăng nhập dài quá cho mã QR thì dùng nút Chép.
+
 ## v0.50.0 — 15/10/2026
 - **Ô viết bình luận (khung thread) đủ chức năng như ô gõ tin chính**:
   - **Aa** để hiện / ẩn thanh định dạng: đậm, nghiêng, gạch, link, mã, trích dẫn, danh sách. Thanh mặc định ẩn cho gọn; addon nhớ lựa chọn của bạn.

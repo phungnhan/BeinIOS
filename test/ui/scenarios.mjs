@@ -730,6 +730,39 @@ export const scenarios = [
     },
   },
   {
+    name: 'BeinIOS: chuyển đăng nhập (cửa sổ ẩn danh, mã QR, chép)',
+    async run({ page, url, assert }) {
+      await page.open(url('dashboard', 'tab=settings'));
+      await page.ev(`window.__incog = true; window.__incogAllowed = true; Object.defineProperty(navigator, 'clipboard', { value: { writeText: async (t) => (window.__copied = t) } }); true`);
+      await page.ev(`document.getElementById('btn-beinios').click(); true`);
+      await page.until(() => document.getElementById('beinios').open && !!document.querySelector('#beinios-qr svg path'));
+      const s1 = await page.ev(`({ src: document.querySelector('input[name=beinios-src]:checked')?.value, info: document.getElementById('beinios-info').textContent, reads: window.__cookieReads.map((r) => r.storeId), perm: window.__permRequests })`);
+      assert.equal(s1.src, '1', 'mặc định chọn cửa sổ ẩn danh khi có');
+      assert.ok(s1.reads.length === 3 && s1.reads.every((x) => x === '1'), 'đọc cookie của cửa sổ ẩn danh: ' + s1.reads);
+      assert.match(s1.info, /1 cookie Beincom · 2 cookie Chat · 2 cookie máy chủ đăng nhập/);
+      assert.equal(s1.perm, 1, 'xin quyền cookies khi bấm');
+      await page.ev(`document.getElementById('beinios-copy').click(); true`);
+      await page.until(() => !!window.__copied);
+      const got = await page.ev(`BG.beiniosUnpack(window.__copied)`);
+      assert.deepEqual(got.api, { sid: 'phien-an-danh' }, 'bỏ cookie thống kê, giữ cookie phiên');
+      assert.deepEqual(got.chat, { MMAUTHTOKEN: 'chat-an-danh', sid: 'phien-an-danh' });
+      assert.deepEqual(got.auth, { sid: 'phien-an-danh', rt: 'lam-moi-an-danh' });
+      // Đổi sang phiên của trình duyệt này
+      await page.ev(`document.querySelector('input[name=beinios-src][value="0"]').click(); true`);
+      await page.until(() => window.__cookieReads.some((r) => r.storeId === '0') && !!document.querySelector('#beinios-qr svg path'));
+      await page.ev(`window.__copied = ''; document.getElementById('beinios-copy').click(); true`);
+      await page.until(() => !!window.__copied);
+      assert.equal(await page.ev(`BG.beiniosUnpack(window.__copied).api.sid`), 'phien-thuong');
+      // Đóng: xoá mã khỏi trang
+      await page.ev(`document.getElementById('beinios-close').click(); true`);
+      await page.until(() => !document.getElementById('beinios').open && !document.querySelector('#beinios-qr svg') && document.getElementById('beinios-copy').disabled);
+      // Chưa đăng nhập Beincom
+      await page.ev(`window.__noLogin = true; window.__incog = false; document.getElementById('btn-beinios').click(); true`);
+      await page.until(() => /Không thấy phiên đăng nhập Beincom ở trình duyệt này/.test(document.getElementById('beinios-info').textContent));
+      assert.equal(await page.ev(`!!document.querySelector('#beinios-qr svg')`), false);
+    },
+  },
+  {
     name: 'Việc cần làm',
     async run({ page, url, assert }) {
       await page.open(url('dashboard', 'tab=overview'));

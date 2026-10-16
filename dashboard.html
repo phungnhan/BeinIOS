@@ -1440,6 +1440,13 @@
         <div class="muted small" id="backup-hint"></div>
         <div class="muted small" id="storage-usage"></div>
       </div>
+      <div class="group beinios-group" id="beinios-group">
+        <div class="group-title">📱 BeinIOS (iPhone)</div>
+        <div class="muted small">BeinIOS là BeinFusion chạy như ứng dụng trên iPhone (<a href="https://phungnhan.github.io/BeinIOS/" target="_blank" rel="noopener">phungnhan.github.io/BeinIOS</a>, cần proxy riêng của bạn). Nút dưới chép phiên đăng nhập Beincom sang BeinIOS: quét mã QR bằng Camera iPhone, hoặc bấm Chép rồi dán ở BeinIOS → Cài đặt → Dán từ addon. Addon xin quyền đọc cookie Beincom khi bấm lần đầu; không gửi cookie đi đâu.</div>
+        <div class="backup-actions">
+          <button type="button" class="ghost" id="btn-beinios">Chuyển đăng nhập sang BeinIOS</button>
+        </div>
+      </div>
     </section>
 
     <section class="card span-3" id="log-card" data-tab="log">
@@ -1619,6 +1626,20 @@
     </form>
   </dialog>
 
+  <dialog id="beinios" class="whatsnew beinios-dialog" aria-labelledby="beinios-title">
+    <form method="dialog">
+      <h3 id="beinios-title">Chuyển đăng nhập sang BeinIOS</h3>
+      <div class="beinios-src small" id="beinios-src"></div>
+      <div class="beinios-qr" id="beinios-qr"></div>
+      <p class="small" id="beinios-info" role="status"></p>
+      <p class="small err-text">Mã này là chìa khoá tài khoản Beincom của bạn: đừng để người khác chụp hay quét. Mã tự ẩn sau 2 phút.</p>
+      <div class="dialog-actions">
+        <button type="button" class="ghost" id="beinios-copy" disabled>Chép</button>
+        <button value="close" class="primary" id="beinios-close">Xong</button>
+      </div>
+    </form>
+  </dialog>
+
   <dialog id="whatsnew" class="whatsnew">
     <form method="dialog">
       <h3 id="whatsnew-title">Có gì mới</h3>
@@ -1652,6 +1673,8 @@
   <script src="lib/telegram.js"></script>
   <script src="lib/diag.js"></script>
   <script src="lib/chat.js"></script>
+  <script src="lib/qr.js"></script>
+  <script src="lib/transfer.js"></script>
   <script src="upload.js"></script>
   <script src="charts.js"></script>
   <script src="dash/core.js"></script>
@@ -1686,6 +1709,7 @@
   <script src="dash/digest.js"></script>
   <script src="dash/whatsnew.js"></script>
   <script src="dash/onboarding.js"></script>
+  <script src="dash/beinios.js"></script>
   <script src="dash/layout.js"></script>
   <script src="dashboard.js"></script>
 </body>
