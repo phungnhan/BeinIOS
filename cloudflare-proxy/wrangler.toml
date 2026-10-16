@@ -1,6 +1,8 @@
+# Giữ giống wrangler.toml ở gốc repo (Worker nối repo GitHub dựng bằng tệp đó).
 name = "beinios-proxy"
 main = "worker.js"
 compatibility_date = "2025-01-01"
+workers_dev = true
 
 # Trang được dùng proxy (địa chỉ GitHub Pages của bạn, không có đường dẫn). Nhiều trang: ngăn cách bằng dấu phẩy.
 [vars]

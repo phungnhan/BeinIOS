@@ -1,0 +1,17 @@
+# Cloudflare Worker proxy của BeinIOS (mã: cloudflare-proxy/worker.js, hướng dẫn: cloudflare-proxy/README.md).
+# Tệp này nằm ở gốc repo để Worker nối repo GitHub ("Import a repository") dựng đúng proxy, thay vì đưa cả repo
+# lên làm trang tĩnh. Giữ giống cloudflare-proxy/wrangler.toml (dùng khi chạy wrangler trong thư mục đó).
+name = "beinios-proxy"
+main = "cloudflare-proxy/worker.js"
+compatibility_date = "2025-01-01"
+workers_dev = true
+
+# Trang được dùng proxy (địa chỉ GitHub Pages, không có đường dẫn). Nhiều trang: ngăn cách bằng dấu phẩy.
+[vars]
+ALLOWED_ORIGIN = "https://phungnhan.github.io"
+
+# PROXY_KEY là khoá bí mật — KHÔNG ghi vào tệp này: đặt ở Cloudflare (Settings → Variables and Secrets, kiểu Secret).
+
+# Không ghi nhật ký yêu cầu (trong yêu cầu có cookie đăng nhập Beincom)
+[observability]
+enabled = false

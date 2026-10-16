@@ -53,15 +53,13 @@ npx wrangler deploy
 
 ## Cách 3: nối repo GitHub (tự cập nhật proxy mỗi lần đẩy mã)
 
-Khi tạo Worker bằng **Import a repository** và chọn repo `BeinIOS`, Cloudflare mặc định đưa **cả repo** lên làm trang tĩnh. Khi đó, mở `/` thấy trang BeinIOS, còn `/health` trả 404 trống: proxy **không** chạy. Sửa như sau:
+Tạo Worker bằng **Import a repository** và chọn repo `BeinIOS`. Không cần chỉnh gì thêm phần dựng: repo có sẵn `wrangler.toml` ở gốc, chỉ Cloudflare dựng `cloudflare-proxy/worker.js` với tên `beinios-proxy`, đặt sẵn `ALLOWED_ORIGIN` và tắt nhật ký.
 
-1. Vào Worker → **Settings** → **Build** → **Build configuration**, đặt **Root directory** là `cloudflare-proxy`. Giữ lệnh deploy `npx wrangler deploy`.
-2. **Save**, rồi chạy lại bản dựng: vào **Deployments** → **Retry build**, hoặc đẩy mã mới lên.
-3. Vào **Settings** → **Variables and Secrets**, thêm `PROXY_KEY` kiểu **Secret**. `ALLOWED_ORIGIN` đã có sẵn trong `wrangler.toml`.
+1. Tên Worker phải là `beinios-proxy`, trùng `name` trong `wrangler.toml`. Đặt tên khác thì sửa `name` cho khớp.
+2. Vào **Settings** → **Variables and Secrets**, thêm `PROXY_KEY` kiểu **Secret**.
+3. Mở `https://beinios-proxy.<tài khoản>.workers.dev/health`, thấy `"service": "BeinIOS proxy"` là đúng.
 
-Tên Worker phải trùng `name` trong `wrangler.toml` (`beinios-proxy`). Nếu bạn đặt tên khác, sửa `name` trong tệp cho khớp.
-
-Mở `https://beinios-proxy.<tài khoản>.workers.dev/health`, thấy `"service": "BeinIOS proxy"` là đúng.
+Repo trước bản 1.0.2 chưa có `wrangler.toml` ở gốc. Khi đó Cloudflare đưa cả repo lên làm trang tĩnh: mở `/` thấy trang BeinIOS, còn `/health` trả 404 trống. Cách sửa: đẩy bản mới (Cloudflare tự dựng lại), hoặc đặt **Settings** → **Build** → **Root directory** là `cloudflare-proxy`.
 
 ## Dùng với BeinIOS
 

@@ -317,3 +317,20 @@ test('proxy Cloudflare: chỉ chuyển header cần thiết, cookie từ x-bein-
     },
   );
 });
+
+test('wrangler.toml ở gốc repo (Worker nối repo GitHub) dựng đúng proxy, giống bản trong cloudflare-proxy/', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
+  const val = (toml, key) => toml.match(new RegExp('^' + key + '\\s*=\\s*(.+)$', 'm'))?.[1].trim();
+  const root = read('wrangler.toml');
+  const sub = read('cloudflare-proxy/wrangler.toml');
+  assert.equal(val(root, 'main'), '"cloudflare-proxy/worker.js"');
+  assert.ok(fs.existsSync(path.join(__dirname, '..', 'cloudflare-proxy', 'worker.js')));
+  assert.equal(val(sub, 'main'), '"worker.js"');
+  for (const k of ['name', 'compatibility_date', 'workers_dev', 'ALLOWED_ORIGIN', 'enabled']) assert.equal(val(root, k), val(sub, k), k);
+  assert.equal(val(root, 'name'), '"beinios-proxy"');
+  assert.equal(val(root, 'enabled'), 'false'); // không ghi nhật ký
+  assert.ok(!/^\s*\[assets\]/m.test(root), 'không đưa repo lên làm trang tĩnh');
+  assert.ok(!/PROXY_KEY\s*=/.test(root + sub), 'khoá không nằm trong tệp');
+});

@@ -130,6 +130,11 @@ node test/pwa/pwa.e2e.mjs
 
 ## Lịch sử BeinIOS
 
+- **1.0.2 (16/10/2026).** Thêm `wrangler.toml` ở gốc repo. Worker nối repo GitHub giờ tự dựng đúng proxy, không còn đưa cả repo lên làm trang tĩnh.
+- **1.0.1 (16/10/2026).**
+  - Màn hình Cài đặt chỉ đúng nguyên nhân khi proxy sai.
+  - Địa chỉ proxy dán thừa đường dẫn được tự rút về địa chỉ gốc.
+  - Proxy lên 2.0.1.
 - **1.0.0 (16/10/2026).** Chạy thật phần nền của addon:
   - SharedWorker, có dự phòng Worker thường;
   - kho IndexedDB dùng chung;

@@ -133,8 +133,8 @@ try {
       chat,
     );
   await fill('sai-khoa', '', '', `http://127.0.0.1:${notProxyPort}/`);
-  await page.until(() => /Root directory = cloudflare-proxy/.test(document.getElementById('result').textContent), 8000);
-  ok(true, 'Worker chạy cả repo (404 trống): Cài đặt chỉ cách sửa (Root directory)');
+  await page.until(() => /Worker đang phát cả repo/.test(document.getElementById('result').textContent), 8000);
+  ok(true, 'Worker phát cả repo (404 trống): Cài đặt chỉ cách sửa');
   notProxyCors = true;
   await fill('sai-khoa', '', '', `http://127.0.0.1:${notProxyPort}/`);
   await page.until(() => /không phải proxy BeinIOS \(trả 404\)/.test(document.getElementById('result').textContent), 8000);

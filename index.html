@@ -374,15 +374,15 @@
           j = await r.json().catch(() => null);
         } catch {
           line(`Không gọi được proxy. Mở thử ${base}/health bằng trình duyệt:`, 'bad');
-          line('• Thấy trang BeinIOS hoặc trang trắng / 404: Worker đang chạy cả repo (tạo bằng "Import a repository") chứ không phải mã proxy. Vào Worker → Settings → Build, đặt Root directory = cloudflare-proxy rồi Deploy lại; hoặc tạo Worker mới từ "Hello World" và dán cloudflare-proxy/worker.js.', 'bad');
+          line('• Thấy trang BeinIOS hoặc trang trắng / 404: Worker đang phát cả repo chứ không chạy mã proxy. Worker nối repo GitHub: xem Deployments đã dựng bản mới nhất chưa (repo có wrangler.toml ở gốc để dựng đúng proxy), tên Worker phải là beinios-proxy; hoặc tạo Worker mới từ "Hello World" và dán cloudflare-proxy/worker.js.', 'bad');
           line(`• Thấy "BeinIOS proxy": biến ALLOWED_ORIGIN của proxy phải đúng ${location.origin} (không thêm /BeinIOS).`, 'bad');
           return false;
         }
         // Proxy BeinIOS luôn trả JSON có service / code: đoán nguyên nhân theo câu trả lời
         if (j?.code === 'setup') return line('Proxy chưa đặt đủ biến: vào Worker → Settings → Variables and Secrets, thêm PROXY_KEY (Secret) và ALLOWED_ORIGIN (Text), rồi thử lại.', 'bad'), false;
         if (j?.status !== 'ok' || !/BeinIOS/i.test(j?.service || '')) {
-          if (r.status === 404) return line(`Địa chỉ này không phải proxy BeinIOS (trả 404). Hay gặp: Worker chạy cả repo thay vì mã proxy (đặt Root directory = cloudflare-proxy), tạo nhầm Cloudflare Pages, hoặc dán sai địa chỉ. Mở ${base}/health phải thấy "BeinIOS proxy".`, 'bad'), false;
-          if (r.ok) return line('Địa chỉ này trả lời nhưng không phải proxy BeinIOS — có thể Worker vẫn là mã mẫu (Hello World) hoặc đang chạy cả repo: dán cloudflare-proxy/worker.js (hoặc đặt Root directory = cloudflare-proxy) rồi Deploy.', 'bad'), false;
+          if (r.status === 404) return line(`Địa chỉ này không phải proxy BeinIOS (trả 404). Hay gặp: Worker phát cả repo thay vì chạy mã proxy (xem Deployments đã dựng bản mới nhất chưa), tạo nhầm Cloudflare Pages, hoặc dán sai địa chỉ. Mở ${base}/health phải thấy "BeinIOS proxy".`, 'bad'), false;
+          if (r.ok) return line('Địa chỉ này trả lời nhưng không phải proxy BeinIOS — có thể Worker vẫn là mã mẫu (Hello World) hoặc đang phát cả repo: dán cloudflare-proxy/worker.js rồi Deploy (Worker nối repo: dựng lại bản mới nhất).', 'bad'), false;
           return line(`Proxy trả lỗi ${r.status}${j?.code ? ' (' + j.code + ')' : ''}. Mở ${base}/health bằng trình duyệt để xem.`, 'bad'), false;
         }
         if (!('key' in j)) return line('Proxy đang chạy mã cũ: dán lại toàn bộ cloudflare-proxy/worker.js mới nhất rồi Deploy.', 'bad'), false;
