@@ -1108,6 +1108,61 @@ export const scenarios = [
     },
   },
   {
+    name: 'Trả lời bình luận bằng AI trên web (chép – dán): chép đề bài, mở trang chat, dán câu trả lời về',
+    async run({ page, url, assert }) {
+      await page.open(url('dashboard', 'tab=content'));
+      await page.ev(`document.querySelector('#comment-filter button[data-f=all]').click(); true`);
+      await page.until(() => !!document.querySelector('#comments-body input[aria-label="Chọn bình luận của Thanh Hà"]'));
+      await page.ev(`['Thanh Hà', 'Kèo VIP'].forEach((n) => document.querySelector('#comments-body input[aria-label="Chọn bình luận của ' + n + '"]').click()); true`);
+      await page.until(() => !document.getElementById('btn-ai-comments').disabled);
+      // Bộ nhớ tạm và thẻ mới giả: ghi lại đề bài đã chép và trang được mở
+      await page.ev(`(() => {
+        Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async (t) => { window.__clip = t; } } });
+        window.open = (u) => { window.__opened = u; return null; };
+        return true;
+      })()`);
+      await page.ev(`document.getElementById('btn-ai-comments').click(); true`);
+      await page.until(() => document.getElementById('ai-reply').open && !document.getElementById('ar-web').hidden);
+      assert.equal(await page.ev(`document.querySelector('#ar-mode button.active').dataset.m`), 'web');
+      assert.equal(await page.ev(`document.getElementById('ar-copy').textContent`), 'Chép đề bài & mở Claude');
+      await setValue(page, 'ar-site', 'chatgpt');
+      await setValue(page, 'ar-note', 'Nhắc đọc bài ghim');
+      assert.equal(await page.ev(`document.getElementById('ar-copy').textContent`), 'Chép đề bài & mở ChatGPT');
+      await page.ev(`document.getElementById('ar-copy').click(); true`);
+      await page.until(() => !!window.__clip && window.__opened === 'https://chatgpt.com/');
+      const clip = await page.ev(`window.__clip`);
+      assert.match(clip, /^Bạn giúp admin một cộng đồng trên Beincom/);
+      assert.match(clip, /Ghi chú của admin \(làm theo\): Nhắc đọc bài ghim/);
+      assert.match(clip, /Sàn này không rút tiền được/);
+      assert.match(clip, /Nhận airdrop 500 USDT/);
+      assert.match(clip, /đủ 2 mục/);
+      assert.match(await page.ev(`document.getElementById('ar-status').textContent`), /Đã chép đề bài \(2 bình luận\) và mở ChatGPT/);
+      // Câu trả lời dán về (có chữ quanh khối JSON như trang chat thường viết): điền nháp đúng bình luận theo mã rút gọn
+      const order = await page.ev(`(() => { const d = JSON.parse(window.__clip.split('Dữ liệu (JSON):' + String.fromCharCode(10))[1].split(String.fromCharCode(10, 10))[0]); return d.comments.map((c) => [c.id, c.text]); })()`);
+      const ha = order.find(([, t]) => /không rút tiền/.test(t))[0];
+      const vip = order.find(([, t]) => /keovip/.test(t))[0];
+      const answer = 'Đây là các câu trả lời:\n```json\n' + JSON.stringify({ replies: [{ id: ha, reply: 'Bạn nhắn admin kèm mã giao dịch nhé, mình kiểm tra ngay.', skip: false, reason: '' }, { id: vip, reply: '', skip: true, reason: 'Quảng cáo nhóm kèo' }] }) + '\n```';
+      await setValue(page, 'ar-paste', answer);
+      await page.ev(`document.getElementById('ar-fill').click(); true`);
+      await page.until(() => document.querySelectorAll('#ar-list .ar-text').length === 2 && /Đã điền nháp cho 2 bình luận/.test(document.getElementById('ar-status').textContent));
+      const items = await page.ev(`[...document.querySelectorAll('#ar-list .ar-item')].map((x) => ({ skip: x.classList.contains('skip'), on: x.querySelector('input[type=checkbox]').checked, text: x.querySelector('.ar-text').value }))`);
+      assert.deepEqual(items.find((x) => !x.skip), { skip: false, on: true, text: '@thanhha Bạn nhắn admin kèm mã giao dịch nhé, mình kiểm tra ngay.' });
+      assert.equal(items.find((x) => x.skip).on, false);
+      // Dán nhầm (không có JSON): báo rõ, giữ nháp
+      await setValue(page, 'ar-paste', 'Xin lỗi, tôi không giúp được.');
+      await page.ev(`document.getElementById('ar-fill').click(); true`);
+      await page.until(() => /Không thấy khối/.test(document.getElementById('ar-status').textContent));
+      assert.equal(await page.ev(`document.querySelectorAll('#ar-list .ar-text').length`), 2);
+      // Trả lời tất cả như cách khoá API; lần sau mở lại vẫn nhớ cách AI trên web và trang ChatGPT
+      await page.ev(`document.getElementById('ar-send').click(); true`);
+      await confirmOk(page);
+      await page.until(() => window.__lastCommentWrite?.source === 'ai');
+      assert.deepEqual(await page.ev(`[window.__lastCommentWrite.commentId, window.__lastCommentWrite.content]`), ['cw1', '@thanhha Bạn nhắn admin kèm mã giao dịch nhé, mình kiểm tra ngay.']);
+      assert.deepEqual(await page.ev(`chrome.storage.local.get('aiConfig').then((r) => [r.aiConfig.mode, r.aiConfig.site, r.aiConfig.key])`), ['web', 'chatgpt', '']);
+      await page.ev(`document.getElementById('ar-close').click(); true`);
+    },
+  },
+  {
     name: 'Trả lời bình luận bằng AI: chọn bình luận → AI viết nháp → sửa → Trả lời tất cả',
     async run({ page, url, assert }) {
       await page.open(url('dashboard', 'tab=content'));
@@ -1115,9 +1170,11 @@ export const scenarios = [
       await page.until(() => !!document.querySelector('#comments-body input[aria-label="Chọn bình luận của Thanh Hà"]'));
       await page.ev(`['Thanh Hà', 'Kèo VIP'].forEach((n) => document.querySelector('#comments-body input[aria-label="Chọn bình luận của ' + n + '"]').click()); true`);
       await page.until(() => !document.getElementById('btn-ai-comments').disabled);
-      // Chưa có khoá API: hộp mở, nhắc vào Cài đặt, chưa tạo được
+      // Chưa có khoá API: hộp mở ở cách AI trên web; chuyển sang Khoá API thì nhắc vào Cài đặt, chưa tạo được
       await page.ev(`document.getElementById('btn-ai-comments').click(); true`);
-      await page.until(() => document.getElementById('ai-reply').open && !document.getElementById('ar-setup').hidden);
+      await page.until(() => document.getElementById('ai-reply').open && !document.getElementById('ar-web').hidden && document.getElementById('ar-gen').hidden);
+      await page.ev(`document.querySelector('#ar-mode button[data-m=api]').click(); true`);
+      await page.until(() => !document.getElementById('ar-setup').hidden && document.getElementById('ar-web').hidden);
       assert.equal(await page.ev(`document.getElementById('ar-gen').disabled`), true);
       assert.equal(await page.ev(`document.getElementById('ar-title').textContent`), '✨ Trả lời 2 bình luận bằng AI');
       await page.ev(`document.getElementById('ar-close').click(); true`);

@@ -3,10 +3,12 @@
 Mỗi bản một mục, bản mới nhất ở trên. Dashboard tự hiện các mục mới sau khi cập nhật (bấm "Có gì mới" ở cuối trang để xem lại).
 
 ## v0.54.0 — 22/10/2026
-- **✨ Trả lời bình luận bằng AI**: chọn nhiều bình luận ở **Bình luận mới** (hoặc mở một bài → **✨ Trả lời hàng loạt bằng AI**), Claude viết nháp một câu trả lời cho từng bình luận theo nội dung bài.
+- **✨ Trả lời bình luận bằng AI**: chọn nhiều bình luận ở **Bình luận mới** (hoặc mở một bài → **✨ Trả lời hàng loạt bằng AI**), AI viết nháp một câu trả lời cho từng bình luận theo nội dung bài. Hai cách:
+  - **AI trên web (chép – dán)**, không cần khoá API: addon soạn sẵn đề bài, chép và mở Claude / ChatGPT / Gemini; bạn dán vào trang chat, gửi, rồi dán câu trả lời về — addon điền nháp vào từng bình luận. Addon không tự điều khiển trang chat (điều khoản các trang này cấm truy cập tự động).
+  - **Khoá API Claude**: tự động hoàn toàn.
   - Xem, sửa, bỏ chọn từng câu rồi bấm **Trả lời tất cả**: có hộp xác nhận, gửi lần lượt như nút Trả lời, có nút **Dừng**. Bình luận spam / lừa đảo được AI đề nghị bỏ qua.
   - Chọn giọng văn (thân thiện / trang trọng / ngắn gọn) và thêm ghi chú cho AI mỗi lần.
-  - Cần khoá API Claude của bạn: **Cài đặt → ✨ Trả lời bình luận bằng AI** (mô hình Opus 5.5 / Sonnet 5.5 / Haiku 5.5, hướng dẫn thêm, nút Kiểm tra). Khoá chỉ lưu trong trình duyệt này, không có trong sao lưu / đồng bộ. Hộp báo chi phí ước tính sau mỗi lần tạo.
+  - Khoá API Claude (không bắt buộc): **Cài đặt → ✨ Trả lời bình luận bằng AI** (mô hình Opus 5.5 / Sonnet 5.5 / Haiku 5.5, hướng dẫn thêm, nút Kiểm tra). Khoá chỉ lưu trong trình duyệt này, không có trong sao lưu / đồng bộ. Hộp báo chi phí ước tính sau mỗi lần tạo.
 
 ## v0.53.1 — 21/10/2026
 - **Trang Chat**: tin nhắn riêng với chính mình đổi tên thành **Nhật ký của tôi** (trước là "Nhật ký cá nhân"), cùng tên với mục Nhật ký của tôi trong Hồ sơ cá nhân của BeinIOS.

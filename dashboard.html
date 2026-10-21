@@ -1423,9 +1423,9 @@
       </div>
       <div class="group ai-group">
         <div class="group-title">✨ Trả lời bình luận bằng AI</div>
-        <div class="muted small">Nhờ Claude (Anthropic) viết sẵn câu trả lời cho nhiều bình luận một lúc: chọn bình luận ở tab Bài viết → <b>Bình luận mới</b> (hoặc mở một bài) → <b>✨ Trả lời bằng AI</b>, xem / sửa từng câu rồi bấm <b>Trả lời tất cả</b>. Cần khoá API của chính bạn ở <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com → API Keys</a>; mỗi lần tạo tính phí vào tài khoản Anthropic đó (Opus 5.5: khoảng 0,02–0,1 USD cho 20 bình luận). Khoá chỉ lưu trong trình duyệt này, không có trong sao lưu / đồng bộ.</div>
+        <div class="muted small">Nhờ Claude (Anthropic) viết sẵn câu trả lời cho nhiều bình luận một lúc: chọn bình luận ở tab Bài viết → <b>Bình luận mới</b> (hoặc mở một bài) → <b>✨ Trả lời bằng AI</b>, xem / sửa từng câu rồi bấm <b>Trả lời tất cả</b>. Hai cách: <b>AI trên web (chép – dán)</b> — không cần khoá, dùng tài khoản Claude / ChatGPT / Gemini bạn đang có: addon soạn sẵn đề bài, bạn dán vào trang chat rồi dán câu trả lời về; hoặc <b>khoá API Claude</b> — tự động hoàn toàn, lấy khoá ở <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com → API Keys</a>, mỗi lần tạo tính phí vào tài khoản Anthropic đó (Opus 5.5: khoảng 0,02–0,1 USD cho 20 bình luận). Khoá chỉ lưu trong trình duyệt này, không có trong sao lưu / đồng bộ.</div>
         <label class="text-row">
-          <span><b>Khoá API Claude</b></span>
+          <span><b>Khoá API Claude</b> <span class="muted small">(không bắt buộc)</span></span>
           <span class="tg-line"><input type="password" id="ai-key" autocomplete="off" spellcheck="false" placeholder="sk-ant-…" /><button type="button" class="ghost sm" id="btn-ai-show">Hiện</button></span>
         </label>
         <label class="select-row"><span><b>Mô hình</b></span><select id="ai-model"></select></label>
@@ -1584,14 +1584,34 @@
       <button type="button" class="ghost sm" id="ar-close" aria-label="Đóng">✕</button>
     </div>
     <div class="pv-body">
+      <div class="seg ar-mode" id="ar-mode" role="group" aria-label="Cách nhờ AI viết">
+        <button type="button" data-m="web" title="Dùng tài khoản Claude / ChatGPT / Gemini bạn đang có trên trình duyệt — tự chép đề bài sang và dán câu trả lời về">AI trên web (chép – dán)</button>
+        <button type="button" data-m="api" title="Tự động hoàn toàn, cần khoá API Claude (tính phí theo lần dùng)">Khoá API Claude (tự động)</button>
+      </div>
       <div class="ar-opts">
         <label class="ar-opt"><span class="muted small">Giọng văn</span><select id="ar-style"></select></label>
         <label class="ar-opt ar-note"><span class="muted small">Ghi chú cho AI lần này (không bắt buộc)</span><input type="text" id="ar-note" maxlength="500" placeholder="vd: nhắc mọi người đọc bài ghim về sự kiện" /></label>
         <button type="button" class="primary" id="ar-gen">Tạo câu trả lời</button>
       </div>
+      <div class="ar-web" id="ar-web" hidden>
+        <div class="ar-step">
+          <span class="ar-num">1</span>
+          <div class="ar-step-body">
+            <div class="ar-step-row"><select id="ar-site" aria-label="Trang chat AI"></select><button type="button" class="primary" id="ar-copy">Chép đề bài &amp; mở Claude</button></div>
+            <div class="muted small">Trong trang chat AI (đã đăng nhập): bấm vào ô nhập, dán (Ctrl + V), gửi. Đợi AI viết xong rồi bấm nút chép câu trả lời (hoặc bôi đen cả khối JSON và chép).</div>
+          </div>
+        </div>
+        <div class="ar-step">
+          <span class="ar-num">2</span>
+          <div class="ar-step-body">
+            <textarea id="ar-paste" rows="4" spellcheck="false" placeholder='Dán câu trả lời của AI vào đây — khối {"replies": [ … ]}'></textarea>
+            <div class="ar-step-row"><button type="button" class="primary" id="ar-fill">Điền vào các bình luận</button><span class="muted small">Addon điền nháp vào từng bình luận bên dưới để bạn xem, sửa.</span></div>
+          </div>
+        </div>
+      </div>
       <p class="muted small" id="ar-status" role="status" aria-live="polite"></p>
       <p class="warn-text small" id="ar-dry" hidden>Đang bật Chạy thử: bấm Trả lời tất cả chỉ ghi vào nhật ký, chưa gửi lên Beincom.</p>
-      <div class="ar-setup" id="ar-setup" hidden>Chưa có khoá API Claude. Vào <b>Cài đặt → ✨ Trả lời bình luận bằng AI</b>, dán khoá lấy ở console.anthropic.com rồi bấm Lưu. <button type="button" class="ghost sm" id="ar-open-settings">Mở Cài đặt</button></div>
+      <div class="ar-setup" id="ar-setup" hidden>Chưa có khoá API Claude. Dùng <b>AI trên web (chép – dán)</b> ở trên (không cần khoá), hoặc vào <b>Cài đặt → ✨ Trả lời bình luận bằng AI</b> dán khoá lấy ở console.anthropic.com rồi bấm Lưu. <button type="button" class="ghost sm" id="ar-open-settings">Mở Cài đặt</button></div>
       <div id="ar-list" class="ar-list"></div>
     </div>
     <div class="pv-form">

@@ -1,11 +1,15 @@
-// Dashboard — Trả lời bình luận bằng AI: gửi nội dung các bình luận (kèm bài) cho Claude, nhận một câu trả lời cho từng bình
-// luận; chính chủ xem, sửa, bỏ chọn rồi bấm Trả lời tất cả (gửi lần lượt như nút Trả lời, nghỉ theo "Nghỉ giữa hai thao tác").
+// Dashboard — Trả lời bình luận bằng AI: AI viết một câu trả lời cho từng bình luận (theo nội dung bài); chính chủ xem, sửa,
+// bỏ chọn rồi bấm Trả lời tất cả (gửi lần lượt như nút Trả lời, nghỉ theo "Nghỉ giữa hai thao tác"). Hai cách nhờ AI:
+//   - AI trên web (chép – dán): addon soạn đề bài, chép vào bộ nhớ tạm, mở trang chat (Claude / ChatGPT / Gemini) — người dùng
+//     tự dán, gửi, rồi dán câu trả lời về (không tự điều khiển trang chat: điều khoản các trang này cấm truy cập tự động)
+//   - Khoá API Claude: gọi thẳng Claude Messages API, tự động hoàn toàn
 // Mở từ bảng Bình luận mới (các bình luận đã chọn) và cửa sổ Bài viết & bình luận (bình luận chưa được mình trả lời).
 // Khoá API, mô hình, giọng văn: Cài đặt → ✨ Trả lời bình luận bằng AI (chrome.storage.local `aiConfig`, ngoài sao lưu / đồng bộ).
 // Nạp sau postview.js (dùng PV, loadPostComments, postOf).
 
 // drafts[id] = { text, on, skip, reason, status: '' | 'sending' | 'sent' | 'dry' | 'error', error }
-const AR = { list: [], posts: {}, drafts: {}, gen: false, sending: false, stop: false, cost: 0, cfg: null, fromPost: '', error: '' };
+// mode: 'web' | 'api' · webIds: mã rút gọn trong đề bài đã chép -> mã bình luận thật
+const AR = { list: [], posts: {}, drafts: {}, gen: false, sending: false, stop: false, cost: 0, cfg: null, fromPost: '', error: '', mode: 'web', webIds: null };
 
 async function aiConfig() {
   const { aiConfig: c } = await chrome.storage.local.get('aiConfig');
@@ -61,7 +65,7 @@ $('btn-ai-save').addEventListener('click', async () => {
   const v = aiFormValues();
   if (v.key && !BG.validAiKey(v.key)) return toast('Khoá API chưa đúng dạng (bắt đầu bằng sk-ant-…)', 'err');
   if (v.key) await askAiPermission();
-  await chrome.storage.local.set({ aiConfig: v });
+  await chrome.storage.local.set({ aiConfig: { ...(await aiConfig()), ...v } });
   $('ai-status').textContent = v.key ? 'Đã lưu khoá API.' : 'Đã xoá khoá API.';
   toast(v.key ? 'Đã lưu. Chọn bình luận ở tab Bài viết → ✨ Trả lời bằng AI.' : 'Đã lưu (chưa có khoá API).');
 });
@@ -102,11 +106,17 @@ async function openAiReply(comments, { posts = {}, fromPost = '' } = {}) {
   const list = all.slice(0, BG.AI_MAX);
   const postText = {};
   for (const c of list) postText[c.postId] ||= posts[c.postId] || postOf(c.postId, c).text || c.postSnippet || '';
-  Object.assign(AR, { list, posts: postText, drafts: {}, gen: false, sending: false, stop: false, cost: 0, fromPost, error: '' });
+  Object.assign(AR, { list, posts: postText, drafts: {}, gen: false, sending: false, stop: false, cost: 0, fromPost, error: '', webIds: null });
   AR.cfg = await aiConfig();
+  // Cách dùng: lần trước chọn gì thì giữ; chưa chọn: có khoá API thì tự động, không thì AI trên web
+  AR.mode = AR.cfg.mode === 'api' || AR.cfg.mode === 'web' ? AR.cfg.mode : BG.validAiKey(AR.cfg.key) ? 'api' : 'web';
   $('ar-style').replaceChildren(...Object.entries(BG.AI_STYLES).map(([k, t]) => el('option', { value: k, text: t })));
   $('ar-style').value = BG.AI_STYLES[AR.cfg.style] ? AR.cfg.style : 'friendly';
+  $('ar-site').replaceChildren(...Object.entries(BG.AI_WEB_SITES).map(([k, w]) => el('option', { value: k, text: w.label })));
+  $('ar-site').value = BG.AI_WEB_SITES[AR.cfg.site] ? AR.cfg.site : 'claude';
   $('ar-note').value = '';
+  $('ar-paste').value = '';
+  arStatus('');
   renderAr();
   if (!$('ai-reply').open) $('ai-reply').showModal();
 }
@@ -157,7 +167,7 @@ function arItem(c) {
     el('div', { class: 'pv-chead' }, el('label', { class: 'check', title: 'Gửi câu trả lời này' }, cb), c.actor ? postAuthor(c.actor) : null, el('span', { class: 'muted small', title: fmtTime(c.createdAt), text: ago(c.createdAt) }), c.parentId ? el('span', { class: 'tag info', text: '↳ trả lời' }) : null, arStatusTag(d)),
     el('div', { class: 'pv-ctext', text: c.text || (c.images ? '(ảnh)' : c.giphy ? '(ảnh GIF)' : '(không có chữ)') }),
     !AR.fromPost && snippet ? el('div', { class: 'muted small ar-post', text: 'Trên bài: ' + snippet }) : null,
-    d ? box : el('p', { class: 'muted small', text: AR.gen ? 'Đang chờ AI viết…' : 'Bấm Tạo câu trả lời để AI viết nháp.' }),
+    d ? box : el('p', { class: 'muted small', text: AR.gen ? 'Đang chờ AI viết…' : AR.mode === 'web' ? 'Làm bước 1 và 2 ở trên để AI viết nháp.' : 'Bấm Tạo câu trả lời để AI viết nháp.' }),
     d?.skip ? el('div', { class: 'warn-text small', text: 'AI đề nghị không trả lời' + (d.reason ? ': ' + d.reason : '') + ' — vẫn muốn trả lời thì gõ vào ô trên.' }) : null,
     d?.status === 'error' || (d?.error && !d.status) ? el('div', { class: 'err-text small', text: d.error }) : null,
   );
@@ -167,7 +177,17 @@ function renderAr() {
   const n = AR.list.length;
   $('ar-title').textContent = `✨ Trả lời ${n} bình luận bằng AI`;
   const hasKey = BG.validAiKey(AR.cfg?.key);
-  $('ar-setup').hidden = hasKey;
+  const web = AR.mode === 'web';
+  for (const b of document.querySelectorAll('#ar-mode button')) {
+    b.classList.toggle('active', b.dataset.m === AR.mode);
+    b.setAttribute('aria-pressed', String(b.dataset.m === AR.mode));
+    b.disabled = AR.gen || AR.sending;
+  }
+  $('ar-web').hidden = !web;
+  $('ar-gen').hidden = web;
+  $('ar-setup').hidden = web || hasKey;
+  $('ar-copy').textContent = `Chép đề bài & mở ${BG.AI_WEB_SITES[$('ar-site').value]?.label || 'trang chat AI'}`;
+  for (const id of ['ar-site', 'ar-copy', 'ar-paste', 'ar-fill']) $(id).disabled = AR.sending;
   $('ar-gen').disabled = AR.gen || AR.sending || !hasKey;
   $('ar-gen').textContent = AR.gen ? 'AI đang viết…' : Object.keys(AR.drafts).length ? 'Tạo lại' : 'Tạo câu trả lời';
   $('ar-gen').title = Object.keys(AR.drafts).length ? 'Viết lại các câu chưa gửi (bỏ chỗ đã sửa tay)' : '';
@@ -175,6 +195,17 @@ function renderAr() {
   $('ar-dry').hidden = !data.settings.dryRun;
   $('ar-list').replaceChildren(...AR.list.map(arItem));
   renderArFoot();
+}
+
+// Câu trả lời của AI -> nháp từng bình luận (thêm @tên người được trả lời như nút Trả lời)
+function arApply(comments, out) {
+  for (const c of comments) {
+    const r = out[c.id];
+    const pre = BG.replyTarget(c).prefill;
+    AR.drafts[c.id] = r
+      ? { text: r.skip && !r.reply ? '' : pre + BG.aiCleanReply(r.reply, c.actor?.username), on: !r.skip && !!r.reply, skip: r.skip, reason: r.reason, status: '', error: '' }
+      : { text: pre, on: false, skip: false, reason: '', status: '', error: 'AI chưa viết cho bình luận này — gõ tay, hoặc nhờ AI viết lại.' };
+  }
 }
 
 const arStatus = (text, cls = '') => {
@@ -205,13 +236,7 @@ async function arGenerate() {
       const body = await aiCall(req);
       const out = BG.aiParseReplies(body, chunk.map((c) => c.id));
       AR.cost += BG.aiCost(body.usage, body.model || cfg.model);
-      for (const c of chunk) {
-        const r = out[c.id];
-        const pre = BG.replyTarget(c).prefill;
-        AR.drafts[c.id] = r
-          ? { text: r.skip && !r.reply ? '' : pre + BG.aiCleanReply(r.reply, c.actor?.username), on: !r.skip && !!r.reply, skip: r.skip, reason: r.reason, status: '', error: '' }
-          : { text: pre, on: false, skip: false, reason: '', status: '', error: 'AI chưa viết cho bình luận này — gõ tay hoặc bấm Tạo lại.' };
-      }
+      arApply(chunk, out);
       done += chunk.length;
       renderAr();
     }
@@ -290,6 +315,80 @@ async function arSendAll() {
   arStatus(parts ? parts[0].toUpperCase() + parts.slice(1) + '.' : '');
   renderAr();
   await loadAll();
+}
+
+// ---------- AI trên web (chép – dán) ----------
+
+const arTodo = () => AR.list.filter((c) => !['sent', 'dry'].includes(AR.drafts[c.id]?.status));
+const arCommunity = (list) => [...new Set(list.flatMap((c) => (c.groups || []).map((g) => g.communityName || g.name)).filter(Boolean))].slice(0, 3).join(', ');
+
+// Chép vào bộ nhớ tạm (trình duyệt chặn Clipboard API thì dùng cách cũ)
+async function arCopy(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {}
+  const t = el('textarea', { style: 'position:fixed;opacity:0;top:0;left:0' });
+  t.value = text;
+  $('ai-reply').append(t);
+  t.select();
+  let ok = false;
+  try {
+    ok = document.execCommand('copy');
+  } catch {}
+  t.remove();
+  return ok;
+}
+
+// Bước 1: soạn đề bài (giọng văn, ghi chú, bài, bình luận chưa gửi), chép, mở trang chat AI ở thẻ mới
+async function arWebCopy() {
+  const todo = arTodo();
+  if (!todo.length) return toast('Các bình luận đã được trả lời hết.', 'warn');
+  const cfg = (AR.cfg = await aiConfig());
+  const site = BG.AI_WEB_SITES[$('ar-site').value] ? $('ar-site').value : 'claude';
+  const style = $('ar-style').value;
+  const note = [cfg.note, $('ar-note').value.trim()].filter(Boolean).join('\n');
+  const p = BG.aiWebPrompt({ comments: todo, posts: AR.posts, style, note, community: arCommunity(todo) });
+  AR.webIds = p.ids;
+  chrome.storage.local.set({ aiConfig: { ...cfg, site, style, mode: 'web' } });
+  const copied = await arCopy(p.text);
+  window.open(BG.AI_WEB_SITES[site].url, '_blank', 'noopener');
+  arStatus(copied ? `Đã chép đề bài (${todo.length} bình luận) và mở ${BG.AI_WEB_SITES[site].label}. Dán vào ô chat, gửi, rồi chép câu trả lời dán vào bước 2.` : 'Trình duyệt không cho chép tự động — thử lại, hoặc dùng khoá API.', copied ? '' : 'err-text');
+  $('ar-paste').focus();
+}
+
+// Bước 2: đọc khối JSON dán về, điền nháp
+function arWebFill() {
+  const text = $('ar-paste').value;
+  if (!text.trim()) return toast('Dán câu trả lời của AI vào ô trước', 'err');
+  // Chưa bấm Chép đề bài ở lần mở hộp này: mã rút gọn theo đúng thứ tự đề bài sẽ soạn
+  const ids = AR.webIds || Object.fromEntries(arTodo().map((c, i) => [String(i + 1), String(c.id)]));
+  let out;
+  try {
+    out = BG.aiParseWebReplies(text, ids);
+  } catch (e) {
+    return arStatus(e.message, 'err-text');
+  }
+  const want = new Set(Object.values(ids));
+  const list = AR.list.filter((c) => want.has(String(c.id)));
+  arApply(list, out);
+  const got = list.filter((c) => out[c.id]).length;
+  arStatus(got === list.length ? `Đã điền nháp cho ${got} bình luận. Xem, sửa hoặc bỏ chọn từng câu rồi bấm Trả lời tất cả.` : `Đã điền ${got}/${list.length} bình luận — AI bỏ sót ${list.length - got} bình luận (gõ tay, hoặc nhờ AI viết thêm).`, got === list.length ? '' : 'warn-text');
+  renderAr();
+}
+
+$('ar-copy').addEventListener('click', arWebCopy);
+$('ar-fill').addEventListener('click', arWebFill);
+$('ar-site').addEventListener('change', () => renderAr());
+for (const b of document.querySelectorAll('#ar-mode button')) {
+  b.addEventListener('click', async () => {
+    if (AR.mode === b.dataset.m) return;
+    AR.mode = b.dataset.m;
+    AR.cfg = await aiConfig();
+    chrome.storage.local.set({ aiConfig: { ...AR.cfg, mode: AR.mode } });
+    arStatus('');
+    renderAr();
+  });
 }
 
 $('ar-gen').addEventListener('click', arGenerate);
