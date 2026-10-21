@@ -13,7 +13,7 @@
   'use strict';
   if (G.BeinPWA) return;
   const PWA = (G.BeinPWA = {});
-  const VERSION = '1.5.1';
+  const VERSION = '1.5.2';
   PWA.VERSION = VERSION;
 
   // ---------- 1. Kho lưu trữ ----------

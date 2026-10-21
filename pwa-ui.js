@@ -72,6 +72,18 @@
     });
     const start = () => {
       swap();
+      // Điện thoại: trang kéo hết màn hình — danh sách chừa chỗ cho thanh dưới của ứng dụng (--bein-tb, pwa-ui.css); mở một
+      // cuộc trò chuyện / Thread thì nhờ khung ẩn thanh dưới (như Telegram)
+      const phone = matchMedia('(max-width: 820px)');
+      const space = () => root.style.setProperty('--bein-tb', (shell.tabSpace?.() || 86) + 'px');
+      space();
+      window.addEventListener('resize', space);
+      const app = document.getElementById('app');
+      const deep = () => shell.chatDeep?.(phone.matches && !!app?.classList.contains('open'));
+      if (app) new MutationObserver(deep).observe(app, { attributes: true, attributeFilter: ['class'] });
+      phone.addEventListener?.('change', deep);
+      window.addEventListener('pagehide', () => shell.chatDeep?.(false));
+      deep();
       // Silk vẽ lại cụm nút mỗi khi đổi mục -> đổi lại
       const sh = document.getElementById('space-head');
       if (sh) new MutationObserver(swap).observe(sh, { childList: true, subtree: true });

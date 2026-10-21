@@ -148,6 +148,10 @@ node test/pwa/pwa.e2e.mjs
 
 ## Lịch sử BeinIOS
 
+- **1.5.2 (21/10/2026).** Thanh dưới của trang Chat gọn và cân đối:
+  - Trang Chat kéo hết màn hình, không còn dải xám ngăn cách với thanh Chat · Quản trị · Cài đặt.
+  - Giao diện Silk: thanh cộng đồng thành một viên kính nổi ngay trên thanh dưới, cùng bề rộng, icon gọn hơn, không còn khoảng trống thừa bên dưới.
+  - Mở một cuộc trò chuyện / Thread thì thanh dưới tự ẩn như Telegram, ô gõ tin nằm sát đáy; quay lại danh sách thì thanh dưới hiện lại.
 - **1.5.1 (21/10/2026).** Đi cùng addon BeinFusion 0.53.1:
   - **Nhật ký của tôi** mở thẳng vào cuộc trò chuyện kể cả khi trang Chat đang mở (trước đây chỉ đổi địa chỉ, không vào). Trang Chat cũng gọi tin nhắn cho chính mình là "Nhật ký của tôi".
   - Các trang cài đặt con (Hoạt động & quét, Tự xử lý, Theo dõi, Quy tắc, Chat, Telegram, Sao lưu, Proxy & Login) cùng kiểu với trang Cài đặt: thanh trên có nút tròn, thẻ trắng bo tròn, công tắc kiểu iPhone bên phải, ô nhập nền xám.

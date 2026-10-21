@@ -72,6 +72,11 @@
     /* Trang Chat / Quản trị dừng trên thanh dưới (ô gõ tin không bị che) */
     main iframe { position: absolute; inset: 0 0 var(--tb-space) 0; width: 100%; height: calc(100% - var(--tb-space)); border: 0; display: none; background: var(--bg); }
     main iframe.on { display: block; }
+    /* Điện thoại: trang Chat kéo hết màn hình — danh sách tự chừa chỗ, thanh cộng đồng (Silk) nổi ngay trên thanh dưới
+       (pwa-ui.css); mở một cuộc trò chuyện thì thanh dưới ẩn như Telegram để ô gõ tin nằm sát đáy */
+    @media (max-width: 820px) {
+      main iframe#f-chat { inset: 0; height: 100%; }
+    }
 
     /* ---------- Thanh dưới: viên nổi kiểu Telegram (nền kính trong nhẹ, icon đen, mục đang mở có nền xám) — hiện cả
        khi mở Cài đặt ---------- */
@@ -100,7 +105,9 @@
       -webkit-backdrop-filter: saturate(180%) blur(22px);
       backdrop-filter: saturate(180%) blur(22px);
       box-shadow: 0 6px 24px rgba(0, 0, 0, 0.1), inset 0 0 0 0.5px var(--glass-edge);
+      transition: transform 0.25s ease, opacity 0.2s;
     }
+    nav.tabbar.away { transform: translate(-50%, calc(100% + 24px)); opacity: 0; pointer-events: none; }
     nav.tabbar button {
       flex: 1;
       position: relative;
@@ -655,9 +662,11 @@
         history.replaceState(null, '', '#' + tab);
       }
       tabs.forEach((b) => b.addEventListener('click', () => show(b.dataset.tab)));
+      let chatDeep = false; // trang Chat (điện thoại) đang mở một cuộc trò chuyện / Thread
       const markTabs = () => {
         const open = $('setup').classList.contains('open');
         for (const b of tabs) b.classList.toggle('on', b.dataset.tab === (open ? 'setup' : current));
+        document.querySelector('nav.tabbar').classList.toggle('away', !open && current === 'chat' && chatDeep);
       };
       const closeSetup = () => {
         $('setup').classList.remove('open');
@@ -673,6 +682,15 @@
         embedReady: () => {
           $('f-set').classList.add('ready');
           $('dset-wait').hidden = true;
+        },
+        // Trang Chat: đang ở trong một cuộc trò chuyện thì ẩn thanh dưới (như Telegram); khoảng chừa cho thanh dưới (px)
+        chatDeep: (on) => {
+          chatDeep = !!on;
+          markTabs();
+        },
+        tabSpace: () => {
+          const n = document.querySelector('nav.tabbar');
+          return Math.round(innerHeight - n.offsetTop + 8);
         },
         setChatBadge: (t) => ($('badge-chat').textContent = /^\d+$/.test(String(t || '')) && Number(t) > 0 ? (Number(t) > 99 ? '99+' : String(t)) : ''),
         open(url) {

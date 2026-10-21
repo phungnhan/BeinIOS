@@ -3,6 +3,38 @@
 
 /* ---------- Chat ---------- */
 html[data-host='beinios'] .bein-login svg { display: block; }
+/* Điện thoại: trang Chat kéo hết màn hình dưới thanh dưới nổi của ứng dụng (--bein-tb = khoảng chừa, pwa-ui.js đặt).
+   Danh sách chừa chỗ; thanh cộng đồng của Silk thành viên kính nổi ngay trên thanh dưới, cùng cỡ, không chừa vùng an toàn
+   (thanh dưới đã chừa); trong cuộc trò chuyện thanh dưới ẩn nên ô gõ tin chừa vùng an toàn của iPhone. */
+@media (max-width: 820px) {
+  html[data-bein-page='chat'] .side { padding-bottom: var(--bein-tb, 86px); }
+  html[data-bein-page='chat'] .composer { padding-bottom: max(12px, env(safe-area-inset-bottom, 0px)); }
+  html[data-bein-page='chat'] .jump { bottom: calc(84px + env(safe-area-inset-bottom, 0px)); }
+  html[data-bein-page='chat'][data-ui='silk'] .side { padding-bottom: calc(var(--bein-tb, 86px) + 64px); }
+  html[data-bein-page='chat'][data-ui='silk'] .srail {
+    left: 50%;
+    right: auto;
+    bottom: var(--bein-tb, 86px);
+    width: min(calc(100% - 24px), 440px);
+    height: 56px;
+    box-sizing: border-box;
+    align-items: center;
+    gap: 4px;
+    padding: 0 10px;
+    border: 0;
+    border-radius: 999px;
+    transform: translateX(-50%);
+    background: color-mix(in srgb, var(--s-rail, #f3f0fb) 72%, transparent);
+    -webkit-backdrop-filter: saturate(180%) blur(22px);
+    backdrop-filter: saturate(180%) blur(22px);
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.1), inset 0 0 0 0.5px rgba(0, 0, 0, 0.06);
+  }
+  html[data-bein-page='chat'][data-ui='silk'] .rail-teams { gap: 4px; }
+  html[data-bein-page='chat'][data-ui='silk'] .rail-btn,
+  html[data-bein-page='chat'][data-ui='silk'] .rail-face { width: 40px; height: 40px; }
+  html[data-bein-page='chat'][data-ui='silk'] .rail-btn { border-radius: 13px; }
+  html[data-bein-page='chat'][data-ui='silk'] .rail-sep { height: 24px; }
+}
 
 /* ---------- Quản trị: thanh trên gọn — logo + (Login, avatar) một hàng; trạng thái + Quét ngay hàng dưới ---------- */
 html[data-bein-page='dash'] #btn-chat-page { display: none; } /* thanh dưới đã có Chat */

@@ -122,7 +122,7 @@ const page = await launch();
 // PWA_SHOTS=<thư mục>: chụp màn hình cỡ iPhone 13 ở vài bước để xem bằng mắt
 const SHOTS = process.env.PWA_SHOTS || '';
 const shot = async (name) => SHOTS && page.shot(path.join(SHOTS, name + '.png'));
-if (SHOTS) await page.cdp('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 2, mobile: true });
+await page.cdp('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: SHOTS ? 2 : 1, mobile: true });
 const frame = (id, expr) => `(() => { const w = document.getElementById('${id}').contentWindow; return w.eval(${JSON.stringify(expr)}); })()`;
 try {
   console.log('Giai đoạn 1: SharedWorker');
@@ -354,6 +354,8 @@ try {
   await page.until(() => !!document.getElementById('f-chat').contentDocument?.querySelector('.space-actions .bein-login'), 6000);
   const silk = await page.ev(frame('f-chat', "({ dash: !!document.querySelector('.space-actions a[href=\"dashboard.html\"]'), me: !!document.querySelector('.space-actions button.space-me') })"));
   ok(!silk.dash && silk.me, 'Chat (Silk): nút Dashboard cạnh avatar đổi thành Login, avatar là nút');
+  const rail = await page.ev(`(() => { const f = document.getElementById('f-chat'); const r = f.contentDocument.getElementById('rail').getBoundingClientRect(); const fr = f.getBoundingClientRect(); const n = document.querySelector('nav.tabbar').getBoundingClientRect(); return { h: Math.round(r.height), gap: Math.round(n.top - (fr.top + r.bottom)), w: Math.round(r.width), nw: Math.round(n.width), frameBottom: Math.round(fr.bottom), screen: innerHeight }; })()`);
+  ok(rail.h === 56 && rail.gap >= 4 && rail.gap <= 12 && rail.w === rail.nw && rail.frameBottom === rail.screen, 'Chat (Silk): thanh cộng đồng thành viên nổi gọn ngay trên thanh dưới, cùng bề rộng; trang Chat kéo hết màn hình' + (rail.h === 56 ? '' : ' ' + JSON.stringify(rail)));
   await sleep(300);
   await shot('9-chat-silk');
   await page.ev(frame('f-chat', "document.querySelector('.space-actions .space-me').click(), true"));
@@ -419,8 +421,15 @@ try {
     return !document.getElementById('setup').classList.contains('open') && document.querySelector('nav button.on')?.dataset.tab === 'chat' && w.eval('S.sel?.id') === 'selfdm1' && w.document.getElementById('app').classList.contains('open') && w.document.getElementById('conv-title').textContent === 'Nhật ký của tôi';
   }, 5000);
   ok((await page.ev(`document.getElementById('f-chat').contentWindow.performance.timeOrigin`)) === chatSrc, 'Tài khoản › Nhật ký của tôi: trang Chat đang mở vào thẳng Nhật ký của tôi (không tải lại trang)');
+  await page.until(() => document.querySelector('nav.tabbar').classList.contains('away'), 3000);
+  const conv = await page.ev(`(() => { const d = document.getElementById('f-chat').contentDocument; const c = d.getElementById('composer').getBoundingClientRect(); return { bottom: Math.round(c.bottom), screen: innerHeight }; })()`);
+  ok(conv.bottom === conv.screen, 'Trong cuộc trò chuyện: thanh dưới ẩn (như Telegram), ô gõ tin sát đáy');
+  await page.ev("document.querySelectorAll('#bein-toasts [role=status]').forEach((t) => t.remove()), true");
   await sleep(300);
   await shot('9c-nhat-ky-cua-toi');
+  await page.ev(frame('f-chat', "document.getElementById('back').click(), true"));
+  await page.until(() => !document.querySelector('nav.tabbar').classList.contains('away'), 3000);
+  ok(true, 'Quay lại danh sách Chat: thanh dưới hiện lại');
   // Đang mở Cài đặt, bấm tab Quản trị ở thanh dưới: đóng Cài đặt, sang Quản trị
   await page.ev(`document.querySelector('nav button[data-tab="setup"]').click(); true`);
   await page.until(new Function(`return ${isOpen('main')}`), 3000);
