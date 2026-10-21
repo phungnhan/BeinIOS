@@ -15,3 +15,13 @@ ALLOWED_ORIGIN = "https://phungnhan.github.io"
 # Không ghi nhật ký yêu cầu (trong yêu cầu có cookie đăng nhập Beincom)
 [observability]
 enabled = false
+
+# Chuyển nhanh đăng nhập từ addon (/handoff): mỗi lần chuyển là một Durable Object giữ bản mã hoá tối đa 5 phút.
+# Cloudflare tự tạo khi dựng (gói miễn phí dùng được, kiểu lưu SQLite) — không phải cài gì thêm.
+[[durable_objects.bindings]]
+name = "HANDOFF"
+class_name = "Handoff"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Handoff"]

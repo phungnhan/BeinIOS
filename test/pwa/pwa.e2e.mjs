@@ -64,7 +64,20 @@ const realFetch = globalThis.fetch;
 globalThis.fetch = (url, init) => (/^https:\/\/[a-z]+\.beincom\.com\//.test(String(url)) ? beincom(url, init) : realFetch(url, init));
 
 // ---------- Cloudflare proxy thật, chạy trong Node ----------
-const { default: proxyWorker } = await import('../../cloudflare-proxy/worker.js');
+const { default: proxyWorker, Handoff } = await import('../../cloudflare-proxy/worker.js');
+// Durable Object giả cho chuyển nhanh (/handoff)
+const hoObjects = new Map();
+const HANDOFF = {
+  idFromName: (n) => n,
+  get(id) {
+    if (!hoObjects.has(id)) {
+      const data = new Map();
+      hoObjects.set(id, new Handoff({ storage: { put: async (o) => Object.entries(o).forEach(([k, v]) => data.set(k, v)), get: async (ks) => new Map(ks.filter((k) => data.has(k)).map((k) => [k, data.get(k)])), deleteAll: async () => data.clear(), setAlarm: async () => {} } }));
+    }
+    const obj = hoObjects.get(id);
+    return { fetch: (u, init) => obj.fetch(new Request(u, init)) };
+  },
+};
 let ENV;
 const proxy = http.createServer(async (req, res) => {
   const chunks = [];
@@ -88,7 +101,7 @@ const sitePort = await listen(site);
 const proxyPort = await listen(proxy);
 const notProxyPort = await listen(notProxy);
 const APP = `http://127.0.0.1:${sitePort}`;
-ENV = { PROXY_KEY: KEY, ALLOWED_ORIGIN: APP };
+ENV = { PROXY_KEY: KEY, ALLOWED_ORIGIN: APP, HANDOFF };
 
 const fails = [];
 const ok = (cond, msg) => {
@@ -243,6 +256,31 @@ try {
   await sleep(300);
   await page.until(() => document.readyState === 'complete' && /không có đăng nhập hợp lệ/.test(document.getElementById('info')?.textContent || ''), 8000);
   ok(true, 'nhap.html với link hỏng: báo tạo mã mới');
+
+  // ---------- Mã QR ngắn (chuyển nhanh qua proxy): addon mã hoá, gửi lên; iPhone mở nhap.html#h=…&p=… ----------
+  const b64u = (b) => Buffer.from(b).toString('base64url');
+  const hoKey = crypto.getRandomValues(new Uint8Array(32));
+  const hoIv = crypto.getRandomValues(new Uint8Array(12));
+  const hoId = b64u(crypto.getRandomValues(new Uint8Array(12)));
+  const ck = await crypto.subtle.importKey('raw', hoKey, 'AES-GCM', false, ['encrypt']);
+  const sealed = b64u(hoIv) + '.' + b64u(new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv: hoIv }, ck, new TextEncoder().encode(transfer))));
+  const put = await fetch(`http://127.0.0.1:${proxyPort}/handoff`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-beinios-key': KEY, Origin: 'chrome-extension://abcdefghijklmnopabcdefghijklmnop' }, body: JSON.stringify({ id: hoId, payload: sealed }) });
+  ok(put.status === 200, 'addon gửi bản mã hoá lên proxy (mã proxy thật)');
+  const hoLink = `${APP}/BeinIOS/nhap.html?lan=3#h=${hoId}.${b64u(hoKey)}&p=${encodeURIComponent('http://127.0.0.1:' + proxyPort)}`;
+  const n2 = upstream.length;
+  await page.ev(`location.href = ${JSON.stringify(hoLink)}; true`);
+  await sleep(300);
+  await page.until(() => document.readyState === 'complete' && /Đã nhận đăng nhập/.test(document.getElementById('info')?.textContent || ''), 10000);
+  const nh2 = await page.ev(`({ hash: location.hash, info: document.getElementById('info').textContent })`);
+  ok(nh2.hash === '' && /2 cookie Beincom · 1 cookie Chat · 3 cookie máy chủ đăng nhập/.test(nh2.info), 'nhap.html với mã ngắn: lấy về, giải mã đúng, xoá mã khỏi thanh địa chỉ');
+  ok(upstream.length === n2, 'lấy mã không gọi Beincom');
+  await page.ev(`Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async (t) => (window.__copied = t) } }); document.getElementById('copy').click(); true`);
+  await page.until(() => !!window.__copied, 5000);
+  ok((await page.ev('window.__copied')) === transfer, 'nút Chép chép đúng đoạn đăng nhập (để Dán từ addon trong ứng dụng)');
+  await page.ev(`location.href = ${JSON.stringify(hoLink.replace('lan=3', 'lan=4'))}; true`);
+  await sleep(300);
+  await page.until(() => document.readyState === 'complete' && /Mã đã dùng/.test(document.getElementById('info')?.textContent || ''), 10000);
+  ok(true, 'quét lại mã đã dùng: báo tạo mã mới');
 
   console.log('Giai đoạn 2: không có SharedWorker (Worker thường do khung ứng dụng giữ)');
   noShared = true;

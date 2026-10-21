@@ -58,11 +58,14 @@ Lần đầu mở, ứng dụng tự hiện **Cài đặt**. Dán **địa chỉ
    - Addon phải được bật **Cho phép ở chế độ ẩn danh**: trang Tiện ích → BeinFusion → Chi tiết.
    - Dùng cửa sổ ẩn danh để BeinIOS có phiên riêng, không giành phiên với trình duyệt bạn đang dùng.
 2. Mở Dashboard của addon → **Cài đặt** → 📱 BeinIOS → **Chuyển đăng nhập sang BeinIOS**. Lần đầu bấm, addon xin quyền đọc cookie Beincom.
-3. Addon hiện **mã QR**. Quét bằng **Camera iPhone**, mở link, rồi bấm **Chép**.
-   - Trang `nhap.html` xoá đăng nhập khỏi thanh địa chỉ ngay khi mở.
-   - Đăng nhập dài quá cho mã QR thì addon báo. Khi đó bấm **Chép** trên máy tính rồi tự chuyển đoạn chữ sang iPhone, và xoá bản trung chuyển sau khi dán.
-4. Mở BeinIOS từ Màn hình chính → **Cài đặt** → **Dán từ addon**. iPhone hỏi "Dán" thì bấm **Dán**.
-5. Đóng cửa sổ ẩn danh. **Đừng bấm Đăng xuất**, vì đăng xuất làm phiên hết hiệu lực.
+3. Lần đầu: trong hộp đó mở mục **Proxy của BeinIOS**, điền đúng địa chỉ và khoá proxy như ở BeinIOS → **Lưu & tạo mã ngắn**. Khoá chỉ lưu ở máy tính đó, không có trong sao lưu.
+4. Addon hiện **mã QR ngắn**. Quét bằng **Camera iPhone**, mở trang, rồi bấm **Chép**.
+   - Đăng nhập thật rất dài (hơn 4.000 ký tự), không vừa một mã QR. Vì vậy addon **mã hoá đăng nhập ngay trên máy tính** (AES-GCM) và gửi bản mã hoá lên proxy của bạn. Mã QR chỉ chứa mã số, khoá giải mã và địa chỉ proxy.
+   - Khoá giải mã nằm sau dấu `#` của link, nên không gửi lên proxy hay GitHub. Proxy chỉ giữ bản mã hoá: lấy một lần là xoá, tự xoá sau 5 phút.
+   - Trang `nhap.html` lấy bản mã hoá về, giải mã ngay trên iPhone, rồi xoá mã khỏi thanh địa chỉ.
+   - Chưa điền proxy mà đăng nhập dài quá cho mã QR thì addon báo. Khi đó bấm **Chép** trên máy tính rồi tự chuyển đoạn chữ sang iPhone, và xoá bản trung chuyển sau khi dán.
+5. Mở BeinIOS từ Màn hình chính → **Cài đặt** → **Dán từ addon**. iPhone hỏi "Dán" thì bấm **Dán**.
+6. Đóng cửa sổ ẩn danh. **Đừng bấm Đăng xuất**, vì đăng xuất làm phiên hết hiệu lực.
 
 Addon chép đủ ba nhóm cookie: Beincom, Chat, và máy chủ đăng nhập `auth.beincom.com`. Có nhóm cuối thì BeinIOS tự làm mới phiên được.
 
@@ -144,6 +147,11 @@ node test/pwa/pwa.e2e.mjs
 
 ## Lịch sử BeinIOS
 
+- **1.2.0 (21/10/2026).** Mã QR ngắn qua proxy (chuyển nhanh):
+  - addon mã hoá đăng nhập trên máy tính, gửi bản mã hoá lên proxy;
+  - `nhap.html` lấy về và giải mã ngay trên iPhone;
+  - proxy 2.1.0 có `/handoff` và Durable Object `HANDOFF`: Cloudflare tự tạo khi dựng, giữ bản mã hoá 5 phút, lấy một lần là xoá;
+  - **Dán từ addon** bỏ qua ký tự xuống dòng / khoảng trắng lẫn vào khi chuyển đoạn chữ sang iPhone.
 - **1.1.0 (16/10/2026).** Thêm cách đăng nhập bằng addon BeinFusion 0.51.0 (Cài đặt → Chuyển đăng nhập sang BeinIOS):
   - nút **Dán từ addon** trong Cài đặt;
   - trang nhận mã QR `nhap.html`;

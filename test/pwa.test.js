@@ -118,6 +118,10 @@ test('dán từ addon: đọc đúng đoạn của addon (cả link nhap.html#�
   assert.deepEqual(PWA.parseTransfer(ADDON_SAMPLE), want);
   assert.deepEqual(PWA.parseTransfer('https://phungnhan.github.io/BeinIOS/nhap.html#' + ADDON_SAMPLE), want);
   assert.deepEqual(PWA.parseTransfer('Đăng nhập:\n ' + ADDON_SAMPLE + ' \n'), want);
+  // Chuyển qua Ghi chú / tin nhắn / email trên iPhone hay chèn xuống dòng, khoảng trắng, hoặc đổi '-' thành gạch dài
+  const body = ADDON_SAMPLE.slice('BEINIOS1.'.length);
+  assert.deepEqual(PWA.parseTransfer('BEINIOS1.' + body.slice(0, 10) + '\n' + body.slice(10, 20) + ' \r\n\t' + body.slice(20)), want, 'bỏ xuống dòng / khoảng trắng lẫn vào giữa');
+  assert.deepEqual(PWA.parseTransfer('BEINIOS1.' + body + '\u00a0'), want, 'bỏ khoảng trắng không ngắt');
   assert.equal(PWA.parseTransfer('BEINIOS1.@@@'), null);
   assert.equal(PWA.parseTransfer('sid=abc'), null);
   assert.equal(PWA.parseTransfer('BEINIOS1.' + Buffer.from(JSON.stringify({ v: 1, t: 1, c: [['rt', 'x', 4]] })).toString('base64url')), null);
@@ -378,4 +382,132 @@ test('wrangler.toml ở gốc repo (Worker nối repo GitHub) dựng đúng prox
   assert.equal(val(root, 'enabled'), 'false'); // không ghi nhật ký
   assert.ok(!/^\s*\[assets\]/m.test(root), 'không đưa repo lên làm trang tĩnh');
   assert.ok(!/PROXY_KEY\s*=/.test(root + sub), 'khoá không nằm trong tệp');
+});
+
+// ---------- Chuyển nhanh qua proxy (/handoff, Durable Object) ----------
+
+// Durable Object giả: mỗi mã số một vật có kho riêng (như Cloudflare)
+function fakeHandoffNs(Handoff) {
+  const objects = new Map();
+  const ns = {
+    idFromName: (name) => 'do:' + name,
+    get(id) {
+      if (!objects.has(id)) {
+        const data = new Map();
+        const box = { data, alarm: 0 };
+        const storage = {
+          put: async (o) => Object.entries(o).forEach(([k, v]) => data.set(k, v)),
+          get: async (keys) => new Map(keys.filter((k) => data.has(k)).map((k) => [k, data.get(k)])),
+          deleteAll: async () => data.clear(),
+          setAlarm: async (t) => (box.alarm = t),
+        };
+        box.obj = new Handoff({ storage });
+        objects.set(id, box);
+      }
+      const box = objects.get(id);
+      return { fetch: (url, init) => box.obj.fetch(new Request(url, init)) };
+    },
+  };
+  return { ns, objects };
+}
+const HO_ID = 'AbCdEfGhIjKlMnOp';
+const HO_PAYLOAD = 'IvIvIvIvIvIvIvIv.' + 'Q'.repeat(40);
+const hoReq = (method, { key, origin = APP, body, id = HO_ID } = {}) =>
+  new Request('https://px.example.workers.dev/handoff' + (method === 'GET' ? '?id=' + id : ''), {
+    method,
+    headers: { ...(origin ? { Origin: origin } : {}), ...(key ? { 'x-beinios-key': key } : {}), ...(body ? { 'Content-Type': 'application/json' } : {}) },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+
+test('chuyển nhanh: gửi lên cần khoá + đúng dạng; lấy về không cần khoá, chỉ một lần; hết giờ thì mất', async () => {
+  const mod = await import('../cloudflare-proxy/worker.js');
+  const { ns, objects } = fakeHandoffNs(mod.Handoff);
+  const env = { ...ENV, HANDOFF: ns };
+  const w = mod.default;
+  assert.equal((await w.fetch(hoReq('POST', { body: { id: HO_ID, payload: HO_PAYLOAD } }), env)).status, 403, 'thiếu khoá');
+  assert.equal((await w.fetch(hoReq('POST', { key: 'sai', body: { id: HO_ID, payload: HO_PAYLOAD } }), env)).status, 403, 'sai khoá');
+  for (const bad of [{ id: 'ngan', payload: HO_PAYLOAD }, { id: HO_ID, payload: 'khong-co-cham' }, { id: HO_ID + '!', payload: HO_PAYLOAD }, {}]) {
+    assert.equal((await w.fetch(hoReq('POST', { key: ENV.PROXY_KEY, body: bad }), env)).status, 400, JSON.stringify(bad));
+  }
+  const put = await w.fetch(hoReq('POST', { key: ENV.PROXY_KEY, body: { id: HO_ID, payload: HO_PAYLOAD } }), env);
+  assert.equal(put.status, 200);
+  assert.deepEqual(await put.json(), { ok: true, ttl: 300 });
+  const box = objects.get('do:' + HO_ID);
+  assert.ok(box.alarm > Date.now() + 290e3 && box.alarm <= Date.now() + 300e3, 'hẹn giờ tự xoá sau 5 phút');
+  const got = await w.fetch(hoReq('GET'), env);
+  assert.equal(got.status, 200);
+  assert.equal(got.headers.get('access-control-allow-origin'), APP);
+  assert.deepEqual(await got.json(), { payload: HO_PAYLOAD });
+  const again = await w.fetch(hoReq('GET'), env);
+  assert.equal(again.status, 404, 'lấy một lần là xoá');
+  assert.equal(again.headers.get('x-bein-proxy-error'), 'gone');
+  // Hết giờ (đồng hồ của vật đã quá hạn) -> không trả nữa; alarm xoá hết
+  await w.fetch(hoReq('POST', { key: ENV.PROXY_KEY, body: { id: HO_ID, payload: HO_PAYLOAD } }), env);
+  box.data.set('exp', Date.now() - 1);
+  assert.equal((await w.fetch(hoReq('GET'), env)).status, 404);
+  await w.fetch(hoReq('POST', { key: ENV.PROXY_KEY, body: { id: HO_ID, payload: HO_PAYLOAD } }), env);
+  await box.obj.alarm();
+  assert.equal(box.data.size, 0);
+  assert.equal((await w.fetch(hoReq('GET', { id: 'x' }), env)).status, 400, 'mã sai dạng');
+});
+
+test('chuyển nhanh: addon (chrome-extension://) gọi được /handoff, nhưng vẫn không dùng được /proxy; proxy cũ không có kho thì báo rõ', async () => {
+  const mod = await import('../cloudflare-proxy/worker.js');
+  const { ns } = fakeHandoffNs(mod.Handoff);
+  const env = { ...ENV, HANDOFF: ns };
+  const w = mod.default;
+  const EXT = 'chrome-extension://abcdefghijklmnopabcdefghijklmnop';
+  const pre = await w.fetch(new Request('https://px.example.workers.dev/handoff', { method: 'OPTIONS', headers: { Origin: EXT, 'Access-Control-Request-Method': 'POST' } }), env);
+  assert.equal(pre.status, 204);
+  assert.equal(pre.headers.get('access-control-allow-origin'), EXT);
+  assert.match(pre.headers.get('access-control-allow-headers'), /x-beinios-key/);
+  const put = await w.fetch(hoReq('POST', { key: ENV.PROXY_KEY, origin: EXT, body: { id: HO_ID, payload: HO_PAYLOAD } }), env);
+  assert.equal(put.status, 200);
+  assert.equal(put.headers.get('access-control-allow-origin'), EXT);
+  const prePx = await w.fetch(new Request('https://px.example.workers.dev/proxy', { method: 'OPTIONS', headers: { Origin: EXT } }), env);
+  assert.equal(prePx.status, 403);
+  assert.equal((await w.fetch(proxyReq('https://api.beincom.com/v1/x', { origin: EXT, headers: { 'x-beinios-key': ENV.PROXY_KEY } }), env)).status, 403);
+  const h = await (await w.fetch(new Request('https://px.example.workers.dev/health', { headers: { Origin: APP } }), env)).json();
+  assert.equal(h.handoff, true);
+  assert.equal(h.version, '2.1.0');
+  const old = await w.fetch(hoReq('POST', { key: ENV.PROXY_KEY, body: { id: HO_ID, payload: HO_PAYLOAD } }), ENV);
+  assert.equal(old.status, 501);
+  assert.equal(old.headers.get('x-bein-proxy-error'), 'no_store');
+});
+
+test('chuyển nhanh (iPhone): đọc link mã QR, giải đúng đoạn mẫu addon mã hoá, đi trọn vòng addon → proxy → iPhone', async () => {
+  const link = 'https://phungnhan.github.io/BeinIOS/nhap.html#h=AAcOFRwjKjE4P0ZN.AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA&p=https%3A%2F%2Fbeinios-proxy.beinfusion.workers.dev';
+  const h = PWA.parseHandoff(link);
+  assert.deepEqual(h, { id: 'AAcOFRwjKjE4P0ZN', key: 'AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA', proxy: 'https://beinios-proxy.beinfusion.workers.dev' });
+  assert.deepEqual(PWA.parseHandoff(link.split('#')[1]), h, 'nhận cả phần sau #');
+  assert.equal(PWA.parseHandoff('h=ngan.AQID&p=x'), null);
+  assert.equal(PWA.parseHandoff('BEINIOS1.abc'), null);
+  assert.equal(PWA.parseHandoff(link.replace('https%3A', 'http%3A')).proxy, '', 'proxy http (không phải máy này) bị bỏ');
+  // Đoạn mẫu addon mã hoá với khoá cố định (BeinGroup test/transfer.test.js)
+  const asked = [];
+  const fake = async (url) => (asked.push(url), json(200, { payload: 'yMfGxcTDwsHAv769.tnI7__ThpemTqJNc7rs5AmOBw1huZE2pvOejvtIcR_EaFbE' }));
+  assert.equal(await PWA.openHandoff(h, fake), 'BEINIOS1.thu-nghiem');
+  assert.deepEqual(asked, ['https://beinios-proxy.beinfusion.workers.dev/handoff?id=AAcOFRwjKjE4P0ZN'], 'chỉ gửi mã số, không gửi khoá');
+  await assert.rejects(() => PWA.openHandoff(h, async () => json(404, { code: 'gone', error: 'Mã đã dùng' })), (e) => e.code === 'gone');
+  await assert.rejects(() => PWA.openHandoff({ ...h, key: 'B'.repeat(43) }, fake), (e) => e.code === 'decrypt');
+  await assert.rejects(() => PWA.openHandoff({ ...h, proxy: '' }, fake), (e) => e.code === 'no_proxy');
+
+  // Trọn vòng: mã hoá như addon (WebCrypto) -> proxy thật (worker.js + Durable Object giả) -> iPhone lấy, giải
+  const mod = await import('../cloudflare-proxy/worker.js');
+  const { ns } = fakeHandoffNs(mod.Handoff);
+  const env = { ...ENV, HANDOFF: ns };
+  const enc = (b) => Buffer.from(b).toString('base64url');
+  const keyBytes = crypto.getRandomValues(new Uint8Array(32));
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const id = enc(crypto.getRandomValues(new Uint8Array(12)));
+  const k = await crypto.subtle.importKey('raw', keyBytes, 'AES-GCM', false, ['encrypt']);
+  const plain = ADDON_SAMPLE;
+  const payload = enc(iv) + '.' + enc(new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, k, new TextEncoder().encode(plain))));
+  const put = await mod.default.fetch(hoReq('POST', { key: ENV.PROXY_KEY, origin: 'chrome-extension://abcdefghijklmnop', body: { id, payload } }), env);
+  assert.equal(put.status, 200);
+  const viaProxy = async (url, init) => mod.default.fetch(new Request(url, { ...init, headers: { Origin: APP } }), env);
+  const text = await PWA.openHandoff({ id, key: enc(keyBytes), proxy: 'https://px.example.workers.dev' }, viaProxy);
+  assert.equal(text, plain);
+  assert.deepEqual(PWA.parseTransfer(text).api, { sid: 'S1' });
+  await assert.rejects(() => PWA.openHandoff({ id, key: enc(keyBytes), proxy: 'https://px.example.workers.dev' }, viaProxy), (e) => e.code === 'gone', 'dùng một lần');
 });

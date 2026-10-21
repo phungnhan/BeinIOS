@@ -11,10 +11,19 @@
  * - Chỉ chuyển các header cần thiết; không ghi nhật ký (tắt observability ở wrangler.toml), không lưu gì.
  * Cookie Beincom trả về (Set-Cookie) được gửi lại cho webapp trong header x-bein-set-cookie (JSON) để webapp cập nhật.
  *
+ * Chuyển nhanh đăng nhập (/handoff): addon BeinFusion mã hoá đăng nhập ngay trên máy tính (AES-GCM, khoá nằm trong mã QR,
+ * không gửi lên đây), gửi bản mã hoá lên (POST, cần PROXY_KEY); iPhone quét mã QR, trang nhap.html lấy về (GET theo mã số
+ * ngẫu nhiên) rồi tự giải mã. Proxy chỉ giữ bản mã hoá trong Durable Object HANDOFF: lấy một lần là xoá, tự xoá sau 5 phút.
+ *
  * Tác giả: Kai | Crypto Life
  */
 
-const VERSION = '2.0.1';
+const VERSION = '2.1.0';
+
+// Chuyển nhanh: mã số 12–24 byte ngẫu nhiên (base64url), bản mã hoá = iv (12 byte) "." dữ liệu, giữ tối đa 5 phút
+const HANDOFF_TTL = 300;
+const HANDOFF_ID = /^[A-Za-z0-9_-]{16,32}$/;
+const HANDOFF_PAYLOAD = /^[A-Za-z0-9_-]{16}\.[A-Za-z0-9_-]{24,40000}$/;
 
 const ALLOWED_HOSTS = ['api.beincom.com', 'group.beincom.com', 'chat.beincom.com', 'upload.beincom.com', 'auth.beincom.com'];
 // auth.beincom.com: chỉ làm mới phiên (không cho đăng nhập bằng mật khẩu qua proxy)
@@ -54,6 +63,10 @@ function sameKey(a, b) {
   return diff === 0 && x.length > 0;
 }
 
+function json(data, origin, status = 200) {
+  return new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...(origin ? cors(origin) : {}) } });
+}
+
 function fail(status, code, message, origin) {
   return new Response(JSON.stringify({ error: message, code }), {
     status,
@@ -61,12 +74,68 @@ function fail(status, code, message, origin) {
   });
 }
 
+// Một lần chuyển nhanh = một Durable Object (theo mã số): cất bản mã hoá, đọc một lần là xoá, hết giờ thì tự xoá
+export class Handoff {
+  constructor(state) {
+    this.storage = state.storage;
+  }
+  async fetch(request) {
+    if (request.method === 'PUT') {
+      await this.storage.put({ p: await request.text(), exp: Date.now() + HANDOFF_TTL * 1000 });
+      await this.storage.setAlarm(Date.now() + HANDOFF_TTL * 1000);
+      return new Response('ok');
+    }
+    if (request.method === 'GET') {
+      const got = await this.storage.get(['p', 'exp']);
+      const p = got.get('p');
+      const exp = got.get('exp');
+      await this.storage.deleteAll();
+      if (p == null || !(exp > Date.now())) return new Response('', { status: 404 });
+      return new Response(p);
+    }
+    return new Response('', { status: 405 });
+  }
+  async alarm() {
+    await this.storage.deleteAll();
+  }
+}
+
+async function handoff(request, env, url, origin, keyOk) {
+  if (!env.HANDOFF) return fail(501, 'no_store', 'Proxy chưa có kho chuyển nhanh — cập nhật proxy bằng mã mới nhất (wrangler.toml có HANDOFF).', origin);
+  if (request.method === 'POST') {
+    // Gửi lên cần khoá proxy (người lạ không cất được gì); bản mã hoá chỉ addon và iPhone của bạn giải được
+    if (!keyOk) return fail(403, 'key', 'Sai khoá proxy (x-beinios-key).', origin);
+    let body = null;
+    try {
+      body = await request.json();
+    } catch {}
+    const id = String(body?.id || '');
+    const payload = String(body?.payload || '');
+    if (!HANDOFF_ID.test(id) || !HANDOFF_PAYLOAD.test(payload)) return fail(400, 'bad', 'Dữ liệu chuyển nhanh không hợp lệ.', origin);
+    const r = await env.HANDOFF.get(env.HANDOFF.idFromName(id)).fetch('https://handoff/', { method: 'PUT', body: payload });
+    if (!r.ok) return fail(502, 'store', 'Không cất được — thử lại.', origin);
+    return json({ ok: true, ttl: HANDOFF_TTL }, origin);
+  }
+  if (request.method === 'GET') {
+    // Lấy về không cần khoá proxy: mã số ngẫu nhiên khó đoán, và chỉ ai có khoá giải mã (trong mã QR) mới đọc được
+    const id = url.searchParams.get('id') || '';
+    if (!HANDOFF_ID.test(id)) return fail(400, 'bad', 'Mã không hợp lệ.', origin);
+    const r = await env.HANDOFF.get(env.HANDOFF.idFromName(id)).fetch('https://handoff/', { method: 'GET' });
+    if (r.status === 404) return fail(404, 'gone', 'Mã đã dùng hoặc đã hết hạn (5 phút) — tạo mã mới ở addon.', origin);
+    if (!r.ok) return fail(502, 'store', 'Không đọc được — thử lại.', origin);
+    return json({ payload: await r.text() }, origin);
+  }
+  return fail(405, 'method', 'Chỉ nhận POST / GET.', origin);
+}
+
 export default {
   async fetch(request, env) {
     const origins = allowedOrigins(env);
-    const reqOrigin = (request.headers.get('Origin') || '').replace(/\/+$/, '');
-    const origin = origins.includes(reqOrigin) ? reqOrigin : '';
     const url = new URL(request.url);
+    const reqOrigin = (request.headers.get('Origin') || '').replace(/\/+$/, '');
+    // /handoff: addon (chrome-extension://…) gửi lên, iPhone lấy về — có khoá / mã hoá bảo vệ nên nhận mọi trang gọi
+    const isHandoff = url.pathname === '/handoff';
+    const origin = origins.includes(reqOrigin) || (isHandoff && reqOrigin) ? reqOrigin : '';
 
     // Thiếu biến: trả lời đọc được cho mọi trang để webapp báo đúng chỗ cần sửa (không chuyển gì đi)
     if (!env.PROXY_KEY || !origins.length) return fail(500, 'setup', 'Proxy chưa cài PROXY_KEY và ALLOWED_ORIGIN (xem README).', reqOrigin);
@@ -81,11 +150,12 @@ export default {
     const keyOk = sameKey(request.headers.get('x-beinios-key'), env.PROXY_KEY);
 
     if (url.pathname === '/' || url.pathname === '/health') {
-      return new Response(JSON.stringify({ status: 'ok', service: 'BeinIOS proxy', version: VERSION, key: keyOk }), {
+      return new Response(JSON.stringify({ status: 'ok', service: 'BeinIOS proxy', version: VERSION, key: keyOk, handoff: !!env.HANDOFF }), {
         headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...(origin ? cors(origin) : {}) },
       });
     }
 
+    if (isHandoff) return handoff(request, env, url, origin, keyOk);
     if (!keyOk) return fail(403, 'key', 'Sai khoá proxy (x-beinios-key).', origin);
     if (url.pathname !== '/proxy') return fail(404, 'path', 'Đường dẫn không đúng. Dùng /proxy?url=https://api.beincom.com/…', origin);
 

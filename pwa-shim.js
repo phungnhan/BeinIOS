@@ -13,7 +13,7 @@
   'use strict';
   if (G.BeinPWA) return;
   const PWA = (G.BeinPWA = {});
-  const VERSION = '1.1.0';
+  const VERSION = '1.2.0';
   PWA.VERSION = VERSION;
 
   // ---------- 1. Kho lưu trữ ----------
@@ -328,7 +328,9 @@
     const i = s.indexOf(TRANSFER_PREFIX);
     if (i < 0) return null;
     try {
-      const b64 = s.slice(i + TRANSFER_PREFIX.length).split(/[\s#&]/)[0];
+      // Chuyển đoạn sang iPhone (Ghi chú / tin nhắn / email) hay chèn xuống dòng vào giữa, hoặc đổi gạch nối thành gạch dài:
+      // bỏ mọi khoảng trắng, đưa gạch lạ về '-', rồi lấy phần base64url liền mạch (dừng ở ký tự đầu không hợp lệ)
+      const b64 = (s.slice(i + TRANSFER_PREFIX.length).match(/^[\sA-Za-z0-9\-_‐-―−]+/)?.[0] || '').replace(/[‐-―−]/g, '-').replace(/\s+/g, '');
       const bin = atob(b64.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - (b64.length % 4)) % 4));
       const d = JSON.parse(new TextDecoder().decode(Uint8Array.from(bin, (ch) => ch.charCodeAt(0))));
       if (d?.v !== 1 || !Array.isArray(d.c)) return null;
@@ -337,6 +339,47 @@
       return Object.keys(out.api).length || Object.keys(out.chat).length ? out : null;
     } catch {
       return null;
+    }
+  }
+
+  // Chuyển nhanh qua proxy (addon → Cài đặt → Chuyển đăng nhập sang BeinIOS, mã QR ngắn): link nhap.html#h=<mã số>.<khoá>&p=<proxy>.
+  // Lấy bản mã hoá trên proxy theo mã số (proxy không có khoá), giải mã AES-GCM ngay trên máy -> đoạn BEINIOS1.…
+  function parseHandoff(text) {
+    const s = String(text || '').trim();
+    const frag = s.includes('#') ? s.slice(s.indexOf('#') + 1) : s;
+    if (!/(^|&)h=/.test(frag)) return null;
+    const q = new URLSearchParams(frag);
+    const [id = '', key = ''] = String(q.get('h') || '').split('.');
+    if (!/^[A-Za-z0-9_-]{16,32}$/.test(id) || !/^[A-Za-z0-9_-]{43}$/.test(key)) return null;
+    let proxy = '';
+    try {
+      const u = new URL(q.get('p') || '');
+      if (u.protocol === 'https:' || (u.protocol === 'http:' && /^(localhost|127\.0\.0\.1)$/.test(u.hostname))) proxy = u.origin;
+    } catch {}
+    return { id, key, proxy };
+  }
+  const b64uBytes = (str) => Uint8Array.from(atob(str.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - (str.length % 4)) % 4)), (ch) => ch.charCodeAt(0));
+  async function unsealHandoff(payload, key) {
+    const [iv, data] = String(payload || '').split('.');
+    const k = await G.crypto.subtle.importKey('raw', b64uBytes(key), 'AES-GCM', false, ['decrypt']);
+    return new TextDecoder().decode(await G.crypto.subtle.decrypt({ name: 'AES-GCM', iv: b64uBytes(iv) }, k, b64uBytes(data)));
+  }
+  // -> đoạn BEINIOS1.… ; lỗi thì ném Error có .code: gone (đã dùng / hết 5 phút), no_proxy, http, decrypt
+  async function openHandoff({ id, key, proxy }, fetchFn = (u, o) => G.fetch(u, o)) {
+    const err = (code, message) => Object.assign(new Error(message), { code });
+    if (!proxy) throw err('no_proxy', 'Mã không có địa chỉ proxy.');
+    let res;
+    try {
+      res = await fetchFn(proxy + '/handoff?id=' + encodeURIComponent(id), { cache: 'no-store', credentials: 'omit' });
+    } catch {
+      throw err('network', 'Không gọi được proxy.');
+    }
+    const j = await res.json().catch(() => null);
+    if (!res.ok) throw err(j?.code || 'http', j?.error || 'Proxy trả lỗi ' + res.status + '.');
+    try {
+      return await unsealHandoff(j?.payload, key);
+    } catch {
+      throw err('decrypt', 'Không giải mã được — tạo mã mới ở addon.');
     }
   }
 
@@ -545,7 +588,7 @@
     };
   }
 
-  Object.assign(PWA, { idbBackend, memBackend, createStore, createNet, parseCookieInput, parseTransfer, parseSetCookie, applySetCookies, jarFor, cookieString, isBeincom, normConfig, AUTH_REFRESH, AREAS });
+  Object.assign(PWA, { idbBackend, memBackend, createStore, createNet, parseCookieInput, parseTransfer, parseHandoff, openHandoff, parseSetCookie, applySetCookies, jarFor, cookieString, isBeincom, normConfig, AUTH_REFRESH, AREAS });
 
   // Bản dùng chung của trang / luồng nền này (tạo khi cần)
   let shared = null;

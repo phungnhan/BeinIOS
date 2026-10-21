@@ -208,7 +208,7 @@
           <ol>
             <li>Mở <b>cửa sổ ẩn danh</b> Chrome / Edge, đăng nhập <code>group.beincom.com</code> (dùng Chat thì mở cả <code>chat.beincom.com</code>). Addon cần được bật "Cho phép ở chế độ ẩn danh".</li>
             <li>Dashboard của addon → <b>Cài đặt</b> → 📱 BeinIOS → <b>Chuyển đăng nhập sang BeinIOS</b>.</li>
-            <li>Quét mã QR bằng Camera iPhone → mở link → bấm <b>Chép</b> (hoặc bấm Chép ngay trên máy tính rồi tự chuyển đoạn chữ sang iPhone).</li>
+            <li>Lần đầu: trong hộp đó mở mục <b>Proxy của BeinIOS</b>, điền địa chỉ + khoá proxy (như ở trên) để có <b>mã QR ngắn</b>. Quét mã bằng Camera iPhone → mở trang → bấm <b>Chép</b>.</li>
             <li>Bấm <b>Dán từ addon</b> dưới đây. Đóng cửa sổ ẩn danh — <b>đừng bấm Đăng xuất</b>.</li>
           </ol>
         </div>
@@ -448,7 +448,7 @@
           const addonText = pendingTransfer || [$('addon-text').value, $('cookie-api').value, $('cookie-chat').value].find((t) => t.includes('BEINIOS1.')) || '';
           pendingTransfer = '';
           const fromAddon = addonText ? PWA.parseTransfer(addonText) : null;
-          if (addonText && !fromAddon) line('Đoạn từ addon không đọc được (thiếu chữ hoặc mã cũ) — tạo mã mới ở addon rồi chép lại.', 'bad');
+          if (addonText && !fromAddon) line(`Đoạn từ addon không đọc được (nhận ${addonText.replace(/\s+/g, '').length} ký tự) — có thể bị cắt khi chuyển. Chép lại nguyên đoạn ở addon (đừng để sót), hoặc tạo mã mới rồi dán lại.`, 'bad');
           if (fromAddon) {
             jars = { api: fromAddon.api, chat: fromAddon.chat, auth: fromAddon.auth };
             const age = Date.now() - fromAddon.at;

@@ -49,20 +49,38 @@
     </div>
   </main>
   <script>
-    (() => {
+    (async () => {
       const PWA = window.BeinPWA;
       const $ = (id) => document.getElementById(id);
-      let text = window.__beinTransfer || '';
-      window.__beinTransfer = '';
-      const data = PWA.parseTransfer(text);
-      if (!data) {
+      const bad = (msg) => {
         $('info').className = 'bad';
-        $('info').textContent = 'Link không có đăng nhập hợp lệ. Trên máy tính, bấm lại "Chuyển đăng nhập sang BeinIOS" ở addon rồi quét mã mới.';
-        return;
+        $('info').textContent = msg;
+      };
+      const raw = window.__beinTransfer || '';
+      window.__beinTransfer = '';
+      let text = raw;
+      // Mã QR ngắn của addon (chuyển nhanh qua proxy): lấy bản mã hoá về rồi giải ngay trên máy này
+      const ho = PWA.parseTransfer(raw) ? null : PWA.parseHandoff(raw);
+      if (ho) {
+        $('info').textContent = 'Đang lấy đăng nhập từ proxy…';
+        try {
+          text = await PWA.openHandoff(ho);
+        } catch (e) {
+          const why = {
+            gone: 'Mã đã dùng hoặc đã quá 5 phút. Trên máy tính, bấm lại "Chuyển đăng nhập sang BeinIOS" ở addon rồi quét mã mới.',
+            network: 'Không gọi được proxy — kiểm tra mạng rồi quét lại mã.',
+            no_store: 'Proxy chưa có kho chuyển nhanh — cần proxy bản 2.1.0 trở lên (repo BeinIOS mới nhất).',
+            decrypt: 'Không giải mã được — tạo mã mới ở addon rồi quét lại.',
+          };
+          return bad(why[e.code] || 'Không lấy được đăng nhập: ' + (e.message || e));
+        }
       }
+      const data = PWA.parseTransfer(text);
+      if (!data) return bad('Link không có đăng nhập hợp lệ. Trên máy tính, bấm lại "Chuyển đăng nhập sang BeinIOS" ở addon rồi quét mã mới.');
       const n = (k) => Object.keys(data[k]).length;
       const when = data.at ? new Date(data.at).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' }) : '';
-      $('info').textContent = `Đăng nhập Beincom${when ? ' tạo lúc ' + when : ''}: ${n('api')} cookie Beincom · ${n('chat')} cookie Chat${n('auth') ? ' · ' + n('auth') + ' cookie máy chủ đăng nhập' : ''}.`;
+      $('info').className = 'ok';
+      $('info').textContent = `Đã nhận đăng nhập Beincom${when ? ' tạo lúc ' + when : ''}: ${n('api')} cookie Beincom · ${n('chat')} cookie Chat${n('auth') ? ' · ' + n('auth') + ' cookie máy chủ đăng nhập' : ''}.`;
       $('actions').hidden = false;
       $('copy').onclick = async () => {
         try {
@@ -80,7 +98,8 @@
       $('here').onclick = async () => {
         const { net } = PWA.shared();
         await net.load();
-        await net.saveConfig({ jars: { api: data.api, chat: data.chat, auth: data.auth }, savedAt: Date.now(), status: null });
+        const proxy = !net.config.proxyUrl && ho?.proxy ? { proxyUrl: ho.proxy } : {};
+        await net.saveConfig({ jars: { api: data.api, chat: data.chat, auth: data.auth }, savedAt: Date.now(), status: null, ...proxy });
         text = '';
         location.href = 'index.html';
       };

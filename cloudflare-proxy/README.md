@@ -61,6 +61,17 @@ Tạo Worker bằng **Import a repository** và chọn repo `BeinIOS`. Không c�
 
 Repo trước bản 1.0.2 chưa có `wrangler.toml` ở gốc. Khi đó Cloudflare đưa cả repo lên làm trang tĩnh: mở `/` thấy trang BeinIOS, còn `/health` trả 404 trống. Cách sửa: đẩy bản mới (Cloudflare tự dựng lại), hoặc đặt **Settings** → **Build** → **Root directory** là `cloudflare-proxy`.
 
+## Chuyển nhanh đăng nhập (`/handoff`, từ proxy 2.1.0)
+
+Addon BeinFusion dùng điểm này để tạo **mã QR ngắn** cho iPhone. Đăng nhập thật quá dài, không vừa một mã QR.
+
+- **Gửi lên (`POST /handoff`, cần `PROXY_KEY`).** Addon gửi bản đăng nhập đã **mã hoá ngay trên máy tính** (AES-GCM). Khoá giải mã không bao giờ gửi lên proxy.
+- **Lấy về (`GET /handoff?id=…`, không cần khoá proxy).** Trang `nhap.html` trên iPhone lấy về theo mã số ngẫu nhiên, rồi giải mã bằng khoá trong mã QR.
+- **Nơi giữ.** Mỗi lần chuyển là một Durable Object (`HANDOFF`, lớp `Handoff`). Proxy chỉ giữ bản mã hoá: lấy một lần là xoá, tự xoá sau 5 phút.
+- **Không phải cài thêm gì.** `wrangler.toml` đã khai báo `HANDOFF`. Cloudflare tự tạo khi dựng; gói miễn phí dùng được (kiểu lưu SQLite).
+
+Kiểm tra: `/health` có `"handoff": true` là dùng được.
+
 ## Dùng với BeinIOS
 
 Mở BeinIOS → **Cài đặt**, dán địa chỉ proxy và khoá `PROXY_KEY`, rồi làm tiếp theo [HUONG-DAN-PWA.md](../HUONG-DAN-PWA.md).
@@ -78,3 +89,5 @@ Webapp đọc mã trong header `x-bein-proxy-error` và báo ở Cài đặt:
 | `host` / `auth` | Địa chỉ không được phép |
 | `upstream` | Không kết nối được Beincom |
 | `redirect` | Beincom trả chuyển hướng: phiên hỏng, hoặc Beincom đổi đường dẫn |
+| `no_store` | Proxy cũ, chưa có kho chuyển nhanh — cập nhật proxy (2.1.0 trở lên) |
+| `gone` | Mã chuyển nhanh đã dùng hoặc quá 5 phút — tạo mã mới ở addon |
