@@ -148,6 +148,12 @@ node test/pwa/pwa.e2e.mjs
 
 ## Lịch sử BeinIOS
 
+- **1.5.0 (21/10/2026).** Hồ sơ cá nhân gọn hơn, thêm Trang cá nhân và Nhật ký của tôi:
+  - **Tài khoản:** chạm avatar mở trang cá nhân trên Beincom; chạm @tên đăng nhập dưới tên để chép. Bỏ các dòng tên đăng nhập, mã Beincom, Chat Beincom.
+  - **Trang cá nhân:** thông tin cơ bản trên Beincom (họ tên, giới tính, ngày sinh, ngôn ngữ, tình trạng quan hệ) và liên hệ (email, số điện thoại, thành phố). Bấm **Sửa** để đổi, **Lưu** gửi thẳng lên Beincom như web Beincom. Tài khoản đã xác minh danh tính không đổi được họ tên, giới tính, ngày sinh; email đổi trên web Beincom.
+  - **Nhật ký của tôi:** mở Nhật ký cá nhân của Beincom Chat (tin nhắn cho chính mình) ở tab Chat.
+  - **Proxy & Login** chuyển xuống dưới phần Addon.
+  - **Thanh dưới** kiểu Telegram: viên nổi nền kính trong nhẹ, icon đen, mục đang mở có nền xám, tab Cài đặt là avatar của bạn. Thanh dưới hiện cả khi đang ở Cài đặt; bấm Chat / Quản trị là sang ngay.
 - **1.4.0 (21/10/2026).** Cài đặt phân nhóm rõ, có Hồ sơ cá nhân kiểu Telegram, đi cùng addon BeinFusion 0.53.0:
   - **Tài khoản / Hồ sơ cá nhân** (chạm thẻ tài khoản ở đầu Cài đặt, avatar ở góc trên Quản trị, dòng tài khoản / avatar ở Chat): avatar lớn giữa trang, tên, @tên đăng nhập; thẻ Trang cá nhân trên Beincom; tên đăng nhập, mã Beincom (chạm để chép), Chat; Proxy & Login; quyền quản trị theo từng cộng đồng; trạng thái quét. Cuộn xuống thì tên hiện ở thanh trên như Telegram.
   - Tab **Quy tắc & cài đặt** rời khỏi Quản trị, vào **Cài đặt** thành hai nhóm: **Quản trị** (Hoạt động & quét, Tự xử lý, Theo dõi & nhắc việc, Quy tắc thành viên, Quy tắc bài viết) và **Tích hợp** (Chat Beincom, Telegram, Sao lưu & đồng bộ). Mỗi dòng mở đúng nhóm đó, dùng chính ô cài đặt của addon nên đủ chức năng, lưu như cũ.

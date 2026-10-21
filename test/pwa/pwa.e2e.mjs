@@ -35,6 +35,8 @@ const site = http.createServer((req, res) => {
 // ---------- Beincom giả (sau proxy) ----------
 const upstream = [];
 let withRequest = false; // có yêu cầu tham gia mới (thử thông báo)
+// Hồ sơ Beincom giả (Cài đặt › Tài khoản › Trang cá nhân đọc / sửa)
+const profile = { id: 'me-e2e', username: 'tester', fullname: 'Người Thử', avatar: '', gender: 'MALE', birthday: '1994-04-20', language: ['vi', 'en'], relationship_status: 'SINGLE', email: 'tester@example.com', country_code: '+84', phone: '912345678', city: 'Hà Nội', is_verified: false };
 const COOKIE = (h) => Object.fromEntries((h.get('cookie') || '').split(/;\s*/).filter(Boolean).map((p) => [p.split('=')[0], p.slice(p.indexOf('=') + 1)]));
 const J = (status, body, headers = {}) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json', ...headers } });
 async function beincom(url, init = {}) {
@@ -55,7 +57,13 @@ async function beincom(url, init = {}) {
   if (u.hostname !== 'api.beincom.com') return J(404, {});
   if (ck.sid !== 'good') return J(401, { code: 'api.unauthorized' });
   const p = u.pathname.replace(/^\/v1\//, '');
-  if (p === 'user/me/profile') return J(200, { code: 'api.ok', data: { id: 'me-e2e', username: 'tester', fullname: 'Người Thử', avatar: '' } });
+  if (p === 'user/me/profile' && init.method === 'PUT') {
+    Object.assign(profile, JSON.parse(body));
+    return J(200, { code: 'api.ok', data: profile, meta: { message: 'Updated' } });
+  }
+  if (p === 'user/me/profile') return J(200, { code: 'api.ok', data: profile });
+  if (p === 'group/languages') return J(200, { code: 'api.ok', data: [{ code: 'vi', local: 'Tiếng Việt' }, { code: 'en', local: 'English' }, { code: 'ja', local: '日本語' }] });
+  if (p === 'group/cities') return J(200, { code: 'api.ok', data: u.searchParams.get('country_code') === '+84' ? [{ name: 'Hà Nội' }, { name: 'Hồ Chí Minh' }] : [] });
   if (p === 'group/me/permissions') return J(200, { code: 'api.ok', data: { communities: { c1: ['manage', 'ban_member'] }, groups: { g1: ['role_COMMUNITY_ADMIN', 'approve_reject_jr', 'remove_member'] } } });
   if (p === 'group/groups/g1') return J(200, { code: 'api.ok', data: { id: 'g1', name: 'Nhóm Thử BeinIOS', communityId: 'c1', isCommunity: true, level: 0, privacy: 'OPEN', userCount: 42, settings: { isJoinApproval: true } } });
   if (/join-requests/.test(p)) return J(200, { code: 'api.ok', data: withRequest ? [{ id: 'jr1', userId: 'u9', createdAt: new Date().toISOString(), answers: [], user: { id: 'u9', username: 'nguoimoi', fullname: 'Người Mới', avatar: '' } }] : [] });
@@ -240,10 +248,15 @@ try {
   // Tài khoản / Hồ sơ cá nhân
   await page.ev(`document.getElementById('acct').click(); true`);
   await page.until(new Function(`return ${isOpen('account')} && /Người Thử/.test(document.getElementById('pf-head').textContent) && document.querySelectorAll('#pf-sections .group-label').length === 2`), 5000);
-  const pf = await page.ev(`({ head: document.getElementById('pf-head').innerText.split(String.fromCharCode(10)).join(' | '), info: [...document.querySelectorAll('#pf-info .row')].map((r) => r.querySelector('small').textContent + '=' + r.querySelector('.v').textContent), titles: [...document.querySelectorAll('#pf-sections .group-label')].map((x) => x.textContent), comm: document.querySelector('#pf-sections a.row .two')?.innerText.split(String.fromCharCode(10)).join(' | '), login: document.getElementById('pf-login-state').textContent, link: document.querySelector('#pf-links a.row.accent')?.href, avatar: Math.round(document.querySelector('#pf-head .bein-avatar').getBoundingClientRect().width) })`);
-  const pfOk = /NT \| Người Thử \| @tester • Quản trị 1 cộng đồng/.test(pf.head) && pf.avatar === 104 && pf.info[0] === 'Tên đăng nhập=@tester' && pf.info[1] === 'Mã Beincom=me-e2e' && /^Chat Beincom=/.test(pf.info[2] || '') && pf.titles.join(',') === 'Quyền quản trị,Addon' && / \| /.test(pf.comm || '') && pf.login === 'Đã kết nối' && /\/users\/tester$/.test(pf.link || '');
+  const pf = await page.ev(`({ head: document.getElementById('pf-head').innerText.split(String.fromCharCode(10)).join(' | '), info: document.querySelectorAll('#pf-info, #pf-links').length, avLink: document.querySelector('#pf-head a.pf-av')?.href, rows: [...document.querySelectorAll('#view-account .wrap > .list > .row > span:not(.two)')].map((x) => x.textContent), titles: [...document.querySelectorAll('#pf-sections .group-label')].map((x) => x.textContent), comm: document.querySelector('#pf-sections a.row .two')?.innerText.split(String.fromCharCode(10)).join(' | '), loginLast: !!(document.getElementById('pf-sections').compareDocumentPosition(document.getElementById('pf-login')) & Node.DOCUMENT_POSITION_FOLLOWING), login: document.getElementById('pf-login-state').textContent, avatar: Math.round(document.querySelector('#pf-head .bein-avatar').getBoundingClientRect().width), noRows: !/Mã Beincom|Tên đăng nhập|Chat Beincom/.test(document.getElementById('view-account').innerText) })`);
+  const pfOk = /NT \| Người Thử \| @tester • Quản trị 1 cộng đồng/.test(pf.head) && pf.avatar === 104 && pf.info === 0 && /\/users\/tester$/.test(pf.avLink || '') && pf.rows.join(',') === 'Trang cá nhân,Nhật ký của tôi,Proxy & Login' && pf.loginLast && pf.noRows && pf.titles.join(',') === 'Quyền quản trị,Addon' && / \| /.test(pf.comm || '') && pf.login === 'Đã kết nối';
   if (!pfOk) console.log('    (gỡ lỗi)', JSON.stringify(pf));
-  ok(pfOk, 'Cài đặt › Tài khoản (kiểu Telegram): avatar lớn, tên, dòng thông tin, quyền quản trị, addon, Proxy & Login');
+  ok(pfOk, 'Cài đặt › Tài khoản: avatar là link trang Beincom, Trang cá nhân, Nhật ký của tôi, quyền quản trị, addon, Proxy & Login dưới cùng');
+  const copied = await page.ev(`(async () => { let t = ''; Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async (x) => { t = x; }, readText: async () => t } }); document.querySelector('#pf-head .pf-user').click(); await new Promise((r) => setTimeout(r, 50)); return t; })()`);
+  ok(copied === '@tester', 'Tài khoản: chạm @tên đăng nhập dưới tên là chép');
+  // Thanh dưới vẫn hiện khi mở Cài đặt, mục Cài đặt sáng
+  const bar = await page.ev(`(() => { const n = document.querySelector('nav.tabbar'); const r = n.getBoundingClientRect(); const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return { onTop: n.contains(hit), on: document.querySelector('nav.tabbar button.on')?.dataset.tab, av: !!document.querySelector('#tab-av .bein-avatar') }; })()`);
+  ok(bar.onTop && bar.on === 'setup' && bar.av, 'Thanh dưới (Chat · Quản trị · Cài đặt) vẫn hiện trên Cài đặt, mục Cài đặt sáng, có avatar');
   await sleep(450);
   await shot('6c-tai-khoan');
   // Cuộn: tên lên giữa thanh trên, avatar mờ dần (thêm khoảng trống cho đủ dài để cuộn — tài khoản thử chỉ có 1 cộng đồng)
@@ -353,6 +366,50 @@ try {
   await page.until(() => document.querySelector('nav button.on')?.dataset.tab === 'dash' && !!document.getElementById('f-dash').contentDocument?.getElementById('whatsnew')?.open, 8000);
   ok(true, 'Cài đặt → Addon BeinFusion: mở bảng Có gì mới của addon ở Quản trị');
   await page.ev(frame('f-dash', "document.getElementById('whatsnew').close(), true"));
+  // Cài đặt › Tài khoản › Trang cá nhân: thông tin cơ bản trên Beincom
+  await page.ev(`document.querySelector('nav button[data-tab="setup"]').click(); document.getElementById('acct').click(); true`);
+  await page.until(new Function(`return ${isOpen('account')}`), 3000);
+  await page.ev(`document.getElementById('pf-bprofile').click(); true`);
+  const bpRows = `[...document.querySelectorAll('#bp-body .row.info')].map((r) => r.querySelector('small').textContent + '=' + (r.querySelector('.v') || r.querySelector('.in'))?.textContent).join('; ')`;
+  await page.until(new Function(`return ${isOpen('bprofile')} && /Họ và tên=Người Thử/.test(${bpRows})`), 6000);
+  const bpView = await page.ev(bpRows);
+  ok(bpView === 'Họ và tên=Người Thử; Giới tính=Nam; Ngày sinh=20/04/1994; Ngôn ngữ=Tiếng Việt, English; Tình trạng quan hệ=Độc thân; Email=tester@example.com; Số điện thoại=+84 912345678; Thành phố=Hà Nội', 'Trang cá nhân: thông tin cơ bản + liên hệ đọc từ Beincom (' + bpView + ')');
+  await sleep(300);
+  await shot('6e-trang-ca-nhan');
+  await page.ev(`document.getElementById('bp-edit').click(); true`);
+  await page.until(() => !!document.getElementById('bp-fullname') && document.getElementById('bp-city')?.tagName === 'SELECT' && document.getElementById('bp-city').options.length === 3, 5000);
+  ok(true, 'Trang cá nhân › Sửa: ô sửa, danh sách thành phố từ Beincom');
+  await sleep(300);
+  await shot('6f-sua-trang-ca-nhan');
+  const nPut = upstream.length;
+  await page.ev(`(() => {
+    const set = (id, v) => { const e = document.getElementById(id); e.value = v; e.dispatchEvent(new Event('change')); };
+    set('bp-fullname', 'Người Thử');
+    set('bp-relationship', 'MARRIED');
+    for (const o of document.getElementById('bp-language').options) o.selected = o.value === 'vi';
+    set('bp-phone', '987 654 321');
+    set('bp-city', 'Hồ Chí Minh');
+    document.getElementById('bp-edit').click();
+    return true;
+  })()`);
+  await page.until(() => /Đã lưu lên Beincom/.test(document.getElementById('bp-note').textContent), 6000);
+  const puts = upstream.slice(nPut).filter((x) => x.method === 'PUT' && x.path === '/v1/user/me/profile').map((x) => JSON.parse(x.body));
+  ok(puts.length === 2 && JSON.stringify(puts[0]) === JSON.stringify({ fullname: 'Người Thử', gender: 'MALE', birthday: '1994-04-20', language: ['vi'], relationship_status: 'MARRIED' }) && JSON.stringify(puts[1]) === JSON.stringify({ country_code: '+84', phone: '987654321', city: 'Hồ Chí Minh' }), 'Trang cá nhân › Lưu: PUT user/me/profile như web Beincom (thông tin cơ bản, liên hệ)' + (puts.length === 2 ? '' : ' ' + JSON.stringify(puts)));
+  const bpAfter = await page.ev(bpRows);
+  ok(/Ngôn ngữ=Tiếng Việt; Tình trạng quan hệ=Đã kết hôn/.test(bpAfter) && /Số điện thoại=\+84 987654321; Thành phố=Hồ Chí Minh/.test(bpAfter), 'Trang cá nhân: đọc lại sau khi lưu, hiện giá trị mới');
+  // Nhật ký của tôi: mở Nhật ký cá nhân (tin nhắn cho chính mình) ở tab Chat
+  await page.ev(`document.getElementById('bp-back').click(); true`);
+  await page.until(new Function(`return ${isOpen('account')}`), 3000);
+  await page.ev(`BeinPWA.page.store.get('local', ['chatOverviewCache']).then(({ chatOverviewCache: c }) => BeinPWA.page.store.set('local', { chatOverviewCache: { ...(c || {}), dms: [...(c?.dms || []), { id: 'selfdm1', kind: 'dm', type: 'D', self: true, title: 'Nhật ký cá nhân' }] } })).then(() => true)`);
+  await page.ev(`document.getElementById('pf-notes').click(); true`);
+  await page.until(() => !document.getElementById('setup').classList.contains('open') && document.querySelector('nav button.on')?.dataset.tab === 'chat' && /#c=selfdm1$/.test(document.getElementById('f-chat').getAttribute('src') || ''), 5000);
+  ok(true, 'Tài khoản › Nhật ký của tôi: mở Nhật ký cá nhân ở tab Chat');
+  // Đang mở Cài đặt, bấm tab Quản trị ở thanh dưới: đóng Cài đặt, sang Quản trị
+  await page.ev(`document.querySelector('nav button[data-tab="setup"]').click(); true`);
+  await page.until(new Function(`return ${isOpen('main')}`), 3000);
+  await page.ev(`document.querySelector('nav button[data-tab="dash"]').click(); true`);
+  await page.until(() => !document.getElementById('setup').classList.contains('open') && document.querySelector('nav button.on')?.dataset.tab === 'dash', 3000);
+  ok(true, 'Thanh dưới: đang ở Cài đặt bấm Quản trị thì sang Quản trị');
 
   // ---------- Dán từ addon (addon BeinFusion → Chuyển đăng nhập sang BeinIOS) ----------
   // Đoạn như addon tạo: phiên cũ (sid=old2) + cookie máy chủ đăng nhập (rt=r1) -> BeinIOS phải tự làm mới bằng ô auth

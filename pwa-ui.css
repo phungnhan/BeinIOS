@@ -68,7 +68,7 @@ html[data-bein-embed] .to-top,
 html[data-bein-embed] .tab-toc { display: none !important; }
 html[data-bein-embed] .bein-off { display: none !important; }
 html[data-bein-embed] body { background: transparent; }
-html[data-bein-embed] main { display: block; padding: 2px 16px 40px; }
+html[data-bein-embed] main { display: block; padding: 2px 16px 120px; } /* chừa chỗ cho thanh dưới nổi của ứng dụng */
 html[data-bein-embed] main > [data-tab='settings']:not(.bein-off) { display: block; margin: 0 0 14px; }
 html[data-bein-embed] .rules-col > .card { margin-bottom: 14px; }
 html[data-bein-embed] #settings > .card-head h2 { display: none; }

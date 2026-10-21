@@ -67,17 +67,37 @@
     svg.i { display: block; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 
     main { flex: 1; position: relative; min-height: 0; }
-    main iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; display: none; background: var(--bg); }
+    /* Trang Chat / Quản trị dừng trên thanh dưới (ô gõ tin không bị che) */
+    main iframe { position: absolute; inset: 0 0 var(--tb-space) 0; width: 100%; height: calc(100% - var(--tb-space)); border: 0; display: none; background: var(--bg); }
     main iframe.on { display: block; }
 
-    /* ---------- Thanh dưới ---------- */
+    /* ---------- Thanh dưới: viên nổi kiểu Telegram (nền kính trong nhẹ, icon đen, mục đang mở có nền xám) — hiện cả
+       khi mở Cài đặt ---------- */
+    :root {
+      --tb-h: 62px;
+      --tb-gap: max(8px, calc(env(safe-area-inset-bottom, 0px) - 12px));
+      --tb-space: calc(var(--tb-h) + var(--tb-gap) + 8px);
+      --tb-glass: rgba(255, 255, 255, 0.7);
+      --tb-on: rgba(0, 0, 0, 0.065);
+    }
+    @media (prefers-color-scheme: dark) {
+      :root { --tb-glass: rgba(30, 30, 32, 0.72); --tb-on: rgba(255, 255, 255, 0.11); }
+    }
     nav.tabbar {
+      position: fixed;
+      z-index: 60;
+      left: 50%;
+      bottom: var(--tb-gap);
+      transform: translateX(-50%);
+      width: min(calc(100% - 24px), 440px);
+      height: var(--tb-h);
       display: flex;
-      background: var(--nav);
-      -webkit-backdrop-filter: saturate(180%) blur(20px);
-      backdrop-filter: saturate(180%) blur(20px);
-      border-top: 0.5px solid var(--line);
-      padding-bottom: env(safe-area-inset-bottom, 0px);
+      padding: 4px;
+      border-radius: 999px;
+      background: var(--tb-glass);
+      -webkit-backdrop-filter: saturate(180%) blur(22px);
+      backdrop-filter: saturate(180%) blur(22px);
+      box-shadow: 0 6px 24px rgba(0, 0, 0, 0.1), inset 0 0 0 0.5px var(--glass-edge);
     }
     nav.tabbar button {
       flex: 1;
@@ -85,19 +105,22 @@
       display: flex;
       flex-direction: column;
       align-items: center;
-      gap: 2px;
-      padding: 6px 0 4px;
+      justify-content: center;
+      gap: 3px;
       border: 0;
+      border-radius: 999px;
       background: none;
-      color: var(--sub);
-      font-size: 10.5px;
-      font-weight: 500;
+      color: var(--text);
+      font-size: 11px;
+      font-weight: 600;
       letter-spacing: 0.1px;
       cursor: pointer;
+      transition: background-color 0.2s;
     }
-    nav.tabbar svg.i { width: 26px; height: 26px; stroke-width: 1.6; }
-    nav.tabbar button.on { color: var(--accent); }
-    nav.tabbar button.on svg.i { stroke-width: 2; }
+    nav.tabbar svg.i { width: 27px; height: 27px; }
+    nav.tabbar svg.f { fill: currentColor; stroke: none; }
+    nav.tabbar .tab-av { display: grid; place-items: center; width: 27px; height: 27px; }
+    nav.tabbar button.on { background: var(--tb-on); color: var(--accent); }
     nav.tabbar .badge {
       position: absolute;
       top: 2px;
@@ -114,7 +137,7 @@
       text-align: center;
     }
     nav.tabbar .badge:empty { display: none; }
-    nav.tabbar .dot { position: absolute; top: 5px; left: calc(50% + 9px); width: 8px; height: 8px; border-radius: 50%; display: none; }
+    nav.tabbar .dot { position: absolute; top: 6px; left: calc(50% + 8px); width: 10px; height: 10px; border-radius: 50%; display: none; box-shadow: 0 0 0 2px var(--card); }
     nav.tabbar .dot.warn { display: block; background: var(--warn); }
     nav.tabbar .dot.bad { display: block; background: var(--bad); }
 
@@ -133,7 +156,7 @@
       inset: 0;
       overflow-y: auto;
       -webkit-overflow-scrolling: touch;
-      padding: env(safe-area-inset-top, 0px) 16px calc(28px + env(safe-area-inset-bottom, 0px));
+      padding: env(safe-area-inset-top, 0px) 16px calc(var(--tb-space) + 20px);
       background: var(--bg);
     }
     .view[hidden] { display: none !important; }
@@ -172,7 +195,12 @@
     .glass.round { width: 44px; padding: 0; }
     .glass:active { filter: brightness(0.94); }
     .tg-title { position: absolute; left: 96px; right: 96px; text-align: center; font-size: 17px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; opacity: 0; transition: opacity 0.2s; }
-    .tg-top.scrolled .tg-title { opacity: 1; }
+    .tg-top.scrolled .tg-title, .tg-title.on { opacity: 1; }
+    .glass[hidden] { display: none; }
+    .glass.save { color: var(--accent); font-weight: 600; }
+    .glass:disabled { opacity: 0.5; }
+    .profile .pf-av { display: block; border-radius: 50%; }
+    .profile .pf-user { padding: 0; border: 0; background: none; color: inherit; font: inherit; cursor: pointer; }
     .profile { display: flex; flex-direction: column; align-items: center; gap: 4px; margin-top: -48px; padding-bottom: 6px; text-align: center; }
     .profile .bein-avatar { transform-origin: 50% 70%; box-shadow: 0 4px 18px rgba(0, 0, 0, 0.08); }
     .profile b { max-width: 100%; margin-top: 14px; font-size: 27px; font-weight: 600; letter-spacing: 0.1px; line-height: 1.15; overflow-wrap: anywhere; }
@@ -192,6 +220,19 @@
     .tg .row.info .v.link { color: var(--accent); }
     .tg .row.info .v.ok { color: var(--ok); }
     .tg .row.info .v.warn { color: var(--warn); }
+    .tg .row.info .v.none { color: var(--sub); }
+    /* Trang cá nhân › Sửa: ô nhập nằm gọn trong dòng, giữ kiểu nhãn trên / giá trị dưới */
+    .tg .row.edit { cursor: default; }
+    .tg .row.edit:active { background: none; }
+    .tg .row.info .in { width: 100%; min-width: 0; padding: 2px 0; border: 0; background: transparent; color: var(--text); font-family: inherit; font-size: 17px; line-height: 1.35; outline: none; }
+    .tg .row.info select.in { color: var(--accent); -webkit-appearance: none; appearance: none; }
+    .tg .row.info select[multiple].in { height: auto; padding: 4px 0; }
+    .tg .row.info .in:disabled { color: var(--sub); opacity: 1; -webkit-text-fill-color: var(--sub); }
+    .tg .row.info .pair { display: flex; gap: 10px; }
+    .tg .row.info .pair .cc { flex: 0 0 62px; }
+    .tg .row.info .hint { font-size: 13px; color: var(--sub); }
+    .group-note.bad { color: var(--bad); }
+    .group-note.ok { color: var(--ok); }
     /* Dòng hai tầng: tên + dòng phụ (cộng đồng, giá trị dài) */
     .tg .row .two { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
     .tg .row .two b { font-weight: 400; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -270,7 +311,7 @@
     .field { display: flex; align-items: center; gap: 10px; padding: 4px 16px; min-height: 52px; position: relative; }
     .field + .field::before { content: ''; position: absolute; top: 0; right: 0; left: 16px; border-top: 0.5px solid var(--line); }
     .field > span { width: 74px; flex: none; color: var(--text); }
-    .field input { flex: 1; min-width: 0; border: 0; background: transparent; color: var(--text); font: 16px/1.3 inherit; font-family: inherit; padding: 10px 0; outline: none; }
+    .field input { flex: 1; min-width: 0; border: 0; background: transparent; color: var(--text); font-family: inherit; font-size: 17px; line-height: 1.3; padding: 10px 0; outline: none; }
     .field input::placeholder { color: var(--sub); }
     .pad { padding: 16px; }
     .btn {
@@ -332,15 +373,15 @@
 
   <nav class="tabbar" aria-label="Ứng dụng">
     <button type="button" data-tab="chat" class="on">
-      <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.5h10A3.5 3.5 0 0 1 20.5 8v6a3.5 3.5 0 0 1-3.5 3.5h-6.2L6.5 21v-3.5A3.5 3.5 0 0 1 3.5 14V8A3.5 3.5 0 0 1 7 4.5Z" /></svg>
+      <svg class="i f" viewBox="0 0 24 24" aria-hidden="true"><path d="M9.6 3.6c-4.2 0-7.6 2.8-7.6 6.3 0 1.9 1 3.6 2.6 4.8l-.7 3 3.2-1.7c.8.2 1.6.3 2.5.3 4.2 0 7.6-2.8 7.6-6.4S13.8 3.6 9.6 3.6Z" /><path d="M19.4 8.6c.1.4.1.8.1 1.3 0 4.6-4.3 8.1-9.3 8.3 1.3 1.4 3.4 2.3 5.7 2.3.7 0 1.4-.1 2-.2l2.8 1.5-.6-2.6c1.4-1 2.3-2.5 2.3-4.1 0-2.6-1.2-4.6-3-6.5Z" /></svg>
       <span>Chat</span><b class="badge" id="badge-chat"></b>
     </button>
     <button type="button" data-tab="dash">
-      <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="6.5" height="6.5" rx="1.8" /><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.8" /><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.8" /><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.8" /></svg>
+      <svg class="i f" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="3.5" width="7.6" height="7.6" rx="2.2" /><rect x="12.9" y="3.5" width="7.6" height="7.6" rx="2.2" /><rect x="3.5" y="12.9" width="7.6" height="7.6" rx="2.2" /><rect x="12.9" y="12.9" width="7.6" height="7.6" rx="2.2" /></svg>
       <span>Quản trị</span><b class="badge" id="badge"></b>
     </button>
     <button type="button" data-tab="setup">
-      <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h9M17 7h3M4 17h3M11 17h9" /><circle cx="15" cy="7" r="2.2" /><circle cx="9" cy="17" r="2.2" /></svg>
+      <span class="tab-av" id="tab-av"></span>
       <span>Cài đặt</span><i class="dot" id="dot"></i>
     </button>
   </nav>
@@ -463,15 +504,41 @@
       </div>
       <div class="wrap">
         <div class="profile" id="pf-head"></div>
-        <div class="list" id="pf-links" hidden></div>
-        <div class="list" id="pf-info"></div>
+        <div class="list">
+          <button type="button" class="row" id="pf-bprofile">
+            <i class="ic" style="--c: #ff453a"><svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="8.5" r="3.6" /><path d="M5 19.5c.8-3.3 3.6-5.2 7-5.2s6.2 1.9 7 5.2" /></svg></i>
+            <span>Trang cá nhân</span><svg class="i chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg>
+          </button>
+        </div>
+        <div class="list">
+          <button type="button" class="row" id="pf-notes">
+            <i class="ic" style="--c: #0a84ff"><svg class="i" viewBox="0 0 24 24"><path d="M7.5 3.5h9a1.5 1.5 0 0 1 1.5 1.5v15.5l-6-3.9-6 3.9V5a1.5 1.5 0 0 1 1.5-1.5Z" /></svg></i>
+            <span>Nhật ký của tôi</span><svg class="i chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg>
+          </button>
+        </div>
+        <div id="pf-sections"></div>
         <div class="list">
           <button type="button" class="row" id="pf-login">
             <i class="ic" style="--c: #5e5ce6"><svg class="i" viewBox="0 0 24 24"><circle cx="8" cy="15" r="4" /><path d="M11 12l8.5-8.5M16.5 7l2.5 2.5M14.5 9l1.8 1.8" /></svg></i>
             <span>Proxy &amp; Login</span><em id="pf-login-state"></em><svg class="i chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg>
           </button>
         </div>
-        <div id="pf-sections"></div>
+      </div>
+    </div>
+
+    <!-- Trang cá nhân: thông tin cơ bản trên Beincom (đọc user/me/profile), Sửa -> lưu thẳng lên Beincom -->
+    <div class="view tg" id="view-bprofile" hidden>
+      <div class="tg-top" id="bp-top">
+        <div class="wrap">
+          <button type="button" class="glass round" id="bp-back" aria-label="Tài khoản"><svg class="i" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M15 5l-7 7 7 7" /></svg></button>
+          <button type="button" class="glass" id="bp-cancel" hidden>Huỷ</button>
+          <b class="tg-title on">Trang cá nhân</b>
+          <button type="button" class="glass" id="bp-edit">Sửa</button>
+        </div>
+      </div>
+      <div class="wrap">
+        <div id="bp-body"><p class="group-note">Đang tải…</p></div>
+        <p class="group-note" id="bp-note"></p>
       </div>
     </div>
 
@@ -560,18 +627,26 @@
       let current = 'chat';
 
       // ---------- Chuyển tab ----------
+      // Thanh dưới hiện cả khi mở Cài đặt (như Telegram): mục sáng là Cài đặt khi đang mở, không thì Chat / Quản trị
       function show(tab) {
         if (tab === 'setup') return openSetup('main');
         current = tab;
-        for (const b of tabs) b.classList.toggle('on', b.dataset.tab === tab);
         for (const [k, f] of Object.entries(frames)) {
           if (k === tab && !f.getAttribute('src')) f.src = f.dataset.src;
           f.classList.toggle('on', k === tab);
         }
+        closeSetup();
         history.replaceState(null, '', '#' + tab);
       }
       tabs.forEach((b) => b.addEventListener('click', () => show(b.dataset.tab)));
-      const closeSetup = () => $('setup').classList.remove('open');
+      const markTabs = () => {
+        const open = $('setup').classList.contains('open');
+        for (const b of tabs) b.classList.toggle('on', b.dataset.tab === (open ? 'setup' : current));
+      };
+      const closeSetup = () => {
+        $('setup').classList.remove('open');
+        markTabs();
+      };
 
       // Trang bên trong (hoặc luồng nền) xin mở một trang của ứng dụng: chuyển đúng tab, giữ phần # (cuộc trò chuyện, tab Dashboard).
       // setup('main' | 'login'): mở Cài đặt / Cài đặt › Proxy & Login (nút Login ở Chat, Quản trị). setChatBadge: số tin chưa đọc.
@@ -676,6 +751,7 @@
         renderSaved(cfg);
         const me = await PWA.me().catch(() => null);
         $('acct-avatar').replaceChildren(PWA.avatarEl(me, 52));
+        $('tab-av').replaceChildren(PWA.avatarEl(me, 27));
         $('acct-name').textContent = me?.name || 'Tài khoản Beincom';
         const sub = $('acct-sub');
         sub.querySelector('i').className = st.level === 'ok' ? '' : st.level;
@@ -689,7 +765,7 @@
       }
 
       // ---------- Cài đặt: Cài đặt chung · Tài khoản · một nhóm Quản trị · Proxy & Login ----------
-      const VIEWS = ['main', 'account', 'dset', 'login'];
+      const VIEWS = ['main', 'account', 'bprofile', 'dset', 'login'];
       function showView(view) {
         const was = VIEWS.find((v) => !$('view-' + v).hidden);
         for (const v of VIEWS) $('view-' + v).hidden = v !== view;
@@ -740,7 +816,6 @@
         'Tự quét': icon('#ff9f0a', '<circle cx="12" cy="12" r="8.5" /><path d="M12 7.5V12l3 2" />'),
         'Chạy thử': icon('#af52de', '<path d="M9.5 3.5h5M10.5 3.5v5.2L5.6 17a2.3 2.3 0 0 0 2 3.5h8.8a2.3 2.3 0 0 0 2-3.5l-4.9-8.3V3.5M7.6 14.5h8.8" />'),
       };
-      const ICON_LINK = icon('', '<circle cx="12" cy="12" r="8.5" /><path d="M3.5 12h17M12 3.5c2.3 2.4 3.4 5.2 3.4 8.5s-1.1 6.1-3.4 8.5c-2.3-2.4-3.4-5.2-3.4-8.5s1.1-6.1 3.4-8.5Z" />');
       const make = (tag, props = {}, ...kids) => {
         const e = Object.assign(document.createElement(tag), props);
         e.append(...kids);
@@ -750,33 +825,24 @@
       async function renderProfile() {
         const { state, settings, chatOverviewCache } = await page.store.get('local', ['state', 'settings', 'chatOverviewCache']);
         const p = BG.selfProfile({ me: state?.me, chatMe: chatOverviewCache?.me, groups: state?.snapshot?.groups || [], settings: { ...BG.DEFAULT_SETTINGS, ...settings }, lastScan: state?.lastScan, lastResult: state?.lastResult });
-        const me = p.avatar ? { name: p.name, avatar: p.avatar, chatId: p.chatId } : (await PWA.me().catch(() => null)) || { name: p.name, chatId: p.chatId };
-        // Đầu trang: avatar lớn giữa, tên, @tên đăng nhập • tóm tắt
-        const name = make('b', { textContent: p.name || 'Tài khoản Beincom' });
+        // Vừa sửa ở Trang cá nhân: dùng tên mới đọc từ Beincom (lần quét sau mới cập nhật state.me)
+        const fullname = (bp?.username === p.username && bp?.fullname) || p.name;
+        const me = p.avatar ? { name: fullname, avatar: p.avatar, chatId: p.chatId } : (await PWA.me().catch(() => null)) || { name: fullname, chatId: p.chatId };
+        // Đầu trang: avatar lớn giữa (chạm: trang cá nhân trên Beincom), tên, @tên đăng nhập (chạm để chép) • tóm tắt
+        const name = make('b', { textContent: fullname || 'Tài khoản Beincom' });
         if (p.verified) name.append(make('i', { className: 'vb', title: 'Đã xác minh', textContent: '✓' }));
-        const sub = make('span', { textContent: [p.username ? '@' + p.username : '', p.summary].filter(Boolean).join(' • ') || 'Chưa đọc được tài khoản — bấm Quét ngay ở Quản trị' });
-        $('pf-head').replaceChildren(PWA.avatarEl(me, 104), name, sub);
-        $('pf-title').textContent = p.name || 'Tài khoản';
-        // Thẻ hành động (chữ màu nhấn, như "Đổi ảnh đại diện" của Telegram): trang cá nhân trên Beincom
-        $('pf-links').replaceChildren(...p.links.map((l) => make('a', { className: 'row accent', href: l.href, target: '_blank', rel: 'noopener', innerHTML: ICON_LINK }, make('span', { textContent: l.label }))));
-        $('pf-links').hidden = !p.links.length;
-        // Tài khoản: dòng thông tin như hồ sơ Telegram (nhãn nhỏ trên, giá trị dưới); tên đăng nhập, mã: chạm để chép
-        const info = p.sections.find((s) => s.title === 'Tài khoản');
-        $('pf-info').replaceChildren(
-          ...(info?.rows || []).map((r) => {
-            const copy = r.copy || /^@/.test(r.value);
-            const row = make('button', { type: 'button', className: 'row info' + (copy ? '' : ' static') }, make('small', { textContent: r.label }), make('span', { className: 'v ' + (r.tone || (/^@/.test(r.value) ? 'link' : '')), textContent: r.value }));
-            if (copy) {
-              row.title = 'Chạm để chép';
-              row.addEventListener('click', () => copyText(r.label, r.value));
-            }
-            return row;
-          }),
-        );
-        // Quyền quản trị (cộng đồng: avatar tròn + vai trò), Addon (icon màu); giá trị dài xuống dòng phụ
+        const sub = make('span');
+        if (p.username) sub.append(make('button', { type: 'button', className: 'pf-user', title: 'Chạm để chép', textContent: '@' + p.username, onclick: () => copyText('Tên đăng nhập', '@' + p.username) }), p.summary ? ' • ' + p.summary : '');
+        else sub.textContent = p.summary || 'Chưa đọc được tài khoản — bấm Quét ngay ở Quản trị';
+        const av = PWA.avatarEl(me, 104);
+        const link = p.links[0];
+        $('pf-head').replaceChildren(link ? make('a', { className: 'pf-av', href: link.href, target: '_blank', rel: 'noopener', title: link.label }, av) : av, name, sub);
+        $('pf-title').textContent = fullname || 'Tài khoản';
+        // Quyền quản trị (cộng đồng: avatar tròn + vai trò), Addon (icon màu); giá trị dài xuống dòng phụ. Phần "Tài khoản"
+        // (tên đăng nhập, mã, Chat) không hiện: tên đăng nhập đã ở dưới tên, Chat đã có ở thanh dưới.
         const nodes = [];
         for (const sec of p.sections) {
-          if (sec === info) continue;
+          if (sec.title === 'Tài khoản') continue;
           nodes.push(make('div', { className: 'group-label', textContent: sec.title }));
           const list = make('div', { className: 'list' });
           for (const r of sec.rows) {
@@ -797,6 +863,189 @@
         Object.assign($('pf-login-state'), { textContent: st.short, className: st.level });
         pfScroll();
       }
+
+      // Nhật ký của tôi = Nhật ký cá nhân của Beincom Chat (tin nhắn cho chính mình, như "Tin nhắn đã lưu" của Telegram)
+      $('pf-notes').onclick = async () => {
+        const { chatOverviewCache: c, settings } = await page.store.get('local', ['chatOverviewCache', 'settings']);
+        const self = (c?.dms || []).find((d) => d.self && d.id);
+        if (self) return void BeinShell.open('chat.html#c=' + encodeURIComponent(self.id));
+        BeinShell.open('chat.html');
+        PWA.toast('Nhật ký của tôi', settings?.chatEnabled ? 'Chưa có Nhật ký cá nhân — nhắn cho chính mình một tin trên Beincom Chat để tạo.' : 'Bật Chat Beincom (tab Chat) để dùng Nhật ký cá nhân.');
+      };
+
+      // ---------- Trang cá nhân: thông tin cơ bản trên Beincom ----------
+      // Đọc user/me/profile (không gửi x-version-id: bản thấp bị 400). Sửa -> PUT user/me/profile như web Beincom (khoá
+      // snake_case): thông tin cơ bản { fullname, gender, birthday 'yyyy-MM-dd', language [mã], relationship_status } — tài
+      // khoản đã xác minh danh tính không đổi họ tên / giới tính / ngày sinh; liên hệ { country_code, phone, city }. Danh sách
+      // ngôn ngữ / thành phố: group/languages, group/cities?country_code=. Email đổi trên web Beincom.
+      const BIC_USER = 'https://api.beincom.com/v1/user/';
+      const BIC_GROUP = 'https://api.beincom.com/v1/group/';
+      const GENDERS = { MALE: 'Nam', FEMALE: 'Nữ', OTHERS: 'Khác' };
+      const RELATIONS = { SINGLE: 'Độc thân', IN_A_RELATIONSHIP: 'Đang hẹn hò', ENGAGED: 'Đã đính hôn', MARRIED: 'Đã kết hôn' };
+      const LANG_NAMES = { vi: 'Tiếng Việt', en: 'English' };
+      let bp = null; // hồ sơ Beincom vừa đọc
+      let bpAt = 0;
+      let bpLangs = null; // [{ code, local }]
+      let bpEditing = false;
+      async function bicJson(url, init = {}) {
+        const headers = { Accept: 'application/json', 'x-application': 'BIC_GROUP', 'x-platform': 'WEB', ...(init.body ? { 'Content-Type': 'application/json' } : {}), ...init.headers };
+        const r = await fetch(url, { ...init, headers });
+        const j = await r.json().catch(() => null);
+        if (!r.ok) throw new Error(j?.meta?.message || (r.status === 401 ? 'phiên đăng nhập Beincom hết hạn' : 'Beincom trả lỗi ' + r.status));
+        return j?.data;
+      }
+      const bday = (v) => {
+        const d = v ? new Date(v) : null;
+        return d && !isNaN(d) ? d : null;
+      };
+      const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      const langName = (code) => bpLangs?.find((l) => l.code === code)?.local || LANG_NAMES[code] || code;
+      async function loadLangs() {
+        if (bpLangs?.length) return;
+        try {
+          const d = await bicJson(BIC_GROUP + 'languages', { headers: { 'x-version-id': '2.0.0' } });
+          bpLangs = (Array.isArray(d) ? d : []).filter((l) => l?.code).map((l) => ({ code: l.code, local: l.local || l.name || l.code }));
+        } catch {}
+      }
+      const bpNote = (text, cls = '') => Object.assign($('bp-note'), { textContent: text, className: 'group-note ' + cls });
+      async function loadBprofile() {
+        setBpEdit(false);
+        bpNote('');
+        if (!bp) $('bp-body').replaceChildren(make('p', { className: 'group-note', textContent: 'Đang tải từ Beincom…' }));
+        try {
+          const [p] = await Promise.all([bicJson(BIC_USER + 'me/profile'), loadLangs()]);
+          bp = p || {};
+          bpAt = Date.now();
+          if (!bpEditing) renderBp();
+        } catch (e) {
+          if (!bp) $('bp-body').replaceChildren();
+          bpNote('Không đọc được trang cá nhân: ' + e.message + '.', 'bad');
+        }
+      }
+      const bpCard = (title, rows) => [make('div', { className: 'group-label', textContent: title }), make('div', { className: 'list' }, ...rows)];
+      function renderBp() {
+        const p = bp || {};
+        const d = bday(p.birthday);
+        const row = (label, value) => make('div', { className: 'row info static' }, make('small', { textContent: label }), make('span', { className: 'v' + (value ? '' : ' none'), textContent: value || 'Chưa có' }));
+        $('bp-body').replaceChildren(
+          ...bpCard('Thông tin cơ bản', [
+            row('Họ và tên', p.fullname),
+            row('Giới tính', GENDERS[p.gender]),
+            row('Ngày sinh', d ? d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' }) : ''),
+            row('Ngôn ngữ', (p.language || []).map(langName).join(', ')),
+            row('Tình trạng quan hệ', RELATIONS[p.relationship_status]),
+          ]),
+          ...bpCard('Liên hệ', [row('Email', p.email), row('Số điện thoại', p.phone ? `${p.country_code || ''} ${p.phone}`.trim() : ''), row('Thành phố', p.city)]),
+        );
+        bpNote(`Lấy từ Beincom lúc ${fmtTime(bpAt)}. Bấm Sửa để thay đổi — lưu thẳng lên Beincom.` + (p.is_verified ? ' Tài khoản đã xác minh danh tính: không đổi được họ tên, giới tính, ngày sinh.' : ''));
+      }
+      function renderBpEdit() {
+        const p = bp || {};
+        const locked = !!p.is_verified;
+        const field = (label, ...kids) => make('label', { className: 'row info edit' }, make('small', { textContent: label }), ...kids);
+        const select = (id, opts, value, props = {}) => {
+          const el = make('select', { id, className: 'in', ...props }, ...opts.map(([v, t]) => make('option', { value: v, textContent: t })));
+          el.value = value || '';
+          return el;
+        };
+        const d = bday(p.birthday);
+        const langs = bpLangs?.length ? bpLangs : [...new Set(['vi', 'en', ...(p.language || [])])].map((code) => ({ code, local: langName(code) }));
+        const lang = make('select', { id: 'bp-language', className: 'in', multiple: true, size: Math.min(6, langs.length) }, ...langs.map((l) => make('option', { value: l.code, textContent: l.local, selected: (p.language || []).includes(l.code) })));
+        const city = select('bp-city', [['', 'Chưa chọn'], ...(p.city ? [[p.city, p.city]] : [])], p.city);
+        const cc = make('input', { id: 'bp-cc', className: 'in cc', value: p.country_code || '+84', inputMode: 'tel', autocomplete: 'off', placeholder: '+84' });
+        $('bp-body').replaceChildren(
+          ...bpCard('Thông tin cơ bản', [
+            field('Họ và tên', make('input', { id: 'bp-fullname', className: 'in', value: p.fullname || '', maxLength: 64, autocomplete: 'off', disabled: locked })),
+            field('Giới tính', select('bp-gender', [['', 'Chưa chọn'], ...Object.entries(GENDERS)], p.gender, { disabled: locked })),
+            field('Ngày sinh', make('input', { id: 'bp-birthday', className: 'in', type: 'date', min: '1902-01-01', max: ymd(new Date()), value: d ? ymd(d) : '', disabled: locked })),
+            field('Ngôn ngữ', lang, make('span', { className: 'hint', textContent: 'Chọn được nhiều ngôn ngữ' })),
+            field('Tình trạng quan hệ', select('bp-relationship', [['', 'Không hiển thị'], ...Object.entries(RELATIONS)], p.relationship_status)),
+          ]),
+          ...bpCard('Liên hệ', [
+            make('div', { className: 'row info static' }, make('small', { textContent: 'Email' }), make('span', { className: 'v' + (p.email ? '' : ' none'), textContent: p.email || 'Chưa có' }), make('span', { className: 'hint', textContent: 'Đổi email trên web Beincom' })),
+            field('Số điện thoại', make('span', { className: 'pair' }, cc, make('input', { id: 'bp-phone', className: 'in', type: 'tel', value: p.phone || '', inputMode: 'tel', autocomplete: 'off', placeholder: 'Số điện thoại' }))),
+            field('Thành phố', city),
+          ]),
+        );
+        loadCities(cc.value, p.city);
+        cc.addEventListener('change', () => loadCities(cc.value, $('bp-city')?.value));
+        bpNote(locked ? 'Tài khoản đã xác minh danh tính: không đổi được họ tên, giới tính, ngày sinh.' : '');
+      }
+      // Thành phố theo mã quốc gia; không đọc được danh sách thì cho gõ tay
+      async function loadCities(cc, keep) {
+        let list = null;
+        try {
+          const d = await bicJson(BIC_GROUP + 'cities?country_code=' + encodeURIComponent(cc || '+84'), { headers: { 'x-version-id': '2.0.0' } });
+          list = (Array.isArray(d) ? d : []).map((c) => c?.name).filter(Boolean);
+        } catch {}
+        const cur = $('bp-city');
+        if (!cur || !bpEditing) return;
+        if (!list?.length) return void cur.replaceWith(make('input', { id: 'bp-city', className: 'in', value: keep || '', autocomplete: 'off', placeholder: 'Thành phố' }));
+        const names = [...new Set([...(keep && !list.includes(keep) ? [keep] : []), ...list])];
+        const sel = make('select', { id: 'bp-city', className: 'in' }, make('option', { value: '', textContent: 'Chưa chọn' }), ...names.map((n) => make('option', { value: n, textContent: n })));
+        sel.value = keep || '';
+        cur.replaceWith(sel);
+      }
+      function setBpEdit(on) {
+        bpEditing = on;
+        $('bp-back').hidden = on;
+        $('bp-cancel').hidden = !on;
+        $('bp-edit').textContent = on ? 'Lưu' : 'Sửa';
+        $('bp-edit').classList.toggle('save', on);
+        if (on) renderBpEdit();
+        else if (bp) renderBp();
+      }
+      async function saveBp() {
+        const p = bp || {};
+        const val = (id) => $(id)?.value ?? '';
+        const basic = {};
+        if (!p.is_verified) {
+          basic.fullname = val('bp-fullname').trim();
+          if (!basic.fullname) return bpNote('Họ và tên không được để trống.', 'bad');
+          basic.gender = val('bp-gender') || undefined;
+          basic.birthday = val('bp-birthday') || undefined;
+        }
+        basic.language = [...($('bp-language')?.selectedOptions || [])].map((o) => o.value);
+        basic.relationship_status = val('bp-relationship') || null;
+        const contact = { country_code: val('bp-cc').trim() || null, phone: val('bp-phone').replace(/[\s.-]/g, '') || null, city: val('bp-city').trim() || null };
+        if (contact.phone && !/^\+\d{1,4}$/.test(contact.country_code || '')) return bpNote('Mã quốc gia viết dạng +84.', 'bad');
+        if (contact.phone && !/^\d{6,15}$/.test(contact.phone)) return bpNote('Số điện thoại chỉ gồm 6–15 chữ số.', 'bad');
+        if (!contact.phone && !p.phone) contact.country_code = p.country_code || null;
+        const d = bday(p.birthday);
+        const was = { fullname: p.fullname, gender: p.gender || undefined, birthday: d ? ymd(d) : undefined, language: p.language || [], relationship_status: p.relationship_status || null };
+        const same = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+        const basicChanged = Object.keys(basic).some((k) => !same(basic[k], was[k]));
+        const contactChanged = !same(contact, { country_code: p.country_code || null, phone: p.phone || null, city: p.city || null });
+        if (!basicChanged && !contactChanged) {
+          setBpEdit(false);
+          return bpNote('Không có gì thay đổi.');
+        }
+        const btn = $('bp-edit');
+        btn.disabled = true;
+        bpNote('Đang lưu lên Beincom…');
+        try {
+          if (basicChanged) await bicJson(BIC_USER + 'me/profile', { method: 'PUT', body: JSON.stringify(basic) });
+          if (contactChanged) await bicJson(BIC_USER + 'me/profile', { method: 'PUT', body: JSON.stringify(contact) });
+          PWA.toast('Đã lưu', 'Trang cá nhân trên Beincom đã cập nhật.');
+          await loadBprofile();
+          bpNote('Đã lưu lên Beincom lúc ' + fmtTime(Date.now()) + '.', 'ok');
+        } catch (e) {
+          bpNote('Không lưu được: ' + e.message + '.', 'bad');
+        } finally {
+          btn.disabled = false;
+        }
+      }
+      $('pf-bprofile').onclick = () => openSetup('bprofile');
+      $('bp-back').onclick = () => {
+        showView('account');
+        renderProfile();
+      };
+      $('bp-cancel').onclick = () => {
+        setBpEdit(false);
+        bpNote('');
+      };
+      $('bp-edit').onclick = () => (bpEditing ? saveBp() : bp && setBpEdit(true));
+      $('view-bprofile').addEventListener('scroll', () => $('bp-top').classList.toggle('scrolled', $('view-bprofile').scrollTop > 4), { passive: true });
       // Cuộn: avatar thu nhỏ, mờ dần; tên lên giữa thanh trên (nền mờ) khi tên lớn đã khuất
       function pfScroll() {
         const view = $('view-account');
@@ -827,12 +1076,14 @@
           if (cfg.status && !cfg.status.ok) line(cfg.status.code === 'session' ? 'Phiên đăng nhập Beincom hết hạn (' + (cfg.status.host === 'chat' ? 'Chat' : 'Beincom') + ') — dán đăng nhập mới.' : 'Proxy báo lỗi lần gần nhất: ' + cfg.status.code, 'bad');
         }
         if (view === 'account') renderProfile();
+        if (view === 'bprofile') loadBprofile();
         if (view === 'dset') openDset(arg);
         if (view === 'main') checkUpdate();
         renderNotif();
         renderAccount();
         renderAdminStates();
         $('setup').classList.add('open');
+        markTabs();
         showView(view);
       }
       $('close').onclick = closeSetup;
@@ -1029,6 +1280,7 @@
 
       // ---------- Khởi động ----------
       if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).catch((e) => console.warn('BeinIOS: không đăng ký được service worker', e));
+      $('tab-av').replaceChildren(PWA.avatarEl(null, 27));
       $('ver-addon').textContent = 'v' + PWA.manifest().version;
       $('ver-ios').textContent = PWA.VERSION;
       // Bản mới trên GitHub Pages: so phiên bản addon (manifest.json) và BeinIOS (pwa-shim.js) với bản đang chạy. iPhone giữ
