@@ -4,9 +4,10 @@ Mỗi bản một mục, bản mới nhất ở trên. Dashboard tự hiện cá
 
 ## v0.54.0 — 22/10/2026
 - **✨ Trả lời bình luận bằng AI**: chọn nhiều bình luận ở **Bình luận mới** (hoặc mở một bài → **✨ Trả lời hàng loạt bằng AI**), AI viết nháp một câu trả lời cho từng bình luận theo nội dung bài. Hai cách:
-  - **AI trên web (chép – dán)**, không cần khoá API: addon soạn sẵn đề bài, chép và mở Claude / ChatGPT / Gemini; bạn dán vào trang chat, gửi, rồi dán câu trả lời về — addon điền nháp vào từng bình luận. Addon không tự điều khiển trang chat (điều khoản các trang này cấm truy cập tự động).
+  - **AI trên web (chép – dán)**, không cần khoá API: addon soạn sẵn đề bài, chép và mở Claude / ChatGPT / Gemini; bạn dán vào trang chat, gửi, chép câu trả lời rồi bấm **📋 Dán** (hoặc Ctrl + V vào ô) — addon điền nháp vào từng bình luận. Addon không tự điều khiển trang chat (điều khoản các trang này cấm truy cập tự động).
   - **Khoá API Claude**: tự động hoàn toàn.
   - Xem, sửa, bỏ chọn từng câu rồi bấm **Trả lời tất cả**: có hộp xác nhận, gửi lần lượt như nút Trả lời, có nút **Dừng**. Bình luận spam / lừa đảo được AI đề nghị bỏ qua.
+  - Câu trả lời ngắn gọn, thân thiện, không trùng lặp giữa các bình luận; bình luận chỉ có icon / emoji (hoặc ảnh GIF) thì AI trả lời bằng icon.
   - Chọn giọng văn (thân thiện / trang trọng / ngắn gọn) và thêm ghi chú cho AI mỗi lần.
   - Khoá API Claude (không bắt buộc): **Cài đặt → ✨ Trả lời bình luận bằng AI** (mô hình Opus 5.5 / Sonnet 5.5 / Haiku 5.5, hướng dẫn thêm, nút Kiểm tra). Khoá chỉ lưu trong trình duyệt này, không có trong sao lưu / đồng bộ. Hộp báo chi phí ước tính sau mỗi lần tạo.
 

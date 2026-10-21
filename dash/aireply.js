@@ -187,7 +187,7 @@ function renderAr() {
   $('ar-gen').hidden = web;
   $('ar-setup').hidden = web || hasKey;
   $('ar-copy').textContent = `Chép đề bài & mở ${BG.AI_WEB_SITES[$('ar-site').value]?.label || 'trang chat AI'}`;
-  for (const id of ['ar-site', 'ar-copy', 'ar-paste', 'ar-fill']) $(id).disabled = AR.sending;
+  for (const id of ['ar-site', 'ar-copy', 'ar-paste', 'ar-paste-btn', 'ar-fill']) $(id).disabled = AR.sending;
   $('ar-gen').disabled = AR.gen || AR.sending || !hasKey;
   $('ar-gen').textContent = AR.gen ? 'AI đang viết…' : Object.keys(AR.drafts).length ? 'Tạo lại' : 'Tạo câu trả lời';
   $('ar-gen').title = Object.keys(AR.drafts).length ? 'Viết lại các câu chưa gửi (bỏ chỗ đã sửa tay)' : '';
@@ -377,8 +377,28 @@ function arWebFill() {
   renderAr();
 }
 
+// Nút Dán: đọc bộ nhớ tạm (addon xin quyền đọc bộ nhớ tạm lúc bấm, một lần) rồi điền luôn; không đọc được thì nhắc dán tay
+async function arWebPaste() {
+  try {
+    await chrome.permissions?.request?.({ permissions: ['clipboardRead'] });
+  } catch {}
+  let text = '';
+  try {
+    text = await navigator.clipboard.readText();
+  } catch {}
+  if (!text.trim()) {
+    $('ar-paste').focus();
+    return arStatus('Không đọc được bộ nhớ tạm — bấm vào ô rồi dán (Ctrl + V).', 'warn-text');
+  }
+  $('ar-paste').value = text;
+  arWebFill();
+}
+
 $('ar-copy').addEventListener('click', arWebCopy);
+$('ar-paste-btn').addEventListener('click', arWebPaste);
 $('ar-fill').addEventListener('click', arWebFill);
+// Dán tay vào ô (Ctrl + V) cũng điền luôn
+$('ar-paste').addEventListener('paste', () => setTimeout(arWebFill, 0));
 $('ar-site').addEventListener('change', () => renderAr());
 for (const b of document.querySelectorAll('#ar-mode button')) {
   b.addEventListener('click', async () => {

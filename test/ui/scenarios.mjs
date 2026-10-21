@@ -1117,7 +1117,7 @@ export const scenarios = [
       await page.until(() => !document.getElementById('btn-ai-comments').disabled);
       // Bộ nhớ tạm và thẻ mới giả: ghi lại đề bài đã chép và trang được mở
       await page.ev(`(() => {
-        Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async (t) => { window.__clip = t; } } });
+        Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async (t) => { window.__clip = t; }, readText: async () => window.__clipIn || '' } });
         window.open = (u) => { window.__opened = u; return null; };
         return true;
       })()`);
@@ -1142,12 +1142,17 @@ export const scenarios = [
       const ha = order.find(([, t]) => /không rút tiền/.test(t))[0];
       const vip = order.find(([, t]) => /keovip/.test(t))[0];
       const answer = 'Đây là các câu trả lời:\n```json\n' + JSON.stringify({ replies: [{ id: ha, reply: 'Bạn nhắn admin kèm mã giao dịch nhé, mình kiểm tra ngay.', skip: false, reason: '' }, { id: vip, reply: '', skip: true, reason: 'Quảng cáo nhóm kèo' }] }) + '\n```';
-      await setValue(page, 'ar-paste', answer);
-      await page.ev(`document.getElementById('ar-fill').click(); true`);
+      // Nút Dán: đọc bộ nhớ tạm rồi điền luôn
+      await page.call((a) => ((window.__clipIn = a), true), answer);
+      await page.ev(`document.getElementById('ar-paste-btn').click(); true`);
       await page.until(() => document.querySelectorAll('#ar-list .ar-text').length === 2 && /Đã điền nháp cho 2 bình luận/.test(document.getElementById('ar-status').textContent));
+      assert.equal(await page.ev(`document.getElementById('ar-paste').value === window.__clipIn`), true);
       const items = await page.ev(`[...document.querySelectorAll('#ar-list .ar-item')].map((x) => ({ skip: x.classList.contains('skip'), on: x.querySelector('input[type=checkbox]').checked, text: x.querySelector('.ar-text').value }))`);
       assert.deepEqual(items.find((x) => !x.skip), { skip: false, on: true, text: '@thanhha Bạn nhắn admin kèm mã giao dịch nhé, mình kiểm tra ngay.' });
       assert.equal(items.find((x) => x.skip).on, false);
+      // Bộ nhớ tạm trống: nhắc dán tay vào ô
+      await page.ev(`window.__clipIn = ''; document.getElementById('ar-paste-btn').click(); true`);
+      await page.until(() => /Không đọc được bộ nhớ tạm/.test(document.getElementById('ar-status').textContent));
       // Dán nhầm (không có JSON): báo rõ, giữ nháp
       await setValue(page, 'ar-paste', 'Xin lỗi, tôi không giúp được.');
       await page.ev(`document.getElementById('ar-fill').click(); true`);
