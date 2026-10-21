@@ -5,7 +5,12 @@
 //      mã QR có đủ cookie của từng máy chủ, bỏ cookie thống kê.
 //   2. Addon nguyên bản (quyền tuỳ chọn): bấm nút (như người dùng bấm) -> trình duyệt hiện hộp xin quyền, không báo lỗi
 //      (không báo nhầm "chưa nạp bản mới" hay "phải bấm").
+//   3. Có thư mục BeinIOS bên cạnh (../BeinIOS): chạy proxy thật (cloudflare-proxy/worker.js, Durable Object giả) trên máy,
+//      điền proxy trong hộp -> addon mã hoá, gửi lên proxy -> lấy về như iPhone, giải mã ra đúng cookie.
 import { spawn } from 'node:child_process';
+import http from 'node:http';
+import { createRequire } from 'node:module';
+import { pathToFileURL } from 'node:url';
 import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -25,7 +30,41 @@ const tempDir = (prefix) => {
   return d;
 };
 
-async function run(granted) {
+// Proxy thật của BeinIOS chạy trên máy (nếu có thư mục BeinIOS bên cạnh), Durable Object giả trong bộ nhớ
+const BEINIOS_WORKER = path.resolve(ROOT, '..', 'BeinIOS', 'cloudflare-proxy', 'worker.js');
+async function startProxy() {
+  if (!existsSync(BEINIOS_WORKER)) return null;
+  const mod = await import(pathToFileURL(BEINIOS_WORKER).href);
+  const objects = new Map();
+  const HANDOFF = {
+    idFromName: (n) => n,
+    get(id) {
+      if (!objects.has(id)) {
+        const data = new Map();
+        objects.set(id, new mod.Handoff({ storage: { put: async (o) => Object.entries(o).forEach(([k, v]) => data.set(k, v)), get: async (ks) => new Map(ks.filter((k) => data.has(k)).map((k) => [k, data.get(k)])), deleteAll: async () => data.clear(), setAlarm: async () => {} } }));
+      }
+      const obj = objects.get(id);
+      return { fetch: (u, init) => obj.fetch(new Request(u, init)) };
+    },
+  };
+  const env = { PROXY_KEY: 'khoa-e2e', ALLOWED_ORIGIN: 'https://phungnhan.github.io', HANDOFF };
+  const seen = [];
+  const srv = http.createServer(async (req, res) => {
+    const chunks = [];
+    for await (const c of req) chunks.push(c);
+    seen.push({ method: req.method, url: req.url, origin: req.headers.origin || '' });
+    const body = chunks.length && !['GET', 'HEAD'].includes(req.method) ? Buffer.concat(chunks) : undefined;
+    const r = await mod.default.fetch(new Request('http://127.0.0.1' + req.url, { method: req.method, headers: Object.entries(req.headers).filter(([k]) => k !== 'host' && k !== 'connection'), body }), env);
+    const out = {};
+    r.headers.forEach((v, k) => (out[k] = v));
+    res.writeHead(r.status, out);
+    res.end(Buffer.from(await r.arrayBuffer()));
+  });
+  await new Promise((r) => srv.listen(0, '127.0.0.1', r));
+  return { origin: 'http://127.0.0.1:' + srv.address().port, seen, close: () => srv.close() };
+}
+
+async function run(granted, proxy = null) {
   let ext = ROOT;
   if (granted) {
     ext = tempDir('beinios-ext-');
@@ -95,7 +134,20 @@ async function run(granted) {
       await sleep(250);
     }
     const got = st.qr ? await ev(s, 'BG.beiniosUnpack(bi.text)') : null;
-    return { st, got, problems };
+    let handoff = null;
+    if (proxy && st.qr) {
+      // Điền proxy trong hộp như người dùng -> addon tạo mã ngắn; ghi lại link mã QR để lấy về như iPhone
+      await ev(s, `window.__qrUrl = ''; const real = BG.beiniosHandoffUrl; BG.beiniosHandoffUrl = (...a) => (window.__qrUrl = real(...a));
+        document.getElementById('beinios-px-url').value = ${JSON.stringify(proxy.origin)};
+        document.getElementById('beinios-px-key').value = 'khoa-e2e';
+        document.getElementById('beinios-px-save').click(); true`);
+      for (let i = 0; i < 40; i++) {
+        handoff = await ev(s, "({ url: window.__qrUrl, info: document.getElementById('beinios-info').textContent, qr: !!document.querySelector('#beinios-qr svg path') })");
+        if (/Mã dùng một lần|Không tạo được/.test(handoff.info)) break;
+        await sleep(250);
+      }
+    }
+    return { st, got, handoff, problems };
   } finally {
     await Promise.race([send('Browser.close').catch(() => {}), sleep(2000)]);
     if ((await Promise.race([exited.then(() => true), sleep(4000)])) !== true) chrome.kill();
@@ -107,13 +159,33 @@ const check = (cond, msg) => {
   console.log((cond ? '✔ ' : '✖ ') + msg);
   if (!cond) failed = true;
 };
+const require = createRequire(import.meta.url);
+const BG = require(path.join(ROOT, 'common.js'));
+let proxy = null;
 try {
-  const a = await run(true);
+  proxy = await startProxy();
+  const a = await run(true, proxy);
   check(a.st?.qr, 'đã có quyền: bấm nút hiện mã QR' + (a.st?.qr ? '' : ` (${a.st?.toast || a.st?.info})`));
   check(a.got?.api?.sid === 'GIA-phien', 'đọc được cookie chung .beincom.com (phiên đăng nhập) cho ô Beincom');
   check(a.got?.chat?.MMAUTHTOKEN === 'GIA-chat' && a.got?.chat?.sid === 'GIA-phien', 'ô Chat: cookie riêng chat.beincom.com + cookie chung');
   check(a.got?.auth?.rt === 'GIA-lammoi' && a.got?.auth?.sid === 'GIA-phien', 'ô máy chủ đăng nhập: cookie riêng auth.beincom.com (đường dẫn /v1/auth) + cookie chung');
   check(!Object.keys({ ...a.got?.api, ...a.got?.chat, ...a.got?.auth }).includes('_ga'), 'bỏ cookie thống kê');
+  if (proxy) {
+    const h = a.handoff || {};
+    check(/Mã dùng một lần/.test(h.info || '') && h.qr, 'điền proxy: addon tạo mã QR ngắn qua proxy' + (/Mã dùng một lần/.test(h.info || '') ? '' : ` (${h.info})`));
+    check(proxy.seen.some((x) => x.method === 'OPTIONS' && x.url === '/handoff' && x.origin.startsWith('chrome-extension://')) && proxy.seen.some((x) => x.method === 'POST' && x.url === '/handoff'), 'addon gửi lên proxy được (qua kiểm tra CORS của trình duyệt)');
+    const m = /#h=([A-Za-z0-9_-]+)\.([A-Za-z0-9_-]+)&p=(.+)$/.exec(h.url || '');
+    check(!!m && decodeURIComponent(m?.[3] || '') === proxy.origin, 'link mã QR: mã số + khoá + địa chỉ proxy');
+    if (m) {
+      const r = await fetch(proxy.origin + '/handoff?id=' + m[1]);
+      const j = await r.json();
+      const text = await BG.beiniosUnseal(j.payload, m[2]);
+      const back = BG.beiniosUnpack(text);
+      check(back?.api?.sid === 'GIA-phien' && back?.auth?.rt === 'GIA-lammoi' && back?.chat?.MMAUTHTOKEN === 'GIA-chat', 'lấy về như iPhone, giải mã ra đúng cookie');
+      check(!JSON.stringify(j).includes('GIA-'), 'proxy chỉ giữ bản mã hoá (không thấy cookie dạng rõ)');
+      check((await fetch(proxy.origin + '/handoff?id=' + m[1])).status === 404, 'mã dùng một lần');
+    }
+  } else console.log('… bỏ qua thử proxy: không thấy ' + BEINIOS_WORKER);
   check(a.problems.length === 0, 'không có lỗi JavaScript' + (a.problems.length ? ': ' + a.problems.join(' | ') : ''));
   const b = await run(false);
   // Chưa có quyền: bấm -> trình duyệt hiện hộp xin quyền và chờ người dùng (headless không bấm được) — không báo lỗi
@@ -122,6 +194,7 @@ try {
 } catch (e) {
   check(false, String(e?.message || e));
 } finally {
+  proxy?.close();
   for (const d of temps) {
     try {
       rmSync(d, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });

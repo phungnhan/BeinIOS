@@ -1633,6 +1633,13 @@
       <div class="beinios-qr" id="beinios-qr"></div>
       <p class="small" id="beinios-info" role="status"></p>
       <p class="small err-text">Mã này là chìa khoá tài khoản Beincom của bạn: đừng để người khác chụp hay quét. Mã tự ẩn sau 2 phút.</p>
+      <details class="beinios-px small" id="beinios-px">
+        <summary>Proxy của BeinIOS — để có mã QR ngắn <span class="muted" id="beinios-px-state"></span></summary>
+        <div class="muted">Điền đúng địa chỉ và khoá proxy bạn đã điền ở BeinIOS → Cài đặt. Đăng nhập được mã hoá ngay trên máy này; proxy chỉ giữ bản mã hoá 5 phút, lấy một lần là xoá. Khoá chỉ lưu ở máy này, không có trong sao lưu.</div>
+        <label class="beinios-px-row"><span>Địa chỉ proxy</span><input type="url" id="beinios-px-url" placeholder="https://beinios-proxy.&lt;tài khoản&gt;.workers.dev" autocomplete="off" spellcheck="false" /></label>
+        <label class="beinios-px-row"><span>Khoá proxy</span><input type="password" id="beinios-px-key" autocomplete="off" spellcheck="false" /></label>
+        <div class="backup-actions"><button type="button" class="ghost sm" id="beinios-px-save">Lưu &amp; tạo mã ngắn</button><button type="button" class="ghost sm" id="beinios-px-clear">Xoá proxy</button></div>
+      </details>
       <div class="dialog-actions">
         <button type="button" class="ghost" id="beinios-copy" disabled>Chép</button>
         <button value="close" class="primary" id="beinios-close">Xong</button>

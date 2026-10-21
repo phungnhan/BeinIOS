@@ -237,6 +237,10 @@ Tab Quy tắc & cài đặt và Nhật ký chỉ dùng dữ liệu trong máy n�
     - Kết quả hiện thành mã QR (`lib/qr.js`, tự tạo, không dùng thư viện hay dịch vụ ngoài) mở `nhap.html#…` của BeinIOS; phần sau `#` không gửi lên máy chủ. Kèm nút Chép.
     - Nguồn nên dùng: cửa sổ ẩn danh, để BeinIOS có phiên riêng (cần bật "Cho phép ở chế độ ẩn danh"); hoặc phiên của trình duyệt đang dùng.
     - Không gửi cookie đi đâu, không lưu lại; mã tự ẩn sau 2 phút hoặc khi đóng hộp. Trong chính BeinIOS nhóm này bị ẩn (webapp không đọc được cookie).
+    - **Mã QR ngắn qua proxy** (v0.52.0): đăng nhập thật quá dài cho một mã QR.
+      - Khi đã điền proxy của BeinIOS (mục Proxy trong hộp; khoá `beiniosProxy` chỉ ở máy này, không có trong sao lưu / đồng bộ), addon mã hoá đăng nhập bằng AES-GCM (`BG.beiniosSeal`).
+      - Addon gửi bản mã hoá lên `POST <proxy>/handoff`. Mã QR là `nhap.html#h=<mã số>.<khoá>&p=<proxy>`.
+      - iPhone lấy về bằng `GET /handoff?id=…` rồi giải mã; proxy chỉ giữ bản mã hoá, dùng một lần, tối đa 5 phút.
 - **Theo dõi** (Cài đặt → 🔔 Theo dõi):
   - **Từ khoá cần để ý** (không phải vi phạm, vd "lừa đảo", "mất tiền", tên dự án): bài / bình luận mới nhắc tới thì có thông báo và hiện ở Việc cần làm (trong 3 ngày) với nút Bình luận / Trả lời / Bỏ qua.
   - **Nhắc bài chưa ai trả lời**: bài của thành viên quá số giờ đã chọn mà chưa có bình luận thì thông báo, mỗi bài một lần.

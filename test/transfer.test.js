@@ -197,3 +197,35 @@ test('BeinIOS: đoạn mẫu cố định (BeinIOS pwa-shim.js kiểm tra đọc
   const text = BG.beiniosPack({ api: [ck('sid', 'S1')], chat: [ck('MMAUTHTOKEN', 'M1')], auth: [ck('sid', 'S1'), ck('rt', 'R1')] }, 1792000000000).text;
   assert.equal(text, 'BEINIOS1.' + Buffer.from(JSON.stringify({ v: 1, t: 1792000000000, c: [['sid', 'S1', 5], ['MMAUTHTOKEN', 'M1', 2], ['rt', 'R1', 4]] })).toString('base64url'));
 });
+
+// ---------- Chuyển nhanh qua proxy (mã hoá trên máy, QR ngắn) ----------
+
+const FIXED = { key: new Uint8Array(32).map((_, i) => i + 1), iv: new Uint8Array(12).map((_, i) => 200 - i), id: new Uint8Array(12).map((_, i) => i * 7) };
+// Cùng dạng proxy BeinIOS kiểm (cloudflare-proxy/worker.js HANDOFF_ID / HANDOFF_PAYLOAD)
+const HANDOFF_ID = /^[A-Za-z0-9_-]{16,32}$/;
+const HANDOFF_PAYLOAD = /^[A-Za-z0-9_-]{16}\.[A-Za-z0-9_-]{24,40000}$/;
+
+test('chuyển nhanh: mã hoá AES-GCM, giải ngược đúng; đoạn mẫu cố định (BeinIOS kiểm giải được cùng đoạn này)', async () => {
+  const s = await BG.beiniosSeal('BEINIOS1.thu-nghiem', FIXED);
+  assert.deepEqual(s, { id: 'AAcOFRwjKjE4P0ZN', key: 'AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA', payload: 'yMfGxcTDwsHAv769.tnI7__ThpemTqJNc7rs5AmOBw1huZE2pvOejvtIcR_EaFbE' });
+  assert.equal(await BG.beiniosUnseal(s.payload, s.key), 'BEINIOS1.thu-nghiem');
+  // Ngẫu nhiên: mỗi lần khác nhau, đúng dạng proxy nhận, giải được; sai khoá thì không giải được
+  const big = 'BEINIOS1.' + 'x'.repeat(6000);
+  const a = await BG.beiniosSeal(big);
+  const b = await BG.beiniosSeal(big);
+  assert.notEqual(a.id, b.id);
+  assert.notEqual(a.key, b.key);
+  assert.ok(HANDOFF_ID.test(a.id) && HANDOFF_PAYLOAD.test(a.payload), 'đúng dạng proxy nhận');
+  assert.equal(await BG.beiniosUnseal(a.payload, a.key), big);
+  await assert.rejects(() => BG.beiniosUnseal(a.payload, b.key));
+});
+
+test('chuyển nhanh: link mã QR ngắn (vừa mã QR nhỏ), chỉ nhận proxy https', () => {
+  const url = BG.beiniosHandoffUrl({ id: 'AAcOFRwjKjE4P0ZN', key: 'AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA' }, 'https://beinios-proxy.beinfusion.workers.dev/proxy?x=1');
+  assert.equal(url, 'https://phungnhan.github.io/BeinIOS/nhap.html#h=AAcOFRwjKjE4P0ZN.AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA&p=https%3A%2F%2Fbeinios-proxy.beinfusion.workers.dev');
+  const qr = BG.qrEncode(url, { level: 'L' });
+  assert.ok(qr && qr.version <= 10, 'mã QR nhỏ, dễ quét: phiên bản ' + qr?.version);
+  assert.equal(BG.beiniosProxyOrigin('http://evil.example/'), '');
+  assert.equal(BG.beiniosProxyOrigin('http://127.0.0.1:8787/x'), 'http://127.0.0.1:8787');
+  assert.equal(BG.beiniosProxyOrigin('không phải link'), '');
+});

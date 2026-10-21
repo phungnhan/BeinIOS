@@ -2,6 +2,15 @@
 
 Mỗi bản một mục, bản mới nhất ở trên. Dashboard tự hiện các mục mới sau khi cập nhật (bấm "Có gì mới" ở cuối trang để xem lại).
 
+## v0.52.0 — 21/10/2026
+- **Mã QR ngắn qua proxy của BeinIOS** (Cài đặt → 📱 BeinIOS → Chuyển đăng nhập sang BeinIOS).
+  - **Vì sao cần**: đăng nhập Beincom thật dài hơn 4.000 ký tự, không vừa một mã QR. Chép đoạn chữ sang iPhone qua Ghi chú hay tin nhắn thì hay bị chèn xuống dòng.
+  - **Cách làm**: addon mã hoá đăng nhập ngay trên máy tính (AES-GCM) rồi gửi bản mã hoá lên proxy của bạn. Mã QR chỉ chứa mã số, khoá giải mã và địa chỉ proxy, nên rất nhỏ và dễ quét.
+  - **Trên iPhone**: quét mã → trang BeinIOS tự lấy về và giải mã → bấm Chép → mở BeinIOS → Dán từ addon.
+  - **Cài lần đầu**: trong hộp, mở mục **Proxy của BeinIOS**, điền địa chỉ + khoá proxy như ở BeinIOS. Khoá chỉ lưu ở máy này, không có trong sao lưu hay đồng bộ.
+  - **An toàn**: khoá giải mã không gửi lên proxy. Proxy chỉ giữ bản mã hoá: lấy một lần là xoá, tự xoá sau 5 phút.
+  - **Cần**: proxy BeinIOS bản 2.1.0 trở lên (Cloudflare tự dựng lại khi repo BeinIOS cập nhật).
+
 ## v0.51.0 — 16/10/2026
 - **Chuyển đăng nhập sang BeinIOS** (Cài đặt → 📱 BeinIOS). BeinIOS là BeinFusion chạy như ứng dụng trên iPhone, tại https://phungnhan.github.io/BeinIOS/.
   - **Cách dùng**: bấm nút, quét mã QR bằng Camera iPhone, mở link, bấm Chép, rồi dán ở BeinIOS → Cài đặt → Dán từ addon. Có thể bấm **Chép** ngay trên máy tính rồi tự chuyển đoạn chữ sang iPhone.

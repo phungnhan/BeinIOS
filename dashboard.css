@@ -960,3 +960,7 @@ table.requests td.act-wrap button + button { margin-left: 0; }
 .beinios-src .hint { margin: 2px 0 6px 24px; }
 .beinios-qr svg { display: block; width: 100%; max-width: 420px; margin: 10px auto; border-radius: 6px; }
 .beinios-dialog.wide .beinios-qr svg { max-width: min(82vh, 820px); }
+.beinios-px { margin: 8px 0 4px; }
+.beinios-px summary { cursor: pointer; font-weight: 600; }
+.beinios-px-row { display: grid; grid-template-columns: 110px 1fr; gap: 8px; align-items: center; margin: 6px 0; }
+.beinios-px-row input { width: 100%; }
