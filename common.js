@@ -291,7 +291,7 @@
   }
 
   // Các phần của BG trong lib/, theo thứ tự nạp
-  const PARTS = ['content', 'members', 'compose', 'article', 'manage', 'reports', 'telegram', 'diag', 'chat'];
+  const PARTS = ['content', 'members', 'compose', 'article', 'manage', 'reports', 'telegram', 'diag', 'chat', 'qr', 'transfer', 'self'];
 
   return {
     PARTS,

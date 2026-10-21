@@ -1,4 +1,5 @@
 // Trang Chat — bấm tên người: hồ sơ, vi phạm addon đã ghi, tìm bài, xoá tin của người đó, mở Dọn tài khoản trên Dashboard.
+// Bấm chính mình (tên, avatar góc trên ở Silk, dòng tài khoản cuối danh sách): Hồ sơ cá nhân (BG.selfProfile, lib/self.js).
 
 // ---------- Bấm tên người: hồ sơ, vi phạm, xử lý (nối với công cụ quản trị của addon) ----------
 
@@ -26,6 +27,11 @@ async function openPerson(u) {
         : null,
     ),
   ];
+  if (me) {
+    const box = el('div', { class: 'pc-self' }, el('div', { class: 'muted' }, 'Đang đọc…'));
+    body.push(box);
+    readSelf().then((nodes) => box.replaceChildren(...nodes));
+  }
   if (!me && u.id) {
     const vio = el('div', { class: 'pc-sec' }, el('h4', {}, 'Hồ sơ vi phạm'), el('div', { class: 'muted' }, 'Đang đọc…'));
     const posts = el('div', { class: 'pc-sec' }, el('h4', {}, 'Bài trong các community bạn quản trị'), el('button', { type: 'button', class: 'pc-btn', onclick: (e) => findPersonPosts(u, posts, e.currentTarget) }, 'Tìm bài của người này'));
@@ -39,6 +45,47 @@ async function openPerson(u) {
   } else if (!me) body.push(el('p', { class: 'muted' }, 'Không có mã Beincom của người này nên chưa mở được công cụ quản trị.'));
   $('pc-body').replaceChildren(...body.filter(Boolean));
   if (!d.open) d.showModal();
+}
+
+// Hồ sơ cá nhân: tài khoản, quyền quản trị theo cộng đồng, trạng thái addon (cùng nội dung với Dashboard)
+async function readSelf() {
+  let st = {};
+  try {
+    st = await chrome.storage.local.get(['state', 'settings']);
+  } catch {}
+  const p = BG.selfProfile({ me: st.state?.me, chatMe: S.me, groups: st.state?.snapshot?.groups || [], settings: { ...BG.DEFAULT_SETTINGS, ...st.settings }, lastScan: st.state?.lastScan, lastResult: st.state?.lastResult });
+  return p.sections.map((s) =>
+    el(
+      'div',
+      { class: 'pc-sec' },
+      el('h4', {}, s.title),
+      s.note ? el('div', { class: 'muted' }, s.note) : null,
+      s.rows.length
+        ? el(
+            'ul',
+            { class: 'pc-rows' },
+            s.rows.map((r) =>
+              el(
+                'li',
+                {},
+                el('span', { class: 'k' }, r.href ? el('a', { href: r.href, target: '_blank', rel: 'noopener noreferrer' }, r.label) : r.label),
+                el('span', { class: 'v' + (r.tone ? ' ' + r.tone : '') }, r.value),
+                r.copy ? el('button', { type: 'button', class: 'pc-copy', title: 'Chép ' + r.label, 'aria-label': 'Chép ' + r.label, onclick: () => navigator.clipboard.writeText(r.value).then(() => toast('Đã chép ' + r.label)) }, 'Chép') : null,
+              ),
+            ),
+          )
+        : null,
+    ),
+  );
+}
+
+// Dòng tài khoản cuối danh sách (BeinFusion theme): bấm để xem Hồ sơ cá nhân
+{
+  const foot = $('me');
+  Object.assign(foot, { tabIndex: 0, title: 'Hồ sơ cá nhân' });
+  foot.setAttribute('role', 'button');
+  foot.addEventListener('click', () => S.me && openPerson(S.me));
+  foot.addEventListener('keydown', (e) => (e.key === 'Enter' || e.key === ' ') && S.me && (e.preventDefault(), openPerson(S.me)));
 }
 
 // Hồ sơ vi phạm addon ghi nhận (Nhật ký, quét): tóm tắt + 3 lần gần nhất

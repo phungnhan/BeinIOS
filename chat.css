@@ -231,7 +231,9 @@ svg { width: 20px; height: 20px; fill: currentColor; flex: none; }
 }
 .badge.at { background: var(--err); }
 .list-empty { padding: 30px 16px; text-align: center; color: var(--muted); font-size: 13px; }
-.side-foot { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-top: 1px solid var(--border); font-size: 13px; }
+.side-foot { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-top: 1px solid var(--border); font-size: 13px; cursor: pointer; }
+.side-foot:hover { background: var(--hover, rgba(0, 0, 0, 0.03)); }
+.side-foot:empty { cursor: default; }
 .side-foot .who { min-width: 0; }
 .side-foot .who b, .side-foot .who span { display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .side-foot .who span { color: var(--muted); font-size: 12px; }
@@ -276,6 +278,16 @@ svg { width: 20px; height: 20px; fill: currentColor; flex: none; }
 .pc-btn.danger { border-color: var(--err); color: var(--err); }
 .pc-btn.danger:hover { background: var(--err); color: #fff; }
 .pc-btn:disabled { opacity: .6; }
+/* Hồ sơ cá nhân (bấm chính mình) */
+.pc-rows { list-style: none; margin: 4px 0 0; padding: 0; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+.pc-rows li { display: flex; align-items: center; gap: 10px; padding: 8px 12px; font-size: 13.5px; }
+.pc-rows li + li { border-top: 1px solid var(--border); }
+.pc-rows .k { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.pc-rows .v { color: var(--muted); text-align: right; }
+.pc-rows .v.ok { color: var(--ok, #138a4a); }
+.pc-rows .v.warn { color: var(--warn, #a86400); }
+.pc-rows .v.bad { color: var(--err); }
+.pc-copy { padding: 3px 9px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--fg); font-size: 12px; cursor: pointer; }
 .pc-sec { padding: 10px 12px; border-radius: 12px; background: var(--surface-2); font-size: 13px; }
 .pc-sec h4 { margin: 0 0 6px; font-size: 12px; letter-spacing: .03em; text-transform: uppercase; color: var(--muted); }
 .pc-sec .muted, .pc-events .muted { color: var(--muted); }

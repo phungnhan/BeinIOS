@@ -952,3 +952,40 @@ table.requests td.act-wrap button + button { margin-left: 0; }
 .chat-link:hover { border-color: var(--accent); color: var(--accent); text-decoration: none; }
 .chat-link .badge:empty { display: none; }
 .ghost-link { align-self: center; }
+
+/* Cài đặt → BeinIOS: hộp mã QR chuyển đăng nhập */
+.beinios-dialog { max-width: 560px; }
+.beinios-dialog.wide { max-width: min(96vw, 900px); }
+.beinios-src label { display: flex; gap: 8px; align-items: flex-start; margin: 6px 0; }
+.beinios-src .hint { margin: 2px 0 6px 24px; }
+.beinios-qr svg { display: block; width: 100%; max-width: 420px; margin: 10px auto; border-radius: 6px; }
+.beinios-dialog.wide .beinios-qr svg { max-width: min(82vh, 820px); }
+.beinios-px { margin: 8px 0 4px; }
+.beinios-px summary { cursor: pointer; font-weight: 600; }
+.beinios-px-row { display: grid; grid-template-columns: 110px 1fr; gap: 8px; align-items: center; margin: 6px 0; }
+.beinios-px-row input { width: 100%; }
+
+/* Hồ sơ cá nhân: avatar góc trên + hộp hồ sơ (dash/self.js) */
+.me-btn { padding: 0; border: 0; background: none; border-radius: 50%; cursor: pointer; line-height: 0; }
+.me-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.me-av { position: relative; display: inline-grid; place-items: center; width: var(--s, 32px); height: var(--s, 32px); border-radius: 50%; overflow: hidden; flex: none; color: #fff; font-weight: 700; font-size: calc(var(--s, 32px) * 0.38); background: linear-gradient(135deg, hsl(var(--h, 260) 70% 62%), hsl(calc(var(--h, 260) + 25) 65% 45%)); }
+.me-av img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.me-card { max-width: 520px; }
+.me-head { display: flex; gap: 14px; align-items: center; margin-bottom: 6px; }
+.me-who { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.me-who b { font-size: 18px; }
+.me-vb { display: inline-grid; place-items: center; width: 18px; height: 18px; margin-left: 6px; border-radius: 50%; background: var(--accent); color: #fff; font-size: 11px; vertical-align: 2px; }
+.me-body { max-height: 62vh; overflow: auto; }
+.me-sec { margin-top: 14px; }
+.me-sec h4 { margin: 0 0 4px; font-size: 13px; text-transform: uppercase; letter-spacing: 0.3px; color: var(--muted); }
+.me-sec p { margin: 0 0 6px; }
+.me-rows { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+.me-row { display: flex; align-items: center; gap: 10px; padding: 8px 12px; }
+.me-row + .me-row { border-top: 1px solid var(--border); }
+.me-k { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.me-v { color: var(--muted); text-align: right; }
+.me-v.ok { color: var(--ok); }
+.me-v.warn { color: var(--warn); }
+.me-v.bad { color: var(--err); }
+.me-links { margin-top: 14px; }
+

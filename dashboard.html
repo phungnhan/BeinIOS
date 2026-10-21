@@ -22,6 +22,7 @@
       <span class="pill warn" id="dry-pill" hidden>Chạy thử</span>
       <a class="chat-link" href="chat.html" target="_blank" id="btn-chat-page" title="Mở trang Chat: tin nhắn riêng và kênh chat của các group">💬 Chat <span class="badge" id="badge-chat"></span></a>
       <button id="btn-scan" class="primary" title="Quét toàn bộ: group, yêu cầu tham gia, bài chờ duyệt, bài mới đăng. Chỉ cần tải lại tab đang xem thì dùng nút Tải lại trên thanh tab.">↻ Quét ngay</button>
+      <button type="button" class="me-btn" id="me-btn" aria-label="Hồ sơ cá nhân" hidden></button>
     </div>
   </header>
 
@@ -1441,6 +1442,13 @@
         <div class="muted small" id="backup-hint"></div>
         <div class="muted small" id="storage-usage"></div>
       </div>
+      <div class="group beinios-group" id="beinios-group">
+        <div class="group-title">📱 BeinIOS (iPhone)</div>
+        <div class="muted small">BeinIOS là BeinFusion chạy như ứng dụng trên iPhone (<a href="https://phungnhan.github.io/BeinIOS/" target="_blank" rel="noopener">phungnhan.github.io/BeinIOS</a>, cần proxy riêng của bạn). Nút dưới chép phiên đăng nhập Beincom sang BeinIOS: quét mã QR bằng Camera iPhone, hoặc bấm Chép rồi dán ở BeinIOS → Cài đặt → Dán từ addon. Addon xin quyền đọc cookie Beincom khi bấm lần đầu; không gửi cookie đi đâu.</div>
+        <div class="backup-actions">
+          <button type="button" class="ghost" id="btn-beinios">Chuyển đăng nhập sang BeinIOS</button>
+        </div>
+      </div>
     </section>
 
     <section class="card span-3" id="log-card" data-tab="log">
@@ -1620,6 +1628,35 @@
     </form>
   </dialog>
 
+  <dialog id="me-card" class="whatsnew me-card" aria-label="Hồ sơ cá nhân">
+    <form method="dialog">
+      <div class="me-head" id="me-head"></div>
+      <div class="me-body" id="me-body"></div>
+      <div class="dialog-actions"><button value="ok" class="primary">Đóng</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="beinios" class="whatsnew beinios-dialog" aria-labelledby="beinios-title">
+    <form method="dialog">
+      <h3 id="beinios-title">Chuyển đăng nhập sang BeinIOS</h3>
+      <div class="beinios-src small" id="beinios-src"></div>
+      <div class="beinios-qr" id="beinios-qr"></div>
+      <p class="small" id="beinios-info" role="status"></p>
+      <p class="small err-text">Mã này là chìa khoá tài khoản Beincom của bạn: đừng để người khác chụp hay quét. Mã tự ẩn sau 2 phút.</p>
+      <details class="beinios-px small" id="beinios-px">
+        <summary>Proxy của BeinIOS — để có mã QR ngắn <span class="muted" id="beinios-px-state"></span></summary>
+        <div class="muted">Điền đúng địa chỉ và khoá proxy bạn đã điền ở BeinIOS → Cài đặt. Đăng nhập được mã hoá ngay trên máy này; proxy chỉ giữ bản mã hoá 5 phút, lấy một lần là xoá. Khoá chỉ lưu ở máy này, không có trong sao lưu.</div>
+        <label class="beinios-px-row"><span>Địa chỉ proxy</span><input type="url" id="beinios-px-url" placeholder="https://beinios-proxy.&lt;tài khoản&gt;.workers.dev" autocomplete="off" spellcheck="false" /></label>
+        <label class="beinios-px-row"><span>Khoá proxy</span><input type="password" id="beinios-px-key" autocomplete="off" spellcheck="false" /></label>
+        <div class="backup-actions"><button type="button" class="ghost sm" id="beinios-px-save">Lưu &amp; tạo mã ngắn</button><button type="button" class="ghost sm" id="beinios-px-clear">Xoá proxy</button></div>
+      </details>
+      <div class="dialog-actions">
+        <button type="button" class="ghost" id="beinios-copy" disabled>Chép</button>
+        <button value="close" class="primary" id="beinios-close">Xong</button>
+      </div>
+    </form>
+  </dialog>
+
   <dialog id="whatsnew" class="whatsnew">
     <form method="dialog">
       <h3 id="whatsnew-title">Có gì mới</h3>
@@ -1653,6 +1690,9 @@
   <script src="lib/telegram.js"></script>
   <script src="lib/diag.js"></script>
   <script src="lib/chat.js"></script>
+  <script src="lib/qr.js"></script>
+  <script src="lib/transfer.js"></script>
+  <script src="lib/self.js"></script>
   <script src="upload.js"></script>
   <script src="charts.js"></script>
   <script src="dash/core.js"></script>
@@ -1687,6 +1727,8 @@
   <script src="dash/digest.js"></script>
   <script src="dash/whatsnew.js"></script>
   <script src="dash/onboarding.js"></script>
+  <script src="dash/beinios.js"></script>
+  <script src="dash/self.js"></script>
   <script src="dash/layout.js"></script>
   <script src="dashboard.js"></script>
 </body>

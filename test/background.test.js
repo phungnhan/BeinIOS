@@ -1711,7 +1711,7 @@ test('nhận ra tài khoản đang đăng nhập (gọi không kèm header phiê
   data.timeline.gCL.push(post('t9', 'Bài của Kai', { actor: { id: 'me1', username: 'kai', fullname: 'Kai Crypto' } }));
   const env = makeEnv({ data, settings: { dryRun: false } });
   const state = await scan(env);
-  assert.deepEqual(state.me, { id: 'me1', username: 'kai', fullname: 'Kai Crypto' });
+  assert.deepEqual(state.me, { id: 'me1', username: 'kai', fullname: 'Kai Crypto', avatar: '', verified: false }); // ảnh / xác minh cho Hồ sơ cá nhân
   assert.equal(data.meHeaders['x-version-id'], undefined);
   // Bài người khác: không xoá được
   const other = await env.send({ type: 'postAct', action: 'delete', contentIds: ['t1'] });

@@ -110,7 +110,7 @@ function renderSpaceHead(sp) {
     { class: 'space-actions' },
     el('button', { type: 'button', class: 'space-btn', 'aria-label': 'Giao diện', title: 'Giao diện', 'aria-haspopup': 'dialog', onclick: openLook }, strokeSvg(ICON_PALETTE, 20)),
     el('a', { class: 'space-btn', href: 'dashboard.html', 'aria-label': 'Mở Dashboard', title: 'Mở Dashboard' }, strokeSvg(RAIL_ICON.dash, 20)),
-    S.me ? el('span', { class: 'space-me', title: me + (S.error ? ' — mất kết nối chat' : ' — đang kết nối') }, avatar({ name: me, chatId: S.me.chatId, pictureAt: S.me.pictureAt, size: 'sm' }), el('i', { class: 'rail-dot' + (S.error ? ' off' : '') })) : null,
+    S.me ? el('button', { type: 'button', class: 'space-me', title: me + (S.error ? ' — mất kết nối chat' : ' — đang kết nối') + ' · Hồ sơ cá nhân', 'aria-label': 'Hồ sơ cá nhân', onclick: () => openPerson(S.me) }, avatar({ name: me, chatId: S.me.chatId, pictureAt: S.me.pictureAt, size: 'sm' }), el('i', { class: 'rail-dot' + (S.error ? ' off' : '') })) : null,
   );
   $('space-head').replaceChildren(face || el('span', { class: 'space-face ic' }, strokeSvg(sp === 'dm' ? RAIL_ICON.dm : RAIL_ICON.all, 18)), el('div', { class: 'space-title' }, el('b', {}, title), el('span', {}, sub)), actions);
 }

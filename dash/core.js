@@ -122,6 +122,7 @@ function renderTop() {
   pill.className = 'pill ' + (s.active ? 'on' : 'off');
   pill.textContent = s.active ? `Tự quét mỗi ${s.intervalMin >= 60 ? s.intervalMin / 60 + ' giờ' : s.intervalMin + ' phút'}` : 'Đã tắt';
   $('dry-pill').hidden = !s.dryRun;
+  if (typeof renderMeBtn === 'function') renderMeBtn(); // avatar Hồ sơ cá nhân (dash/self.js)
 
   const st = data.state;
   const r = st.lastResult;

@@ -198,8 +198,21 @@
         return true;
       },
     },
+    // Cookie giả (giá trị không phải thật) cho nút Chuyển đăng nhập sang BeinIOS; window.__incog: có cửa sổ ẩn danh
+    cookies: {
+      getAllCookieStores: async () => [{ id: '0', tabIds: [1] }, ...(window.__incog ? [{ id: '1', tabIds: [2] }] : [])],
+      getAll: async ({ url, storeId }) => {
+        (window.__cookieReads ||= []).push({ url, storeId });
+        const tag = storeId === '1' ? 'an-danh' : 'thuong';
+        if (window.__noLogin) return [{ name: '_ga', value: 'GA1.1.1' }];
+        if (url.startsWith('https://chat.')) return [{ name: 'MMAUTHTOKEN', value: 'chat-' + tag }, { name: 'sid', value: 'phien-' + tag }];
+        if (url.startsWith('https://auth.')) return [{ name: 'sid', value: 'phien-' + tag }, { name: 'rt', value: 'lam-moi-' + tag }];
+        return [{ name: 'sid', value: 'phien-' + tag }, { name: '_ga', value: 'GA1.1.1' }, { name: 'mp_x_mixpanel', value: '{}' }];
+      },
+    },
+    extension: { isAllowedIncognitoAccess: async () => !!window.__incogAllowed },
     runtime: {
-      getManifest: () => ({ version: '__VERSION__', permissions: ['storage', 'unlimitedStorage'] }), // harness.mjs điền phiên bản trong manifest.json
+      getManifest: () => ({ version: '__VERSION__', permissions: ['storage', 'unlimitedStorage'], optional_permissions: ['cookies'] }), // harness.mjs điền phiên bản trong manifest.json
       getURL: (p) => p,
       openOptionsPage() {},
       sendMessage: async (m) => {
