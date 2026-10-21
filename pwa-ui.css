@@ -54,3 +54,24 @@ html[data-bein-page='dash'] .bein-me .bein-dot.bad { background: var(--err, #d93
   html[data-bein-page='dash'] .tabs { padding: 0 10px; scrollbar-width: none; }
   html[data-bein-page='dash'] .tabs::-webkit-scrollbar { display: none; }
 }
+
+/* Quản trị: avatar Hồ sơ cá nhân của addon nằm trong cụm góc trên; bỏ tab Quy tắc & cài đặt (đã chuyển vào Cài đặt) */
+html[data-bein-page='dash'] .bein-acct .me-btn { display: inline-grid; place-items: center; width: 38px; height: 38px; }
+html[data-bein-page='dash'] .bein-acct .me-btn[hidden] { display: none; }
+html[data-bein-page='dash']:not([data-bein-embed]) #tabs [data-tab='settings'] { display: none; }
+
+/* ---------- Cài đặt › một nhóm (dashboard.html?embed=settings): chỉ nội dung nhóm đang chọn ---------- */
+html[data-bein-embed] .topbar,
+html[data-bein-embed] .tabs,
+html[data-bein-embed] #banner,
+html[data-bein-embed] .to-top,
+html[data-bein-embed] .tab-toc { display: none !important; }
+html[data-bein-embed] .bein-off { display: none !important; }
+html[data-bein-embed] body { background: transparent; }
+html[data-bein-embed] main { display: block; padding: 2px 16px 40px; }
+html[data-bein-embed] main > [data-tab='settings']:not(.bein-off) { display: block; margin: 0 0 14px; }
+html[data-bein-embed] .rules-col > .card { margin-bottom: 14px; }
+html[data-bein-embed] #settings > .card-head h2 { display: none; }
+html[data-bein-embed] #settings > .card-head { min-height: 0; margin: 0; }
+html[data-bein-embed] #settings > .group:first-of-type,
+html[data-bein-embed] #settings > .master-row { margin-top: 0; }

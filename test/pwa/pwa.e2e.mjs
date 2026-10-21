@@ -55,6 +55,7 @@ async function beincom(url, init = {}) {
   if (u.hostname !== 'api.beincom.com') return J(404, {});
   if (ck.sid !== 'good') return J(401, { code: 'api.unauthorized' });
   const p = u.pathname.replace(/^\/v1\//, '');
+  if (p === 'user/me/profile') return J(200, { code: 'api.ok', data: { id: 'me-e2e', username: 'tester', fullname: 'Người Thử', avatar: '' } });
   if (p === 'group/me/permissions') return J(200, { code: 'api.ok', data: { communities: { c1: ['manage', 'ban_member'] }, groups: { g1: ['role_COMMUNITY_ADMIN', 'approve_reject_jr', 'remove_member'] } } });
   if (p === 'group/groups/g1') return J(200, { code: 'api.ok', data: { id: 'g1', name: 'Nhóm Thử BeinIOS', communityId: 'c1', isCommunity: true, level: 0, privacy: 'OPEN', userCount: 42, settings: { isJoinApproval: true } } });
   if (/join-requests/.test(p)) return J(200, { code: 'api.ok', data: withRequest ? [{ id: 'jr1', userId: 'u9', createdAt: new Date().toISOString(), answers: [], user: { id: 'u9', username: 'nguoimoi', fullname: 'Người Mới', avatar: '' } }] : [] });
@@ -221,21 +222,42 @@ try {
   const reg = await page.ev("navigator.serviceWorker.getRegistration().then((r) => !!r)");
   ok(reg, 'service worker đã đăng ký');
 
-  // ---------- Giao diện điện thoại: Cài đặt chung, Proxy & Login, nút Login ở Chat / Quản trị ----------
+  // ---------- Giao diện điện thoại: Cài đặt chung, Tài khoản, nhóm Quản trị, Proxy & Login, nút Login ở Chat / Quản trị ----------
   const isOpen = (view) => `document.getElementById('setup').classList.contains('open') && !document.getElementById('view-${view}').hidden`;
   await page.ev(`document.querySelector('nav button[data-tab="setup"]').click(); true`);
   await page.until(new Function(`return ${isOpen('main')} && document.getElementById('view-login').hidden`), 5000);
-  await page.until(() => document.getElementById('login-state').textContent === 'Đã kết nối' && /tester/.test(document.getElementById('acct-name').textContent), 8000);
-  const acct = await page.ev(`({ name: document.getElementById('acct-name').textContent, sub: document.getElementById('acct-sub').textContent, dot: document.getElementById('dot').className, notif: document.getElementById('notif-state').textContent })`);
-  ok(acct.name === 'tester' && /@tester · Đã đăng nhập/.test(acct.sub) && acct.dot === 'dot', 'Cài đặt chung: thẻ tài khoản (tên Chat, đã đăng nhập), không chấm cảnh báo khi ổn');
-  await sleep(450); // chờ hiệu ứng trượt xong
+  await page.until(() => document.getElementById('login-state').textContent === 'Đã kết nối' && /Người Thử/.test(document.getElementById('acct-name').textContent), 8000);
+  const acct = await page.ev(`({ name: document.getElementById('acct-name').textContent, sub: document.getElementById('acct-sub').textContent, dot: document.getElementById('dot').className, admin: [...document.querySelectorAll('#admin-list .row span')].map((x) => x.textContent), scan: document.getElementById('st-scan').textContent })`);
+  ok(acct.name === 'Người Thử' && /@tester · Đã đăng nhập/.test(acct.sub) && acct.dot === 'dot', 'Cài đặt chung: thẻ tài khoản (tên Beincom, đã đăng nhập), không chấm cảnh báo khi ổn');
+  ok(JSON.stringify(acct.admin) === JSON.stringify(['Hoạt động & quét', 'Tự xử lý', 'Theo dõi & nhắc việc', 'Quy tắc thành viên', 'Quy tắc bài viết']) && acct.scan === 'Chạy thử', 'Cài đặt chung: nhóm Quản trị (5 mục) có trạng thái nhanh');
+  const iosVer = readFileSync(path.join(ROOT, 'pwa-shim.js'), 'utf8').match(/const VERSION = '([\d.]+)'/)[1];
+  await page.until(() => /bản mới nhất/.test(document.getElementById('ver-note').textContent), 6000);
+  const vers = await page.ev(`({ addon: document.getElementById('ver-addon').textContent, ios: document.getElementById('ver-ios').textContent, upd: document.getElementById('upd').hidden })`);
+  ok(vers.addon === 'v' + real && vers.ios === iosVer && vers.upd, `Cài đặt › Về: addon BeinFusion v${real}, BeinIOS ${iosVer}, đang là bản mới nhất`);
+  await sleep(450);
   await page.ev("document.querySelectorAll('#bein-toasts [role=status]').forEach((t) => t.remove()), true");
   await shot('6-cai-dat-chung');
-  await page.ev(`document.getElementById('go-login').click(); true`);
-  await page.until(new Function(`return ${isOpen('login')} && document.getElementById('view-main').hidden`), 3000);
+  // Tài khoản / Hồ sơ cá nhân
+  await page.ev(`document.getElementById('acct').click(); true`);
+  await page.until(new Function(`return ${isOpen('account')} && /Người Thử/.test(document.getElementById('pf-head').textContent) && document.querySelectorAll('#pf-sections .group-label').length === 2`), 5000);
+  const pf = await page.ev(`({ head: document.getElementById('pf-head').innerText.split(String.fromCharCode(10)).join(' | '), info: [...document.querySelectorAll('#pf-info .row')].map((r) => r.querySelector('small').textContent + '=' + r.querySelector('.v').textContent), titles: [...document.querySelectorAll('#pf-sections .group-label')].map((x) => x.textContent), comm: document.querySelector('#pf-sections a.row .two')?.innerText.split(String.fromCharCode(10)).join(' | '), login: document.getElementById('pf-login-state').textContent, link: document.querySelector('#pf-links a.row.accent')?.href, avatar: Math.round(document.querySelector('#pf-head .bein-avatar').getBoundingClientRect().width) })`);
+  const pfOk = /NT \| Người Thử \| @tester • Quản trị 1 cộng đồng/.test(pf.head) && pf.avatar === 104 && pf.info[0] === 'Tên đăng nhập=@tester' && pf.info[1] === 'Mã Beincom=me-e2e' && /^Chat Beincom=/.test(pf.info[2] || '') && pf.titles.join(',') === 'Quyền quản trị,Addon' && / \| /.test(pf.comm || '') && pf.login === 'Đã kết nối' && /\/users\/tester$/.test(pf.link || '');
+  if (!pfOk) console.log('    (gỡ lỗi)', JSON.stringify(pf));
+  ok(pfOk, 'Cài đặt › Tài khoản (kiểu Telegram): avatar lớn, tên, dòng thông tin, quyền quản trị, addon, Proxy & Login');
+  await sleep(450);
+  await shot('6c-tai-khoan');
+  // Cuộn: tên lên giữa thanh trên, avatar mờ dần (thêm khoảng trống cho đủ dài để cuộn — tài khoản thử chỉ có 1 cộng đồng)
+  await page.ev(`(() => { const v = document.getElementById('view-account'); v.querySelector(':scope > .wrap').append(Object.assign(document.createElement('div'), { id: 'e2e-pad', style: 'height:600px' })); v.scrollTop = 400; v.dispatchEvent(new Event('scroll')); return true; })()`);
+  await page.until(() => document.getElementById('pf-top').classList.contains('scrolled') && document.getElementById('pf-title').textContent === 'Người Thử' && Number(document.querySelector('#pf-head .bein-avatar').style.opacity) < 0.5, 3000);
+  ok(true, 'Tài khoản: cuộn xuống thì tên hiện ở thanh trên, avatar thu nhỏ mờ dần');
+  await sleep(300);
+  await shot('6c2-tai-khoan-cuon');
+  await page.ev(`(() => { document.getElementById('e2e-pad').remove(); const v = document.getElementById('view-account'); v.scrollTop = 0; v.dispatchEvent(new Event('scroll')); return true; })()`);
+  await page.ev(`document.getElementById('pf-login').click(); true`);
+  await page.until(new Function(`return ${isOpen('login')}`), 3000);
   const stx = await page.ev(`({ proxy: document.getElementById('st-proxy').textContent, login: document.getElementById('st-login').textContent, url: document.getElementById('proxy-url').value })`);
   ok(stx.proxy === '127.0.0.1' && stx.login === 'Đã kết nối' && stx.url === 'http://127.0.0.1:' + proxyPort, 'Proxy & Login: trang con có trạng thái proxy / đăng nhập');
-  await sleep(450); // chờ hiệu ứng trượt xong
+  await sleep(450);
   await page.ev("document.querySelectorAll('#bein-toasts [role=status]').forEach((t) => t.remove()), true");
   await shot('7-proxy-login');
   if (SHOTS) {
@@ -244,48 +266,78 @@ try {
     await page.ev(`document.getElementById('back').click(); true`);
     await sleep(450);
     await shot('6b-cai-dat-toi');
-    await page.ev(`document.getElementById('go-login').click(); true`);
-    await sleep(450);
     await page.cdp('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: 'light' }] });
   }
   await page.ev(`document.getElementById('back').click(); true`);
   await page.until(new Function(`return ${isOpen('main')}`), 3000);
-  await page.ev(`document.getElementById('go-rules').click(); true`);
-  await page.until(() => !document.getElementById('setup').classList.contains('open') && document.querySelector('nav button.on')?.dataset.tab === 'dash' && /tab=settings/.test(document.getElementById('f-dash').contentWindow.location.hash), 5000);
-  ok(true, 'Cài đặt → Quy tắc & cài đặt quét: mở đúng mục ở Quản trị');
-  // Quản trị: góc trên có Login + avatar; nút "💬 Chat" ẩn (thanh dưới đã có)
-  await page.until(() => !!document.getElementById('f-dash').contentDocument?.querySelector('.topbar .bein-acct .bein-me'), 8000);
-  const dashUi = await page.ev(frame('f-dash', "({ login: !!document.querySelector('.bein-acct .bein-login'), me: document.querySelector('.bein-acct .bein-me .bein-avatar')?.textContent, chatBtn: getComputedStyle(document.getElementById('btn-chat-page')).display })"));
-  ok(dashUi.login && dashUi.me === 'T' && dashUi.chatBtn === 'none', 'Quản trị: góc trên có Login + avatar, ẩn nút Chat');
+  // Một nhóm Quản trị: trang cài đặt thật của addon, chỉ hiện nhóm đang chọn
+  const embedSees = (sel) => `(() => { const d = document.getElementById('f-set').contentDocument; const e = d && d.querySelector(${JSON.stringify(sel)}); return !!e && e.getClientRects().length > 0; })()`;
+  await page.ev(`document.querySelector('[data-sec="rules"]').click(); true`);
+  await page.until(new Function(`return ${isOpen('dset')} && document.getElementById('f-set').classList.contains('ready') && ${embedSees('#rules')}`), 15000);
+  const rulesView = await page.ev(`({ title: document.getElementById('dset-title').textContent, scope: ${embedSees('#rules-scope')}, post: ${embedSees('#post-rules')}, settings: ${embedSees('#settings')}, top: ${embedSees('.topbar')}, tabs: ${embedSees('#tabs')}, dlg: !!document.getElementById('f-set').contentDocument.querySelector('dialog[open]') })`);
+  ok(rulesView.title === 'Quy tắc thành viên' && rulesView.scope && !rulesView.post && !rulesView.settings && !rulesView.top && !rulesView.tabs && !rulesView.dlg, 'Cài đặt › Quy tắc thành viên: chỉ phạm vi + quy tắc thành viên (không thanh trên, không tab, không hộp tự mở)');
+  await sleep(300);
+  await shot('6d-quy-tac');
+  await page.ev(`document.querySelector('#view-dset [data-back]').click(); document.querySelector('[data-sec="tg"]').click(); true`);
+  await page.until(new Function(`return ${isOpen('dset')} && ${embedSees('#settings .tg-group')}`), 5000);
+  const tgView = await page.ev(`({ title: document.getElementById('dset-title').textContent, grp: ${embedSees('#settings-group')}, chat: ${embedSees('#settings .chat-group')}, rules: ${embedSees('.rules-col')}, head: ${embedSees('#settings > .card-head h2')} })`);
+  ok(tgView.title === 'Telegram' && !tgView.grp && !tgView.chat && !tgView.rules && !tgView.head, 'Cài đặt › Telegram: chỉ nhóm Telegram');
+  await page.ev(`document.querySelector('#view-dset [data-back]').click(); document.querySelector('[data-sec="scan"]').click(); true`);
+  await page.until(new Function(`return ${isOpen('dset')} && ${embedSees('#scanComments')} && !${embedSees('#autoApprove')}`), 5000);
+  const scanBefore = await page.ev(`BeinPWA.page.store.get('local', ['settings']).then((r) => !!r.settings?.scanComments)`);
+  await page.ev(`document.getElementById('f-set').contentDocument.getElementById('scanComments').click(); true`);
+  await page.until(new Function('b', `return BeinPWA.page.store.get('local', ['settings']).then((r) => !!r.settings?.scanComments !== b)`), 5000, scanBefore);
+  ok(true, 'Cài đặt › Hoạt động & quét: bật / tắt một mục là lưu cài đặt thật của addon');
+  await page.ev(`document.querySelector('#view-dset [data-close]').click(); true`);
+  await page.until(() => !document.getElementById('setup').classList.contains('open'), 3000);
+
+  // Quản trị: không còn tab Quy tắc & cài đặt; chỗ nào mở tab đó thì mở Cài đặt; góc trên có Login + avatar Hồ sơ cá nhân
+  await page.ev(`document.querySelector('nav button[data-tab="dash"]').click(); true`);
+  await page.until(() => !!document.getElementById('f-dash').contentDocument?.querySelector('.topbar .bein-acct .me-btn:not([hidden]) .me-av'), 10000);
+  const dashUi = await page.ev(frame('f-dash', "({ login: !!document.querySelector('.bein-acct .bein-login'), me: document.querySelector('.bein-acct .me-btn .me-av')?.textContent, chatBtn: getComputedStyle(document.getElementById('btn-chat-page')).display, setTab: getComputedStyle(document.querySelector('#tabs [data-tab=\"settings\"]')).display })"));
+  ok(dashUi.login && dashUi.me === 'NT' && dashUi.chatBtn === 'none' && dashUi.setTab === 'none', 'Quản trị: góc trên có Login + avatar, ẩn nút Chat và tab Quy tắc & cài đặt');
+  await page.ev(frame('f-dash', "showTab('settings'), true"));
+  await page.until(new Function(`return ${isOpen('main')} && /tab=overview/.test(document.getElementById('f-dash').contentWindow.location.hash)`), 4000);
+  ok(true, 'Quản trị: mở tab Quy tắc & cài đặt (từ chỗ khác) -> mở Cài đặt của ứng dụng');
+  await page.ev(`document.getElementById('close').click(); true`);
   await page.ev(`document.getElementById('f-dash').contentWindow.location.hash = '#tab=overview'; true`);
   await sleep(400);
   await shot('8-quan-tri');
   await page.ev(frame('f-dash', "document.querySelector('.bein-acct .bein-login').click(), true"));
   await page.until(new Function(`return ${isOpen('login')}`), 3000);
   await page.ev(`document.getElementById('close-login').click(); true`);
-  await page.ev(frame('f-dash', "document.querySelector('.bein-acct .bein-me').click(), true"));
-  await page.until(new Function(`return ${isOpen('main')}`), 3000);
-  ok(true, 'Quản trị: nút Login mở Proxy & Login, avatar mở Cài đặt chung');
-  await page.ev(`document.getElementById('close').click(); document.querySelector('nav button[data-tab="chat"]').click(); true`);
-  // Chat (BeinFusion theme): nút Dashboard đổi thành Login
+  await page.ev(frame('f-dash', "document.querySelector('.bein-acct .me-btn').click(), true"));
+  await page.until(new Function(`return ${isOpen('account')} && !document.getElementById('f-dash').contentDocument.getElementById('me-card')?.open`), 5000);
+  ok(true, 'Quản trị: nút Login mở Proxy & Login, avatar mở Cài đặt › Tài khoản (không mở hộp của addon)');
+  await page.ev(`document.querySelector('#view-account [data-close]').click(); true`);
+  await page.ev(`document.querySelector('nav button[data-tab="chat"]').click(); true`);
+  // Chat (BeinFusion theme): nút Dashboard đổi thành Login; bấm dòng tài khoản -> Hồ sơ cá nhân
   const chatUi = await page.ev(frame('f-chat', "({ dash: !!document.querySelector('.head-actions a[href=\"dashboard.html\"]'), login: !!document.querySelector('.head-actions .bein-login') })"));
   ok(!chatUi.dash && chatUi.login, 'Chat (BeinFusion theme): nút Dashboard đổi thành Login');
   await page.ev(frame('f-chat', "document.querySelector('.head-actions .bein-login').click(), true"));
   await page.until(new Function(`return ${isOpen('login')}`), 3000);
   await page.ev(`document.getElementById('close-login').click(); true`);
   ok(true, 'Chat: nút Login mở Proxy & Login');
+  await page.ev(frame('f-chat', "document.getElementById('me').click(), true"));
+  await page.until(new Function(`return ${isOpen('account')} && !document.getElementById('f-chat').contentDocument.getElementById('person')?.open`), 5000);
+  ok(true, 'Chat: bấm dòng tài khoản mở Cài đặt › Tài khoản');
+  await page.ev(`document.querySelector('#view-account [data-close]').click(); true`);
   await page.ev(frame('f-chat', "document.getElementById('cnt-unread').textContent = '3', true"));
   await page.until(() => document.getElementById('badge-chat').textContent === '3', 3000);
   await page.ev(frame('f-chat', "document.getElementById('cnt-unread').textContent = '', true"));
   await page.until(() => document.getElementById('badge-chat').textContent === '', 3000);
   ok(true, 'số tin chưa đọc của Chat hiện trên tab Chat ở thanh dưới');
-  // Chat (Silk): nút Dashboard cạnh avatar cũng đổi thành Login
+  // Chat (Silk): nút Dashboard cạnh avatar đổi thành Login; avatar mở Hồ sơ cá nhân
   await page.ev(`BeinPWA.page.store.set('local', { chatLook: { ui: 'silk' } }).then(() => true)`);
   await page.until(() => !!document.getElementById('f-chat').contentDocument?.querySelector('.space-actions .bein-login'), 6000);
-  const silk = await page.ev(frame('f-chat', "({ dash: !!document.querySelector('.space-actions a[href=\"dashboard.html\"]'), me: !!document.querySelector('.space-actions .space-me') })"));
-  ok(!silk.dash && silk.me, 'Chat (Silk): nút Dashboard cạnh avatar đổi thành Login');
+  const silk = await page.ev(frame('f-chat', "({ dash: !!document.querySelector('.space-actions a[href=\"dashboard.html\"]'), me: !!document.querySelector('.space-actions button.space-me') })"));
+  ok(!silk.dash && silk.me, 'Chat (Silk): nút Dashboard cạnh avatar đổi thành Login, avatar là nút');
   await sleep(300);
   await shot('9-chat-silk');
+  await page.ev(frame('f-chat', "document.querySelector('.space-actions .space-me').click(), true"));
+  await page.until(new Function(`return ${isOpen('account')} && !document.getElementById('f-chat').contentDocument.getElementById('person')?.open`), 5000);
+  await page.ev(`document.querySelector('#view-account [data-close]').click(); true`);
+  ok(true, 'Chat (Silk): avatar mở Cài đặt › Tài khoản');
   await page.ev(`BeinPWA.page.store.set('local', { chatLook: { ui: 'theme' } }).then(() => true)`);
   // Cài đặt → Giao diện Chat
   await page.ev(`document.querySelector('nav button[data-tab="setup"]').click(); true`);
@@ -294,6 +346,13 @@ try {
   await page.until(() => !!document.getElementById('f-chat').contentDocument?.getElementById('look')?.open && !document.getElementById('setup').classList.contains('open'), 5000);
   ok(true, 'Cài đặt → Giao diện Chat: mở bảng Giao diện của trang Chat');
   await page.ev(frame('f-chat', "document.getElementById('look').close(), true"));
+  // Cài đặt → Addon BeinFusion: bảng Có gì mới của addon ở Quản trị
+  await page.ev(`document.querySelector('nav button[data-tab="setup"]').click(); true`);
+  await page.until(new Function(`return ${isOpen('main')}`), 3000);
+  await page.ev(`document.getElementById('go-whatsnew').click(); true`);
+  await page.until(() => document.querySelector('nav button.on')?.dataset.tab === 'dash' && !!document.getElementById('f-dash').contentDocument?.getElementById('whatsnew')?.open, 8000);
+  ok(true, 'Cài đặt → Addon BeinFusion: mở bảng Có gì mới của addon ở Quản trị');
+  await page.ev(frame('f-dash', "document.getElementById('whatsnew').close(), true"));
 
   // ---------- Dán từ addon (addon BeinFusion → Chuyển đăng nhập sang BeinIOS) ----------
   // Đoạn như addon tạo: phiên cũ (sid=old2) + cookie máy chủ đăng nhập (rt=r1) -> BeinIOS phải tự làm mới bằng ô auth

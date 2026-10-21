@@ -13,7 +13,7 @@
   'use strict';
   if (G.BeinPWA) return;
   const PWA = (G.BeinPWA = {});
-  const VERSION = '1.3.0';
+  const VERSION = '1.4.0';
   PWA.VERSION = VERSION;
 
   // ---------- 1. Kho lưu trữ ----------
@@ -891,16 +891,18 @@
     ensureWorker,
   };
 
-  // Tài khoản đang đăng nhập: trang Chat lưu sẵn trong kho (chatOverviewCache.me); ảnh đại diện lấy qua proxy (bản trang
-  // Chat đã lưu trong Cache Storage thì dùng luôn). Link ảnh giống lib/chat.js chatAvatarUrl.
+  // Tài khoản đang đăng nhập: tài khoản Beincom lần quét lưu (state.me — tên, ảnh) và tài khoản Chat trang Chat lưu
+  // (chatOverviewCache.me). Không có ảnh Beincom thì lấy ảnh Chat qua proxy (bản trang Chat đã lưu trong Cache Storage
+  // thì dùng luôn). Link ảnh Chat giống lib/chat.js chatAvatarUrl.
   let meP = null;
   PWA.me = () =>
     (meP ||= (async () => {
-      const { chatOverviewCache: c } = await store.get('local', ['chatOverviewCache']);
-      const me = c?.me;
-      if (!me) return null;
-      const out = { name: me.fullname || me.username || '', username: me.username || '', chatId: me.chatId || '', avatar: '' };
-      const url = me.chatId ? `https://chat.beincom.com/api/v4/users/${me.chatId}/image${me.pictureAt ? '?_=' + me.pictureAt : ''}` : '';
+      const { chatOverviewCache: c, state } = await store.get('local', ['chatOverviewCache', 'state']);
+      const bm = state?.me;
+      const cm = c?.me;
+      if (!bm && !cm) return null;
+      const out = { name: bm?.fullname || cm?.fullname || bm?.username || cm?.username || '', username: bm?.username || cm?.username || '', chatId: cm?.chatId || '', avatar: bm?.avatar || '' };
+      const url = !out.avatar && cm?.chatId ? `https://chat.beincom.com/api/v4/users/${cm.chatId}/image${cm.pictureAt ? '?_=' + cm.pictureAt : ''}` : '';
       if (url) {
         try {
           let res = (await G.caches?.open('beingroup-img-v1').then((ch) => ch.match(url)).catch(() => null)) || null;
@@ -914,7 +916,7 @@
       return out;
     })());
   store.onChanged.addListener((ch, area) => {
-    if (area === 'local' && ch.chatOverviewCache) meP = null;
+    if (area === 'local' && (ch.chatOverviewCache || ch.state)) meP = null;
   });
   // Ô ảnh đại diện tròn: ảnh, hoặc chữ cái đầu trên nền chuyển sắc, hoặc hình người khi chưa biết tài khoản.
   // Màu và chữ giống avatar của trang Chat (chat/core.js GRADIENTS, hash, initials) để cùng một người cùng một màu.

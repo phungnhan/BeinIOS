@@ -16,6 +16,9 @@
   <!-- Khung ứng dụng: các trang bên trong (Chat, Dashboard) nhờ khung này mở trang, hiện thông báo -->
   <script>window.__BEIN_SHELL__ = true;</script>
   <script src="pwa-shim.js"></script>
+  <!-- Hồ sơ cá nhân (Cài đặt › Tài khoản): cùng nội dung với addon (BG.selfProfile) -->
+  <script src="common.js"></script>
+  <script src="lib/self.js"></script>
   <style>
     :root {
       --bg: #f2f2f7;
@@ -30,6 +33,8 @@
       --nav: rgba(249, 249, 251, 0.86);
       --field: #f2f2f7;
       --press: rgba(0, 0, 0, 0.05);
+      --glass: rgba(255, 255, 255, 0.78);
+      --glass-edge: rgba(0, 0, 0, 0.06);
       color-scheme: light;
     }
     @media (prefers-color-scheme: dark) {
@@ -43,6 +48,8 @@
         --nav: rgba(22, 22, 24, 0.86);
         --field: #2c2c2e;
         --press: rgba(255, 255, 255, 0.06);
+        --glass: rgba(44, 44, 46, 0.72);
+        --glass-edge: rgba(255, 255, 255, 0.08);
         color-scheme: dark;
       }
     }
@@ -129,7 +136,70 @@
       padding: env(safe-area-inset-top, 0px) 16px calc(28px + env(safe-area-inset-bottom, 0px));
       background: var(--bg);
     }
+    .view[hidden] { display: none !important; }
     .view.slide-in { animation: slide-in 0.28s cubic-bezier(0.2, 0.8, 0.2, 1); }
+    /* Cài đặt › một nhóm của Quản trị: tiêu đề + trang cài đặt thật của addon bên dưới */
+    .view.dset { display: flex; flex-direction: column; overflow: hidden; padding-left: 0; padding-right: 0; padding-bottom: 0; }
+    .dset-top { padding: 0 16px; }
+    .dset-top h1.large { margin-bottom: 4px; }
+    #f-set { flex: 1; width: 100%; border: 0; background: transparent; opacity: 0; transition: opacity 0.2s; }
+    #f-set.ready { opacity: 1; }
+    .dset-wait { position: absolute; left: 0; right: 0; top: 150px; text-align: center; color: var(--sub); font-size: 14px; }
+    /* Tài khoản / Hồ sơ cá nhân — kiểu Telegram: nút tròn nổi ở góc, avatar lớn giữa, tên hiện lên thanh trên khi cuộn,
+       thẻ bo tròn lớn, dòng cao có icon màu */
+    .view.tg { padding-top: 0; }
+    .tg-top { position: sticky; top: 0; z-index: 3; margin: 0 -16px; padding: env(safe-area-inset-top, 0px) 16px 0; pointer-events: none; transition: background-color 0.2s; }
+    .tg-top.scrolled { background: var(--nav); -webkit-backdrop-filter: saturate(180%) blur(20px); backdrop-filter: saturate(180%) blur(20px); box-shadow: 0 0.5px 0 var(--line); }
+    .tg-top .wrap { position: relative; display: flex; align-items: center; justify-content: space-between; height: 60px; }
+    .glass {
+      pointer-events: auto;
+      display: inline-grid;
+      place-items: center;
+      height: 44px;
+      min-width: 44px;
+      padding: 0 18px;
+      border: 0;
+      border-radius: 22px;
+      background: var(--glass);
+      -webkit-backdrop-filter: saturate(180%) blur(16px);
+      backdrop-filter: saturate(180%) blur(16px);
+      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.07), inset 0 0 0 0.5px var(--glass-edge);
+      color: var(--text);
+      font-size: 17px;
+      font-weight: 500;
+      cursor: pointer;
+    }
+    .glass.round { width: 44px; padding: 0; }
+    .glass:active { filter: brightness(0.94); }
+    .tg-title { position: absolute; left: 96px; right: 96px; text-align: center; font-size: 17px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; opacity: 0; transition: opacity 0.2s; }
+    .tg-top.scrolled .tg-title { opacity: 1; }
+    .profile { display: flex; flex-direction: column; align-items: center; gap: 4px; margin-top: -48px; padding-bottom: 6px; text-align: center; }
+    .profile .bein-avatar { transform-origin: 50% 70%; box-shadow: 0 4px 18px rgba(0, 0, 0, 0.08); }
+    .profile b { max-width: 100%; margin-top: 14px; font-size: 27px; font-weight: 600; letter-spacing: 0.1px; line-height: 1.15; overflow-wrap: anywhere; }
+    .profile b .vb { display: inline-grid; place-items: center; width: 22px; height: 22px; margin-left: 6px; border-radius: 50%; background: var(--accent); color: #fff; font-size: 13px; vertical-align: 3px; }
+    .profile span { font-size: 16px; color: var(--sub); }
+    .tg .list { margin-top: 26px; }
+    .tg .list[hidden] { display: none; }
+    .tg .group-label + .list { margin-top: 0; }
+    .tg .ic.plain { background: none; color: var(--accent); }
+    .tg .ic.plain svg.i { width: 26px; height: 26px; stroke-width: 1.7; }
+    .tg .row.accent { color: var(--accent); }
+    /* Dòng thông tin như hồ sơ Telegram: nhãn nhỏ trên, giá trị dưới */
+    .tg .row.info { flex-direction: column; align-items: stretch; justify-content: center; gap: 1px; min-height: 60px; }
+    .tg .row.info + .row::before, .tg .row + .row.info::before { left: 16px; }
+    .tg .row.info small { font-size: 14px; color: var(--sub); }
+    .tg .row.info .v { font-size: 17px; overflow-wrap: anywhere; }
+    .tg .row.info .v.link { color: var(--accent); }
+    .tg .row.info .v.ok { color: var(--ok); }
+    .tg .row.info .v.warn { color: var(--warn); }
+    /* Dòng hai tầng: tên + dòng phụ (cộng đồng, giá trị dài) */
+    .tg .row .two { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+    .tg .row .two b { font-weight: 400; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .tg .row .two small { font-size: 14px; color: var(--sub); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .tg .row .two small.ok { color: var(--ok); }
+    .tg .row .two small.warn { color: var(--warn); }
+    .tg .row .two small.bad { color: var(--bad); }
+    .row .k { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     @keyframes slide-in { from { transform: translateX(28%); opacity: 0.4; } to { transform: none; opacity: 1; } }
     .wrap { max-width: 600px; margin: 0 auto; }
     .bar { display: flex; align-items: center; justify-content: space-between; height: 44px; }
@@ -143,9 +213,9 @@
       align-items: center;
       gap: 14px;
       width: 100%;
-      padding: 12px 14px;
+      padding: 14px 16px;
       border: 0;
-      border-radius: 12px;
+      border-radius: 22px;
       background: var(--card);
       text-align: left;
       cursor: pointer;
@@ -158,58 +228,60 @@
     .acct-text small i.warn { background: var(--warn); }
     .acct-text small i.bad { background: var(--bad); }
 
-    .group-label { margin: 24px 16px 6px; font-size: 13px; color: var(--sub); text-transform: uppercase; letter-spacing: 0.2px; }
-    .group-note { margin: 6px 16px 0; font-size: 13px; color: var(--sub); }
+    /* Thẻ bo tròn lớn, dòng cao, icon màu — kiểu Cài đặt của Telegram */
+    .group-label { margin: 28px 18px 7px; font-size: 13px; color: var(--sub); text-transform: uppercase; letter-spacing: 0.2px; }
+    .group-note { margin: 7px 18px 0; font-size: 13px; color: var(--sub); }
     .group-note:empty { display: none; }
-    .list { background: var(--card); border-radius: 12px; overflow: hidden; }
+    .list { background: var(--card); border-radius: 22px; overflow: hidden; }
     .row {
       display: flex;
       align-items: center;
-      gap: 12px;
+      gap: 14px;
       width: 100%;
-      min-height: 46px;
-      padding: 7px 14px;
+      min-height: 52px;
+      padding: 8px 16px;
       border: 0;
       background: none;
       color: var(--text);
       text-align: left;
       text-decoration: none;
-      font-size: 16px;
+      font-size: 17px;
       cursor: pointer;
       position: relative;
     }
-    .row + .row::before { content: ''; position: absolute; top: 0; right: 0; left: 55px; border-top: 0.5px solid var(--line); }
-    .status .row + .row::before { left: 14px; }
+    .row + .row::before { content: ''; position: absolute; top: 0; right: 0; left: 60px; border-top: 0.5px solid var(--line); }
+    .status .row + .row::before { left: 16px; }
     .row > span { flex: 1; min-width: 0; }
-    .row em { font-style: normal; color: var(--sub); font-size: 15px; white-space: nowrap; }
+    .row em { font-style: normal; color: var(--sub); font-size: 16px; white-space: nowrap; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
     .row em.ok { color: var(--ok); }
     .row em.warn { color: var(--warn); }
     .row em.bad { color: var(--bad); }
     svg.chev { width: 14px; height: 14px; color: #c4c4c7; flex: none; stroke-width: 2.4; }
+    .row[hidden] { display: none; }
     .row.static { cursor: default; }
     .row.static:active { background: none; }
     .row.danger { color: var(--bad); justify-content: center; }
     .row.danger > span { flex: none; }
-    .ic { width: 29px; height: 29px; border-radius: 7px; display: grid; place-items: center; color: #fff; background: var(--c, #8e8e93); flex: none; }
-    .ic svg.i { width: 18px; height: 18px; stroke-width: 2; }
+    .ic { width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center; color: #fff; background: var(--c, #8e8e93); flex: none; }
+    .ic svg.i { width: 19px; height: 19px; stroke-width: 2; }
 
     /* Proxy & Login */
-    .status { background: var(--card); border-radius: 12px; overflow: hidden; }
-    .field { display: flex; align-items: center; gap: 10px; padding: 4px 14px; min-height: 46px; position: relative; }
-    .field + .field::before { content: ''; position: absolute; top: 0; right: 0; left: 14px; border-top: 0.5px solid var(--line); }
+    .status { background: var(--card); border-radius: 22px; overflow: hidden; }
+    .field { display: flex; align-items: center; gap: 10px; padding: 4px 16px; min-height: 52px; position: relative; }
+    .field + .field::before { content: ''; position: absolute; top: 0; right: 0; left: 16px; border-top: 0.5px solid var(--line); }
     .field > span { width: 74px; flex: none; color: var(--text); }
     .field input { flex: 1; min-width: 0; border: 0; background: transparent; color: var(--text); font: 16px/1.3 inherit; font-family: inherit; padding: 10px 0; outline: none; }
     .field input::placeholder { color: var(--sub); }
-    .pad { padding: 14px; }
+    .pad { padding: 16px; }
     .btn {
       display: block;
       width: 100%;
       padding: 13px 14px;
       border: 0;
-      border-radius: 12px;
+      border-radius: 14px;
       background: var(--card);
       color: var(--accent);
-      font-size: 16px;
+      font-size: 17px;
       font-weight: 600;
       cursor: pointer;
     }
@@ -234,7 +306,7 @@
     .saved.none { color: var(--sub); }
     .check { display: flex; gap: 10px; align-items: center; margin-top: 12px; font-size: 15px; }
     .check input { width: 20px; height: 20px; accent-color: var(--accent); margin: 0; }
-    details.help { margin-top: 12px; background: var(--card); border-radius: 12px; padding: 0 14px; }
+    details.help { margin-top: 12px; background: var(--card); border-radius: 22px; padding: 0 16px; }
     details.help summary { cursor: pointer; padding: 13px 0; font-size: 15px; color: var(--accent); list-style: none; }
     details.help summary::-webkit-details-marker { display: none; }
     details.help summary::after { content: '›'; float: right; color: #c4c4c7; transition: transform 0.2s; }
@@ -280,7 +352,7 @@
         <div class="bar"><span></span><button type="button" class="bar-btn strong" id="close">Xong</button></div>
         <h1 class="large">Cài đặt</h1>
 
-        <button type="button" class="acct" id="acct" aria-label="Tài khoản — Proxy &amp; Login">
+        <button type="button" class="acct" id="acct" aria-label="Tài khoản — Hồ sơ cá nhân">
           <span id="acct-avatar"></span>
           <span class="acct-text"><b id="acct-name">Tài khoản Beincom</b><small id="acct-sub"><i></i><span>Đang kiểm tra…</span></small></span>
           <svg class="i chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg>
@@ -295,6 +367,46 @@
           </button>
         </div>
 
+        <div class="group-label">Quản trị</div>
+        <div class="list" id="admin-list">
+          <button type="button" class="row" data-sec="scan">
+            <i class="ic" style="--c: #34c759"><svg class="i" viewBox="0 0 24 24"><path d="M3 12h4l3-7 4 14 3-7h4" /></svg></i>
+            <span>Hoạt động &amp; quét</span><em id="st-scan"></em><svg class="i chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg>
+          </button>
+          <button type="button" class="row" data-sec="auto">
+            <i class="ic" style="--c: #ff9f0a"><svg class="i" viewBox="0 0 24 24"><path d="M13 3 5 13.5h6L10 21l8-10.5h-6Z" /></svg></i>
+            <span>Tự xử lý</span><em id="st-auto"></em><svg class="i chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg>
+          </button>
+          <button type="button" class="row" data-sec="watch">
+            <i class="ic" style="--c: #32ade6"><svg class="i" viewBox="0 0 24 24"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z" /><circle cx="12" cy="12" r="2.8" /></svg></i>
+            <span>Theo dõi &amp; nhắc việc</span><svg class="i chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg>
+          </button>
+          <button type="button" class="row" data-sec="rules">
+            <i class="ic" style="--c: #5856d6"><svg class="i" viewBox="0 0 24 24"><circle cx="9.5" cy="8" r="3.2" /><path d="M3.5 19v-1a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v1M16 4.8a3.2 3.2 0 0 1 0 6.4M18.5 14.3a4 4 0 0 1 2 3.5V19" /></svg></i>
+            <span>Quy tắc thành viên</span><svg class="i chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg>
+          </button>
+          <button type="button" class="row" data-sec="postRules">
+            <i class="ic" style="--c: #ff2d55"><svg class="i" viewBox="0 0 24 24"><path d="M7 3h7l5 5v13H7Z" /><path d="M14 3v5h5M10 13h6M10 17h6" /></svg></i>
+            <span>Quy tắc bài viết</span><svg class="i chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg>
+          </button>
+        </div>
+
+        <div class="group-label">Tích hợp</div>
+        <div class="list">
+          <button type="button" class="row" data-sec="chat">
+            <i class="ic" style="--c: #30b0c7"><svg class="i" viewBox="0 0 24 24"><path d="M7 4.5h10A3.5 3.5 0 0 1 20.5 8v6a3.5 3.5 0 0 1-3.5 3.5h-6.2L6.5 21v-3.5A3.5 3.5 0 0 1 3.5 14V8A3.5 3.5 0 0 1 7 4.5Z" /></svg></i>
+            <span>Chat Beincom</span><em id="st-chat"></em><svg class="i chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg>
+          </button>
+          <button type="button" class="row" data-sec="tg">
+            <i class="ic" style="--c: #2aabee"><svg class="i" viewBox="0 0 24 24"><path d="M21 3.5 3 10.8l6.3 2.4L12 20l3-4.6 4.6 3.4Z" /><path d="M9.3 13.2 21 3.5" /></svg></i>
+            <span>Telegram</span><em id="st-tg"></em><svg class="i chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg>
+          </button>
+          <button type="button" class="row" data-sec="backup">
+            <i class="ic" style="--c: #8e8e93"><svg class="i" viewBox="0 0 24 24"><path d="M7.5 18.5a4 4 0 0 1-.6-8A5.8 5.8 0 0 1 18 9.6a4.5 4.5 0 0 1-.5 8.9Z" /><path d="M12 15.5v-5M9.8 12.6 12 10.4l2.2 2.2" /></svg></i>
+            <span>Sao lưu &amp; đồng bộ</span><em id="st-sync"></em><svg class="i chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg>
+          </button>
+        </div>
+
         <div class="group-label">Ứng dụng</div>
         <div class="list">
           <button type="button" class="row" id="notif">
@@ -303,18 +415,11 @@
           </button>
           <button type="button" class="row" id="go-look">
             <i class="ic" style="--c: #af52de"><svg class="i" viewBox="0 0 24 24"><path d="M12 3.5a8.5 8.5 0 1 0 0 17c1 0 1.6-.7 1.6-1.5 0-1-.9-1.4-.9-2.4 0-.9.7-1.6 1.6-1.6h2.2a4 4 0 0 0 4-4c0-4.2-3.8-7.5-8.5-7.5Z" /><circle cx="7.8" cy="11" r=".6" /><circle cx="10.5" cy="7.6" r=".6" /><circle cx="14.6" cy="7.8" r=".6" /></svg></i>
-            <span>Giao diện Chat</span>
-            <svg class="i chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg>
-          </button>
-          <button type="button" class="row" id="go-rules">
-            <i class="ic" style="--c: #8e8e93"><svg class="i" viewBox="0 0 24 24"><path d="M4 7h9M17 7h3M4 17h3M11 17h9" /><circle cx="15" cy="7" r="2" /><circle cx="9" cy="17" r="2" /></svg></i>
-            <span>Quy tắc &amp; cài đặt quét</span>
-            <svg class="i chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg>
+            <span>Giao diện Chat</span><svg class="i chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg>
           </button>
           <button type="button" class="row" id="go-log">
             <i class="ic" style="--c: #0a84ff"><svg class="i" viewBox="0 0 24 24"><path d="M9 6.5h11M9 12h11M9 17.5h11M4.5 6.5h.01M4.5 12h.01M4.5 17.5h.01" /></svg></i>
-            <span>Nhật ký</span>
-            <svg class="i chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg>
+            <span>Nhật ký</span><svg class="i chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg>
           </button>
           <button type="button" class="row" id="reload">
             <i class="ic" style="--c: #34c759"><svg class="i" viewBox="0 0 24 24"><path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3" /><path d="M19.5 4.5v4.5H15" /></svg></i>
@@ -330,12 +435,59 @@
             <span>Hướng dẫn</span>
             <svg class="i chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg>
           </a>
-          <div class="row static">
-            <i class="ic" style="--c: #636366"><svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" /><path d="M12 11v5.5M12 7.7h.01" /></svg></i>
-            <span>Phiên bản</span><em id="ver"></em>
-          </div>
+          <button type="button" class="row" id="go-whatsnew">
+            <i class="ic" style="--c: #6b3fe7"><svg class="i" viewBox="0 0 24 24"><path d="M12 3.5l2.4 5.1 5.6.7-4.1 3.9 1 5.5L12 16l-4.9 2.7 1-5.5L4 9.3l5.6-.7Z" /></svg></i>
+            <span>Addon BeinFusion</span><em id="ver-addon"></em><svg class="i chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg>
+          </button>
+          <a class="row" href="https://github.com/phungnhan/BeinIOS/blob/main/HUONG-DAN-PWA.md#l%E1%BB%8Bch-s%E1%BB%AD-beinios" target="_blank" rel="noopener">
+            <i class="ic" style="--c: #636366"><svg class="i" viewBox="0 0 24 24"><rect x="6.5" y="2.5" width="11" height="19" rx="2.6" /><path d="M10.5 18.5h3" /></svg></i>
+            <span>BeinIOS</span><em id="ver-ios"></em><svg class="i chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg>
+          </a>
+          <button type="button" class="row" id="upd" hidden>
+            <i class="ic" style="--c: #34c759"><svg class="i" viewBox="0 0 24 24"><path d="M12 4v11M7.5 10.5 12 15l4.5-4.5M5 19.5h14" /></svg></i>
+            <span>Có bản mới · chạm để cập nhật</span>
+          </button>
+        </div>
+        <p class="group-note" id="ver-note"></p>
+      </div>
+    </div>
+
+    <!-- Tài khoản / Hồ sơ cá nhân -->
+    <div class="view tg" id="view-account" hidden>
+      <div class="tg-top" id="pf-top">
+        <div class="wrap">
+          <button type="button" class="glass round" data-back aria-label="Cài đặt"><svg class="i" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M15 5l-7 7 7 7" /></svg></button>
+          <b class="tg-title" id="pf-title"></b>
+          <button type="button" class="glass" data-close>Xong</button>
         </div>
       </div>
+      <div class="wrap">
+        <div class="profile" id="pf-head"></div>
+        <div class="list" id="pf-links" hidden></div>
+        <div class="list" id="pf-info"></div>
+        <div class="list">
+          <button type="button" class="row" id="pf-login">
+            <i class="ic" style="--c: #5e5ce6"><svg class="i" viewBox="0 0 24 24"><circle cx="8" cy="15" r="4" /><path d="M11 12l8.5-8.5M16.5 7l2.5 2.5M14.5 9l1.8 1.8" /></svg></i>
+            <span>Proxy &amp; Login</span><em id="pf-login-state"></em><svg class="i chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg>
+          </button>
+        </div>
+        <div id="pf-sections"></div>
+      </div>
+    </div>
+
+    <!-- Một nhóm cài đặt của Quản trị (trang cài đặt thật của addon, chỉ hiện nhóm đang chọn) -->
+    <div class="view dset" id="view-dset" hidden>
+      <div class="dset-top">
+        <div class="wrap">
+          <div class="bar">
+            <button type="button" class="bar-btn back" data-back><svg class="i" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M15 5l-7 7 7 7" /></svg>Cài đặt</button>
+            <button type="button" class="bar-btn strong" data-close>Xong</button>
+          </div>
+          <h1 class="large" id="dset-title"></h1>
+        </div>
+      </div>
+      <div class="dset-wait" id="dset-wait">Đang mở…</div>
+      <iframe id="f-set" title="Cài đặt quản trị"></iframe>
     </div>
 
     <!-- Proxy & Login -->
@@ -424,7 +576,13 @@
       // Trang bên trong (hoặc luồng nền) xin mở một trang của ứng dụng: chuyển đúng tab, giữ phần # (cuộc trò chuyện, tab Dashboard).
       // setup('main' | 'login'): mở Cài đặt / Cài đặt › Proxy & Login (nút Login ở Chat, Quản trị). setChatBadge: số tin chưa đọc.
       window.BeinShell = {
-        setup: (view = 'login') => openSetup(view),
+        setup: (view = 'login', arg) => openSetup(view, arg),
+        // Cài đặt › một nhóm Quản trị: trang nhúng hỏi nhóm đang chọn, báo đã sẵn sàng
+        embedSection: () => dsetSec,
+        embedReady: () => {
+          $('f-set').classList.add('ready');
+          $('dset-wait').hidden = true;
+        },
         setChatBadge: (t) => ($('badge-chat').textContent = /^\d+$/.test(String(t || '')) && Number(t) > 0 ? (Number(t) > 99 ? '99+' : String(t)) : ''),
         open(url) {
           const u = new URL(url, location.href);
@@ -530,21 +688,132 @@
         s.className = Notification.permission === 'granted' ? 'ok' : '';
       }
 
-      // ---------- Cài đặt: hai trang (Cài đặt chung · Proxy & Login) ----------
+      // ---------- Cài đặt: Cài đặt chung · Tài khoản · một nhóm Quản trị · Proxy & Login ----------
+      const VIEWS = ['main', 'account', 'dset', 'login'];
       function showView(view) {
-        const login = view === 'login';
-        const was = !$('view-login').hidden;
-        $('view-main').hidden = login;
-        $('view-login').hidden = !login;
-        const v = $(login ? 'view-login' : 'view-main');
-        if (login !== was && $('setup').classList.contains('open')) {
-          v.classList.remove('slide-in');
-          void v.offsetWidth;
-          v.classList.add('slide-in');
+        const was = VIEWS.find((v) => !$('view-' + v).hidden);
+        for (const v of VIEWS) $('view-' + v).hidden = v !== view;
+        const el = $('view-' + view);
+        if (view !== was && view !== 'main' && $('setup').classList.contains('open')) {
+          el.classList.remove('slide-in');
+          void el.offsetWidth;
+          el.classList.add('slide-in');
         }
-        v.scrollTop = 0;
+        el.scrollTop = 0;
       }
-      async function openSetup(view = 'main') {
+
+      // Nhóm cài đặt của Quản trị: tên hiện ở trang con (khớp pwa-ui.js BeinEmbed)
+      const SECTIONS = { scan: 'Hoạt động & quét', auto: 'Tự xử lý', watch: 'Theo dõi & nhắc việc', rules: 'Quy tắc thành viên', postRules: 'Quy tắc bài viết', chat: 'Chat Beincom', tg: 'Telegram', backup: 'Sao lưu & đồng bộ' };
+      let dsetSec = 'scan';
+      function openDset(sec) {
+        dsetSec = SECTIONS[sec] ? sec : 'scan';
+        $('dset-title').textContent = SECTIONS[dsetSec];
+        const f = $('f-set');
+        const embed = f.getAttribute('src') ? f.contentWindow?.BeinEmbed : null;
+        if (embed) embed.show(dsetSec);
+        else if (!f.getAttribute('src')) {
+          f.classList.remove('ready');
+          $('dset-wait').hidden = false;
+          f.src = 'dashboard.html?embed=settings#tab=settings';
+        }
+      }
+      for (const b of document.querySelectorAll('[data-sec]')) b.addEventListener('click', () => openSetup('dset', b.dataset.sec));
+
+      // Giá trị nhanh bên phải các dòng Quản trị / Tích hợp
+      async function renderAdminStates() {
+        const { settings: raw, telegram } = await page.store.get('local', ['settings', 'telegram']);
+        const st = { ...BG.DEFAULT_SETTINGS, ...raw };
+        const every = st.intervalMin % 60 ? st.intervalMin + ' phút' : st.intervalMin / 60 + ' giờ';
+        const put = (id, text, cls = '') => Object.assign($(id), { textContent: text, className: cls });
+        put('st-scan', !st.active ? 'Đang tắt' : st.dryRun ? 'Chạy thử' : every, !st.active || st.dryRun ? 'warn' : '');
+        put('st-auto', st.autoApprove || st.autoDecline || st.autoHideSpam || st.autoApprovePosts ? 'Bật' : 'Tắt');
+        put('st-chat', st.chatEnabled ? 'Bật' : 'Tắt');
+        put('st-tg', telegram?.enabled ? 'Bật' : 'Tắt');
+        put('st-sync', st.syncSettings ? 'Đồng bộ bật' : '');
+      }
+
+      // Tài khoản / Hồ sơ cá nhân kiểu Telegram: cùng nội dung với addon (BG.selfProfile) + trạng thái đăng nhập của BeinIOS
+      const CHEV = '<svg class="i chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg>';
+      const icon = (color, paths) => `<i class="ic${color ? '' : ' plain'}"${color ? ` style="--c: ${color}"` : ''}><svg class="i" viewBox="0 0 24 24">${paths}</svg></i>`;
+      const PF_ICONS = {
+        'Quét gần nhất': icon('#34c759', '<path d="M3 12h4l3-7 4 14 3-7h4" />'),
+        'Tự quét': icon('#ff9f0a', '<circle cx="12" cy="12" r="8.5" /><path d="M12 7.5V12l3 2" />'),
+        'Chạy thử': icon('#af52de', '<path d="M9.5 3.5h5M10.5 3.5v5.2L5.6 17a2.3 2.3 0 0 0 2 3.5h8.8a2.3 2.3 0 0 0 2-3.5l-4.9-8.3V3.5M7.6 14.5h8.8" />'),
+      };
+      const ICON_LINK = icon('', '<circle cx="12" cy="12" r="8.5" /><path d="M3.5 12h17M12 3.5c2.3 2.4 3.4 5.2 3.4 8.5s-1.1 6.1-3.4 8.5c-2.3-2.4-3.4-5.2-3.4-8.5s1.1-6.1 3.4-8.5Z" />');
+      const make = (tag, props = {}, ...kids) => {
+        const e = Object.assign(document.createElement(tag), props);
+        e.append(...kids);
+        return e;
+      };
+      const copyText = (label, text) => navigator.clipboard?.writeText(text).then(() => PWA.toast('Đã chép', label + ': ' + text));
+      async function renderProfile() {
+        const { state, settings, chatOverviewCache } = await page.store.get('local', ['state', 'settings', 'chatOverviewCache']);
+        const p = BG.selfProfile({ me: state?.me, chatMe: chatOverviewCache?.me, groups: state?.snapshot?.groups || [], settings: { ...BG.DEFAULT_SETTINGS, ...settings }, lastScan: state?.lastScan, lastResult: state?.lastResult });
+        const me = p.avatar ? { name: p.name, avatar: p.avatar, chatId: p.chatId } : (await PWA.me().catch(() => null)) || { name: p.name, chatId: p.chatId };
+        // Đầu trang: avatar lớn giữa, tên, @tên đăng nhập • tóm tắt
+        const name = make('b', { textContent: p.name || 'Tài khoản Beincom' });
+        if (p.verified) name.append(make('i', { className: 'vb', title: 'Đã xác minh', textContent: '✓' }));
+        const sub = make('span', { textContent: [p.username ? '@' + p.username : '', p.summary].filter(Boolean).join(' • ') || 'Chưa đọc được tài khoản — bấm Quét ngay ở Quản trị' });
+        $('pf-head').replaceChildren(PWA.avatarEl(me, 104), name, sub);
+        $('pf-title').textContent = p.name || 'Tài khoản';
+        // Thẻ hành động (chữ màu nhấn, như "Đổi ảnh đại diện" của Telegram): trang cá nhân trên Beincom
+        $('pf-links').replaceChildren(...p.links.map((l) => make('a', { className: 'row accent', href: l.href, target: '_blank', rel: 'noopener', innerHTML: ICON_LINK }, make('span', { textContent: l.label }))));
+        $('pf-links').hidden = !p.links.length;
+        // Tài khoản: dòng thông tin như hồ sơ Telegram (nhãn nhỏ trên, giá trị dưới); tên đăng nhập, mã: chạm để chép
+        const info = p.sections.find((s) => s.title === 'Tài khoản');
+        $('pf-info').replaceChildren(
+          ...(info?.rows || []).map((r) => {
+            const copy = r.copy || /^@/.test(r.value);
+            const row = make('button', { type: 'button', className: 'row info' + (copy ? '' : ' static') }, make('small', { textContent: r.label }), make('span', { className: 'v ' + (r.tone || (/^@/.test(r.value) ? 'link' : '')), textContent: r.value }));
+            if (copy) {
+              row.title = 'Chạm để chép';
+              row.addEventListener('click', () => copyText(r.label, r.value));
+            }
+            return row;
+          }),
+        );
+        // Quyền quản trị (cộng đồng: avatar tròn + vai trò), Addon (icon màu); giá trị dài xuống dòng phụ
+        const nodes = [];
+        for (const sec of p.sections) {
+          if (sec === info) continue;
+          nodes.push(make('div', { className: 'group-label', textContent: sec.title }));
+          const list = make('div', { className: 'list' });
+          for (const r of sec.rows) {
+            const row = make(r.href ? 'a' : 'div', { className: 'row' + (r.href ? '' : ' static') });
+            if (r.href) Object.assign(row, { href: r.href, target: '_blank', rel: 'noopener' });
+            if (r.href) row.append(PWA.avatarEl({ name: r.label }, 32));
+            else row.insertAdjacentHTML('beforeend', PF_ICONS[r.label] || icon('#8e8e93', '<circle cx="12" cy="12" r="8.5" /><path d="M12 11v5.5M12 7.7h.01" />'));
+            if (r.href || r.value.length > 18) row.append(make('span', { className: 'two' }, make('b', { textContent: r.label }), make('small', { className: r.tone || '', textContent: r.value })));
+            else row.append(make('span', { className: 'k', textContent: r.label }), make('em', { className: r.tone || '', textContent: r.value }));
+            if (r.href) row.insertAdjacentHTML('beforeend', CHEV);
+            list.append(row);
+          }
+          if (sec.rows.length) nodes.push(list);
+          if (sec.note) nodes.push(make('p', { className: 'group-note', textContent: sec.note }));
+        }
+        $('pf-sections').replaceChildren(...nodes);
+        const st = loginState(net.config);
+        Object.assign($('pf-login-state'), { textContent: st.short, className: st.level });
+        pfScroll();
+      }
+      // Cuộn: avatar thu nhỏ, mờ dần; tên lên giữa thanh trên (nền mờ) khi tên lớn đã khuất
+      function pfScroll() {
+        const view = $('view-account');
+        const top = $('pf-top');
+        const name = $('pf-head').querySelector('b');
+        const av = $('pf-head').querySelector('.bein-avatar');
+        const y = view.scrollTop;
+        if (av) {
+          const k = Math.min(1, Math.max(0, y / 120));
+          av.style.transform = `scale(${1 - 0.4 * k})`;
+          av.style.opacity = String(1 - k);
+        }
+        top.classList.toggle('scrolled', !!name && y > name.offsetTop + name.offsetHeight - top.offsetHeight);
+      }
+      $('view-account').addEventListener('scroll', pfScroll, { passive: true });
+
+      async function openSetup(view = 'main', arg) {
         const cfg = (await net.load(), net.config);
         if (view === 'login') {
           $('proxy-url').value = cfg.proxyUrl;
@@ -557,17 +826,23 @@
           $('result').innerHTML = '';
           if (cfg.status && !cfg.status.ok) line(cfg.status.code === 'session' ? 'Phiên đăng nhập Beincom hết hạn (' + (cfg.status.host === 'chat' ? 'Chat' : 'Beincom') + ') — dán đăng nhập mới.' : 'Proxy báo lỗi lần gần nhất: ' + cfg.status.code, 'bad');
         }
+        if (view === 'account') renderProfile();
+        if (view === 'dset') openDset(arg);
+        if (view === 'main') checkUpdate();
         renderNotif();
         renderAccount();
+        renderAdminStates();
         $('setup').classList.add('open');
         showView(view);
       }
       $('close').onclick = closeSetup;
       $('close-login').onclick = closeSetup;
       $('back').onclick = () => showView('main');
-      $('acct').onclick = () => openSetup('login');
+      for (const b of document.querySelectorAll('#setup [data-back]')) b.onclick = () => showView('main');
+      for (const b of document.querySelectorAll('#setup [data-close]')) b.onclick = closeSetup;
+      $('acct').onclick = () => openSetup('account');
       $('go-login').onclick = () => openSetup('login');
-      $('go-rules').onclick = () => BeinShell.open('dashboard.html#tab=settings');
+      $('pf-login').onclick = () => openSetup('login');
       $('go-log').onclick = () => BeinShell.open('dashboard.html#tab=log');
       // Giao diện Chat: về tab Chat rồi mở bảng Giao diện của trang Chat (cả BeinFusion theme lẫn Silk)
       $('go-look').onclick = () => {
@@ -748,12 +1023,56 @@
 
       page.store.onChanged.addListener((changes, area) => {
         if ((area === 'pwa' && changes.config) || (area === 'local' && changes.chatOverviewCache)) renderAccount();
+        if (area === 'local' && (changes.settings || changes.telegram)) renderAdminStates();
+        if (area === 'local' && (changes.state || changes.chatOverviewCache) && !$('view-account').hidden) renderProfile();
       });
 
       // ---------- Khởi động ----------
       if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).catch((e) => console.warn('BeinIOS: không đăng ký được service worker', e));
-      const v = PWA.manifest().version;
-      $('ver').textContent = `${v} · BeinIOS ${PWA.VERSION}`;
+      $('ver-addon').textContent = 'v' + PWA.manifest().version;
+      $('ver-ios').textContent = PWA.VERSION;
+      // Bản mới trên GitHub Pages: so phiên bản addon (manifest.json) và BeinIOS (pwa-shim.js) với bản đang chạy. iPhone giữ
+      // ứng dụng mở nhiều ngày nên kiểm tra khi mở lại / vào Cài đặt (cách nhau ít nhất 10 phút), có bản mới thì báo một lần.
+      let checkedAt = 0;
+      let told = false;
+      const cmpVersion = (a, b) => {
+        const x = String(a).split('.').map(Number);
+        const y = String(b).split('.').map(Number);
+        for (let i = 0; i < Math.max(x.length, y.length); i++) if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) - (y[i] || 0);
+        return 0;
+      };
+      async function checkUpdate(force = false) {
+        if (!force && Date.now() - checkedAt < 10 * 60e3) return;
+        checkedAt = Date.now();
+        try {
+          const [m, shim] = await Promise.all([fetch('manifest.json', { cache: 'no-store' }).then((r) => r.json()), fetch('pwa-shim.js', { cache: 'no-store' }).then((r) => r.text())]);
+          const ios = /const VERSION = '([\d.]+)'/.exec(shim)?.[1] || PWA.VERSION;
+          const parts = [cmpVersion(m.version, PWA.manifest().version) > 0 ? 'BeinFusion v' + m.version : '', cmpVersion(ios, PWA.VERSION) > 0 ? 'BeinIOS ' + ios : ''].filter(Boolean);
+          $('upd').hidden = !parts.length;
+          $('ver-note').textContent = parts.length ? `Bản mới: ${parts.join(' · ')}.` : `Đang dùng bản mới nhất (kiểm tra lúc ${fmtTime(checkedAt)}).`;
+          if (parts.length && !told) {
+            told = true;
+            PWA.toast('Có bản mới', parts.join(' · ') + ' — chạm để cập nhật', () => location.reload(), 'bein-update');
+          }
+        } catch {
+          $('ver-note').textContent = '';
+        }
+      }
+      $('upd').onclick = () => location.reload();
+      // Addon BeinFusion: mở Quản trị rồi bảng "Có gì mới" của addon (đọc CHANGELOG.md)
+      $('go-whatsnew').onclick = () => {
+        closeSetup();
+        show('dash');
+        const tryOpen = (n) => {
+          const d = frames.dash.contentDocument;
+          const btn = d?.readyState === 'complete' && d.getElementById('btn-whatsnew');
+          if (btn) return void btn.click();
+          if (n > 0) setTimeout(() => tryOpen(n - 1), 250);
+        };
+        tryOpen(24);
+      };
+      document.addEventListener('visibilitychange', () => document.visibilityState === 'visible' && checkUpdate());
+      setTimeout(checkUpdate, 4000);
       const hash = new URLSearchParams(location.hash.slice(1));
       const start = ['chat', 'dash'].includes(location.hash.slice(1)) ? location.hash.slice(1) : 'chat';
       show(start);

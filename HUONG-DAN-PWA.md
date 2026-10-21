@@ -108,8 +108,8 @@ Vào **Cài đặt** → **Bật thông báo**. Trên iPhone, nút này chỉ c�
 
 | Tệp | Vai trò |
 |---|---|
-| `index.html` | Khung ứng dụng: thanh dưới (số tin chưa đọc trên tab Chat, việc chờ trên tab Quản trị), Cài đặt chung + trang con Proxy & Login, thông báo, huy hiệu |
-| `pwa-ui.js`, `pwa-ui.css` | Chỉnh trang Chat / Quản trị của addon cho điện thoại khi nằm trong khung ứng dụng (không sửa mã addon): nút Login thay nút Dashboard, cụm Login + avatar ở góc trên Quản trị |
+| `index.html` | Khung ứng dụng: thanh dưới (số tin chưa đọc trên tab Chat, việc chờ trên tab Quản trị), Cài đặt chung + các trang con (Tài khoản, nhóm cài đặt Quản trị / Tích hợp, Proxy & Login), báo bản mới, thông báo, huy hiệu |
+| `pwa-ui.js`, `pwa-ui.css` | Chỉnh trang Chat / Quản trị của addon cho điện thoại khi nằm trong khung ứng dụng (không sửa mã addon): nút Login thay nút Dashboard, cụm Login + avatar ở góc trên Quản trị, avatar mở Cài đặt › Tài khoản, `dashboard.html?embed=settings` chỉ hiện một nhóm cài đặt |
 | `pwa-shim.js` | Kho IndexedDB, gọi Beincom qua proxy (cookie, làm mới phiên), giả lập `chrome.*` ở trang |
 | `pwa-worker.js` | Luồng nền: giả lập `chrome.*` (alarms, notifications, tabs…), chạy `background.js` |
 | `sw.js` | Service worker: lấy bản mới trước, dùng bản lưu khi mất mạng; xử lý bấm thông báo |
@@ -148,6 +148,11 @@ node test/pwa/pwa.e2e.mjs
 
 ## Lịch sử BeinIOS
 
+- **1.4.0 (21/10/2026).** Cài đặt phân nhóm rõ, có Hồ sơ cá nhân kiểu Telegram, đi cùng addon BeinFusion 0.53.0:
+  - **Tài khoản / Hồ sơ cá nhân** (chạm thẻ tài khoản ở đầu Cài đặt, avatar ở góc trên Quản trị, dòng tài khoản / avatar ở Chat): avatar lớn giữa trang, tên, @tên đăng nhập; thẻ Trang cá nhân trên Beincom; tên đăng nhập, mã Beincom (chạm để chép), Chat; Proxy & Login; quyền quản trị theo từng cộng đồng; trạng thái quét. Cuộn xuống thì tên hiện ở thanh trên như Telegram.
+  - Tab **Quy tắc & cài đặt** rời khỏi Quản trị, vào **Cài đặt** thành hai nhóm: **Quản trị** (Hoạt động & quét, Tự xử lý, Theo dõi & nhắc việc, Quy tắc thành viên, Quy tắc bài viết) và **Tích hợp** (Chat Beincom, Telegram, Sao lưu & đồng bộ). Mỗi dòng mở đúng nhóm đó, dùng chính ô cài đặt của addon nên đủ chức năng, lưu như cũ.
+  - Cài đặt dùng thẻ bo tròn lớn, dòng cao, icon màu như Cài đặt của Telegram.
+  - Mục **Về** hiện phiên bản **addon BeinFusion** (chạm để xem Có gì mới) và **BeinIOS**. Ứng dụng tự kiểm tra bản mới trên GitHub Pages khi mở lại / vào Cài đặt; có bản mới thì báo, chạm để cập nhật.
 - **1.3.0 (21/10/2026).** Giao diện điện thoại gọn hơn, đủ chức năng:
   - **Cài đặt** thành trang cài đặt chung kiểu iPhone: thẻ tài khoản (tên, avatar, trạng thái), Proxy & Login, Thông báo, Giao diện Chat, Quy tắc & cài đặt quét, Nhật ký, Tải lại, Hướng dẫn, Phiên bản. Proxy & cookie đăng nhập nằm ở trang con **Proxy & Login**.
   - **Chat**: nút Dashboard (thanh dưới đã có tab Quản trị) đổi thành nút **Login** mở thẳng Proxy & Login, ở cả BeinFusion theme lẫn Silk.
