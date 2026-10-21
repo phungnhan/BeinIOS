@@ -2,6 +2,9 @@
 
 Mỗi bản một mục, bản mới nhất ở trên. Dashboard tự hiện các mục mới sau khi cập nhật (bấm "Có gì mới" ở cuối trang để xem lại).
 
+## v0.53.1 — 21/10/2026
+- **Trang Chat**: tin nhắn riêng với chính mình đổi tên thành **Nhật ký của tôi** (trước là "Nhật ký cá nhân"), cùng tên với mục Nhật ký của tôi trong Hồ sơ cá nhân của BeinIOS.
+
 ## v0.53.0 — 21/10/2026
 - **Hồ sơ cá nhân** của tài khoản đang đăng nhập.
   - **Cách mở**:

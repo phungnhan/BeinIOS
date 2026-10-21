@@ -1966,7 +1966,7 @@ test('chat Beincom: người dùng chat -> người Beincom, quyền kênh, thu 
   assert.equal(ct({}), null); // tin nhắn riêng cũ (không có trạng thái)
   assert.equal(BG.chatContact({ type: 'G', props: { contact_status: 'pending' } }, 'me'), null);
   assert.deepEqual(BG.dmUnread([{ id: 'r1', type: 'D', name: 'me__c9', total_msg_count: 1, props: { contact_requester_id: 'c9', contact_status: 'pending' } }], [], 'me').map((d) => [d.channelId, d.request]), [['r1', true]]);
-  // Nhật ký cá nhân (nhắn cho chính mình): không phải tin nhắn riêng chưa đọc
+  // Nhật ký của tôi (nhắn cho chính mình): không phải tin nhắn riêng chưa đọc
   assert.deepEqual(BG.dmUnread([{ id: 's1', type: 'D', name: 'me__me', total_msg_count: 5 }], [], 'me'), []);
   assert.deepEqual([BG.chatSelfDm({ type: 'D', name: 'me__me' }, 'me'), BG.chatSelfDm({ type: 'D', name: 'me__c9' }, 'me'), BG.chatSelfDm({ type: 'G', name: 'me__me' }, 'me'), BG.chatSelfDm({ type: 'D', name: '__' }, '')], [true, false, false, false]);
   assert.equal(BG.chatShareText('## Tiêu đề **đậm**\nThân bài', 'https://x/p/1'), '📢 Tiêu đề đậm\nhttps://x/p/1');
