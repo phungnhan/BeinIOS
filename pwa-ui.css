@@ -1,0 +1,56 @@
+/* BeinIOS — chỉnh trang Chat / Quản trị của addon cho điện thoại (chỉ khi chạy trong khung ứng dụng; pwa-ui.js gắn
+   html[data-host="beinios"][data-bein-page="chat|dash"]). Mã addon giữ nguyên. */
+
+/* ---------- Chat ---------- */
+html[data-host='beinios'] .bein-login svg { display: block; }
+
+/* ---------- Quản trị: thanh trên gọn — logo + (Login, avatar) một hàng; trạng thái + Quét ngay hàng dưới ---------- */
+html[data-bein-page='dash'] #btn-chat-page { display: none; } /* thanh dưới đã có Chat */
+html[data-bein-page='dash'] .bein-acct { display: flex; align-items: center; gap: 6px; margin-left: auto; }
+html[data-bein-page='dash'] .bein-icon,
+html[data-bein-page='dash'] .bein-me {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+html[data-bein-page='dash'] .bein-icon:hover,
+html[data-bein-page='dash'] .bein-icon:focus-visible { background: var(--none); color: var(--fg); }
+html[data-bein-page='dash'] .bein-me .bein-dot {
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--ok, #12a150);
+  box-shadow: 0 0 0 2px var(--surface);
+}
+html[data-bein-page='dash'] .bein-me .bein-dot.off { background: var(--warn, #d98a00); }
+html[data-bein-page='dash'] .bein-me .bein-dot.bad { background: var(--err, #d93a3a); }
+
+@media (max-width: 720px) {
+  html[data-bein-page='dash'] .topbar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    row-gap: 8px;
+    padding: 8px 14px 10px;
+  }
+  html[data-bein-page='dash'] .topbar .brand { grid-column: 1; min-width: 0; }
+  html[data-bein-page='dash'] .topbar .brand img { width: 26px; height: 26px; }
+  html[data-bein-page='dash'] .topbar .brand h1 { font-size: 17px; margin: 0; }
+  html[data-bein-page='dash'] .topbar .brand .muted.small { display: none; }
+  html[data-bein-page='dash'] .bein-acct { grid-column: 2; grid-row: 1; }
+  html[data-bein-page='dash'] .topbar .actions { grid-column: 1 / -1; grid-row: 2; display: flex; flex-wrap: nowrap; gap: 6px; min-width: 0; }
+  html[data-bein-page='dash'] .topbar .actions .pill { white-space: nowrap; }
+  html[data-bein-page='dash'] #btn-scan { margin-left: auto; padding: 6px 12px; font-size: 13px; white-space: nowrap; }
+  html[data-bein-page='dash'] .tabs { padding: 0 10px; scrollbar-width: none; }
+  html[data-bein-page='dash'] .tabs::-webkit-scrollbar { display: none; }
+}

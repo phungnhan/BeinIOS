@@ -13,7 +13,7 @@
   'use strict';
   if (G.BeinPWA) return;
   const PWA = (G.BeinPWA = {});
-  const VERSION = '1.2.0';
+  const VERSION = '1.3.0';
   PWA.VERSION = VERSION;
 
   // ---------- 1. Kho lưu trữ ----------
@@ -890,6 +890,84 @@
     openPage,
     ensureWorker,
   };
+
+  // Tài khoản đang đăng nhập: trang Chat lưu sẵn trong kho (chatOverviewCache.me); ảnh đại diện lấy qua proxy (bản trang
+  // Chat đã lưu trong Cache Storage thì dùng luôn). Link ảnh giống lib/chat.js chatAvatarUrl.
+  let meP = null;
+  PWA.me = () =>
+    (meP ||= (async () => {
+      const { chatOverviewCache: c } = await store.get('local', ['chatOverviewCache']);
+      const me = c?.me;
+      if (!me) return null;
+      const out = { name: me.fullname || me.username || '', username: me.username || '', chatId: me.chatId || '', avatar: '' };
+      const url = me.chatId ? `https://chat.beincom.com/api/v4/users/${me.chatId}/image${me.pictureAt ? '?_=' + me.pictureAt : ''}` : '';
+      if (url) {
+        try {
+          let res = (await G.caches?.open('beingroup-img-v1').then((ch) => ch.match(url)).catch(() => null)) || null;
+          if (!res) {
+            res = await G.fetch(url, { credentials: 'omit' });
+            if (!res.ok || !/^image\//.test(res.headers.get('content-type') || '')) res = null;
+          }
+          if (res) out.avatar = URL.createObjectURL(await res.blob());
+        } catch {}
+      }
+      return out;
+    })());
+  store.onChanged.addListener((ch, area) => {
+    if (area === 'local' && ch.chatOverviewCache) meP = null;
+  });
+  // Ô ảnh đại diện tròn: ảnh, hoặc chữ cái đầu trên nền chuyển sắc, hoặc hình người khi chưa biết tài khoản.
+  // Màu và chữ giống avatar của trang Chat (chat/core.js GRADIENTS, hash, initials) để cùng một người cùng một màu.
+  const AV_GRADIENTS = [
+    ['#8f63ff', '#5b2fe0'],
+    ['#ff7a59', '#e0436b'],
+    ['#2bb8a3', '#16807a'],
+    ['#4f8cff', '#2a5bd7'],
+    ['#f5a524', '#d9711c'],
+    ['#e05ab8', '#9b3dd1'],
+    ['#3fbf6f', '#1f8a4c'],
+    ['#5c6bc0', '#3949ab'],
+  ];
+  const avHash = (str) => [...String(str || '')].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7);
+  const avInitials = (name) => {
+    const w = String(name || '?').replace(/[^\p{L}\p{N}\s]/gu, ' ').trim().split(/\s+/).filter(Boolean);
+    return ((w[0]?.[0] || '?') + (w.length > 1 ? w[w.length - 1][0] : '')).toUpperCase();
+  };
+  PWA.avatarEl = (me, size = 32) => {
+    const box = document.createElement('span');
+    box.className = 'bein-avatar';
+    box.style.cssText = `display:inline-grid;place-items:center;width:${size}px;height:${size}px;border-radius:50%;overflow:hidden;flex:none;font:600 ${Math.round(size * 0.4)}px/1 -apple-system,system-ui,sans-serif;color:#fff;`;
+    if (me?.avatar) {
+      const img = document.createElement('img');
+      img.src = me.avatar;
+      img.alt = '';
+      img.style.cssText = 'width:100%;height:100%;object-fit:cover;display:block';
+      box.append(img);
+      return box;
+    }
+    const name = String(me?.name || '').trim();
+    if (!name) {
+      box.style.background = '#9aa1b5';
+      box.innerHTML = '<svg viewBox="0 0 24 24" width="60%" height="60%" fill="currentColor" aria-hidden="true"><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm0 2c-3.3 0-8 1.7-8 5v1h16v-1c0-3.3-4.7-5-8-5Z"/></svg>';
+      return box;
+    }
+    const [a, b] = AV_GRADIENTS[avHash(me.chatId || name) % AV_GRADIENTS.length];
+    box.style.background = `linear-gradient(135deg, ${a}, ${b})`;
+    box.textContent = avInitials(name);
+    return box;
+  };
+
+  // Trang Chat / Quản trị trong khung ứng dụng: lớp chỉnh giao diện điện thoại (pwa-ui.css / pwa-ui.js)
+  if (inShell) {
+    const css = document.createElement('link');
+    css.rel = 'stylesheet';
+    css.href = new URL('pwa-ui.css', PWA.base()).href;
+    document.head.append(css);
+    const js = document.createElement('script');
+    js.src = new URL('pwa-ui.js', PWA.base()).href;
+    document.head.append(js);
+  }
+
   if (!inShell && !G.__BEIN_SHELL__) {
     eventFns.add((ev) => {
       if (ev.type === 'open') openPage(ev.url);

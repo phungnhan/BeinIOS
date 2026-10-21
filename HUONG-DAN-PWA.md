@@ -50,7 +50,7 @@ Mỗi lần đẩy mã mới, ứng dụng tự nhận bản mới khi mở lạ
 
 ## Bước 4: proxy và đăng nhập Beincom
 
-Lần đầu mở, ứng dụng tự hiện **Cài đặt**. Dán **địa chỉ proxy** và **khoá proxy** trước.
+Lần đầu mở, ứng dụng tự hiện **Cài đặt › Proxy & Login**. Dán **địa chỉ proxy** và **khoá proxy** trước. Sau này vào lại trang này bằng tab **Cài đặt** → **Proxy & Login**, hoặc bấm nút **Login** (mũi tên vào cửa) ở góc trên trang Chat / Quản trị.
 
 ### Cách nhanh: nút trong addon BeinFusion trên máy tính (bản 0.51.0 trở lên)
 
@@ -108,7 +108,8 @@ Vào **Cài đặt** → **Bật thông báo**. Trên iPhone, nút này chỉ c�
 
 | Tệp | Vai trò |
 |---|---|
-| `index.html` | Khung ứng dụng: thanh dưới, Cài đặt, thông báo, huy hiệu |
+| `index.html` | Khung ứng dụng: thanh dưới (số tin chưa đọc trên tab Chat, việc chờ trên tab Quản trị), Cài đặt chung + trang con Proxy & Login, thông báo, huy hiệu |
+| `pwa-ui.js`, `pwa-ui.css` | Chỉnh trang Chat / Quản trị của addon cho điện thoại khi nằm trong khung ứng dụng (không sửa mã addon): nút Login thay nút Dashboard, cụm Login + avatar ở góc trên Quản trị |
 | `pwa-shim.js` | Kho IndexedDB, gọi Beincom qua proxy (cookie, làm mới phiên), giả lập `chrome.*` ở trang |
 | `pwa-worker.js` | Luồng nền: giả lập `chrome.*` (alarms, notifications, tabs…), chạy `background.js` |
 | `sw.js` | Service worker: lấy bản mới trước, dùng bản lưu khi mất mạng; xử lý bấm thông báo |
@@ -147,6 +148,11 @@ node test/pwa/pwa.e2e.mjs
 
 ## Lịch sử BeinIOS
 
+- **1.3.0 (21/10/2026).** Giao diện điện thoại gọn hơn, đủ chức năng:
+  - **Cài đặt** thành trang cài đặt chung kiểu iPhone: thẻ tài khoản (tên, avatar, trạng thái), Proxy & Login, Thông báo, Giao diện Chat, Quy tắc & cài đặt quét, Nhật ký, Tải lại, Hướng dẫn, Phiên bản. Proxy & cookie đăng nhập nằm ở trang con **Proxy & Login**.
+  - **Chat**: nút Dashboard (thanh dưới đã có tab Quản trị) đổi thành nút **Login** mở thẳng Proxy & Login, ở cả BeinFusion theme lẫn Silk.
+  - **Quản trị**: góc trên bên phải có nút Login + avatar như Chat (avatar cùng màu với Chat). Ẩn nút "💬 Chat" vì đã có tab Chat; số tin chưa đọc hiện trên tab Chat ở thanh dưới. Thanh trên gọn hai hàng.
+  - Thanh dưới dùng icon nét mảnh; chấm ở tab Cài đặt chỉ hiện khi cần chú ý (chưa đăng nhập / hết phiên / lỗi proxy).
 - **1.2.0 (21/10/2026).** Mã QR ngắn qua proxy (chuyển nhanh):
   - addon mã hoá đăng nhập trên máy tính, gửi bản mã hoá lên proxy;
   - `nhap.html` lấy về và giải mã ngay trên iPhone;

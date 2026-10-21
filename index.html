@@ -8,8 +8,8 @@
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <meta name="apple-mobile-web-app-title" content="BeinIOS" />
-  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
-  <meta name="theme-color" content="#14161f" media="(prefers-color-scheme: dark)" />
+  <meta name="theme-color" content="#f2f2f7" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)" />
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="icon" href="icons/icon48.png" />
   <link rel="apple-touch-icon" href="icons/icon128.png" />
@@ -18,29 +18,31 @@
   <script src="pwa-shim.js"></script>
   <style>
     :root {
-      --bg: #f4f5f9;
+      --bg: #f2f2f7;
       --card: #ffffff;
-      --line: #e3e5ee;
-      --text: #171a24;
-      --sub: #5d6375;
+      --line: rgba(60, 60, 67, 0.16);
+      --text: #1c1c1e;
+      --sub: #8a8a8e;
       --accent: #6b3fe7;
-      --ok: #12a150;
+      --ok: #1f9d55;
       --warn: #d98a00;
-      --bad: #d93a3a;
-      --nav: rgba(255, 255, 255, 0.94);
-      --field: #f7f8fb;
+      --bad: #e5484d;
+      --nav: rgba(249, 249, 251, 0.86);
+      --field: #f2f2f7;
+      --press: rgba(0, 0, 0, 0.05);
       color-scheme: light;
     }
     @media (prefers-color-scheme: dark) {
       :root {
-        --bg: #0f1117;
-        --card: #191c26;
-        --line: #2b2f3d;
-        --text: #eef0f6;
-        --sub: #9aa1b5;
-        --accent: #9d7bff;
-        --nav: rgba(20, 22, 31, 0.94);
-        --field: #12141c;
+        --bg: #000000;
+        --card: #1c1c1e;
+        --line: rgba(84, 84, 88, 0.55);
+        --text: #f2f2f7;
+        --sub: #98989f;
+        --accent: #a184ff;
+        --nav: rgba(22, 22, 24, 0.86);
+        --field: #2c2c2e;
+        --press: rgba(255, 255, 255, 0.06);
         color-scheme: dark;
       }
     }
@@ -49,204 +51,349 @@
     body {
       background: var(--bg);
       color: var(--text);
-      font: 14px/1.45 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+      font: 16px/1.4 -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Roboto, Arial, sans-serif;
       display: flex;
       flex-direction: column;
       overflow: hidden;
     }
+    button { font: inherit; color: inherit; }
+    svg.i { display: block; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+
     main { flex: 1; position: relative; min-height: 0; }
     main iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; display: none; background: var(--bg); }
     main iframe.on { display: block; }
-    nav {
+
+    /* ---------- Thanh dưới ---------- */
+    nav.tabbar {
       display: flex;
       background: var(--nav);
-      -webkit-backdrop-filter: blur(20px);
-      backdrop-filter: blur(20px);
-      border-top: 1px solid var(--line);
+      -webkit-backdrop-filter: saturate(180%) blur(20px);
+      backdrop-filter: saturate(180%) blur(20px);
+      border-top: 0.5px solid var(--line);
       padding-bottom: env(safe-area-inset-bottom, 0px);
     }
-    nav button {
+    nav.tabbar button {
       flex: 1;
       position: relative;
       display: flex;
       flex-direction: column;
       align-items: center;
       gap: 2px;
-      padding: 7px 0 6px;
+      padding: 6px 0 4px;
       border: 0;
       background: none;
       color: var(--sub);
-      font: 500 11px/1.2 inherit;
-      font-family: inherit;
+      font-size: 10.5px;
+      font-weight: 500;
+      letter-spacing: 0.1px;
       cursor: pointer;
     }
-    nav button svg { width: 24px; height: 24px; fill: currentColor; }
-    nav button.on { color: var(--accent); }
-    nav .badge {
+    nav.tabbar svg.i { width: 26px; height: 26px; stroke-width: 1.6; }
+    nav.tabbar button.on { color: var(--accent); }
+    nav.tabbar button.on svg.i { stroke-width: 2; }
+    nav.tabbar .badge {
       position: absolute;
-      top: 3px;
-      left: calc(50% + 6px);
-      min-width: 17px;
-      height: 17px;
+      top: 2px;
+      left: calc(50% + 7px);
+      min-width: 18px;
+      height: 18px;
       padding: 0 5px;
       border-radius: 9px;
       background: var(--bad);
       color: #fff;
-      font: 600 10.5px/17px inherit;
-      font-family: inherit;
+      font-size: 11px;
+      font-weight: 600;
+      line-height: 18px;
+      text-align: center;
     }
-    nav .badge:empty { display: none; }
-    nav .dot { position: absolute; top: 6px; left: calc(50% + 8px); width: 8px; height: 8px; border-radius: 50%; background: var(--warn); }
-    nav .dot.ok { background: var(--ok); }
-    nav .dot.bad { background: var(--bad); }
+    nav.tabbar .badge:empty { display: none; }
+    nav.tabbar .dot { position: absolute; top: 5px; left: calc(50% + 9px); width: 8px; height: 8px; border-radius: 50%; display: none; }
+    nav.tabbar .dot.warn { display: block; background: var(--warn); }
+    nav.tabbar .dot.bad { display: block; background: var(--bad); }
 
-    /* Cài đặt */
+    /* ---------- Cài đặt (danh sách nhóm kiểu iPhone) ---------- */
     #setup {
       position: fixed;
       inset: 0;
       z-index: 50;
       display: none;
       background: var(--bg);
-      overflow-y: auto;
-      -webkit-overflow-scrolling: touch;
-      padding: calc(14px + env(safe-area-inset-top, 0px)) 16px calc(24px + env(safe-area-inset-bottom, 0px));
+      overflow: hidden;
     }
     #setup.open { display: block; }
-    .wrap { max-width: 560px; margin: 0 auto; }
-    .top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
-    .top h1 { font-size: 20px; margin: 0; }
-    .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px; margin-bottom: 12px; }
-    .card h2 { font-size: 15px; margin: 0 0 8px; }
-    label { display: block; font-weight: 600; font-size: 13px; margin: 10px 0 5px; }
-    input[type='url'], input[type='password'], input[type='text'], textarea {
+    .view {
+      position: absolute;
+      inset: 0;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      padding: env(safe-area-inset-top, 0px) 16px calc(28px + env(safe-area-inset-bottom, 0px));
+      background: var(--bg);
+    }
+    .view.slide-in { animation: slide-in 0.28s cubic-bezier(0.2, 0.8, 0.2, 1); }
+    @keyframes slide-in { from { transform: translateX(28%); opacity: 0.4; } to { transform: none; opacity: 1; } }
+    .wrap { max-width: 600px; margin: 0 auto; }
+    .bar { display: flex; align-items: center; justify-content: space-between; height: 44px; }
+    .bar-btn { border: 0; background: none; color: var(--accent); font-size: 17px; padding: 8px 2px; cursor: pointer; }
+    .bar-btn.strong { font-weight: 600; }
+    .bar-btn.back { display: inline-flex; align-items: center; gap: 2px; margin-left: -6px; }
+    h1.large { font-size: 32px; font-weight: 700; letter-spacing: 0.3px; margin: 2px 0 14px; }
+
+    .acct {
+      display: flex;
+      align-items: center;
+      gap: 14px;
       width: 100%;
+      padding: 12px 14px;
+      border: 0;
+      border-radius: 12px;
+      background: var(--card);
+      text-align: left;
+      cursor: pointer;
+    }
+    .acct:active, .row:active { background: var(--press); }
+    .acct-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+    .acct-text b { font-size: 18px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .acct-text small { font-size: 13px; color: var(--sub); display: flex; align-items: center; gap: 6px; }
+    .acct-text small i { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); flex: none; }
+    .acct-text small i.warn { background: var(--warn); }
+    .acct-text small i.bad { background: var(--bad); }
+
+    .group-label { margin: 24px 16px 6px; font-size: 13px; color: var(--sub); text-transform: uppercase; letter-spacing: 0.2px; }
+    .group-note { margin: 6px 16px 0; font-size: 13px; color: var(--sub); }
+    .group-note:empty { display: none; }
+    .list { background: var(--card); border-radius: 12px; overflow: hidden; }
+    .row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      width: 100%;
+      min-height: 46px;
+      padding: 7px 14px;
+      border: 0;
+      background: none;
+      color: var(--text);
+      text-align: left;
+      text-decoration: none;
+      font-size: 16px;
+      cursor: pointer;
+      position: relative;
+    }
+    .row + .row::before { content: ''; position: absolute; top: 0; right: 0; left: 55px; border-top: 0.5px solid var(--line); }
+    .status .row + .row::before { left: 14px; }
+    .row > span { flex: 1; min-width: 0; }
+    .row em { font-style: normal; color: var(--sub); font-size: 15px; white-space: nowrap; }
+    .row em.ok { color: var(--ok); }
+    .row em.warn { color: var(--warn); }
+    .row em.bad { color: var(--bad); }
+    svg.chev { width: 14px; height: 14px; color: #c4c4c7; flex: none; stroke-width: 2.4; }
+    .row.static { cursor: default; }
+    .row.static:active { background: none; }
+    .row.danger { color: var(--bad); justify-content: center; }
+    .row.danger > span { flex: none; }
+    .ic { width: 29px; height: 29px; border-radius: 7px; display: grid; place-items: center; color: #fff; background: var(--c, #8e8e93); flex: none; }
+    .ic svg.i { width: 18px; height: 18px; stroke-width: 2; }
+
+    /* Proxy & Login */
+    .status { background: var(--card); border-radius: 12px; overflow: hidden; }
+    .field { display: flex; align-items: center; gap: 10px; padding: 4px 14px; min-height: 46px; position: relative; }
+    .field + .field::before { content: ''; position: absolute; top: 0; right: 0; left: 14px; border-top: 0.5px solid var(--line); }
+    .field > span { width: 74px; flex: none; color: var(--text); }
+    .field input { flex: 1; min-width: 0; border: 0; background: transparent; color: var(--text); font: 16px/1.3 inherit; font-family: inherit; padding: 10px 0; outline: none; }
+    .field input::placeholder { color: var(--sub); }
+    .pad { padding: 14px; }
+    .btn {
+      display: block;
+      width: 100%;
+      padding: 13px 14px;
+      border: 0;
+      border-radius: 12px;
+      background: var(--card);
+      color: var(--accent);
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .btn.primary { background: var(--accent); color: #fff; }
+    .btn:disabled { opacity: 0.55; }
+    .btn:active { filter: brightness(0.95); }
+    .save-wrap { margin-top: 22px; }
+    textarea {
+      width: 100%;
+      margin-top: 10px;
+      min-height: 78px;
       padding: 10px 12px;
-      border: 1px solid var(--line);
+      border: 0;
       border-radius: 10px;
       background: var(--field);
       color: var(--text);
-      font: 16px/1.4 inherit; /* iPhone phóng to trang khi gõ vào ô chữ nhỏ hơn 16px */
-      font-family: inherit;
+      font: 15px/1.35 ui-monospace, Menlo, Consolas, monospace;
+      resize: vertical;
     }
-    textarea { min-height: 76px; resize: vertical; font: 16px/1.35 ui-monospace, Menlo, Consolas, monospace; }
-    .help { color: var(--sub); font-size: 12.5px; margin: 5px 0 0; }
-    .help ol { margin: 6px 0 0; padding-left: 20px; }
-    .help li { margin: 3px 0; }
-    .saved { font-size: 12.5px; color: var(--ok); margin-top: 5px; }
+    textarea:focus, .field input:focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent); outline-offset: 0; }
+    .saved { margin-top: 10px; font-size: 13.5px; color: var(--ok); }
     .saved.none { color: var(--sub); }
-    .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
-    .btn {
-      flex: 1 1 auto;
-      padding: 11px 14px;
-      border-radius: 11px;
-      border: 1px solid var(--line);
-      background: var(--card);
-      color: var(--text);
-      font: 600 14px/1.2 inherit;
-      font-family: inherit;
-      cursor: pointer;
-    }
-    .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-    .btn.danger { color: var(--bad); }
-    .btn:disabled { opacity: 0.6; }
-    .check { display: flex; gap: 8px; align-items: flex-start; font-weight: 500; margin-top: 12px; }
-    .check input { margin-top: 3px; }
-    #result { margin-top: 12px; font-size: 13px; }
+    .check { display: flex; gap: 10px; align-items: center; margin-top: 12px; font-size: 15px; }
+    .check input { width: 20px; height: 20px; accent-color: var(--accent); margin: 0; }
+    details.help { margin-top: 12px; background: var(--card); border-radius: 12px; padding: 0 14px; }
+    details.help summary { cursor: pointer; padding: 13px 0; font-size: 15px; color: var(--accent); list-style: none; }
+    details.help summary::-webkit-details-marker { display: none; }
+    details.help summary::after { content: '›'; float: right; color: #c4c4c7; transition: transform 0.2s; }
+    details.help[open] summary::after { transform: rotate(90deg); }
+    details.help ol { margin: 0 0 12px; padding-left: 20px; font-size: 14px; color: var(--sub); }
+    details.help li { margin: 4px 0; }
+    details.help label { display: block; font-size: 13px; color: var(--sub); margin-top: 6px; }
+    details.help textarea { margin: 6px 0 12px; }
+    details.help b { color: var(--text); font-weight: 600; }
+    #result { margin: 12px 4px 0; font-size: 14px; }
     #result p { margin: 4px 0; }
     #result .ok { color: var(--ok); }
     #result .warn { color: var(--warn); }
     #result .bad { color: var(--bad); }
-    details.alt { margin-top: 12px; border-top: 1px solid var(--line); padding-top: 10px; }
-    details.alt summary { cursor: pointer; font-weight: 600; font-size: 13px; color: var(--sub); }
-    #addon-text { margin-top: 10px; }
-    .note { border-left: 3px solid var(--warn); padding: 6px 10px; background: color-mix(in srgb, var(--warn) 9%, transparent); border-radius: 6px; font-size: 12.5px; color: var(--text); margin-top: 10px; }
-    code { font-size: 12px; background: var(--field); border: 1px solid var(--line); border-radius: 5px; padding: 0 4px; }
-    .ver { color: var(--sub); font-size: 12px; text-align: center; margin-top: 8px; }
+    code { font-size: 12.5px; background: var(--field); border-radius: 5px; padding: 0 4px; }
   </style>
 </head>
 <body>
   <main>
     <iframe id="f-chat" title="Chat" data-src="chat.html"></iframe>
-    <iframe id="f-dash" title="Dashboard" data-src="dashboard.html"></iframe>
+    <iframe id="f-dash" title="Quản trị" data-src="dashboard.html"></iframe>
   </main>
 
-  <nav aria-label="Ứng dụng">
+  <nav class="tabbar" aria-label="Ứng dụng">
     <button type="button" data-tab="chat" class="on">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 2H4a2 2 0 0 0-2 2v18l4-4h14a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2Zm0 14H5.2L4 17.2V4h16v12Z" /></svg>
-      <span>Chat</span>
+      <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.5h10A3.5 3.5 0 0 1 20.5 8v6a3.5 3.5 0 0 1-3.5 3.5h-6.2L6.5 21v-3.5A3.5 3.5 0 0 1 3.5 14V8A3.5 3.5 0 0 1 7 4.5Z" /></svg>
+      <span>Chat</span><b class="badge" id="badge-chat"></b>
     </button>
     <button type="button" data-tab="dash">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 13h8V3H3v10Zm0 8h8v-6H3v6Zm10 0h8V11h-8v10Zm0-18v6h8V3h-8Z" /></svg>
+      <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="6.5" height="6.5" rx="1.8" /><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.8" /><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.8" /><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.8" /></svg>
       <span>Quản trị</span><b class="badge" id="badge"></b>
     </button>
     <button type="button" data-tab="setup">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.14 12.94a7.07 7.07 0 0 0 0-1.88l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.49.49 0 0 0-.59-.22l-2.39.96a7.04 7.04 0 0 0-1.62-.94l-.36-2.54A.48.48 0 0 0 13.93 2h-3.84a.48.48 0 0 0-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.49.49 0 0 0-.59.22L2.74 8.87a.48.48 0 0 0 .12.61l2.03 1.58a7.07 7.07 0 0 0 0 1.88l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32a.49.49 0 0 0-.12-.61l-2.01-1.58ZM12 15.6a3.6 3.6 0 1 1 0-7.2 3.6 3.6 0 0 1 0 7.2Z" /></svg>
+      <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h9M17 7h3M4 17h3M11 17h9" /><circle cx="15" cy="7" r="2.2" /><circle cx="9" cy="17" r="2.2" /></svg>
       <span>Cài đặt</span><i class="dot" id="dot"></i>
     </button>
   </nav>
 
   <section id="setup" aria-label="Cài đặt">
-    <div class="wrap">
-      <div class="top">
-        <h1>Proxy &amp; đăng nhập</h1>
-        <button type="button" class="btn" id="close" style="flex: none">Xong</button>
-      </div>
+    <!-- Cài đặt chung -->
+    <div class="view" id="view-main">
+      <div class="wrap">
+        <div class="bar"><span></span><button type="button" class="bar-btn strong" id="close">Xong</button></div>
+        <h1 class="large">Cài đặt</h1>
 
-      <div class="card">
-        <h2>1. Cloudflare proxy</h2>
-        <p class="help">Trình duyệt không cho trang này gọi thẳng Beincom, nên mọi lệnh đi qua proxy của riêng bạn (dựng theo <code>cloudflare-proxy/README.md</code>).</p>
-        <label for="proxy-url">Địa chỉ proxy</label>
-        <input type="url" id="proxy-url" inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="https://beinios-proxy.<tên>.workers.dev" />
-        <label for="proxy-key">Khoá proxy (PROXY_KEY)</label>
-        <input type="password" id="proxy-key" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Khoá bí mật đã đặt cho proxy" />
-      </div>
+        <button type="button" class="acct" id="acct" aria-label="Tài khoản — Proxy &amp; Login">
+          <span id="acct-avatar"></span>
+          <span class="acct-text"><b id="acct-name">Tài khoản Beincom</b><small id="acct-sub"><i></i><span>Đang kiểm tra…</span></small></span>
+          <svg class="i chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg>
+        </button>
 
-      <div class="card">
-        <h2>2. Đăng nhập Beincom</h2>
-        <div class="help">
-          <b>Cách nhanh — addon BeinFusion trên máy tính</b> (bản 0.51.0 trở lên):
-          <ol>
-            <li>Mở <b>cửa sổ ẩn danh</b> Chrome / Edge, đăng nhập <code>group.beincom.com</code> (dùng Chat thì mở cả <code>chat.beincom.com</code>). Addon cần được bật "Cho phép ở chế độ ẩn danh".</li>
-            <li>Dashboard của addon → <b>Cài đặt</b> → 📱 BeinIOS → <b>Chuyển đăng nhập sang BeinIOS</b>.</li>
-            <li>Lần đầu: trong hộp đó mở mục <b>Proxy của BeinIOS</b>, điền địa chỉ + khoá proxy (như ở trên) để có <b>mã QR ngắn</b>. Quét mã bằng Camera iPhone → mở trang → bấm <b>Chép</b>.</li>
-            <li>Bấm <b>Dán từ addon</b> dưới đây. Đóng cửa sổ ẩn danh — <b>đừng bấm Đăng xuất</b>.</li>
-          </ol>
+        <div class="group-label">Kết nối</div>
+        <div class="list">
+          <button type="button" class="row" id="go-login">
+            <i class="ic" style="--c: #5e5ce6"><svg class="i" viewBox="0 0 24 24"><circle cx="8" cy="15" r="4" /><path d="M11 12l8.5-8.5M16.5 7l2.5 2.5M14.5 9l1.8 1.8" /></svg></i>
+            <span>Proxy &amp; Login</span><em id="login-state"></em>
+            <svg class="i chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg>
+          </button>
         </div>
-        <div class="row"><button type="button" class="btn primary" id="paste-addon">Dán từ addon</button></div>
-        <textarea id="addon-text" hidden autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Không đọc được bộ nhớ tạm — dán đoạn BEINIOS1… vào đây rồi bấm Lưu &amp; kiểm tra"></textarea>
-        <div class="saved none" id="saved-all"></div>
-        <details class="alt" id="curl-box">
-          <summary>Cách khác: dán cURL từ F12 (không cần addon)</summary>
-          <ol class="help">
-            <li>Mở <b>cửa sổ ẩn danh</b>, đăng nhập <code>group.beincom.com</code>.</li>
-            <li>Bấm F12 → thẻ <b>Network</b>, gõ <code>api.beincom.com</code> vào ô lọc, tải lại trang.</li>
-            <li>Chuột phải một dòng (ví dụ <code>permissions</code>) → <b>Copy</b> → <b>Copy as cURL (bash)</b>, dán vào ô dưới.</li>
-            <li>Dùng Chat: mở <code>chat.beincom.com</code> trong cùng cửa sổ, lọc <code>chat.beincom.com/api</code>, làm như trên với ô thứ hai.</li>
+
+        <div class="group-label">Ứng dụng</div>
+        <div class="list">
+          <button type="button" class="row" id="notif">
+            <i class="ic" style="--c: #ff3b30"><svg class="i" viewBox="0 0 24 24"><path d="M6.5 16.5v-5a5.5 5.5 0 0 1 11 0v5l1.5 1.5H5Z" /><path d="M10 20.5a2 2 0 0 0 4 0" /></svg></i>
+            <span>Thông báo</span><em id="notif-state"></em>
+          </button>
+          <button type="button" class="row" id="go-look">
+            <i class="ic" style="--c: #af52de"><svg class="i" viewBox="0 0 24 24"><path d="M12 3.5a8.5 8.5 0 1 0 0 17c1 0 1.6-.7 1.6-1.5 0-1-.9-1.4-.9-2.4 0-.9.7-1.6 1.6-1.6h2.2a4 4 0 0 0 4-4c0-4.2-3.8-7.5-8.5-7.5Z" /><circle cx="7.8" cy="11" r=".6" /><circle cx="10.5" cy="7.6" r=".6" /><circle cx="14.6" cy="7.8" r=".6" /></svg></i>
+            <span>Giao diện Chat</span>
+            <svg class="i chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg>
+          </button>
+          <button type="button" class="row" id="go-rules">
+            <i class="ic" style="--c: #8e8e93"><svg class="i" viewBox="0 0 24 24"><path d="M4 7h9M17 7h3M4 17h3M11 17h9" /><circle cx="15" cy="7" r="2" /><circle cx="9" cy="17" r="2" /></svg></i>
+            <span>Quy tắc &amp; cài đặt quét</span>
+            <svg class="i chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg>
+          </button>
+          <button type="button" class="row" id="go-log">
+            <i class="ic" style="--c: #0a84ff"><svg class="i" viewBox="0 0 24 24"><path d="M9 6.5h11M9 12h11M9 17.5h11M4.5 6.5h.01M4.5 12h.01M4.5 17.5h.01" /></svg></i>
+            <span>Nhật ký</span>
+            <svg class="i chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg>
+          </button>
+          <button type="button" class="row" id="reload">
+            <i class="ic" style="--c: #34c759"><svg class="i" viewBox="0 0 24 24"><path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3" /><path d="M19.5 4.5v4.5H15" /></svg></i>
+            <span>Tải lại ứng dụng</span>
+          </button>
+        </div>
+        <p class="group-note" id="notif-help"></p>
+
+        <div class="group-label">Về</div>
+        <div class="list">
+          <a class="row" href="https://github.com/phungnhan/BeinIOS/blob/main/HUONG-DAN-PWA.md" target="_blank" rel="noopener">
+            <i class="ic" style="--c: #ff9500"><svg class="i" viewBox="0 0 24 24"><path d="M5 5.5A2.5 2.5 0 0 1 7.5 3H19v15H7.5A2.5 2.5 0 0 0 5 20.5Z" /><path d="M5 20.5A2.5 2.5 0 0 1 7.5 18H19v3H7.5" /></svg></i>
+            <span>Hướng dẫn</span>
+            <svg class="i chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg>
+          </a>
+          <div class="row static">
+            <i class="ic" style="--c: #636366"><svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" /><path d="M12 11v5.5M12 7.7h.01" /></svg></i>
+            <span>Phiên bản</span><em id="ver"></em>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Proxy & Login -->
+    <div class="view" id="view-login" hidden>
+      <div class="wrap">
+        <div class="bar">
+          <button type="button" class="bar-btn back" id="back"><svg class="i" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M15 5l-7 7 7 7" /></svg>Cài đặt</button>
+          <button type="button" class="bar-btn strong" id="close-login">Xong</button>
+        </div>
+        <h1 class="large">Proxy &amp; Login</h1>
+
+        <div class="status" id="status">
+          <div class="row static"><span>Proxy</span><em id="st-proxy"></em></div>
+          <div class="row static"><span>Đăng nhập Beincom</span><em id="st-login"></em></div>
+        </div>
+
+        <div class="group-label">Cloudflare proxy</div>
+        <div class="list">
+          <label class="field"><span>Địa chỉ</span><input type="url" id="proxy-url" inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="https://beinios-proxy.….workers.dev" /></label>
+          <label class="field"><span>Khoá</span><input type="password" id="proxy-key" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="PROXY_KEY" /></label>
+        </div>
+        <p class="group-note">Mọi lệnh tới Beincom đi qua proxy của riêng bạn (dựng theo <code>cloudflare-proxy/README.md</code>).</p>
+
+        <div class="group-label">Đăng nhập Beincom</div>
+        <div class="list pad">
+          <button type="button" class="btn primary" id="paste-addon">Dán từ addon</button>
+          <textarea id="addon-text" hidden autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Không đọc được bộ nhớ tạm — dán đoạn BEINIOS1… vào đây rồi bấm Lưu &amp; kiểm tra"></textarea>
+          <div class="saved none" id="saved-all"></div>
+          <label class="check"><input type="checkbox" id="refresh" checked /> Tự làm mới phiên khi Beincom báo hết hạn</label>
+        </div>
+        <details class="help">
+          <summary>Cách lấy đăng nhập từ addon</summary>
+          <ol>
+            <li>Trên máy tính, mở <b>cửa sổ ẩn danh</b>, đăng nhập <code>group.beincom.com</code> (dùng Chat thì mở cả <code>chat.beincom.com</code>).</li>
+            <li>Dashboard addon → <b>Cài đặt</b> → 📱 BeinIOS → <b>Chuyển đăng nhập sang BeinIOS</b>. Lần đầu: mở mục <b>Proxy của BeinIOS</b>, điền địa chỉ + khoá như trên để có <b>mã QR ngắn</b>.</li>
+            <li>Quét mã bằng Camera iPhone → mở trang → <b>Chép</b>, rồi bấm <b>Dán từ addon</b> ở đây.</li>
+            <li>Đóng cửa sổ ẩn danh — <b>đừng bấm Đăng xuất</b>.</li>
+          </ol>
+        </details>
+        <details class="help" id="curl-box">
+          <summary>Cách khác: dán cURL từ F12</summary>
+          <ol>
+            <li>Cửa sổ ẩn danh, đăng nhập <code>group.beincom.com</code>, bấm F12 → <b>Network</b>, lọc <code>api.beincom.com</code>, tải lại trang.</li>
+            <li>Chuột phải một dòng → <b>Copy</b> → <b>Copy as cURL (bash)</b>, dán vào ô dưới. Chat: làm tương tự với <code>chat.beincom.com/api</code>.</li>
           </ol>
           <label for="cookie-api">Beincom (api.beincom.com)</label>
           <textarea id="cookie-api" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Dán cURL hoặc dòng Cookie… (để trống: giữ cookie đã lưu)"></textarea>
           <label for="cookie-chat">Chat (chat.beincom.com) — không bắt buộc</label>
           <textarea id="cookie-chat" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Dán cURL hoặc dòng Cookie của chat.beincom.com…"></textarea>
         </details>
-        <label class="check"><input type="checkbox" id="refresh" checked /> Tự làm mới phiên khi Beincom báo hết hạn (như web Beincom)</label>
-        <div class="note">Cookie là chìa khoá tài khoản: chỉ dán trên máy của bạn, xoá tin / ghi chú dùng để chuyển cookie sang điện thoại. Dữ liệu lưu trong trình duyệt theo địa chỉ <code id="origin"></code> — các trang GitHub Pages khác của bạn cùng địa chỉ này cũng đọc được, đừng đưa mã của người khác lên đó.</div>
-      </div>
 
-      <div class="row">
-        <button type="button" class="btn primary" id="save">Lưu &amp; kiểm tra</button>
-      </div>
-      <div id="result" role="status" aria-live="polite"></div>
+        <div class="save-wrap"><button type="button" class="btn primary" id="save">Lưu &amp; kiểm tra</button></div>
+        <div id="result" role="status" aria-live="polite"></div>
+        <p class="group-note">Đăng nhập là chìa khoá tài khoản Beincom: chỉ dán trên máy của bạn, xoá ghi chú / tin dùng để chuyển. Dữ liệu lưu theo địa chỉ <code id="origin"></code> — các trang GitHub Pages khác của bạn cùng địa chỉ này cũng đọc được.</p>
 
-      <div class="card" style="margin-top: 14px">
-        <h2>Khác</h2>
-        <div class="row" style="margin-top: 4px">
-          <button type="button" class="btn" id="notif">Bật thông báo</button>
-          <button type="button" class="btn" id="reload">Tải lại trang</button>
-          <button type="button" class="btn danger" id="forget">Xoá cookie khỏi máy này</button>
-        </div>
-        <p class="help" id="notif-help">Thông báo trên iPhone cần thêm ứng dụng vào Màn hình chính (Chia sẻ → Thêm vào MH chính) rồi mở từ biểu tượng.</p>
+        <div class="group-label">&nbsp;</div>
+        <div class="list"><button type="button" class="row danger" id="forget"><span>Xoá đăng nhập khỏi máy này</span></button></div>
       </div>
-      <p class="ver" id="ver"></p>
     </div>
   </section>
 
@@ -257,12 +404,12 @@
       const { net } = page;
       const $ = (id) => document.getElementById(id);
       const frames = { chat: $('f-chat'), dash: $('f-dash') };
-      const tabs = [...document.querySelectorAll('nav button')];
+      const tabs = [...document.querySelectorAll('nav.tabbar button')];
       let current = 'chat';
 
       // ---------- Chuyển tab ----------
       function show(tab) {
-        if (tab === 'setup') return openSetup();
+        if (tab === 'setup') return openSetup('main');
         current = tab;
         for (const b of tabs) b.classList.toggle('on', b.dataset.tab === tab);
         for (const [k, f] of Object.entries(frames)) {
@@ -272,10 +419,13 @@
         history.replaceState(null, '', '#' + tab);
       }
       tabs.forEach((b) => b.addEventListener('click', () => show(b.dataset.tab)));
+      const closeSetup = () => $('setup').classList.remove('open');
 
-      // Trang bên trong (hoặc luồng nền) xin mở một trang của ứng dụng: chuyển đúng tab, giữ phần # (cuộc trò chuyện, tab Dashboard)
+      // Trang bên trong (hoặc luồng nền) xin mở một trang của ứng dụng: chuyển đúng tab, giữ phần # (cuộc trò chuyện, tab Dashboard).
+      // setup('main' | 'login'): mở Cài đặt / Cài đặt › Proxy & Login (nút Login ở Chat, Quản trị). setChatBadge: số tin chưa đọc.
       window.BeinShell = {
-        setup: () => openSetup(),
+        setup: (view = 'login') => openSetup(view),
+        setChatBadge: (t) => ($('badge-chat').textContent = /^\d+$/.test(String(t || '')) && Number(t) > 0 ? (Number(t) > 99 ? '99+' : String(t)) : ''),
         open(url) {
           const u = new URL(url, location.href);
           const tab = /\/chat\.html$/.test(u.pathname) ? 'chat' : 'dash';
@@ -285,6 +435,7 @@
           // Dashboard tự đổi tab theo phần #; trang Chat chỉ đọc # lúc mở nên mở lại
           if (!now || now.pathname !== new URL(target, location.href).pathname || (tab === 'chat' && now.hash !== u.hash)) f.src = target;
           else if (now.hash !== u.hash) f.contentWindow.location.hash = u.hash;
+          closeSetup();
           show(tab);
         },
       };
@@ -313,7 +464,7 @@
       page.onEvent(async (ev) => {
         if (ev.type === 'badge') setBadge(ev.text);
         if (ev.type === 'open') {
-          if (/^https:\/\/group\.beincom\.com\/?(login\/?)?$/.test(ev.url)) return void openSetup(); // thông báo "cần đăng nhập"
+          if (/^https:\/\/group\.beincom\.com\/?(login\/?)?$/.test(ev.url)) return void openSetup('login'); // thông báo "cần đăng nhập"
           try {
             const u = new URL(ev.url, location.href);
             if (u.origin === location.origin) return void BeinShell.open(u.href);
@@ -330,40 +481,105 @@
         if (e.data?.type === 'bein-notification-click') clickNote(e.data.id);
       });
 
-      // ---------- Cài đặt ----------
+      // ---------- Trạng thái đăng nhập (thẻ tài khoản, dòng Proxy & Login, chấm trên tab Cài đặt) ----------
       const fmtTime = (t) => (t ? new Date(t).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' }) : '');
-      function renderSaved(cfg) {
-        const n = (k) => Object.keys(cfg.jars[k] || {}).length;
-        const el = $('saved-all');
-        el.className = 'saved' + (n('api') ? '' : ' none');
-        el.textContent = n('api') ? `Đã lưu ${n('api')} cookie Beincom · ${n('chat') ? n('chat') + ' cookie Chat' : 'Chat dùng cookie Beincom'}${n('auth') ? ' · ' + n('auth') + ' cookie máy chủ đăng nhập' : ''}${cfg.savedAt ? ' (lúc ' + fmtTime(cfg.savedAt) + ')' : ''}.` : 'Chưa có cookie đăng nhập.';
-      }
-      function renderDot(cfg) {
-        const dot = $('dot');
-        dot.className = 'dot';
-        if (!cfg || !cfg.proxyUrl || !cfg.proxyKey || !Object.keys(cfg.jars.api).length) return (dot.title = 'Chưa cài đặt');
+      const nJar = (cfg, k) => Object.keys(cfg?.jars?.[k] || {}).length;
+      // -> { level: ok | warn | bad, short, long }
+      function loginState(cfg) {
+        if (!cfg?.proxyUrl || !cfg?.proxyKey) return { level: 'warn', short: 'Chưa cài', long: 'Chưa cài proxy — chạm để cài' };
+        if (!nJar(cfg, 'api')) return { level: 'warn', short: 'Chưa đăng nhập', long: 'Chưa đăng nhập — chạm để dán đăng nhập' };
         if (cfg.status && !cfg.status.ok) {
-          dot.classList.add('bad');
-          dot.title = cfg.status.code === 'session' ? 'Phiên đăng nhập hết hạn — dán cookie mới' : 'Proxy báo lỗi: ' + cfg.status.code;
-        } else dot.classList.add('ok');
-      }
-      async function openSetup() {
-        const cfg = (await net.load(), net.config);
-        $('proxy-url').value = cfg.proxyUrl;
-        $('proxy-key').value = cfg.proxyKey;
-        $('refresh').checked = cfg.refresh !== false;
-        $('cookie-api').value = '';
-        $('cookie-chat').value = '';
-        $('addon-text').value = '';
-        $('addon-text').hidden = true;
-        renderSaved(cfg);
-        if (cfg.status && !cfg.status.ok) {
-          $('result').innerHTML = '';
-          line(cfg.status.code === 'session' ? 'Phiên đăng nhập Beincom hết hạn (' + (cfg.status.host === 'chat' ? 'Chat' : 'Beincom') + ') — dán cookie mới.' : 'Proxy báo lỗi lần gần nhất: ' + cfg.status.code, 'bad');
+          if (cfg.status.code === 'session') return { level: 'bad', short: 'Hết phiên', long: `Phiên ${cfg.status.host === 'chat' ? 'Chat' : 'Beincom'} hết hạn — chạm để đăng nhập lại` };
+          return { level: 'bad', short: 'Lỗi proxy', long: 'Proxy báo lỗi: ' + cfg.status.code };
         }
-        $('setup').classList.add('open');
+        return { level: 'ok', short: 'Đã kết nối', long: 'Đã đăng nhập' };
       }
-      $('close').onclick = () => $('setup').classList.remove('open');
+      function renderSaved(cfg) {
+        const el = $('saved-all');
+        el.className = 'saved' + (nJar(cfg, 'api') ? '' : ' none');
+        el.textContent = nJar(cfg, 'api') ? `Đã lưu ${nJar(cfg, 'api')} cookie Beincom · ${nJar(cfg, 'chat') ? nJar(cfg, 'chat') + ' cookie Chat' : 'Chat dùng cookie Beincom'}${nJar(cfg, 'auth') ? ' · ' + nJar(cfg, 'auth') + ' cookie máy chủ đăng nhập' : ''}${cfg.savedAt ? ' (lúc ' + fmtTime(cfg.savedAt) + ')' : ''}.` : 'Chưa có cookie đăng nhập.';
+      }
+      async function renderAccount() {
+        const cfg = net.config;
+        const st = loginState(cfg);
+        const dot = $('dot');
+        dot.className = 'dot' + (st.level === 'ok' ? '' : ' ' + st.level);
+        dot.title = st.long;
+        $('login-state').className = st.level;
+        $('login-state').textContent = st.short;
+        let proxyHost = '';
+        try {
+          proxyHost = cfg?.proxyUrl ? new URL(cfg.proxyUrl).hostname : '';
+        } catch {}
+        $('st-proxy').textContent = proxyHost || 'Chưa cài';
+        $('st-proxy').className = proxyHost ? '' : 'warn';
+        $('st-login').textContent = st.short;
+        $('st-login').className = st.level;
+        renderSaved(cfg);
+        const me = await PWA.me().catch(() => null);
+        $('acct-avatar').replaceChildren(PWA.avatarEl(me, 52));
+        $('acct-name').textContent = me?.name || 'Tài khoản Beincom';
+        const sub = $('acct-sub');
+        sub.querySelector('i').className = st.level === 'ok' ? '' : st.level;
+        sub.querySelector('span').textContent = st.level === 'ok' && me?.username ? `@${me.username} · Đã đăng nhập` : st.long;
+      }
+      function renderNotif() {
+        const s = $('notif-state');
+        if (!('Notification' in window)) return void ((s.textContent = 'Không hỗ trợ'), (s.className = ''));
+        s.textContent = Notification.permission === 'granted' ? 'Đã bật' : Notification.permission === 'denied' ? 'Bị chặn' : 'Tắt';
+        s.className = Notification.permission === 'granted' ? 'ok' : '';
+      }
+
+      // ---------- Cài đặt: hai trang (Cài đặt chung · Proxy & Login) ----------
+      function showView(view) {
+        const login = view === 'login';
+        const was = !$('view-login').hidden;
+        $('view-main').hidden = login;
+        $('view-login').hidden = !login;
+        const v = $(login ? 'view-login' : 'view-main');
+        if (login !== was && $('setup').classList.contains('open')) {
+          v.classList.remove('slide-in');
+          void v.offsetWidth;
+          v.classList.add('slide-in');
+        }
+        v.scrollTop = 0;
+      }
+      async function openSetup(view = 'main') {
+        const cfg = (await net.load(), net.config);
+        if (view === 'login') {
+          $('proxy-url').value = cfg.proxyUrl;
+          $('proxy-key').value = cfg.proxyKey;
+          $('refresh').checked = cfg.refresh !== false;
+          $('cookie-api').value = '';
+          $('cookie-chat').value = '';
+          $('addon-text').value = '';
+          $('addon-text').hidden = true;
+          $('result').innerHTML = '';
+          if (cfg.status && !cfg.status.ok) line(cfg.status.code === 'session' ? 'Phiên đăng nhập Beincom hết hạn (' + (cfg.status.host === 'chat' ? 'Chat' : 'Beincom') + ') — dán đăng nhập mới.' : 'Proxy báo lỗi lần gần nhất: ' + cfg.status.code, 'bad');
+        }
+        renderNotif();
+        renderAccount();
+        $('setup').classList.add('open');
+        showView(view);
+      }
+      $('close').onclick = closeSetup;
+      $('close-login').onclick = closeSetup;
+      $('back').onclick = () => showView('main');
+      $('acct').onclick = () => openSetup('login');
+      $('go-login').onclick = () => openSetup('login');
+      $('go-rules').onclick = () => BeinShell.open('dashboard.html#tab=settings');
+      $('go-log').onclick = () => BeinShell.open('dashboard.html#tab=log');
+      // Giao diện Chat: về tab Chat rồi mở bảng Giao diện của trang Chat (cả BeinFusion theme lẫn Silk)
+      $('go-look').onclick = () => {
+        closeSetup();
+        show('chat');
+        const tryOpen = (n) => {
+          const btn = frames.chat.contentDocument?.getElementById('btn-look');
+          if (btn) return void btn.click();
+          if (n > 0) setTimeout(() => tryOpen(n - 1), 250);
+        };
+        tryOpen(20);
+      };
       $('origin').textContent = location.origin;
 
       function line(text, cls = '') {
@@ -483,7 +699,7 @@
           $('cookie-chat').value = '';
           $('addon-text').value = '';
           $('addon-text').hidden = true;
-          renderSaved(net.config);
+          renderAccount();
           navigator.storage?.persist?.().catch(() => {});
           if (!proxyUrl || !net.config.proxyKey) return line('Đã lưu. Điền địa chỉ và khoá proxy để kiểm tra.', 'warn');
           const ok = await check();
@@ -515,38 +731,37 @@
       };
 
       $('forget').onclick = async () => {
-        if (!confirm('Xoá cookie Beincom khỏi máy này? (Proxy vẫn giữ nguyên.)')) return;
+        if (!confirm('Xoá đăng nhập Beincom khỏi máy này? (Proxy vẫn giữ nguyên.)')) return;
         await net.saveConfig({ jars: { api: {}, chat: {}, auth: {} }, status: null, savedAt: 0 });
-        renderSaved(net.config);
+        renderAccount();
         $('result').innerHTML = '';
-        line('Đã xoá cookie.', 'ok');
+        line('Đã xoá đăng nhập.', 'ok');
       };
       $('reload').onclick = () => location.reload();
       $('notif').onclick = async () => {
         if (!('Notification' in window)) return void ($('notif-help').textContent = 'Trình duyệt này chưa cho web gửi thông báo. Trên iPhone: thêm vào Màn hình chính rồi mở từ biểu tượng.');
+        if (Notification.permission === 'granted') return void ($('notif-help').textContent = 'Thông báo đang bật. Muốn tắt: Cài đặt của iPhone → Thông báo → BeinIOS.');
         const r = await Notification.requestPermission();
-        $('notif-help').textContent = r === 'granted' ? 'Đã bật thông báo.' : 'Chưa được phép gửi thông báo (có thể bật lại trong Cài đặt của máy).';
+        $('notif-help').textContent = r === 'granted' ? 'Đã bật thông báo.' : 'Chưa được phép gửi thông báo (có thể bật lại trong Cài đặt của iPhone → Thông báo → BeinIOS).';
+        renderNotif();
       };
 
       page.store.onChanged.addListener((changes, area) => {
-        if (area === 'pwa' && changes.config) {
-          renderDot(net.config);
-          if ($('setup').classList.contains('open')) renderSaved(net.config);
-        }
+        if ((area === 'pwa' && changes.config) || (area === 'local' && changes.chatOverviewCache)) renderAccount();
       });
 
       // ---------- Khởi động ----------
       if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).catch((e) => console.warn('BeinIOS: không đăng ký được service worker', e));
       const v = PWA.manifest().version;
-      $('ver').textContent = `BeinFusion v${v} · BeinIOS ${PWA.VERSION}`;
+      $('ver').textContent = `${v} · BeinIOS ${PWA.VERSION}`;
       const hash = new URLSearchParams(location.hash.slice(1));
       const start = ['chat', 'dash'].includes(location.hash.slice(1)) ? location.hash.slice(1) : 'chat';
       show(start);
       if (hash.get('notif')) clickNote(hash.get('notif'));
       net.load().then(() => {
         const cfg = net.config;
-        renderDot(cfg);
-        if (!cfg.proxyUrl || !cfg.proxyKey || !Object.keys(cfg.jars.api).length) openSetup();
+        renderAccount();
+        if (!cfg.proxyUrl || !cfg.proxyKey || !Object.keys(cfg.jars.api).length) openSetup('login');
       });
     })();
   </script>

@@ -3,7 +3,7 @@
 // - Không đụng tới yêu cầu gửi Beincom / proxy (luôn đi thẳng ra mạng, không lưu).
 // - Bấm thông báo hệ thống: mở / đưa ứng dụng lên trước và báo cho trang biết thông báo nào được bấm.
 const CACHE = 'beinios-app';
-const SHELL = ['./', './index.html', './chat.html', './dashboard.html', './pwa-shim.js', './pwa-worker.js', './manifest.webmanifest', './manifest.json', './icons/icon128.png'];
+const SHELL = ['./', './index.html', './chat.html', './dashboard.html', './pwa-shim.js', './pwa-worker.js', './pwa-ui.js', './pwa-ui.css', './manifest.webmanifest', './manifest.json', './icons/icon128.png'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(

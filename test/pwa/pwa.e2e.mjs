@@ -221,11 +221,87 @@ try {
   const reg = await page.ev("navigator.serviceWorker.getRegistration().then((r) => !!r)");
   ok(reg, 'service worker đã đăng ký');
 
+  // ---------- Giao diện điện thoại: Cài đặt chung, Proxy & Login, nút Login ở Chat / Quản trị ----------
+  const isOpen = (view) => `document.getElementById('setup').classList.contains('open') && !document.getElementById('view-${view}').hidden`;
+  await page.ev(`document.querySelector('nav button[data-tab="setup"]').click(); true`);
+  await page.until(new Function(`return ${isOpen('main')} && document.getElementById('view-login').hidden`), 5000);
+  await page.until(() => document.getElementById('login-state').textContent === 'Đã kết nối' && /tester/.test(document.getElementById('acct-name').textContent), 8000);
+  const acct = await page.ev(`({ name: document.getElementById('acct-name').textContent, sub: document.getElementById('acct-sub').textContent, dot: document.getElementById('dot').className, notif: document.getElementById('notif-state').textContent })`);
+  ok(acct.name === 'tester' && /@tester · Đã đăng nhập/.test(acct.sub) && acct.dot === 'dot', 'Cài đặt chung: thẻ tài khoản (tên Chat, đã đăng nhập), không chấm cảnh báo khi ổn');
+  await sleep(450); // chờ hiệu ứng trượt xong
+  await page.ev("document.querySelectorAll('#bein-toasts [role=status]').forEach((t) => t.remove()), true");
+  await shot('6-cai-dat-chung');
+  await page.ev(`document.getElementById('go-login').click(); true`);
+  await page.until(new Function(`return ${isOpen('login')} && document.getElementById('view-main').hidden`), 3000);
+  const stx = await page.ev(`({ proxy: document.getElementById('st-proxy').textContent, login: document.getElementById('st-login').textContent, url: document.getElementById('proxy-url').value })`);
+  ok(stx.proxy === '127.0.0.1' && stx.login === 'Đã kết nối' && stx.url === 'http://127.0.0.1:' + proxyPort, 'Proxy & Login: trang con có trạng thái proxy / đăng nhập');
+  await sleep(450); // chờ hiệu ứng trượt xong
+  await page.ev("document.querySelectorAll('#bein-toasts [role=status]').forEach((t) => t.remove()), true");
+  await shot('7-proxy-login');
+  if (SHOTS) {
+    // Chế độ tối (chỉ khi chụp màn hình để xem bằng mắt)
+    await page.cdp('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: 'dark' }] });
+    await page.ev(`document.getElementById('back').click(); true`);
+    await sleep(450);
+    await shot('6b-cai-dat-toi');
+    await page.ev(`document.getElementById('go-login').click(); true`);
+    await sleep(450);
+    await page.cdp('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: 'light' }] });
+  }
+  await page.ev(`document.getElementById('back').click(); true`);
+  await page.until(new Function(`return ${isOpen('main')}`), 3000);
+  await page.ev(`document.getElementById('go-rules').click(); true`);
+  await page.until(() => !document.getElementById('setup').classList.contains('open') && document.querySelector('nav button.on')?.dataset.tab === 'dash' && /tab=settings/.test(document.getElementById('f-dash').contentWindow.location.hash), 5000);
+  ok(true, 'Cài đặt → Quy tắc & cài đặt quét: mở đúng mục ở Quản trị');
+  // Quản trị: góc trên có Login + avatar; nút "💬 Chat" ẩn (thanh dưới đã có)
+  await page.until(() => !!document.getElementById('f-dash').contentDocument?.querySelector('.topbar .bein-acct .bein-me'), 8000);
+  const dashUi = await page.ev(frame('f-dash', "({ login: !!document.querySelector('.bein-acct .bein-login'), me: document.querySelector('.bein-acct .bein-me .bein-avatar')?.textContent, chatBtn: getComputedStyle(document.getElementById('btn-chat-page')).display })"));
+  ok(dashUi.login && dashUi.me === 'T' && dashUi.chatBtn === 'none', 'Quản trị: góc trên có Login + avatar, ẩn nút Chat');
+  await page.ev(`document.getElementById('f-dash').contentWindow.location.hash = '#tab=overview'; true`);
+  await sleep(400);
+  await shot('8-quan-tri');
+  await page.ev(frame('f-dash', "document.querySelector('.bein-acct .bein-login').click(), true"));
+  await page.until(new Function(`return ${isOpen('login')}`), 3000);
+  await page.ev(`document.getElementById('close-login').click(); true`);
+  await page.ev(frame('f-dash', "document.querySelector('.bein-acct .bein-me').click(), true"));
+  await page.until(new Function(`return ${isOpen('main')}`), 3000);
+  ok(true, 'Quản trị: nút Login mở Proxy & Login, avatar mở Cài đặt chung');
+  await page.ev(`document.getElementById('close').click(); document.querySelector('nav button[data-tab="chat"]').click(); true`);
+  // Chat (BeinFusion theme): nút Dashboard đổi thành Login
+  const chatUi = await page.ev(frame('f-chat', "({ dash: !!document.querySelector('.head-actions a[href=\"dashboard.html\"]'), login: !!document.querySelector('.head-actions .bein-login') })"));
+  ok(!chatUi.dash && chatUi.login, 'Chat (BeinFusion theme): nút Dashboard đổi thành Login');
+  await page.ev(frame('f-chat', "document.querySelector('.head-actions .bein-login').click(), true"));
+  await page.until(new Function(`return ${isOpen('login')}`), 3000);
+  await page.ev(`document.getElementById('close-login').click(); true`);
+  ok(true, 'Chat: nút Login mở Proxy & Login');
+  await page.ev(frame('f-chat', "document.getElementById('cnt-unread').textContent = '3', true"));
+  await page.until(() => document.getElementById('badge-chat').textContent === '3', 3000);
+  await page.ev(frame('f-chat', "document.getElementById('cnt-unread').textContent = '', true"));
+  await page.until(() => document.getElementById('badge-chat').textContent === '', 3000);
+  ok(true, 'số tin chưa đọc của Chat hiện trên tab Chat ở thanh dưới');
+  // Chat (Silk): nút Dashboard cạnh avatar cũng đổi thành Login
+  await page.ev(`BeinPWA.page.store.set('local', { chatLook: { ui: 'silk' } }).then(() => true)`);
+  await page.until(() => !!document.getElementById('f-chat').contentDocument?.querySelector('.space-actions .bein-login'), 6000);
+  const silk = await page.ev(frame('f-chat', "({ dash: !!document.querySelector('.space-actions a[href=\"dashboard.html\"]'), me: !!document.querySelector('.space-actions .space-me') })"));
+  ok(!silk.dash && silk.me, 'Chat (Silk): nút Dashboard cạnh avatar đổi thành Login');
+  await sleep(300);
+  await shot('9-chat-silk');
+  await page.ev(`BeinPWA.page.store.set('local', { chatLook: { ui: 'theme' } }).then(() => true)`);
+  // Cài đặt → Giao diện Chat
+  await page.ev(`document.querySelector('nav button[data-tab="setup"]').click(); true`);
+  await page.until(new Function(`return ${isOpen('main')}`), 3000);
+  await page.ev(`document.getElementById('go-look').click(); true`);
+  await page.until(() => !!document.getElementById('f-chat').contentDocument?.getElementById('look')?.open && !document.getElementById('setup').classList.contains('open'), 5000);
+  ok(true, 'Cài đặt → Giao diện Chat: mở bảng Giao diện của trang Chat');
+  await page.ev(frame('f-chat', "document.getElementById('look').close(), true"));
+
   // ---------- Dán từ addon (addon BeinFusion → Chuyển đăng nhập sang BeinIOS) ----------
   // Đoạn như addon tạo: phiên cũ (sid=old2) + cookie máy chủ đăng nhập (rt=r1) -> BeinIOS phải tự làm mới bằng ô auth
   const transfer = 'BEINIOS1.' + Buffer.from(JSON.stringify({ v: 1, t: Date.now(), c: [['sid', 'old2', 5], ['Bic.Auth.deviceId', 'dev-addon', 5], ['rt', 'r1', 4], ['MMAUTHTOKEN', 'm1', 2]] })).toString('base64url');
   await page.ev(`document.querySelector('nav button[data-tab="setup"]').click(); true`);
   await page.until(() => document.getElementById('setup').classList.contains('open'), 5000);
+  await page.ev(`document.getElementById('go-login').click(); true`);
+  await page.until(() => !document.getElementById('view-login').hidden, 3000);
   await page.ev(`Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { readText: async () => '' } }); document.getElementById('paste-addon').click(); true`);
   await page.until(() => !document.getElementById('addon-text').hidden, 5000);
   ok(true, 'Dán từ addon khi bộ nhớ tạm trống: hiện ô để dán tay');
