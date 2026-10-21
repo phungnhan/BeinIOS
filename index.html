@@ -35,6 +35,7 @@
       --press: rgba(0, 0, 0, 0.05);
       --glass: rgba(255, 255, 255, 0.78);
       --glass-edge: rgba(0, 0, 0, 0.06);
+      --sw-off: #e9e9eb;
       color-scheme: light;
     }
     @media (prefers-color-scheme: dark) {
@@ -50,6 +51,7 @@
         --press: rgba(255, 255, 255, 0.06);
         --glass: rgba(44, 44, 46, 0.72);
         --glass-edge: rgba(255, 255, 255, 0.08);
+        --sw-off: #39393d;
         color-scheme: dark;
       }
     }
@@ -162,9 +164,10 @@
     .view[hidden] { display: none !important; }
     .view.slide-in { animation: slide-in 0.28s cubic-bezier(0.2, 0.8, 0.2, 1); }
     /* Cài đặt › một nhóm của Quản trị: tiêu đề + trang cài đặt thật của addon bên dưới */
-    .view.dset { display: flex; flex-direction: column; overflow: hidden; padding-left: 0; padding-right: 0; padding-bottom: 0; }
-    .dset-top { padding: 0 16px; }
-    .dset-top h1.large { margin-bottom: 4px; }
+    .view.dset { display: flex; flex-direction: column; overflow: hidden; padding: 0; }
+    .view.dset .tg-top { margin: 0; }
+    .bar.main-bar { height: 60px; }
+    .tg .tg-top + .wrap > :first-child { margin-top: 10px; }
     #f-set { flex: 1; width: 100%; border: 0; background: transparent; opacity: 0; transition: opacity 0.2s; }
     #f-set.ready { opacity: 1; }
     .dset-wait { position: absolute; left: 0; right: 0; top: 150px; text-align: center; color: var(--sub); font-size: 14px; }
@@ -345,8 +348,21 @@
     textarea:focus, .field input:focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent); outline-offset: 0; }
     .saved { margin-top: 10px; font-size: 13.5px; color: var(--ok); }
     .saved.none { color: var(--sub); }
-    .check { display: flex; gap: 10px; align-items: center; margin-top: 12px; font-size: 15px; }
-    .check input { width: 20px; height: 20px; accent-color: var(--accent); margin: 0; }
+    /* Công tắc kiểu iPhone (núm vẽ bằng nền), cùng kiểu với các trang cài đặt con */
+    .check { display: flex; flex-direction: row-reverse; justify-content: space-between; gap: 12px; align-items: center; margin-top: 14px; font-size: 16px; cursor: pointer; }
+    .check input {
+      -webkit-appearance: none;
+      appearance: none;
+      flex: none;
+      width: 51px;
+      height: 31px;
+      margin: 0;
+      border-radius: 31px;
+      background: var(--sw-off) radial-gradient(circle, #fff 12.5px, rgba(0, 0, 0, 0.08) 13px, transparent 14px) no-repeat 0 0 / 31px 31px;
+      transition: background-color 0.2s, background-position 0.2s;
+      cursor: pointer;
+    }
+    .check input:checked { background-color: #34c759; background-position: 20px 0; }
     details.help { margin-top: 12px; background: var(--card); border-radius: 22px; padding: 0 16px; }
     details.help summary { cursor: pointer; padding: 13px 0; font-size: 15px; color: var(--accent); list-style: none; }
     details.help summary::-webkit-details-marker { display: none; }
@@ -390,7 +406,7 @@
     <!-- Cài đặt chung -->
     <div class="view" id="view-main">
       <div class="wrap">
-        <div class="bar"><span></span><button type="button" class="bar-btn strong" id="close">Xong</button></div>
+        <div class="bar main-bar"><span></span><button type="button" class="glass" id="close">Xong</button></div>
         <h1 class="large">Cài đặt</h1>
 
         <button type="button" class="acct" id="acct" aria-label="Tài khoản — Hồ sơ cá nhân">
@@ -398,15 +414,6 @@
           <span class="acct-text"><b id="acct-name">Tài khoản Beincom</b><small id="acct-sub"><i></i><span>Đang kiểm tra…</span></small></span>
           <svg class="i chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg>
         </button>
-
-        <div class="group-label">Kết nối</div>
-        <div class="list">
-          <button type="button" class="row" id="go-login">
-            <i class="ic" style="--c: #5e5ce6"><svg class="i" viewBox="0 0 24 24"><circle cx="8" cy="15" r="4" /><path d="M11 12l8.5-8.5M16.5 7l2.5 2.5M14.5 9l1.8 1.8" /></svg></i>
-            <span>Proxy &amp; Login</span><em id="login-state"></em>
-            <svg class="i chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg>
-          </button>
-        </div>
 
         <div class="group-label">Quản trị</div>
         <div class="list" id="admin-list">
@@ -444,7 +451,7 @@
           </button>
           <button type="button" class="row" data-sec="backup">
             <i class="ic" style="--c: #8e8e93"><svg class="i" viewBox="0 0 24 24"><path d="M7.5 18.5a4 4 0 0 1-.6-8A5.8 5.8 0 0 1 18 9.6a4.5 4.5 0 0 1-.5 8.9Z" /><path d="M12 15.5v-5M9.8 12.6 12 10.4l2.2 2.2" /></svg></i>
-            <span>Sao lưu &amp; đồng bộ</span><em id="st-sync"></em><svg class="i chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg>
+            <span>Sao lưu &amp; khôi phục</span><svg class="i chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg>
           </button>
         </div>
 
@@ -468,6 +475,15 @@
           </button>
         </div>
         <p class="group-note" id="notif-help"></p>
+
+        <div class="group-label">Kết nối</div>
+        <div class="list">
+          <button type="button" class="row" id="go-login">
+            <i class="ic" style="--c: #5e5ce6"><svg class="i" viewBox="0 0 24 24"><circle cx="8" cy="15" r="4" /><path d="M11 12l8.5-8.5M16.5 7l2.5 2.5M14.5 9l1.8 1.8" /></svg></i>
+            <span>Proxy &amp; Login</span><em id="login-state"></em>
+            <svg class="i chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg>
+          </button>
+        </div>
 
         <div class="group-label">Về</div>
         <div class="list">
@@ -544,13 +560,11 @@
 
     <!-- Một nhóm cài đặt của Quản trị (trang cài đặt thật của addon, chỉ hiện nhóm đang chọn) -->
     <div class="view dset" id="view-dset" hidden>
-      <div class="dset-top">
+      <div class="tg-top">
         <div class="wrap">
-          <div class="bar">
-            <button type="button" class="bar-btn back" data-back><svg class="i" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M15 5l-7 7 7 7" /></svg>Cài đặt</button>
-            <button type="button" class="bar-btn strong" data-close>Xong</button>
-          </div>
-          <h1 class="large" id="dset-title"></h1>
+          <button type="button" class="glass round" data-back aria-label="Cài đặt"><svg class="i" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M15 5l-7 7 7 7" /></svg></button>
+          <b class="tg-title on" id="dset-title"></b>
+          <button type="button" class="glass" data-close>Xong</button>
         </div>
       </div>
       <div class="dset-wait" id="dset-wait">Đang mở…</div>
@@ -558,13 +572,15 @@
     </div>
 
     <!-- Proxy & Login -->
-    <div class="view" id="view-login" hidden>
-      <div class="wrap">
-        <div class="bar">
-          <button type="button" class="bar-btn back" id="back"><svg class="i" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M15 5l-7 7 7 7" /></svg>Cài đặt</button>
-          <button type="button" class="bar-btn strong" id="close-login">Xong</button>
+    <div class="view tg" id="view-login" hidden>
+      <div class="tg-top" id="login-top">
+        <div class="wrap">
+          <button type="button" class="glass round" id="back" aria-label="Cài đặt"><svg class="i" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M15 5l-7 7 7 7" /></svg></button>
+          <b class="tg-title on">Proxy &amp; Login</b>
+          <button type="button" class="glass" id="close-login">Xong</button>
         </div>
-        <h1 class="large">Proxy &amp; Login</h1>
+      </div>
+      <div class="wrap">
 
         <div class="status" id="status">
           <div class="row static"><span>Proxy</span><em id="st-proxy"></em></div>
@@ -665,8 +681,8 @@
           const f = frames[tab];
           const target = (tab === 'dash' && /\/popup\.html$/.test(u.pathname) ? 'dashboard.html' : u.pathname.split('/').pop()) + u.hash;
           const now = f.getAttribute('src') ? new URL(f.contentWindow.location.href) : null;
-          // Dashboard tự đổi tab theo phần #; trang Chat chỉ đọc # lúc mở nên mở lại
-          if (!now || now.pathname !== new URL(target, location.href).pathname || (tab === 'chat' && now.hash !== u.hash)) f.src = target;
+          // Trang đã mở: chỉ đổi phần # — Dashboard tự đổi tab, trang Chat tự mở cuộc trò chuyện (pwa-ui.js) theo #
+          if (!now || now.pathname !== new URL(target, location.href).pathname) f.src = target;
           else if (now.hash !== u.hash) f.contentWindow.location.hash = u.hash;
           closeSetup();
           show(tab);
@@ -779,7 +795,7 @@
       }
 
       // Nhóm cài đặt của Quản trị: tên hiện ở trang con (khớp pwa-ui.js BeinEmbed)
-      const SECTIONS = { scan: 'Hoạt động & quét', auto: 'Tự xử lý', watch: 'Theo dõi & nhắc việc', rules: 'Quy tắc thành viên', postRules: 'Quy tắc bài viết', chat: 'Chat Beincom', tg: 'Telegram', backup: 'Sao lưu & đồng bộ' };
+      const SECTIONS = { scan: 'Hoạt động & quét', auto: 'Tự xử lý', watch: 'Theo dõi & nhắc việc', rules: 'Quy tắc thành viên', postRules: 'Quy tắc bài viết', chat: 'Chat Beincom', tg: 'Telegram', backup: 'Sao lưu & khôi phục' };
       let dsetSec = 'scan';
       function openDset(sec) {
         dsetSec = SECTIONS[sec] ? sec : 'scan';
@@ -805,7 +821,6 @@
         put('st-auto', st.autoApprove || st.autoDecline || st.autoHideSpam || st.autoApprovePosts ? 'Bật' : 'Tắt');
         put('st-chat', st.chatEnabled ? 'Bật' : 'Tắt');
         put('st-tg', telegram?.enabled ? 'Bật' : 'Tắt');
-        put('st-sync', st.syncSettings ? 'Đồng bộ bật' : '');
       }
 
       // Tài khoản / Hồ sơ cá nhân kiểu Telegram: cùng nội dung với addon (BG.selfProfile) + trạng thái đăng nhập của BeinIOS
@@ -864,13 +879,13 @@
         pfScroll();
       }
 
-      // Nhật ký của tôi = Nhật ký cá nhân của Beincom Chat (tin nhắn cho chính mình, như "Tin nhắn đã lưu" của Telegram)
+      // Nhật ký của tôi: tin nhắn cho chính mình trên Beincom Chat (như "Tin nhắn đã lưu" của Telegram)
       $('pf-notes').onclick = async () => {
         const { chatOverviewCache: c, settings } = await page.store.get('local', ['chatOverviewCache', 'settings']);
         const self = (c?.dms || []).find((d) => d.self && d.id);
         if (self) return void BeinShell.open('chat.html#c=' + encodeURIComponent(self.id));
         BeinShell.open('chat.html');
-        PWA.toast('Nhật ký của tôi', settings?.chatEnabled ? 'Chưa có Nhật ký cá nhân — nhắn cho chính mình một tin trên Beincom Chat để tạo.' : 'Bật Chat Beincom (tab Chat) để dùng Nhật ký cá nhân.');
+        PWA.toast('Nhật ký của tôi', settings?.chatEnabled ? 'Chưa có — nhắn cho chính mình một tin trên Beincom Chat để tạo.' : 'Bật Chat Beincom (tab Chat) để dùng Nhật ký của tôi.');
       };
 
       // ---------- Trang cá nhân: thông tin cơ bản trên Beincom ----------
@@ -1045,7 +1060,8 @@
         bpNote('');
       };
       $('bp-edit').onclick = () => (bpEditing ? saveBp() : bp && setBpEdit(true));
-      $('view-bprofile').addEventListener('scroll', () => $('bp-top').classList.toggle('scrolled', $('view-bprofile').scrollTop > 4), { passive: true });
+      // Trang con cuộn: thanh trên có nền mờ (như Telegram)
+      for (const [view, top] of [['view-bprofile', 'bp-top'], ['view-login', 'login-top']]) $(view).addEventListener('scroll', () => $(top).classList.toggle('scrolled', $(view).scrollTop > 4), { passive: true });
       // Cuộn: avatar thu nhỏ, mờ dần; tên lên giữa thanh trên (nền mờ) khi tên lớn đã khuất
       function pfScroll() {
         const view = $('view-account');

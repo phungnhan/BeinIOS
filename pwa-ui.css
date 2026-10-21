@@ -60,18 +60,169 @@ html[data-bein-page='dash'] .bein-acct .me-btn { display: inline-grid; place-ite
 html[data-bein-page='dash'] .bein-acct .me-btn[hidden] { display: none; }
 html[data-bein-page='dash']:not([data-bein-embed]) #tabs [data-tab='settings'] { display: none; }
 
-/* ---------- Cài đặt › một nhóm (dashboard.html?embed=settings): chỉ nội dung nhóm đang chọn ---------- */
+/* ---------- Cài đặt › một nhóm (dashboard.html?embed=settings): chỉ nội dung nhóm đang chọn, cùng kiểu với trang Cài đặt
+   của ứng dụng (kiểu Telegram / iPhone): nền xám, các dòng liền nhau thành thẻ trắng bo 22px có vạch ngăn, công tắc iPhone
+   bên phải, tiêu đề nhóm chữ hoa xám ngoài thẻ, ghi chú xám dưới thẻ ---------- */
+html[data-bein-embed] {
+  --bg: #f2f2f7;
+  --surface: #ffffff;
+  --fg: #1c1c1e;
+  --muted: #8a8a8e;
+  --border: rgba(60, 60, 67, 0.16);
+  --accent: #6b3fe7;
+  --accent-soft: rgba(107, 63, 231, 0.12);
+  --ok: #1f9d55;
+  --field: #f2f2f7;
+  --sw-off: #e9e9eb;
+  --sw-on: #34c759;
+}
+@media (prefers-color-scheme: dark) {
+  html[data-bein-embed] {
+    --bg: #000000;
+    --surface: #1c1c1e;
+    --fg: #f2f2f7;
+    --muted: #98989f;
+    --border: rgba(84, 84, 88, 0.55);
+    --accent: #a184ff;
+    --accent-soft: rgba(161, 132, 255, 0.16);
+    --field: #2c2c2e;
+    --sw-off: #39393d;
+    --sw-on: #30d158;
+  }
+}
 html[data-bein-embed] .topbar,
 html[data-bein-embed] .tabs,
 html[data-bein-embed] #banner,
 html[data-bein-embed] .to-top,
-html[data-bein-embed] .tab-toc { display: none !important; }
+html[data-bein-embed] .tab-toc,
+html[data-bein-embed] .card-fold,
+html[data-bein-embed] body > footer,
+html[data-bein-embed] #settings .group-title { display: none !important; }
 html[data-bein-embed] .bein-off { display: none !important; }
-html[data-bein-embed] body { background: transparent; }
-html[data-bein-embed] main { display: block; padding: 2px 16px 120px; } /* chừa chỗ cho thanh dưới nổi của ứng dụng */
-html[data-bein-embed] main > [data-tab='settings']:not(.bein-off) { display: block; margin: 0 0 14px; }
-html[data-bein-embed] .rules-col > .card { margin-bottom: 14px; }
+html[data-bein-embed] body { background: transparent; font: 15px/1.4 -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Roboto, Arial, sans-serif; }
+html[data-bein-embed] main { display: block; padding: 4px 16px 120px; } /* chừa chỗ cho thanh dưới nổi của ứng dụng */
+html[data-bein-embed] main > [data-tab='settings']:not(.bein-off) { display: block; margin: 0; }
+html[data-bein-embed] .rules-grid { display: block; }
+
+/* Thẻ của addon thành khung trong suốt; tiêu đề thẻ / tiêu đề nhóm là nhãn nhóm */
+html[data-bein-embed] .card { background: none; border: 0; box-shadow: none; padding: 0; margin: 0; border-radius: 0; }
+html[data-bein-embed] .card-head { display: flex; align-items: baseline; margin: 24px 18px 7px; min-height: 0; }
+html[data-bein-embed] .rules-col > .card:first-child > .card-head,
+html[data-bein-embed] #settings > .card-head { margin-top: 8px; }
 html[data-bein-embed] #settings > .card-head h2 { display: none; }
-html[data-bein-embed] #settings > .card-head { min-height: 0; margin: 0; }
-html[data-bein-embed] #settings > .group:first-of-type,
-html[data-bein-embed] #settings > .master-row { margin-top: 0; }
+html[data-bein-embed] .card-head h2,
+html[data-bein-embed] .group-title { font-size: 13px; font-weight: 400; color: var(--muted); text-transform: uppercase; letter-spacing: 0.2px; }
+html[data-bein-embed] .group-title { margin: 24px 18px 7px; }
+html[data-bein-embed] .group { display: block; gap: 0; margin: 0; padding: 0; border: 0; }
+html[data-bein-embed] .sync-group { display: none !important; } /* đồng bộ qua tài khoản Chrome / Edge: chỉ có ở addon */
+html[data-bein-embed] :is(.intro, .scope-note, .group > .muted.small, .tg-act-hint, #backup-hint, #storage-usage) { display: block; margin: 7px 18px 0; font-size: 13px; line-height: 1.4; color: var(--muted); }
+html[data-bein-embed] :is(.scope-note, #backup-hint, #storage-usage):empty { display: none; }
+
+/* Dòng: các dòng liền nhau ghép thành một thẻ (bo góc đầu / cuối, vạch ngăn thụt trái 16px) */
+html[data-bein-embed] :is(.switch-row, .select-row, .text-row, .sync-row, .master-row, label.check) {
+  display: flex;
+  gap: 12px;
+  min-height: 52px;
+  margin: 0;
+  padding: 11px 16px;
+  border: 0;
+  border-radius: 0;
+  background-color: var(--surface);
+  color: var(--fg);
+  font-size: 13px;
+}
+html[data-bein-embed] :is(.switch-row, .select-row, .text-row, .sync-row, .master-row, label.check):not(:is(.switch-row, .select-row, .text-row, .sync-row, .master-row, label.check) + *) { border-top-left-radius: 22px; border-top-right-radius: 22px; margin-top: 8px; }
+html[data-bein-embed] :is(.switch-row, .select-row, .text-row, .sync-row, .master-row, label.check):not(:has(+ :is(.switch-row, .select-row, .text-row, .sync-row, .master-row, label.check))) { border-bottom-left-radius: 22px; border-bottom-right-radius: 22px; }
+html[data-bein-embed] :is(.switch-row, .select-row, .text-row, .sync-row, .master-row, label.check) + :is(.switch-row, .select-row, .text-row, .sync-row, .master-row, label.check) {
+  background-image: linear-gradient(var(--border), var(--border));
+  background-size: calc(100% - 16px) 0.5px;
+  background-position: 100% 0;
+  background-repeat: no-repeat;
+}
+html[data-bein-embed] .card-head + :is(.switch-row, .select-row, .text-row, .sync-row, .master-row),
+html[data-bein-embed] .group-title + :is(.switch-row, .select-row, .text-row, .sync-row, .master-row, label.check) { margin-top: 0; }
+/* Chữ trong dòng: tên mục cỡ 17 thường, mô tả xám nhỏ */
+html[data-bein-embed] :is(.switch-row, .select-row, .text-row, .master-row) > span:not(.toggle):not(.inline):not(.tg-line) { flex: 1; min-width: 0; }
+html[data-bein-embed] :is(.switch-row, .select-row, .text-row, .master-row) > span > b:first-child,
+html[data-bein-embed] .master-row #master-title { font-size: 17px; font-weight: 400; color: var(--fg); }
+html[data-bein-embed] :is(.switch-row, .select-row, .text-row, .master-row) .muted.small { display: inline-block; margin-top: 2px; font-size: 13px; line-height: 1.35; }
+html[data-bein-embed] label.check { align-items: center; font-size: 15px; }
+html[data-bein-embed] .switch-row.dry { border: 0; }
+html[data-bein-embed] .is-disabled { opacity: 0.45; }
+
+/* Công tắc iPhone ở bên phải (ô tích của addon; nút gạt chính) — núm vẽ bằng nền nên không cần ::before */
+html[data-bein-embed] :is(.switch-row, label.check) { flex-direction: row-reverse; justify-content: space-between; align-items: center; cursor: pointer; }
+html[data-bein-embed] :is(.switch-row, label.check) > input[type='checkbox'] {
+  -webkit-appearance: none;
+  appearance: none;
+  flex: none;
+  width: 51px;
+  height: 31px;
+  margin: 0;
+  border: 0;
+  border-radius: 31px;
+  background-color: var(--sw-off);
+  background-image: radial-gradient(circle, #fff 12.5px, rgba(0, 0, 0, 0.08) 13px, transparent 14px);
+  background-size: 31px 31px;
+  background-position: 0 0;
+  background-repeat: no-repeat;
+  transition: background-color 0.2s, background-position 0.2s;
+  cursor: pointer;
+}
+html[data-bein-embed] :is(.switch-row, label.check) > input[type='checkbox']:checked { background-color: var(--sw-on); background-position: 20px 0; }
+html[data-bein-embed] :is(.switch-row, label.check) > input[type='checkbox']:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+html[data-bein-embed] .master-row { flex-direction: row-reverse; align-items: center; justify-content: space-between; border-radius: 22px; }
+html[data-bein-embed] .master-row.off { background-color: var(--surface); }
+html[data-bein-embed] .master-row.off #master-title { color: var(--err); }
+html[data-bein-embed] .toggle { width: 51px; height: 31px; }
+html[data-bein-embed] .toggle i { background: var(--sw-off); }
+html[data-bein-embed] .toggle i::after { top: 2px; left: 2px; width: 27px; height: 27px; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15); }
+html[data-bein-embed] .toggle input:checked + i { background: var(--sw-on); }
+
+/* Chọn (chu kỳ quét…): giá trị xám bên phải như Cài đặt iPhone */
+html[data-bein-embed] .select-row { flex-direction: row; align-items: center; justify-content: space-between; }
+html[data-bein-embed] .select-row select {
+  flex: none;
+  width: auto;
+  max-width: 46%;
+  padding: 4px 18px 4px 0;
+  border: 0;
+  background: transparent url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238a8a8e' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M8 10l4 4 4-4'/%3E%3C/svg%3E") no-repeat right center / 14px;
+  color: var(--muted);
+  font-size: 16px;
+  text-align: right;
+  -webkit-appearance: none;
+  appearance: none;
+}
+html[data-bein-embed] .select-row .inline { flex: none; color: var(--muted); font-size: 15px; }
+html[data-bein-embed] .select-row .inline input { width: 64px; text-align: right; }
+/* Ô chữ (từ khoá, token…): nhãn trên, ô nền xám dưới */
+html[data-bein-embed] .text-row { flex-direction: column; align-items: stretch; gap: 8px; }
+html[data-bein-embed] :is(textarea, input[type='text'], input[type='password'], input[type='number'], input[type='search']) {
+  padding: 9px 12px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--field);
+  color: var(--fg);
+  font-size: 16px; /* 16px: iPhone không tự phóng to khi gõ */
+}
+html[data-bein-embed] :is(textarea, input):focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent); outline-offset: 0; }
+html[data-bein-embed] .tg-line { display: flex; gap: 8px; align-items: center; }
+/* Phạm vi quy tắc, nút sao lưu…: khối trắng bo tròn */
+html[data-bein-embed] :is(.scope-row, .backup-actions, details.tg-help) { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 8px 0 0; padding: 12px 16px; border-radius: 22px; background: var(--surface); }
+html[data-bein-embed] .scope-row select { flex: 1 1 100%; padding: 9px 12px; border: 0; border-radius: 10px; background: var(--field); color: var(--fg); font-size: 16px; }
+html[data-bein-embed] .scope-row .spacer { display: none; }
+html[data-bein-embed] details.tg-help { display: block; font-size: 14px; }
+html[data-bein-embed] details.tg-help summary { font-size: 16px; }
+html[data-bein-embed] .tg-kinds { display: block; gap: 0; }
+html[data-bein-embed] .preset-row { border-top: 0; }
+html[data-bein-embed] label.check > span { flex: 1; min-width: 0; }
+html[data-bein-embed] label.check > span .muted { display: block; margin-top: 2px; font-size: 13px; }
+/* Nút: nền nhạt màu nhấn, bo tròn như nút của ứng dụng */
+html[data-bein-embed] button:is(.ghost, .primary, .danger) { padding: 9px 14px; border: 0; border-radius: 12px; font-size: 15px; font-weight: 600; }
+html[data-bein-embed] button.ghost { background: var(--accent-soft); color: var(--accent); }
+html[data-bein-embed] button.primary { background: var(--accent); color: #fff; }
+html[data-bein-embed] button.danger { background: color-mix(in srgb, var(--err) 12%, transparent); color: var(--err); }
+html[data-bein-embed] button.sm { padding: 7px 12px; font-size: 14px; }
+html[data-bein-embed] .sync-row { align-items: center; }
+

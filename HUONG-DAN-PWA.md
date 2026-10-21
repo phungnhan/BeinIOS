@@ -148,6 +148,11 @@ node test/pwa/pwa.e2e.mjs
 
 ## Lịch sử BeinIOS
 
+- **1.5.1 (21/10/2026).** Đi cùng addon BeinFusion 0.53.1:
+  - **Nhật ký của tôi** mở thẳng vào cuộc trò chuyện kể cả khi trang Chat đang mở (trước đây chỉ đổi địa chỉ, không vào). Trang Chat cũng gọi tin nhắn cho chính mình là "Nhật ký của tôi".
+  - Các trang cài đặt con (Hoạt động & quét, Tự xử lý, Theo dõi, Quy tắc, Chat, Telegram, Sao lưu, Proxy & Login) cùng kiểu với trang Cài đặt: thanh trên có nút tròn, thẻ trắng bo tròn, công tắc kiểu iPhone bên phải, ô nhập nền xám.
+  - Nhóm **Kết nối** (Proxy & Login) dời xuống giữa **Ứng dụng** và **Về**.
+  - **Sao lưu & khôi phục** thay cho Sao lưu & đồng bộ: đồng bộ qua tài khoản Chrome / Edge chỉ có ở addon.
 - **1.5.0 (21/10/2026).** Hồ sơ cá nhân gọn hơn, thêm Trang cá nhân và Nhật ký của tôi:
   - **Tài khoản:** chạm avatar mở trang cá nhân trên Beincom; chạm @tên đăng nhập dưới tên để chép. Bỏ các dòng tên đăng nhập, mã Beincom, Chat Beincom.
   - **Trang cá nhân:** thông tin cơ bản trên Beincom (họ tên, giới tính, ngày sinh, ngôn ngữ, tình trạng quan hệ) và liên hệ (email, số điện thoại, thành phố). Bấm **Sửa** để đổi, **Lưu** gửi thẳng lên Beincom như web Beincom. Tài khoản đã xác minh danh tính không đổi được họ tên, giới tính, ngày sinh; email đổi trên web Beincom.

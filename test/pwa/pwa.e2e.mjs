@@ -301,6 +301,15 @@ try {
   await page.ev(`document.getElementById('f-set').contentDocument.getElementById('scanComments').click(); true`);
   await page.until(new Function('b', `return BeinPWA.page.store.get('local', ['settings']).then((r) => !!r.settings?.scanComments !== b)`), 5000, scanBefore);
   ok(true, 'Cài đặt › Hoạt động & quét: bật / tắt một mục là lưu cài đặt thật của addon');
+  const sw = await page.ev(`(() => { const e = document.getElementById('f-set').contentDocument.getElementById('scanComments'); const cs = getComputedStyle(e); const row = e.closest('.switch-row'); return { w: cs.width, app: cs.appearance, last: row.lastElementChild === e || getComputedStyle(row).flexDirection === 'row-reverse', bg: getComputedStyle(row).backgroundColor }; })()`);
+  ok(sw.w === '51px' && sw.app === 'none' && sw.last && sw.bg === 'rgb(255, 255, 255)', 'Cài đặt con cùng kiểu Cài đặt: dòng trắng, công tắc iPhone bên phải' + (sw.w === '51px' ? '' : ' ' + JSON.stringify(sw)));
+  if (SHOTS) {
+    for (const sec of ['scan', 'auto', 'watch', 'rules', 'postRules', 'chat', 'tg', 'backup']) {
+      await page.ev(`document.querySelector('#view-dset [data-back]').click(); document.querySelector('[data-sec="${sec}"]').click(); true`);
+      await sleep(500);
+      await shot('6g-' + sec);
+    }
+  }
   await page.ev(`document.querySelector('#view-dset [data-close]').click(); true`);
   await page.until(() => !document.getElementById('setup').classList.contains('open'), 3000);
 
@@ -397,13 +406,21 @@ try {
   ok(puts.length === 2 && JSON.stringify(puts[0]) === JSON.stringify({ fullname: 'Người Thử', gender: 'MALE', birthday: '1994-04-20', language: ['vi'], relationship_status: 'MARRIED' }) && JSON.stringify(puts[1]) === JSON.stringify({ country_code: '+84', phone: '987654321', city: 'Hồ Chí Minh' }), 'Trang cá nhân › Lưu: PUT user/me/profile như web Beincom (thông tin cơ bản, liên hệ)' + (puts.length === 2 ? '' : ' ' + JSON.stringify(puts)));
   const bpAfter = await page.ev(bpRows);
   ok(/Ngôn ngữ=Tiếng Việt; Tình trạng quan hệ=Đã kết hôn/.test(bpAfter) && /Số điện thoại=\+84 987654321; Thành phố=Hồ Chí Minh/.test(bpAfter), 'Trang cá nhân: đọc lại sau khi lưu, hiện giá trị mới');
-  // Nhật ký của tôi: mở Nhật ký cá nhân (tin nhắn cho chính mình) ở tab Chat
+  // Nhật ký của tôi: trang Chat đang mở vào thẳng Nhật ký của tôi (tin nhắn cho chính mình), không chỉ đổi địa chỉ
   await page.ev(`document.getElementById('bp-back').click(); true`);
   await page.until(new Function(`return ${isOpen('account')}`), 3000);
-  await page.ev(`BeinPWA.page.store.get('local', ['chatOverviewCache']).then(({ chatOverviewCache: c }) => BeinPWA.page.store.set('local', { chatOverviewCache: { ...(c || {}), dms: [...(c?.dms || []), { id: 'selfdm1', kind: 'dm', type: 'D', self: true, title: 'Nhật ký cá nhân' }] } })).then(() => true)`);
+  const selfDm = "{ id: 'selfdm1', kind: 'dm', type: 'D', self: true, title: 'Nhật ký của tôi', teamId: '', teamName: '', groupId: '', canPost: true, canDelete: false, unread: 0, mentions: 0, lastPostAt: Date.now(), other: { ...S.me } }";
+  await page.ev(frame('f-chat', `S.dms.push(${selfDm}); renderList(); true`));
+  await page.ev(`BeinPWA.page.store.get('local', ['chatOverviewCache']).then(({ chatOverviewCache: c }) => BeinPWA.page.store.set('local', { chatOverviewCache: { ...(c || {}), dms: [...(c?.dms || []), { id: 'selfdm1', kind: 'dm', type: 'D', self: true, title: 'Nhật ký của tôi' }] } })).then(() => true)`);
+  const chatSrc = await page.ev(`document.getElementById('f-chat').contentWindow.performance.timeOrigin`);
   await page.ev(`document.getElementById('pf-notes').click(); true`);
-  await page.until(() => !document.getElementById('setup').classList.contains('open') && document.querySelector('nav button.on')?.dataset.tab === 'chat' && /#c=selfdm1$/.test(document.getElementById('f-chat').getAttribute('src') || ''), 5000);
-  ok(true, 'Tài khoản › Nhật ký của tôi: mở Nhật ký cá nhân ở tab Chat');
+  await page.until(() => {
+    const w = document.getElementById('f-chat').contentWindow;
+    return !document.getElementById('setup').classList.contains('open') && document.querySelector('nav button.on')?.dataset.tab === 'chat' && w.eval('S.sel?.id') === 'selfdm1' && w.document.getElementById('app').classList.contains('open') && w.document.getElementById('conv-title').textContent === 'Nhật ký của tôi';
+  }, 5000);
+  ok((await page.ev(`document.getElementById('f-chat').contentWindow.performance.timeOrigin`)) === chatSrc, 'Tài khoản › Nhật ký của tôi: trang Chat đang mở vào thẳng Nhật ký của tôi (không tải lại trang)');
+  await sleep(300);
+  await shot('9c-nhat-ky-cua-toi');
   // Đang mở Cài đặt, bấm tab Quản trị ở thanh dưới: đóng Cài đặt, sang Quản trị
   await page.ev(`document.querySelector('nav button[data-tab="setup"]').click(); true`);
   await page.until(new Function(`return ${isOpen('main')}`), 3000);

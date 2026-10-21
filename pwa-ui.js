@@ -64,6 +64,12 @@
     };
     document.addEventListener('click', toAccount, true);
     document.addEventListener('keydown', toAccount, true);
+    // Khung ứng dụng đổi # khi trang đã mở (Nhật ký của tôi, bấm thông báo): trang Chat chỉ đọc # lúc mở -> mở theo #
+    window.addEventListener('hashchange', () => {
+      const h = new URLSearchParams(location.hash.slice(1));
+      if (h.get('c') && typeof window.openChat === 'function') window.openChat(h.get('c'), { fromHash: true });
+      else if (h.has('threads') && typeof window.showThreads === 'function') window.showThreads({ fromHash: true });
+    });
     const start = () => {
       swap();
       // Silk vẽ lại cụm nút mỗi khi đổi mục -> đổi lại
@@ -113,6 +119,16 @@
         } else tag(ch, c.contains('watch-group') ? 'watch' : c.contains('chat-group') ? 'chat' : c.contains('tg-group') ? 'tg' : c.contains('sync-group') || c.contains('backup-group') ? 'backup' : '');
       }
       if (typeof window.showTab === 'function') window.showTab('settings');
+      // Dòng ô tích có chữ lẫn phần phụ (vd "Kèm hồ sơ vi phạm (chưa có)"): gói phần chữ lại để công tắc nằm gọn bên phải
+      for (const lb of document.querySelectorAll('#settings label.check')) {
+        const rest = [...lb.childNodes].filter((n) => n.nodeName !== 'INPUT' && (n.nodeType !== Node.TEXT_NODE || n.textContent.trim()));
+        if (rest.length < 2) continue;
+        const span = document.createElement('span');
+        span.append(...[...lb.childNodes].filter((n) => n.nodeName !== 'INPUT'));
+        lb.append(span);
+      }
+      // Thẻ đang thu gọn (đặt ở Dashboard): mở ra ở đây, không lưu lại
+      for (const c of document.querySelectorAll('main .card.folded')) typeof window.setFolded === 'function' ? window.setFolded(c, false, { save: false }) : c.classList.remove('folded');
       show(shell.embedSection?.() || 'scan');
       // Hộp tự mở (Bắt đầu, Có gì mới, hỏi gửi báo cáo) để trang Quản trị lo — ở đây đóng lại
       const quiet = () => document.querySelectorAll('dialog[open]').forEach((d) => ['onboard', 'whatsnew', 'usage-consent'].includes(d.id) && d.close());
