@@ -500,7 +500,8 @@ function renderComments() {
   const filtered = rows.filter((r) => inFilter(r, commentFilter));
   const shown = filtered.slice(0, commentLimit);
   const hideable = commentFilter !== 'hidden';
-  const bulk = () => renderBulk({ set: selectedComments, shown, idOf: (r) => r.p.id, checkAll: 'comments-check-all', countEl: 'comments-selected', buttons: hideable ? ['btn-dismiss-comments', 'btn-hide-comments'] : [] });
+  const bulk = () => renderBulk({ set: selectedComments, shown, idOf: (r) => r.p.id, checkAll: 'comments-check-all', countEl: 'comments-selected', buttons: hideable ? ['btn-ai-comments', 'btn-dismiss-comments', 'btn-hide-comments'] : [] });
+  $('btn-ai-comments').hidden = !hideable;
   $('btn-dismiss-comments').textContent = commentFilter === 'dismissed' ? 'Hiện lại đã chọn' : 'Bỏ qua đã chọn';
   $('btn-hide-comments').hidden = !hideable;
   $('btn-dismiss-comments').hidden = !hideable;
