@@ -1911,19 +1911,19 @@ export const scenarios = [
     },
   },
   {
-    name: 'Trang Chat: Nhật ký cá nhân',
+    name: 'Trang Chat: Nhật ký của tôi',
     async run({ page, url, assert }) {
       await page.open(url('chat', 'chat=1&self=1'));
       await page.ev(`localStorage.removeItem('beingroup-chat-dmtab'); localStorage.removeItem('beingroup-chat-closed'); true`); // kịch bản trước để lại tab / mục thu gọn
       await page.open(url('chat', 'chat=1&self=1'));
-      await page.until(() => [...document.querySelectorAll('#list .item-title')].some((x) => x.textContent === 'Nhật ký cá nhân'));
-      const item = await page.ev(`(() => { const it = [...document.querySelectorAll('#list .item')].find((x) => x.querySelector('.item-title')?.textContent === 'Nhật ký cá nhân'); return { sub: it.querySelector('.item-sub').textContent, badges: it.querySelectorAll('.vb').length }; })()`);
+      await page.until(() => [...document.querySelectorAll('#list .item-title')].some((x) => x.textContent === 'Nhật ký của tôi'));
+      const item = await page.ev(`(() => { const it = [...document.querySelectorAll('#list .item')].find((x) => x.querySelector('.item-title')?.textContent === 'Nhật ký của tôi'); return { sub: it.querySelector('.item-sub').textContent, badges: it.querySelectorAll('.vb').length }; })()`);
       assert.equal(item.sub, 'Ghi chú của riêng bạn');
-      assert.equal(item.badges, 0); // không huy hiệu cạnh "Nhật ký cá nhân"
+      assert.equal(item.badges, 0); // không huy hiệu cạnh "Nhật ký của tôi"
       // Ảnh đại diện của chính tài khoản (ảnh thật không tải được ở bản giả lập nên ghi lại mã người được xin ảnh)
       await page.ev(`window.__av = []; const f = BG.chatAvatarUrl; BG.chatAvatarUrl = (id, at) => (window.__av.push(id), f(id, at)); true`);
-      await page.ev(`[...document.querySelectorAll('#list .item')].find((x) => x.querySelector('.item-title')?.textContent === 'Nhật ký cá nhân').click(); true`);
-      await page.until(() => document.getElementById('conv-title').textContent === 'Nhật ký cá nhân');
+      await page.ev(`[...document.querySelectorAll('#list .item')].find((x) => x.querySelector('.item-title')?.textContent === 'Nhật ký của tôi').click(); true`);
+      await page.until(() => document.getElementById('conv-title').textContent === 'Nhật ký của tôi');
       assert.equal(await page.ev(`document.getElementById('conv-sub').textContent`), 'Ghi chú của riêng bạn — chỉ bạn xem được');
       assert.ok((await page.ev(`window.__av`)).includes('cu1'));
       // Ảnh đầu cuộc trò chuyện không mở hồ sơ / xử lý vi phạm của chính mình

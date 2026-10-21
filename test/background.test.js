@@ -3015,7 +3015,7 @@ test('trang Chat: danh sách cuộc trò chuyện trong một lượt (mọi kê
   assert.equal((await makeEnv({ data }).send({ type: 'chatOverview' })).status, 'off');
 });
 
-test('trang Chat: tin nhắn riêng với chính mình là "Nhật ký cá nhân" kèm ảnh đại diện của tài khoản; không tính là tin nhắn mới', async () => {
+test('trang Chat: tin nhắn riêng với chính mình là "Nhật ký của tôi" kèm ảnh đại diện của tài khoản; không tính là tin nhắn mới', async () => {
   const now = Date.parse('2026-10-14T03:00:00Z');
   const data = fixture();
   const c = (data.chat = chatFixture(now));
@@ -3026,7 +3026,7 @@ test('trang Chat: tin nhắn riêng với chính mình là "Nhật ký cá nhân
   for (const quick of [true, false]) {
     const r = await env.send({ type: 'chatOverview', quick });
     const self = r.dms.find((d) => d.id === 'dmSelf');
-    assert.deepEqual([self.self, self.title, self.other.chatId, self.other.id, self.other.username, self.other.pictureAt, self.canDelete], [true, 'Nhật ký cá nhân', 'cu1', 'me1', 'kai', 77, false]);
+    assert.deepEqual([self.self, self.title, self.other.chatId, self.other.id, self.other.username, self.other.pictureAt, self.canDelete], [true, 'Nhật ký của tôi', 'cu1', 'me1', 'kai', 77, false]);
     assert.equal(r.dms.filter((d) => d.self).length, 1);
   }
   assert.ok(!env.calls.includes('GET chat:v4/users/cu1')); // dùng thông tin tài khoản đã đọc, không gọi thêm

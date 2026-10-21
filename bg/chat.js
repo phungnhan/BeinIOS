@@ -756,7 +756,7 @@ async function doChatOverview({ quick = false } = {}) {
       const otherId = otherOf(c);
       const other = otherId ? users[otherId] : null;
       const contact = BG.chatContact(c, me.body.id);
-      // Nhắn cho chính mình: "Nhật ký cá nhân" kèm ảnh đại diện của tài khoản
+      // Nhắn cho chính mình: "Nhật ký của tôi" kèm ảnh đại diện của tài khoản
       if (BG.chatSelfDm(c, me.body.id)) return { ...ch, self: true, canPost: sure ? ch.canPost : null, canDelete: false, title: BG.SELF_DM_TITLE, purpose: '', other: meP, unread: Math.max(0, (c.total_msg_count || 0) - (m?.msg_count || 0)), mentions: m?.mention_count || 0 };
       return {
         ...ch,

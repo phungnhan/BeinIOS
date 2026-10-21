@@ -21,7 +21,7 @@ function contactNote(c) {
 }
 const findChat = (id) => allChats().find((c) => c.id === id) || null;
 // Tin nhắn riêng chưa có tên (lần đọc nhanh chỉ lấy tên người của các tin gần nhất): tạm hiện @tên tài khoản
-// Nhật ký cá nhân (nhắn cho chính mình): dòng phụ
+// Nhật ký của tôi (nhắn cho chính mình): dòng phụ
 const SELF_SUB = 'Ghi chú của riêng bạn';
 const chatTitle = (c) => c.title || (c.kind === 'dm' || c.type === 'D' ? (c.other?.username ? '@' + c.other.username : 'Tin nhắn riêng') : 'Kênh chat');
 
