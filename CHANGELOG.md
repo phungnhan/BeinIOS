@@ -2,6 +2,17 @@
 
 Mỗi bản một mục, bản mới nhất ở trên. Dashboard tự hiện các mục mới sau khi cập nhật (bấm "Có gì mới" ở cuối trang để xem lại).
 
+## v0.53.0 — 21/10/2026
+- **Hồ sơ cá nhân** của tài khoản đang đăng nhập.
+  - **Cách mở**:
+    - **Dashboard**: bấm avatar mới ở góc trên bên phải.
+    - **Chat**: bấm tên mình, dòng tài khoản cuối danh sách (BeinFusion theme), hoặc avatar ở góc trên (Silk).
+  - **Tài khoản**: tên đăng nhập, mã Beincom (có nút Chép), kết nối Chat.
+  - **Quyền quản trị** theo từng cộng đồng: vai trò cao nhất (Chủ sở hữu / Admin community / Admin group), số group con đang quản trị, link mở trang cộng đồng.
+  - **Addon**: lần quét gần nhất, chu kỳ tự quét, Chạy thử.
+  - **Link** tới trang cá nhân trên Beincom.
+  - Lần quét lưu thêm ảnh đại diện và dấu xác minh của tài khoản (không lưu email hay thông tin khác).
+
 ## v0.52.0 — 21/10/2026
 - **Mã QR ngắn qua proxy của BeinIOS** (Cài đặt → 📱 BeinIOS → Chuyển đăng nhập sang BeinIOS).
   - **Vì sao cần**: đăng nhập Beincom thật dài hơn 4.000 ký tự, không vừa một mã QR. Chép đoạn chữ sang iPhone qua Ghi chú hay tin nhắn thì hay bị chèn xuống dòng.

@@ -21,6 +21,7 @@
       <span class="pill warn" id="dry-pill" hidden>Chạy thử</span>
       <a class="chat-link" href="chat.html" target="_blank" id="btn-chat-page" title="Mở trang Chat: tin nhắn riêng và kênh chat của các group">💬 Chat <span class="badge" id="badge-chat"></span></a>
       <button id="btn-scan" class="primary" title="Quét toàn bộ: group, yêu cầu tham gia, bài chờ duyệt, bài mới đăng. Chỉ cần tải lại tab đang xem thì dùng nút Tải lại trên thanh tab.">↻ Quét ngay</button>
+      <button type="button" class="me-btn" id="me-btn" aria-label="Hồ sơ cá nhân" hidden></button>
     </div>
   </header>
 
@@ -1626,6 +1627,14 @@
     </form>
   </dialog>
 
+  <dialog id="me-card" class="whatsnew me-card" aria-label="Hồ sơ cá nhân">
+    <form method="dialog">
+      <div class="me-head" id="me-head"></div>
+      <div class="me-body" id="me-body"></div>
+      <div class="dialog-actions"><button value="ok" class="primary">Đóng</button></div>
+    </form>
+  </dialog>
+
   <dialog id="beinios" class="whatsnew beinios-dialog" aria-labelledby="beinios-title">
     <form method="dialog">
       <h3 id="beinios-title">Chuyển đăng nhập sang BeinIOS</h3>
@@ -1682,6 +1691,7 @@
   <script src="lib/chat.js"></script>
   <script src="lib/qr.js"></script>
   <script src="lib/transfer.js"></script>
+  <script src="lib/self.js"></script>
   <script src="upload.js"></script>
   <script src="charts.js"></script>
   <script src="dash/core.js"></script>
@@ -1717,6 +1727,7 @@
   <script src="dash/whatsnew.js"></script>
   <script src="dash/onboarding.js"></script>
   <script src="dash/beinios.js"></script>
+  <script src="dash/self.js"></script>
   <script src="dash/layout.js"></script>
   <script src="dashboard.js"></script>
 </body>

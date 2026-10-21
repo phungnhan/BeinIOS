@@ -232,6 +232,11 @@ Tab Quy tắc & cài đặt và Nhật ký chỉ dùng dữ liệu trong máy n�
   - **Sao lưu cài đặt**: **Tải bản sao lưu** tạo tệp JSON gồm cài đặt, quy tắc (chung và riêng), mẫu bài, kho câu hỏi thảo luận, câu trả lời mẫu của Chat; tuỳ chọn kèm hồ sơ vi phạm và **lịch sử số liệu** (hiệu quả bài, các lần nhắc người mới, số thành viên theo ngày, nhật ký thao tác — khôi phục thì gộp với dữ liệu đang có, dữ liệu trong máy được ưu tiên khi trùng). Không chứa mật khẩu hay phiên đăng nhập.
     - **Khôi phục từ tệp…**: hộp xác nhận ghi rõ các mục sẽ thay; hồ sơ vi phạm thì gộp thêm, không trùng.
     - Bản sao lưu đang tắt Chạy thử thì addon hỏi có giữ Chạy thử không (mặc định giữ). Tệp lạ / sai kiểu bị bỏ qua.
+  - **Hồ sơ cá nhân** (v0.53.0): avatar góc trên Dashboard; ở Chat, bấm tên mình, dòng tài khoản cuối danh sách hoặc avatar góc trên (Silk).
+    - Mở tài khoản đang đăng nhập: tên, mã Beincom, kết nối Chat.
+    - Quyền quản trị gộp theo cộng đồng (`BG.selfProfile`, `lib/self.js`).
+    - Trạng thái quét, Chạy thử.
+    - Mở thẳng bằng `dashboard.html#…&me=1`.
   - **📱 BeinIOS (iPhone)** (v0.51.0): nút **Chuyển đăng nhập sang BeinIOS** chép phiên đăng nhập Beincom sang BeinIOS (BeinFusion chạy như webapp trên iPhone, repo `phungnhan/BeinIOS`).
     - Addon xin quyền tuỳ chọn `cookies` (cùng `beincom.com`, `auth.beincom.com`, `chat.beincom.com`) khi bấm lần đầu. Phải có quyền với chính `beincom.com` thì Chrome mới cho đọc cookie chung `.beincom.com`, tức phiên đăng nhập, rồi đọc cookie trình duyệt gửi tới api / chat / auth `.beincom.com`. Cookie thống kê được bỏ đi; cookie trùng nhau chỉ ghi một lần (`lib/transfer.js`, định dạng `BEINIOS1.` + base64url JSON).
     - Kết quả hiện thành mã QR (`lib/qr.js`, tự tạo, không dùng thư viện hay dịch vụ ngoài) mở `nhap.html#…` của BeinIOS; phần sau `#` không gửi lên máy chủ. Kèm nút Chép.

@@ -812,6 +812,61 @@ export const scenarios = [
     },
   },
   {
+    name: 'Hồ sơ cá nhân: Dashboard (avatar góc trên, mở bằng #me=1)',
+    async run({ page, url, assert }) {
+      await page.open(url('dashboard', 'tab=overview'));
+      await page.until(() => !document.getElementById('me-btn').hidden && !!document.querySelector('#me-btn .me-av'));
+      assert.equal(await page.ev(`document.querySelector('#me-btn .me-av').textContent`), 'KC');
+      await page.ev(`document.getElementById('me-btn').click(); true`);
+      await page.until(() => document.getElementById('me-card').open && document.querySelectorAll('#me-body .me-sec').length === 3);
+      const info = await page.ev(`({
+        head: document.getElementById('me-head').innerText,
+        titles: [...document.querySelectorAll('#me-body .me-sec h4')].map((h) => h.textContent),
+        admin: [...document.querySelectorAll('#me-body .me-sec')[1].querySelectorAll('.me-row')].map((r) => r.querySelector('.me-k').textContent + ' ' + r.querySelector('.me-v').textContent),
+        note: document.querySelectorAll('#me-body .me-sec')[1].querySelector('p')?.textContent,
+        id: [...document.querySelectorAll('#me-body .me-row')].find((r) => /Mã Beincom/.test(r.textContent))?.innerText,
+        link: document.querySelector('#me-body .me-links a')?.href,
+      })`);
+      assert.match(info.head, /Kai Crypto/);
+      assert.match(info.head, /@kaicrypto · Quản trị 2 cộng đồng/);
+      assert.deepEqual(info.titles, ['Tài khoản', 'Quyền quản trị', 'Addon']);
+      assert.deepEqual(info.admin, ['Food Research Chủ sở hữu', 'Crypto Life Admin group · 1 group con']);
+      assert.match(info.note, /2 cộng đồng · 3 group đang quản trị · chủ 1 cộng đồng/);
+      assert.match(info.id, /me1/);
+      assert.match(info.link, /\/users\/kaicrypto$/);
+      await page.ev(`document.querySelector('#me-card button[value=ok]').click(); true`);
+      await page.until(() => !document.getElementById('me-card').open);
+      // Mở thẳng bằng địa chỉ
+      await page.open(url('dashboard', 'tab=overview&me=1'));
+      await page.until(() => document.getElementById('me-card').open);
+    },
+  },
+  {
+    name: 'Hồ sơ cá nhân: Chat (dòng tài khoản ở BeinFusion theme, avatar góc trên ở Silk)',
+    async run({ page, url, assert }) {
+      await page.open(url('chat', 'chat=1'));
+      await page.until(() => !!document.querySelector('#me .avatar'), 6000);
+      // Đổi qua Silk rồi lại ghi vài khoá localStorage (thanh định dạng…): trả lại như cũ ở cuối để không ảnh hưởng kịch bản sau
+      await page.ev(`window.__ls = JSON.stringify({ ...localStorage }); true`);
+      assert.equal(await page.ev(`document.getElementById('me').getAttribute('role')`), 'button');
+      await page.ev(`document.getElementById('me').click(); true`);
+      await page.until(() => document.getElementById('person').open && document.querySelectorAll('#pc-body .pc-self .pc-sec').length === 3);
+      const t = await page.ev(`[...document.querySelectorAll('#pc-body .pc-self .pc-sec h4')].map((h) => h.textContent)`);
+      assert.deepEqual(t, ['Tài khoản', 'Quyền quản trị', 'Addon']);
+      assert.equal(await page.ev(`document.querySelectorAll('#pc-body .pc-self .pc-rows')[1].children.length`), 2, 'hai cộng đồng');
+      assert.equal(await page.ev(`!!document.querySelector('#pc-body .pc-actions')`), false, 'không có nút xử lý (dọn tài khoản) cho chính mình');
+      await page.ev(`document.getElementById('person').close(); true`);
+      // Silk: avatar góc trên là nút mở Hồ sơ cá nhân
+      await page.ev(`chrome.storage.local.set({ chatLook: { ui: 'silk' } }).then(() => true)`);
+      await page.until(() => document.documentElement.dataset.ui === 'silk' && !!document.querySelector('.space-actions button.space-me'), 6000);
+      await page.ev(`document.querySelector('.space-actions .space-me').click(); true`);
+      await page.until(() => document.getElementById('person').open && document.querySelectorAll('#pc-body .pc-self .pc-sec').length === 3);
+      await page.ev(`document.getElementById('person').close(); chrome.storage.local.set({ chatLook: { ui: 'theme' } }).then(() => true)`);
+      await page.until(() => document.documentElement.dataset.ui !== 'silk');
+      await page.ev(`localStorage.clear(); Object.entries(JSON.parse(window.__ls)).forEach(([k, v]) => localStorage.setItem(k, v)); true`);
+    },
+  },
+  {
     name: 'Việc cần làm',
     async run({ page, url, assert }) {
       await page.open(url('dashboard', 'tab=overview'));
@@ -1667,7 +1722,7 @@ export const scenarios = [
       await page.until(() => document.documentElement.dataset.ui === 'silk' && document.getElementById('rail').offsetWidth === 72);
       assert.deepEqual(await page.ev(`[document.querySelectorAll('#rail .rail-btn.team').length, document.querySelector('#space-head b').textContent, !!document.querySelector('#look [data-k="mode:dark"]'), document.getElementById('fmt').hidden]`), [1, 'Tất cả', true, true]);
       // Giao diện, Dashboard, tài khoản: góc phải hàng tiêu đề của cột danh sách (không ở thanh cộng đồng)
-      assert.deepEqual(await page.ev(`[[...document.querySelectorAll('#space-head .space-actions [aria-label]')].map((x) => x.getAttribute('aria-label')), !!document.querySelector('#space-head .space-me .avatar'), document.querySelectorAll('#rail [aria-label="Giao diện"], #rail [href="dashboard.html"], #rail .avatar').length]`), [['Giao diện', 'Mở Dashboard'], true, 0]);
+      assert.deepEqual(await page.ev(`[[...document.querySelectorAll('#space-head .space-actions [aria-label]')].map((x) => x.getAttribute('aria-label')), !!document.querySelector('#space-head .space-me .avatar'), document.querySelectorAll('#rail [aria-label="Giao diện"], #rail [href="dashboard.html"], #rail .avatar').length]`), [['Giao diện', 'Mở Dashboard', 'Hồ sơ cá nhân'], true, 0]);
       // Màu nhấn xanh dương: biến màu và nút Gửi đổi theo; chế độ tối; kiểu Phẳng; cỡ chữ lớn
       await page.ev(`document.querySelector('#look [data-k="accent:#2F6FEB"]').click(); true`);
       await page.ev(`document.querySelector('#look [data-k="mode:dark"]').click(); true`);

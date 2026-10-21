@@ -235,7 +235,9 @@ async function scanGroups(client, { prevGroups = [], scanPosts = true, scanRepor
 
   // Tài khoản đang đăng nhập (để nhận ra bài của chính mình). API này không nhận header phiên bản.
   const meRes = await client.call('GET', 'user/me/profile', null, '');
-  const me = BG.isOk(meRes) && meRes.body.data?.id ? { id: meRes.body.data.id, username: meRes.body.data.username || '', fullname: meRes.body.data.fullname || '' } : null;
+  // Thêm ảnh đại diện, dấu xác minh cho Hồ sơ cá nhân (lib/self.js) — không lưu email hay thông tin khác
+  const md = meRes.body?.data;
+  const me = BG.isOk(meRes) && md?.id ? { id: md.id, username: md.username || '', fullname: md.fullname || '', avatar: typeof md.avatar === 'string' ? md.avatar : md.avatar?.url || '', verified: !!(md.is_verified ?? md.isVerified) } : null;
 
   return { status: 'ok', groups: r.groups, posts, comments, me };
 }
