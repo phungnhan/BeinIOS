@@ -2,7 +2,11 @@
 
 Mỗi bản một mục, bản mới nhất ở trên. Dashboard tự hiện các mục mới sau khi cập nhật (bấm "Có gì mới" ở cuối trang để xem lại).
 
-## v0.54.1 — 22/10/2026
+## v0.55.0 — 22/10/2026
+- **✨ AI viết bài chào / vinh danh** (tab Đăng bài → Chào thành viên mới / Vinh danh thành viên tích cực → **✨ AI viết bài**): AI viết mẫu bài mới có chỗ trống `{danh_sach}`, addon vẫn tự điền @tên đúng những người bạn đã chọn rồi soạn sẵn vào ô đăng bài. Mẫu cũ chỉ bị thay khi bạn bấm Dùng (bấm Lưu mẫu nếu muốn giữ).
+- **✨ Tóm tắt bình luận** (cửa sổ Bài viết & bình luận): AI đọc bài và các bình luận đang hiện, tóm tắt ý chính, câu hỏi còn chờ admin trả lời, phàn nàn / dấu hiệu spam, không khí chung và việc nên làm; bấm **Chép tóm tắt**.
+- Cả hai dùng chung hai cách như Trả lời bình luận bằng AI: **AI trên web (chép – dán)** không cần khoá, hoặc **khoá API Claude**. Kết quả hiện trong ô sửa được; không có gì được đăng tự động.
+
 - **Trả lời bình luận bằng AI** trên iPhone (BeinIOS) / Safari: **Chép đề bài & mở** trang chat và nút **📋 Dán** chạy ngay trong lúc bấm (Safari chặn chép / mở thẻ mới nếu làm sau khi chờ).
 
 ## v0.54.0 — 22/10/2026

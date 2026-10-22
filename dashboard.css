@@ -750,6 +750,12 @@ dialog.postview[open] { display: flex; }
 .ar-step-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
 .ar-step-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .ar-step-row select { width: auto; }
+dialog.ai-draft { max-width: 720px; height: auto; max-height: min(92vh, 900px); }
+.ad-note { display: flex; margin: 12px 0 0; }
+#ad-status { margin: 10px 0 6px; }
+#ad-status:empty { display: none; }
+.ad-result-label { display: block; margin: 12px 0 4px; }
+#ad-result { width: 100%; min-height: 180px; resize: vertical; font: inherit; }
 #ar-paste { width: 100%; min-height: 80px; resize: vertical; font: 12.5px/1.4 ui-monospace, Menlo, Consolas, monospace; }
 .onboard { max-width: 560px; }
 .onb-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }

@@ -380,8 +380,8 @@ function arWebFill() {
 }
 
 // Nút Dán: đọc bộ nhớ tạm rồi điền luôn; không đọc được thì nhắc dán tay
-async function arWebPaste() {
-  // Đọc ngay trong lúc bấm (Safari cần vậy); addon chưa có quyền đọc bộ nhớ tạm thì xin rồi đọc lại
+// Đọc bộ nhớ tạm ngay trong lúc bấm (Safari cần vậy); addon chưa có quyền đọc thì xin rồi đọc lại. Không đọc được: ''
+async function aiReadClipboard() {
   const read = async () => {
     try {
       return await navigator.clipboard.readText();
@@ -396,7 +396,11 @@ async function arWebPaste() {
     } catch {}
     text = await read();
   }
-  text = text || '';
+  return text || '';
+}
+
+async function arWebPaste() {
+  const text = await aiReadClipboard();
   if (!text.trim()) {
     $('ar-paste').focus();
     return arStatus('Không đọc được bộ nhớ tạm — bấm vào ô rồi dán (Ctrl + V).', 'warn-text');

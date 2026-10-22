@@ -808,6 +808,7 @@
         <label class="check"><input type="checkbox" id="welcome-check-all" /> Chọn tất cả</label>
         <span class="muted small" id="welcome-selected"></span>
         <span class="spacer"></span>
+        <button class="ghost" id="btn-welcome-ai" title="Nhờ AI viết mẫu bài chào mới — addon vẫn tự điền @tên những người đã chọn">✨ AI viết bài</button>
         <button class="primary" id="btn-welcome-compose" disabled>Soạn bài chào</button>
       </div>
       <div class="welcome-people" id="welcome-people"></div>
@@ -842,6 +843,7 @@
       <div class="bulk-bar">
         <span class="muted small" id="shout-selected"></span>
         <span class="spacer"></span>
+        <button class="ghost" id="btn-shout-ai" title="Nhờ AI viết mẫu bài vinh danh mới — addon vẫn tự điền @tên những người đã chọn">✨ AI viết bài</button>
         <button class="primary" id="btn-shout-compose" disabled>Soạn bài vinh danh</button>
       </div>
       <div class="table-wrap">
@@ -1567,7 +1569,7 @@
     </div>
     <div class="pv-body">
       <div id="pv-post" class="pv-post"></div>
-      <div class="pv-ctitle"><b id="pv-count"></b><span class="pv-ctools"><button type="button" class="link-btn" id="pv-ai" hidden title="Nhờ AI viết sẵn câu trả lời cho các bình luận chưa được bạn trả lời — xem, sửa rồi mới gửi">✨ Trả lời hàng loạt bằng AI</button><button type="button" class="link-btn" id="pv-reload">↻ Tải lại</button></span></div>
+      <div class="pv-ctitle"><b id="pv-count"></b><span class="pv-ctools"><button type="button" class="link-btn" id="pv-sum" hidden title="Nhờ AI tóm tắt các bình luận đã tải: ý chính, câu hỏi còn chờ, phàn nàn / spam, việc nên làm">✨ Tóm tắt bình luận</button><button type="button" class="link-btn" id="pv-ai" hidden title="Nhờ AI viết sẵn câu trả lời cho các bình luận chưa được bạn trả lời — xem, sửa rồi mới gửi">✨ Trả lời hàng loạt bằng AI</button><button type="button" class="link-btn" id="pv-reload">↻ Tải lại</button></span></div>
       <button type="button" class="link-btn pv-older" id="pv-older" hidden>Xem bình luận cũ hơn</button>
       <div id="pv-list" class="pv-list"></div>
     </div>
@@ -1616,6 +1618,44 @@
     </div>
     <div class="pv-form">
       <div class="pv-actions"><span class="muted small" id="ar-foot">AI chỉ viết nháp — không có gì được gửi cho tới khi bạn bấm Trả lời tất cả.</span><span class="ar-btns"><button type="button" class="ghost" id="ar-stop" hidden>Dừng</button><button type="button" class="primary" id="ar-send" disabled>Trả lời tất cả</button></span></div>
+    </div>
+  </dialog>
+  <!-- Nhờ AI viết một đoạn chữ (dash/aidraft.js): mẫu bài chào / vinh danh, tóm tắt bình luận -->
+  <dialog id="ai-draft" class="postview ai-draft" aria-labelledby="ad-title">
+    <div class="pv-head">
+      <h3 id="ad-title">✨ Nhờ AI viết</h3>
+      <button type="button" class="ghost sm" id="ad-close" aria-label="Đóng">✕</button>
+    </div>
+    <div class="pv-body">
+      <p class="muted small" id="ad-desc"></p>
+      <div class="seg ar-mode" id="ad-mode" role="group" aria-label="Cách nhờ AI viết">
+        <button type="button" data-m="web" title="Dùng tài khoản Claude / ChatGPT / Gemini bạn đang có — tự chép đề bài sang và dán câu trả lời về">AI trên web (chép – dán)</button>
+        <button type="button" data-m="api" title="Tự động hoàn toàn, cần khoá API Claude (tính phí theo lần dùng)">Khoá API Claude (tự động)</button>
+      </div>
+      <label class="ar-opt ar-note ad-note"><span class="muted small">Ghi chú cho AI (không bắt buộc)</span><input type="text" id="ad-note" maxlength="500" /></label>
+      <div class="ar-web" id="ad-web">
+        <div class="ar-step">
+          <span class="ar-num">1</span>
+          <div class="ar-step-body">
+            <div class="ar-step-row"><select id="ad-site" aria-label="Trang chat AI"></select><button type="button" class="primary" id="ad-copy">Chép đề bài &amp; mở Claude</button></div>
+            <div class="muted small">Trong trang chat AI: dán (Ctrl + V), gửi, đợi AI viết xong rồi chép câu trả lời.</div>
+          </div>
+        </div>
+        <div class="ar-step">
+          <span class="ar-num">2</span>
+          <div class="ar-step-body">
+            <div class="ar-step-row"><button type="button" class="primary" id="ad-paste">📋 Dán</button><span class="muted small">Câu trả lời của AI hiện ở ô Kết quả bên dưới (hoặc dán tay vào ô đó).</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="ar-opts" id="ad-api"><button type="button" class="primary" id="ad-gen">Nhờ AI viết</button></div>
+      <div class="ar-setup" id="ad-setup" hidden>Chưa có khoá API Claude — dùng <b>AI trên web (chép – dán)</b>, hoặc dán khoá ở <b>Cài đặt → ✨ Trả lời bình luận bằng AI</b>.</div>
+      <p class="small muted" id="ad-status" role="status" aria-live="polite"></p>
+      <label class="ad-result-label" for="ad-result"><b>Kết quả</b> <span class="muted small">(sửa được)</span></label>
+      <textarea id="ad-result" rows="10"></textarea>
+    </div>
+    <div class="pv-form">
+      <div class="pv-actions"><span class="muted small">AI chỉ viết nháp — không có gì được đăng cho tới khi bạn tự bấm Đăng.</span><span class="ar-btns"><button type="button" class="ghost" id="ad-cancel">Đóng</button><button type="button" class="primary" id="ad-use" disabled>Dùng</button></span></div>
     </div>
   </dialog>
   <!-- Hồ sơ một người (dash/person.js): bấm tên người, huy hiệu ⚠, hoặc mở từ trang Chat -->
@@ -1763,6 +1803,7 @@
   <script src="dash/content.js"></script>
   <script src="dash/postview.js"></script>
   <script src="dash/aireply.js"></script>
+  <script src="dash/aidraft.js"></script>
   <script src="dash/person.js"></script>
   <script src="dash/sweep.js"></script>
   <script src="dash/tags.js"></script>
