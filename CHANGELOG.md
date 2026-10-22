@@ -2,6 +2,9 @@
 
 Mỗi bản một mục, bản mới nhất ở trên. Dashboard tự hiện các mục mới sau khi cập nhật (bấm "Có gì mới" ở cuối trang để xem lại).
 
+## v0.54.1 — 22/10/2026
+- **Trả lời bình luận bằng AI** trên iPhone (BeinIOS) / Safari: **Chép đề bài & mở** trang chat và nút **📋 Dán** chạy ngay trong lúc bấm (Safari chặn chép / mở thẻ mới nếu làm sau khi chờ).
+
 ## v0.54.0 — 22/10/2026
 - **✨ Trả lời bình luận bằng AI**: chọn nhiều bình luận ở **Bình luận mới** (hoặc mở một bài → **✨ Trả lời hàng loạt bằng AI**), AI viết nháp một câu trả lời cho từng bình luận theo nội dung bài. Hai cách:
   - **AI trên web (chép – dán)**, không cần khoá API: addon soạn sẵn đề bài, chép và mở Claude / ChatGPT / Gemini; bạn dán vào trang chat, gửi, chép câu trả lời rồi bấm **📋 Dán** (hoặc Ctrl + V vào ô) — addon điền nháp vào từng bình luận. Addon không tự điều khiển trang chat (điều khoản các trang này cấm truy cập tự động).
