@@ -409,7 +409,7 @@
         <label class="check"><input type="checkbox" id="comments-check-all" /> Chọn tất cả đang hiện</label>
         <span class="muted small" id="comments-selected">Đã chọn 0</span>
         <span class="spacer"></span>
-        <button id="btn-ai-comments" class="ghost" disabled title="Nhờ AI viết sẵn câu trả lời cho các bình luận đã chọn — xem, sửa rồi mới gửi">✨ Trả lời bằng AI</button>
+        <button id="btn-ai-comments" class="ghost" disabled data-tip="Nhờ AI viết sẵn câu trả lời cho các bình luận đã chọn — xem, sửa rồi mới gửi">✨ Trả lời bằng AI</button>
         <button id="btn-dismiss-comments" class="ghost" disabled>Bỏ qua đã chọn</button>
         <button id="btn-hide-comments" class="danger" disabled>Ẩn đã chọn</button>
       </div>
@@ -809,6 +809,7 @@
         <label class="check"><input type="checkbox" id="welcome-check-all" /> Chọn tất cả</label>
         <span class="muted small" id="welcome-selected"></span>
         <span class="spacer"></span>
+        <button class="ghost" id="btn-welcome-ai" data-tip="Nhờ AI viết mẫu bài chào mới — addon vẫn tự điền @tên những người đã chọn">✨ AI viết bài</button>
         <button class="primary" id="btn-welcome-compose" disabled>Soạn bài chào</button>
       </div>
       <div class="welcome-people" id="welcome-people"></div>
@@ -843,6 +844,7 @@
       <div class="bulk-bar">
         <span class="muted small" id="shout-selected"></span>
         <span class="spacer"></span>
+        <button class="ghost" id="btn-shout-ai" data-tip="Nhờ AI viết mẫu bài vinh danh mới — addon vẫn tự điền @tên những người đã chọn">✨ AI viết bài</button>
         <button class="primary" id="btn-shout-compose" disabled>Soạn bài vinh danh</button>
       </div>
       <div class="table-wrap">
@@ -1424,20 +1426,20 @@
       </div>
       <div class="group ai-group">
         <div class="group-title">✨ Trả lời bình luận bằng AI</div>
-        <div class="muted small">Nhờ Claude (Anthropic) viết sẵn câu trả lời cho nhiều bình luận một lúc: chọn bình luận ở tab Bài viết → <b>Bình luận mới</b> (hoặc mở một bài) → <b>✨ Trả lời bằng AI</b>, xem / sửa từng câu rồi bấm <b>Trả lời tất cả</b>. Hai cách: <b>AI trên web (chép – dán)</b> — không cần khoá, dùng tài khoản Claude / ChatGPT / Gemini bạn đang có: addon soạn sẵn đề bài, bạn dán vào trang chat rồi dán câu trả lời về; hoặc <b>khoá API Claude</b> — tự động hoàn toàn, lấy khoá ở <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com → API Keys</a>, mỗi lần tạo tính phí vào tài khoản Anthropic đó (Opus 5.5: khoảng 0,02–0,1 USD cho 20 bình luận). Khoá chỉ lưu trong trình duyệt này, không có trong sao lưu / đồng bộ.</div>
+        <div class="muted small ai-lead">AI viết nháp câu trả lời, bài chào, tóm tắt — bạn duyệt rồi mới đăng. <button type="button" class="link-btn" data-help="ai">❓ Hướng dẫn</button></div>
         <label class="text-row">
-          <span><b>Khoá API Claude</b> <span class="muted small">(không bắt buộc)</span></span>
+          <span><b>Khoá API Claude</b> <span class="muted small">(không bắt buộc)</span> <button type="button" class="tip-i" data-tip="Chỉ cần nếu muốn AI chạy tự động. Lấy ở console.anthropic.com → API Keys. Khoá chỉ lưu trong trình duyệt này, không có trong sao lưu / đồng bộ." aria-label="Gợi ý: Chỉ cần nếu muốn AI chạy tự động. Lấy ở console.anthropic.com → API Keys. Khoá chỉ lưu trong trình duyệt này, không có trong sao lưu / đồng bộ.">i</button></span>
           <span class="tg-line"><input type="password" id="ai-key" autocomplete="off" spellcheck="false" placeholder="sk-ant-…" /><button type="button" class="ghost sm" id="btn-ai-show">Hiện</button></span>
         </label>
-        <label class="select-row"><span><b>Mô hình</b></span><select id="ai-model"></select></label>
+        <label class="select-row"><span><b>Mô hình</b> <button type="button" class="tip-i" data-tip="Dùng khi có khoá API. Opus 5.5 viết hay nhất (khoảng 0,02–0,1 USD cho 20 bình luận) · Sonnet 5.5 rẻ bằng nửa · Haiku 5.5 rẻ nhất." aria-label="Gợi ý: Dùng khi có khoá API. Opus 5.5 viết hay nhất (khoảng 0,02–0,1 USD cho 20 bình luận) · Sonnet 5.5 rẻ bằng nửa · Haiku 5.5 rẻ nhất.">i</button></span><select id="ai-model"></select></label>
         <label class="select-row"><span><b>Giọng văn mặc định</b></span><select id="ai-style"></select></label>
         <label class="text-row">
-          <span><b>Hướng dẫn thêm cho AI</b><br /><span class="muted small">Dùng cho mọi lần trả lời, vd: xưng "mình", gọi "bạn"; hỏi về phần thưởng thì nhắc xem bài ghim.</span></span>
-          <textarea id="ai-note" rows="2" placeholder="vd: Xưng mình – bạn. Câu hỏi về airdrop: nhắc đọc bài ghim của cộng đồng."></textarea>
+          <span><b>Hướng dẫn thêm cho AI</b> <button type="button" class="tip-i" data-tip="Áp dụng cho mọi lần nhờ AI, vd: xưng mình – bạn; hỏi về phần thưởng thì nhắc đọc bài ghim." aria-label="Gợi ý: Áp dụng cho mọi lần nhờ AI, vd: xưng mình – bạn; hỏi về phần thưởng thì nhắc đọc bài ghim.">i</button></span>
+          <textarea id="ai-note" rows="2" placeholder="vd: Xưng mình – bạn"></textarea>
         </label>
         <div class="sync-row">
           <span class="muted small" id="ai-status"></span>
-          <span class="tg-actions"><button type="button" class="ghost sm" id="btn-ai-test">Kiểm tra</button><button type="button" class="primary sm" id="btn-ai-save">Lưu</button></span>
+          <span class="tg-actions"><button type="button" class="ghost sm" id="btn-ai-test" data-tip="Gửi thử một yêu cầu rất ngắn để biết khoá dùng được">Kiểm tra</button><button type="button" class="primary sm" id="btn-ai-save">Lưu</button></span>
         </div>
       </div>
       <div class="group sync-group">
@@ -1568,7 +1570,7 @@
     </div>
     <div class="pv-body">
       <div id="pv-post" class="pv-post"></div>
-      <div class="pv-ctitle"><b id="pv-count"></b><span class="pv-ctools"><button type="button" class="link-btn" id="pv-ai" hidden title="Nhờ AI viết sẵn câu trả lời cho các bình luận chưa được bạn trả lời — xem, sửa rồi mới gửi">✨ Trả lời hàng loạt bằng AI</button><button type="button" class="link-btn" id="pv-reload">↻ Tải lại</button></span></div>
+      <div class="pv-ctitle"><b id="pv-count"></b><span class="pv-ctools"><button type="button" class="link-btn" id="pv-sum" hidden data-tip="Nhờ AI tóm tắt các bình luận đã tải: ý chính, câu hỏi còn chờ, phàn nàn / spam, việc nên làm">✨ Tóm tắt bình luận</button><button type="button" class="link-btn" id="pv-ai" hidden data-tip="Nhờ AI viết sẵn câu trả lời cho các bình luận chưa được bạn trả lời — xem, sửa rồi mới gửi">✨ Trả lời hàng loạt bằng AI</button><button type="button" class="link-btn" id="pv-reload">↻ Tải lại</button></span></div>
       <button type="button" class="link-btn pv-older" id="pv-older" hidden>Xem bình luận cũ hơn</button>
       <div id="pv-list" class="pv-list"></div>
     </div>
@@ -1582,42 +1584,80 @@
   <dialog id="ai-reply" class="postview ai-reply" aria-labelledby="ar-title">
     <div class="pv-head">
       <h3 id="ar-title">✨ Trả lời bình luận bằng AI</h3>
+      <button type="button" class="ghost sm help-btn" data-help="ai" data-tip="Hướng dẫn" aria-label="Hướng dẫn">❓</button>
       <button type="button" class="ghost sm" id="ar-close" aria-label="Đóng">✕</button>
     </div>
     <div class="pv-body">
       <div class="seg ar-mode" id="ar-mode" role="group" aria-label="Cách nhờ AI viết">
-        <button type="button" data-m="web" title="Dùng tài khoản Claude / ChatGPT / Gemini bạn đang có trên trình duyệt — tự chép đề bài sang và dán câu trả lời về">AI trên web (chép – dán)</button>
-        <button type="button" data-m="api" title="Tự động hoàn toàn, cần khoá API Claude (tính phí theo lần dùng)">Khoá API Claude (tự động)</button>
+        <button type="button" data-m="web" data-tip="Không cần khoá: dùng Claude / ChatGPT / Gemini bạn đang có — chép đề bài sang, dán câu trả lời về">AI trên web (chép – dán)</button>
+        <button type="button" data-m="api" data-tip="Tự động hoàn toàn bằng khoá API Claude (tính phí theo lần dùng)">Khoá API Claude (tự động)</button>
       </div>
       <div class="ar-opts">
         <label class="ar-opt"><span class="muted small">Giọng văn</span><select id="ar-style"></select></label>
-        <label class="ar-opt ar-note"><span class="muted small">Ghi chú cho AI lần này (không bắt buộc)</span><input type="text" id="ar-note" maxlength="500" placeholder="vd: nhắc mọi người đọc bài ghim về sự kiện" /></label>
+        <label class="ar-opt ar-note"><span class="muted small">Ghi chú cho AI</span><input type="text" id="ar-note" maxlength="500" placeholder="Không bắt buộc — vd: nhắc đọc bài ghim về sự kiện" /></label>
         <button type="button" class="primary" id="ar-gen">Tạo câu trả lời</button>
       </div>
       <div class="ar-web" id="ar-web" hidden>
         <div class="ar-step">
           <span class="ar-num">1</span>
-          <div class="ar-step-body">
-            <div class="ar-step-row"><select id="ar-site" aria-label="Trang chat AI"></select><button type="button" class="primary" id="ar-copy">Chép đề bài &amp; mở Claude</button></div>
-            <div class="muted small">Trong trang chat AI (đã đăng nhập): bấm vào ô nhập, dán (Ctrl + V), gửi. Đợi AI viết xong rồi bấm nút chép câu trả lời (hoặc bôi đen cả khối JSON và chép).</div>
-          </div>
+          <div class="ar-step-row"><select id="ar-site" aria-label="Trang chat AI"></select><button type="button" class="primary" id="ar-copy">Chép đề bài &amp; mở Claude</button><button type="button" class="tip-i" data-tip="Trong trang chat AI: dán (Ctrl + V), gửi, đợi AI viết xong rồi chép câu trả lời." aria-label="Gợi ý: Trong trang chat AI: dán (Ctrl + V), gửi, đợi AI viết xong rồi chép câu trả lời.">i</button></div>
         </div>
         <div class="ar-step">
           <span class="ar-num">2</span>
           <div class="ar-step-body">
-            <textarea id="ar-paste" rows="4" spellcheck="false" placeholder='Dán câu trả lời của AI vào đây — khối {"replies": [ … ]}'></textarea>
-            <div class="ar-step-row"><button type="button" class="primary" id="ar-paste-btn" title="Lấy câu trả lời AI vừa chép trong bộ nhớ tạm rồi điền luôn">📋 Dán</button><button type="button" class="ghost" id="ar-fill">Điền vào các bình luận</button><span class="muted small">Bấm Dán (hoặc dán vào ô bằng Ctrl + V): addon điền nháp vào từng bình luận bên dưới để bạn xem, sửa.</span></div>
+            <div class="ar-step-row"><button type="button" class="primary" id="ar-paste-btn">📋 Dán</button><button type="button" class="ghost" id="ar-fill">Điền vào các bình luận</button><button type="button" class="tip-i" data-tip="Bấm Dán để lấy câu trả lời AI vừa chép (hoặc dán tay vào ô dưới): addon điền nháp vào từng bình luận." aria-label="Gợi ý: Bấm Dán để lấy câu trả lời AI vừa chép (hoặc dán tay vào ô dưới): addon điền nháp vào từng bình luận.">i</button></div>
+            <textarea id="ar-paste" rows="2" spellcheck="false" placeholder='Câu trả lời của AI — khối {"replies": [ … ]}'></textarea>
           </div>
         </div>
       </div>
       <p class="muted small" id="ar-status" role="status" aria-live="polite"></p>
-      <p class="warn-text small" id="ar-dry" hidden>Đang bật Chạy thử: bấm Trả lời tất cả chỉ ghi vào nhật ký, chưa gửi lên Beincom.</p>
-      <div class="ar-setup" id="ar-setup" hidden>Chưa có khoá API Claude. Dùng <b>AI trên web (chép – dán)</b> ở trên (không cần khoá), hoặc vào <b>Cài đặt → ✨ Trả lời bình luận bằng AI</b> dán khoá lấy ở console.anthropic.com rồi bấm Lưu. <button type="button" class="ghost sm" id="ar-open-settings">Mở Cài đặt</button></div>
+      <p class="warn-text small" id="ar-dry" hidden>Đang bật Chạy thử — chỉ ghi nhật ký, chưa gửi lên Beincom.</p>
+      <div class="ar-setup" id="ar-setup" hidden>Chưa có khoá API Claude. <button type="button" class="ghost sm" id="ar-open-settings">Mở Cài đặt</button> hoặc dùng AI trên web.</div>
       <div id="ar-list" class="ar-list"></div>
     </div>
     <div class="pv-form">
-      <div class="pv-actions"><span class="muted small" id="ar-foot">AI chỉ viết nháp — không có gì được gửi cho tới khi bạn bấm Trả lời tất cả.</span><span class="ar-btns"><button type="button" class="ghost" id="ar-stop" hidden>Dừng</button><button type="button" class="primary" id="ar-send" disabled>Trả lời tất cả</button></span></div>
+      <div class="pv-actions"><span class="muted small" id="ar-foot"></span><span class="ar-btns"><button type="button" class="ghost" id="ar-stop" hidden>Dừng</button><button type="button" class="primary" id="ar-send" disabled data-tip="AI chỉ viết nháp — không có gì được gửi cho tới khi bạn bấm nút này">Trả lời tất cả</button></span></div>
     </div>
+  </dialog>
+  <!-- Nhờ AI viết một đoạn chữ (dash/aidraft.js): mẫu bài chào / vinh danh, tóm tắt bình luận -->
+  <dialog id="ai-draft" class="postview ai-draft" aria-labelledby="ad-title">
+    <div class="pv-head">
+      <h3 id="ad-title">✨ Nhờ AI viết</h3>
+      <button type="button" class="tip-i" id="ad-tip" data-tip="" aria-label="Gợi ý">i</button>
+      <button type="button" class="ghost sm help-btn" data-help="ai" data-tip="Hướng dẫn" aria-label="Hướng dẫn">❓</button>
+      <button type="button" class="ghost sm" id="ad-close" aria-label="Đóng">✕</button>
+    </div>
+    <div class="pv-body">
+      <div class="seg ar-mode" id="ad-mode" role="group" aria-label="Cách nhờ AI viết">
+        <button type="button" data-m="web" data-tip="Không cần khoá: dùng Claude / ChatGPT / Gemini bạn đang có — chép đề bài sang, dán câu trả lời về">AI trên web (chép – dán)</button>
+        <button type="button" data-m="api" data-tip="Tự động hoàn toàn bằng khoá API Claude (tính phí theo lần dùng)">Khoá API Claude (tự động)</button>
+      </div>
+      <label class="ar-opt ar-note ad-note"><span class="muted small">Ghi chú cho AI</span><input type="text" id="ad-note" maxlength="500" /></label>
+      <div class="ar-web" id="ad-web">
+        <div class="ar-step">
+          <span class="ar-num">1</span>
+          <div class="ar-step-row"><select id="ad-site" aria-label="Trang chat AI"></select><button type="button" class="primary" id="ad-copy">Chép đề bài &amp; mở Claude</button><button type="button" class="tip-i" data-tip="Trong trang chat AI: dán (Ctrl + V), gửi, đợi AI viết xong rồi chép câu trả lời." aria-label="Gợi ý: Trong trang chat AI: dán (Ctrl + V), gửi, đợi AI viết xong rồi chép câu trả lời.">i</button></div>
+        </div>
+        <div class="ar-step">
+          <span class="ar-num">2</span>
+          <div class="ar-step-row"><button type="button" class="primary" id="ad-paste">📋 Dán</button><button type="button" class="tip-i" data-tip="Lấy câu trả lời AI vừa chép vào ô Kết quả (hoặc dán tay vào ô đó)." aria-label="Gợi ý: Lấy câu trả lời AI vừa chép vào ô Kết quả (hoặc dán tay vào ô đó).">i</button></div>
+        </div>
+      </div>
+      <div class="ar-opts" id="ad-api"><button type="button" class="primary" id="ad-gen">Nhờ AI viết</button></div>
+      <div class="ar-setup" id="ad-setup" hidden>Chưa có khoá API Claude — dùng AI trên web, hoặc dán khoá ở Cài đặt.</div>
+      <p class="small muted" id="ad-status" role="status" aria-live="polite"></p>
+      <label class="ad-result-label" for="ad-result"><b>Kết quả</b> <span class="muted small">(sửa được)</span></label>
+      <textarea id="ad-result" rows="10"></textarea>
+    </div>
+    <div class="pv-form">
+      <div class="pv-actions"><span></span><span class="ar-btns"><button type="button" class="ghost" id="ad-cancel">Đóng</button><button type="button" class="primary" id="ad-use" disabled data-tip="AI chỉ viết nháp — không có gì được đăng cho tới khi bạn tự bấm Đăng">Dùng</button></span></div>
+    </div>
+  </dialog>
+  <!-- Hướng dẫn (dash/ui.js openHelp): nội dung dài, mở bằng nút [data-help] -->
+  <dialog id="help-dlg" class="help-dlg" aria-labelledby="help-title">
+    <div class="help-head"><h3 id="help-title">Hướng dẫn</h3><button type="button" class="ghost sm" id="help-x" aria-label="Đóng">✕</button></div>
+    <div class="help-body" id="help-body"></div>
+    <div class="dialog-actions"><button type="button" class="primary" id="help-ok">Đã hiểu</button></div>
   </dialog>
   <!-- Hồ sơ một người (dash/person.js): bấm tên người, huy hiệu ⚠, hoặc mở từ trang Chat -->
   <dialog id="person-card" class="person-card" aria-labelledby="pcd-title">
@@ -1764,6 +1804,7 @@
   <script src="dash/content.js"></script>
   <script src="dash/postview.js"></script>
   <script src="dash/aireply.js"></script>
+  <script src="dash/aidraft.js"></script>
   <script src="dash/person.js"></script>
   <script src="dash/sweep.js"></script>
   <script src="dash/tags.js"></script>

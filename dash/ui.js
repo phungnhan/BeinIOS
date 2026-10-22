@@ -169,3 +169,99 @@ function postGroups(p, adminIds) {
     ),
   );
 }
+
+// ---------- Gợi ý ngắn (tooltip) và Hướng dẫn ----------
+// Mô tả / hướng dẫn ngắn nằm trong data-tip: rê chuột hoặc đưa phím Tab tới thì hiện bong bóng; nút ⓘ (.tip-i) chạm để hiện
+// (điện thoại). Bong bóng là popover nên nổi được trên hộp thoại đang mở. Hướng dẫn dài: hộp Hướng dẫn, mở bằng [data-help].
+const tipBox = el('div', { class: 'tipbox', id: 'tipbox', role: 'tooltip' });
+const tipPop = typeof tipBox.showPopover === 'function';
+if (tipPop) tipBox.setAttribute('popover', 'manual');
+else tipBox.hidden = true;
+document.body.append(tipBox);
+let tipFor = null;
+
+function showTip(t) {
+  const text = t?.dataset.tip;
+  if (!text) return;
+  tipFor?.removeAttribute('aria-describedby');
+  tipFor = t;
+  tipBox.textContent = text;
+  if (tipPop) {
+    if (!tipBox.matches(':popover-open')) tipBox.showPopover();
+  } else {
+    (t.closest('dialog[open]') || document.body).append(tipBox);
+    tipBox.hidden = false;
+  }
+  t.setAttribute('aria-describedby', 'tipbox');
+  // Phía trên phần tử, không đủ chỗ thì phía dưới; luôn nằm trong màn hình
+  const r = t.getBoundingClientRect();
+  const w = tipBox.offsetWidth;
+  const h = tipBox.offsetHeight;
+  const left = Math.min(Math.max(8, r.left + r.width / 2 - w / 2), window.innerWidth - w - 8);
+  const top = r.top - h - 8 >= 8 ? r.top - h - 8 : r.bottom + 8;
+  Object.assign(tipBox.style, { left: left + 'px', top: top + 'px' });
+}
+
+function hideTip() {
+  if (!tipFor) return;
+  tipFor.removeAttribute('aria-describedby');
+  tipFor = null;
+  if (tipPop) {
+    if (tipBox.matches(':popover-open')) tipBox.hidePopover();
+  } else tipBox.hidden = true;
+}
+
+// Nút ⓘ: <button class="tip-i" data-tip="…">
+function tipIcon(text) {
+  return el('button', { type: 'button', class: 'tip-i', 'data-tip': text, 'aria-label': 'Gợi ý: ' + text }, 'i');
+}
+
+document.addEventListener('mouseover', (e) => {
+  const t = e.target.closest?.('[data-tip]');
+  if (t && t !== tipFor) showTip(t);
+  else if (!t && tipFor && !tipFor.classList.contains('tip-i')) hideTip();
+});
+document.addEventListener('mouseout', (e) => {
+  if (tipFor && e.target.closest?.('[data-tip]') === tipFor && !tipFor.contains(e.relatedTarget)) hideTip();
+});
+document.addEventListener('focusin', (e) => {
+  const t = e.target.closest?.('[data-tip]');
+  if (t) showTip(t);
+});
+document.addEventListener('focusout', (e) => e.target === tipFor && hideTip());
+document.addEventListener('click', (e) => {
+  const t = e.target.closest?.('.tip-i');
+  if (!t) return hideTip();
+  e.preventDefault(); // ⓘ nằm trong <label>: không bật / tắt ô của nhãn
+  if (tipFor === t) hideTip();
+  else showTip(t);
+});
+document.addEventListener('keydown', (e) => e.key === 'Escape' && hideTip());
+window.addEventListener('scroll', hideTip, true);
+window.addEventListener('resize', hideTip);
+
+// Hộp Hướng dẫn: HELP_TOPICS[chủ đề] = { title, sections: [{ h, items: [chuỗi | [chuỗi…] (danh sách đánh số)] }] }
+const HELP_TOPICS = {};
+function openHelp(topic) {
+  const t = HELP_TOPICS[topic];
+  if (!t) return;
+  hideTip();
+  $('help-title').textContent = t.title;
+  $('help-body').replaceChildren(
+    ...t.sections.map((s) =>
+      el(
+        'section',
+        {},
+        el('h4', { text: s.h }),
+        ...s.items.map((it) => (Array.isArray(it) ? el('ol', {}, it.map((x) => el('li', { text: x }))) : el('p', { text: it }))),
+      ),
+    ),
+  );
+  $('help-body').scrollTop = 0;
+  $('help-dlg').showModal();
+}
+document.addEventListener('click', (e) => {
+  const b = e.target.closest?.('[data-help]');
+  if (b) openHelp(b.dataset.help);
+});
+for (const id of ['help-x', 'help-ok']) $(id).addEventListener('click', () => $('help-dlg').close());
