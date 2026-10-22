@@ -137,7 +137,7 @@
     </section>
     <section class="card span-3" id="gsettings" data-tab="overview">
       <div class="card-head">
-        <h2>Cài đặt group</h2>
+        <h2>Cài đặt group <button type="button" class="tip-i" data-tip="Bấm một ô để đổi riêng group đó, hoặc tick nhiều group rồi Bật / Tắt cho đã chọn. Duyệt bài cần quyền chủ / admin community." aria-label="Gợi ý: Bấm một ô để đổi riêng group đó, hoặc tick nhiều group rồi Bật / Tắt cho đã chọn. Duyệt bài cần quyền chủ / admin community.">i</button></h2>
         <span class="muted small" id="gsettings-note"></span>
       </div>
       <div class="bulk-bar">
@@ -154,7 +154,7 @@
           <tbody id="gsettings-body"></tbody>
         </table>
       </div>
-      <p class="muted small">Bấm một ô để đổi riêng group đó. ⚠ Tắt <b>Duyệt thành viên</b>: Beincom tự <b>duyệt</b> mọi yêu cầu đang chờ của group. <b>Duyệt bài</b> cần quyền chủ / admin community.</p>
+      <p class="muted small warn-note">⚠ Tắt <b>Duyệt thành viên</b>: Beincom tự <b>duyệt</b> mọi yêu cầu đang chờ của group.</p>
     </section>
 
     <section class="card span-3 guard-card" id="guard" data-tab="members">
@@ -319,10 +319,9 @@
 
     <section class="card span-3 waves-card" id="waves" data-tab="content" hidden>
       <div class="card-head">
-        <h2>Đợt spam <span class="tag err" id="waves-count"></span></h2>
+        <h2>Đợt spam <button type="button" class="tip-i" data-tip="Cùng một link hoặc cùng nội dung từ nhiều tài khoản trong 6 giờ gần nhất (theo bài mới và bình luận mới addon đã quét). Không tính bài của chính bạn và link tới tên miền cho phép." aria-label="Gợi ý: Cùng một link hoặc cùng nội dung từ nhiều tài khoản trong 6 giờ gần nhất (theo bài mới và bình luận mới addon đã quét). Không tính bài của chính bạn và link tới tên miền cho phép.">i</button> <span class="tag err" id="waves-count"></span></h2>
         <button class="ghost sm" id="btn-waves-dismissed" hidden></button>
       </div>
-      <p class="muted small intro">Cùng một link hoặc cùng nội dung từ nhiều tài khoản trong 6 giờ gần nhất (theo bài mới và bình luận mới addon đã quét). Không tính bài của chính bạn và link tới tên miền cho phép.</p>
       <div class="waves-list" id="waves-list"></div>
     </section>
     <section class="card span-3" id="approval" data-tab="content">
@@ -461,9 +460,9 @@
 
     <section class="card span-3" id="sweep" data-tab="content">
       <div class="card-head">
-        <h2>Tìm &amp; dọn bài</h2>
+        <h2>Tìm &amp; dọn bài <button type="button" class="tip-i" data-tip="Tìm trong mọi bài còn hiện của community (không chỉ bài addon đã quét) theo từ khoá hoặc link — vd t.me/, airdrop, một tên miền lừa đảo — rồi tick từng bài cần ẩn." aria-label="Gợi ý: Tìm trong mọi bài còn hiện của community (không chỉ bài addon đã quét) theo từ khoá hoặc link — vd t.me/, airdrop, một tên miền lừa đảo — rồi tick từng bài cần ẩn.">i</button><button type="button" class="ghost sm help-btn" data-help="content" data-tip="Hướng dẫn" aria-label="Hướng dẫn">❓</button></h2>
       </div>
-      <p class="muted small">Tìm trong <b>mọi bài còn hiện</b> của community (không chỉ bài addon đã quét) theo từ khoá hoặc link — vd <code>t.me/</code>, <code>airdrop</code>, một tên miền lừa đảo — rồi tick từng bài cần ẩn. Ẩn là một chiều: Beincom không có lệnh hiện lại, nên không bài nào được chọn sẵn; bài của bạn, admin và thành viên tin cậy được đánh dấu giữ.</p>
+      <p class="muted small warn-note">⚠ Ẩn là một chiều: Beincom không có lệnh hiện lại — không bài nào được chọn sẵn; bài của bạn, admin và thành viên tin cậy được đánh dấu giữ.</p>
       <form id="sweep-form" class="sweep-form">
         <input type="search" id="sweep-q" maxlength="100" placeholder="Từ khoá hoặc link…" aria-label="Từ khoá hoặc link cần tìm" />
         <select id="sweep-group" aria-label="Tìm trong community"></select>
@@ -584,9 +583,8 @@
       <div id="compose-edit-banner" class="edit-banner" hidden></div>
       <div class="compose-grid">
         <div class="compose-groups">
-          <div class="group-title">Đăng vào</div>
+          <div class="group-title">Đăng vào <button type="button" class="tip-i" data-tip="Một bài hiện ở mọi group đã chọn (giống chọn nhiều nơi đăng trên Beincom)." aria-label="Gợi ý: Một bài hiện ở mọi group đã chọn (giống chọn nhiều nơi đăng trên Beincom).">i</button></div>
           <div id="compose-groups" class="check-list"></div>
-          <div class="muted small">Một bài hiện ở mọi group đã chọn (giống chọn nhiều nơi đăng trên Beincom).</div>
         </div>
         <div class="compose-main">
           <div class="editor" id="editor">
@@ -681,7 +679,7 @@
           </div>
           <div class="best-times" id="best-times" hidden></div>
           <div class="muted small" id="compose-repeat-hint" hidden></div>
-          <div class="muted small">Hẹn giờ dùng chức năng có sẵn của Beincom: tới giờ Beincom tự đăng, không cần mở trình duyệt. <b>Lặp lại</b> đặt trước từng bài hẹn giờ (tối đa 30) ngay lúc bấm. Ảnh, video, tệp được tải lên Beincom lúc bấm Đăng — mỗi bài định kỳ tải một lần (Chạy thử thì không tải).</div>
+          <div class="muted small">Hẹn giờ: tới giờ Beincom tự đăng, không cần mở trình duyệt. <button type="button" class="tip-i" data-tip="Hẹn giờ dùng chức năng có sẵn của Beincom: tới giờ Beincom tự đăng, không cần mở trình duyệt. Lặp lại đặt trước từng bài hẹn giờ (tối đa 30) ngay lúc bấm. Ảnh, video, tệp được tải lên Beincom lúc bấm Đăng — mỗi bài định kỳ tải một lần (Chạy thử thì không tải)." aria-label="Gợi ý: Hẹn giờ dùng chức năng có sẵn của Beincom: tới giờ Beincom tự đăng, không cần mở trình duyệt. Lặp lại đặt trước từng bài hẹn giờ (tối đa 30) ngay lúc bấm. Ảnh, video, tệp được tải lên Beincom lúc bấm Đăng — mỗi bài định kỳ tải một lần (Chạy thử thì không tải).">i</button></div>
         </div>
       </div>
     </section>
@@ -765,7 +763,7 @@
                 <div id="art-mention-pop" class="mention-pop" role="listbox" aria-label="Chọn người để nhắc tên" hidden></div>
               </div>
             </div>
-            <div class="muted small art-help">Bôi đen chữ rồi bấm nút để định dạng; Ctrl+B / I / U / K. Ảnh tải lên Beincom lúc bấm Đăng. Một dòng chỉ có link YouTube / Vimeo là video nhúng. Ai quen Markdown có thể gõ thẳng: <code>## tiêu đề</code> <code>**đậm**</code> <code>- danh sách</code> <code>| bảng |</code>.</div>
+            <div class="muted small art-help">Bôi đen chữ rồi bấm nút để định dạng. <button type="button" class="tip-i" data-tip="Bôi đen chữ rồi bấm nút để định dạng; Ctrl+B / I / U / K. Ảnh tải lên Beincom lúc bấm Đăng. Một dòng chỉ có link YouTube / Vimeo là video nhúng. Ai quen Markdown có thể gõ thẳng: ## tiêu đề **đậm** - danh sách | bảng |." aria-label="Gợi ý: Bôi đen chữ rồi bấm nút để định dạng; Ctrl+B / I / U / K. Ảnh tải lên Beincom lúc bấm Đăng. Một dòng chỉ có link YouTube / Vimeo là video nhúng. Ai quen Markdown có thể gõ thẳng: ## tiêu đề **đậm** - danh sách | bảng |.">i</button></div>
           </div>
           <div class="article-only art-picks" id="art-picks"></div>
           <div class="compose-options">
@@ -785,7 +783,7 @@
             </span>
           </div>
           <div class="muted small" id="art-hint"></div>
-          <div class="muted small"><span class="article-only">Article giống web Beincom: cần tiêu đề, ảnh bìa và ít nhất một chuyên mục; hẹn giờ thì tới giờ Beincom tự đăng. </span><span class="series-only">Series là nơi gom các Article theo chủ đề; tạo xong thì chọn series khi soạn Article. </span>Nháp chữ được lưu tự động (ảnh bìa thì không).</div>
+          <div class="muted small"><span class="article-only">Article cần tiêu đề, ảnh bìa và ít nhất một chuyên mục. <button type="button" class="tip-i" data-tip="Giống web Beincom; hẹn giờ thì tới giờ Beincom tự đăng. Nháp chữ được lưu tự động (ảnh bìa thì không)." aria-label="Gợi ý: Giống web Beincom; hẹn giờ thì tới giờ Beincom tự đăng. Nháp chữ được lưu tự động (ảnh bìa thì không).">i</button></span><span class="series-only">Series gom các Article theo chủ đề. <button type="button" class="tip-i" data-tip="Tạo xong thì chọn series khi soạn Article. Nháp chữ được lưu tự động." aria-label="Gợi ý: Tạo xong thì chọn series khi soạn Article. Nháp chữ được lưu tự động.">i</button></span></div>
         </div>
       </div>
     </section>
@@ -813,9 +811,8 @@
       </div>
       <div class="welcome-people" id="welcome-people"></div>
       <details class="welcome-tpl">
-        <summary>Mẫu bài chào</summary>
+        <summary>Mẫu bài chào <button type="button" class="tip-i" data-tip="Dùng {so_nguoi} (số người), {danh_sach} (@tên từng người, cách nhau dấu phẩy), {group} (tên group)." aria-label="Gợi ý: Dùng {so_nguoi} (số người), {danh_sach} (@tên từng người, cách nhau dấu phẩy), {group} (tên group).">i</button></summary>
         <textarea id="welcome-template" rows="5" aria-label="Mẫu bài chào"></textarea>
-        <div class="muted small">Dùng <code>{so_nguoi}</code> (số người), <code>{danh_sach}</code> (@tên từng người, cách nhau dấu phẩy), <code>{group}</code> (tên group).</div>
         <div class="tpl-actions">
           <button class="ghost sm" id="btn-welcome-save">Lưu mẫu</button>
           <button class="ghost sm" id="btn-welcome-reset">Dùng mẫu mặc định</button>
@@ -855,9 +852,8 @@
         </table>
       </div>
       <details class="welcome-tpl">
-        <summary>Mẫu bài vinh danh</summary>
+        <summary>Mẫu bài vinh danh <button type="button" class="tip-i" data-tip="Dùng {danh_sach} (mỗi người một dòng, huy chương cho 3 người đầu, kèm số bài / bình luận), {so_nguoi}, {group}." aria-label="Gợi ý: Dùng {danh_sach} (mỗi người một dòng, huy chương cho 3 người đầu, kèm số bài / bình luận), {so_nguoi}, {group}.">i</button></summary>
         <textarea id="shout-template" rows="5" aria-label="Mẫu bài vinh danh"></textarea>
-        <div class="muted small">Dùng <code>{danh_sach}</code> (mỗi người một dòng, huy chương cho 3 người đầu, kèm số bài / bình luận), <code>{so_nguoi}</code>, <code>{group}</code>.</div>
         <div class="tpl-actions">
           <button class="ghost sm" id="btn-shout-save">Lưu mẫu</button>
           <button class="ghost sm" id="btn-shout-reset">Dùng mẫu mặc định</button>
@@ -867,13 +863,12 @@
 
     <section class="card span-3" id="prompts" data-tab="compose">
       <div class="card-head">
-        <h2>Bài thảo luận hằng tuần</h2>
+        <h2>Bài thảo luận hằng tuần <button type="button" class="tip-i" data-tip="Câu hỏi mồi để thành viên — nhất là người mới — có chủ đề trả lời. Addon xoay vòng các câu trong kho (câu đã dùng ở group không lặp lại trong 8 tuần), soạn vào ô Đăng bài kèm giờ gợi ý theo hiệu quả bài của bạn, và đo tương tác của từng câu." aria-label="Gợi ý: Câu hỏi mồi để thành viên — nhất là người mới — có chủ đề trả lời. Addon xoay vòng các câu trong kho (câu đã dùng ở group không lặp lại trong 8 tuần), soạn vào ô Đăng bài kèm giờ gợi ý theo hiệu quả bài của bạn, và đo tương tác của từng câu.">i</button></h2>
         <div class="review-tools">
           <select id="prompt-group" aria-label="Group"></select>
           <button type="button" class="primary sm" id="btn-prompt-now">✍ Soạn ngay</button>
         </div>
       </div>
-      <div class="muted small review-note">Câu hỏi mồi để thành viên — nhất là người mới — có chủ đề trả lời. Addon xoay vòng các câu trong kho (câu đã dùng ở group không lặp lại trong 8 tuần), soạn vào ô Đăng bài kèm giờ gợi ý theo hiệu quả bài của bạn, và đo tương tác của từng câu.</div>
       <div class="nudge-draft" id="prompt-draft" hidden>
         <div>
           <b id="prompt-draft-title"></b>
@@ -943,7 +938,7 @@
           <input type="file" id="csv-file" accept=".csv,text/csv" hidden />
         </div>
       </div>
-      <div class="muted small">Soạn lịch đăng cả tháng trong Excel / Google Sheets rồi hẹn giờ một lần. Cột bắt buộc: <b>noi_dung</b>, <b>group</b> (tên group, "Community &gt; Group" hoặc id; nhiều group cách nhau dấu ;), <b>gio_dang</b> (giờ Việt Nam, vd 15/10/2026 20:00). Cột tuỳ chọn: <b>quan_trong</b>, <b>tat_binh_luan</b> (có / không). Tối đa 100 bài mỗi lần; có thể kéo thả tệp vào đây. Bài chỉ có chữ (không ảnh / video / tệp).</div>
+      <div class="muted small">Soạn lịch đăng trong Excel / Google Sheets rồi hẹn giờ một lần (tối đa 100 bài). <button type="button" class="link-btn" data-help="csv">❓ Các cột cần có</button></div>
       <div id="csv-preview" class="csv-preview" hidden>
         <div class="csv-bar">
           <span id="csv-note"></span>
@@ -1210,28 +1205,27 @@
       </section>
       <section class="card" id="rules">
         <div class="card-head">
-          <h2>Quy tắc lọc thành viên <span class="scope-tag" id="rules-scope-tag"></span></h2>
+          <h2>Quy tắc lọc thành viên <button type="button" class="tip-i" data-tip="Addon chấm mỗi yêu cầu: vi phạm quy tắc từ chối → Gợi ý từ chối; thiếu điều kiện → Cần xem; đạt hết → Gợi ý duyệt. Chỉ là gợi ý, bạn vẫn bấm duyệt — trừ khi bật tự xử lý ở Cài đặt." aria-label="Gợi ý: Addon chấm mỗi yêu cầu: vi phạm quy tắc từ chối → Gợi ý từ chối; thiếu điều kiện → Cần xem; đạt hết → Gợi ý duyệt. Chỉ là gợi ý, bạn vẫn bấm duyệt — trừ khi bật tự xử lý ở Cài đặt.">i</button><button type="button" class="ghost sm help-btn" data-help="rules" data-tip="Hướng dẫn" aria-label="Hướng dẫn">❓</button> <span class="scope-tag" id="rules-scope-tag"></span></h2>
           <span class="muted small" id="rules-saved"></span>
         </div>
-        <p class="muted small intro">Addon chấm mỗi yêu cầu: vi phạm quy tắc từ chối → <b>Gợi ý từ chối</b>; thiếu điều kiện → <b>Cần xem</b>; đạt hết → <b>Gợi ý duyệt</b>. Chỉ là gợi ý, bạn vẫn bấm duyệt — trừ khi bật tự xử lý ở Cài đặt.</p>
         <div class="rules-grid">
           <div class="group">
             <div class="group-title">⚠ Cần xem khi</div>
             <label class="switch-row"><input type="checkbox" id="requireAvatar" /><span><b>Không có ảnh đại diện</b></span></label>
-            <label class="switch-row"><input type="checkbox" id="requireAnswers" /><span><b>Chưa trả lời câu hỏi bắt buộc</b><br /><span class="muted small">Hoặc trả lời quá ngắn</span></span></label>
+            <label class="switch-row"><input type="checkbox" id="requireAnswers" /><span><b>Chưa trả lời câu hỏi bắt buộc</b> <button type="button" class="tip-i" data-tip="Hoặc trả lời quá ngắn" aria-label="Gợi ý: Hoặc trả lời quá ngắn">i</button></span></label>
             <label class="select-row" data-requires="requireAnswers">
               <span><b>Câu trả lời tối thiểu</b></span>
               <span class="inline"><input type="number" id="minAnswerLength" min="0" max="200" /> ký tự</span>
             </label>
             <label class="switch-row"><input type="checkbox" id="requireVerified" /><span><b>Tài khoản chưa xác minh</b></span></label>
-            <label class="switch-row"><input type="checkbox" id="reviewViolators" /><span><b>Có hồ sơ vi phạm</b><br /><span class="muted small">Từng bị cấm, bị xoá, bị ẩn bài… (xem tab Thành viên → Hồ sơ vi phạm). Người có hồ sơ không bao giờ được tự duyệt.</span></span></label>
+            <label class="switch-row"><input type="checkbox" id="reviewViolators" /><span><b>Có hồ sơ vi phạm</b> <button type="button" class="tip-i" data-tip="Từng bị cấm, bị xoá, bị ẩn bài… (xem tab Thành viên → Hồ sơ vi phạm). Người có hồ sơ không bao giờ được tự duyệt." aria-label="Gợi ý: Từng bị cấm, bị xoá, bị ẩn bài… (xem tab Thành viên → Hồ sơ vi phạm). Người có hồ sơ không bao giờ được tự duyệt.">i</button></span></label>
           </div>
           <div class="group">
             <div class="group-title">✕ Gợi ý từ chối khi</div>
             <label class="switch-row"><input type="checkbox" id="declineDeactivated" /><span><b>Tài khoản đã bị vô hiệu hoá</b></span></label>
-            <label class="switch-row"><input type="checkbox" id="reviewImpersonation" /><span><b>Mạo danh admin</b><br /><span class="muted small">Tên / username giống admin của community (kể cả viết lách: 0→o, chữ Kirin…), hoặc tự nhận "Admin", "Hỗ trợ", "CSKH". Tên ngắn trùng tên admin, tên gần giống: chỉ Cần xem.</span></span></label>
+            <label class="switch-row"><input type="checkbox" id="reviewImpersonation" /><span><b>Mạo danh admin</b> <button type="button" class="tip-i" data-tip="Tên / username giống admin của community (kể cả viết lách: 0→o, chữ Kirin…), hoặc tự nhận &quot;Admin&quot;, &quot;Hỗ trợ&quot;, &quot;CSKH&quot;. Tên ngắn trùng tên admin, tên gần giống: chỉ Cần xem." aria-label="Gợi ý: Tên / username giống admin của community (kể cả viết lách: 0→o, chữ Kirin…), hoặc tự nhận &quot;Admin&quot;, &quot;Hỗ trợ&quot;, &quot;CSKH&quot;. Tên ngắn trùng tên admin, tên gần giống: chỉ Cần xem.">i</button></span></label>
             <label class="text-row">
-              <span><b>Từ khoá cấm</b><br /><span class="muted small">Trong tên, username hoặc câu trả lời. Cách nhau dấu phẩy, không phân biệt hoa thường và dấu.</span></span>
+              <span><b>Từ khoá cấm</b> <button type="button" class="tip-i" data-tip="Trong tên, username hoặc câu trả lời. Cách nhau dấu phẩy, không phân biệt hoa thường và dấu." aria-label="Gợi ý: Trong tên, username hoặc câu trả lời. Cách nhau dấu phẩy, không phân biệt hoa thường và dấu.">i</button></span>
               <textarea id="bannedKeywords" rows="3" placeholder="vd: kiếm tiền nhanh, sex, t.me/"></textarea>
             </label>
             <label class="text-row">
@@ -1242,7 +1236,7 @@
           <div class="group">
             <div class="group-title">✓ Luôn gợi ý duyệt</div>
             <label class="text-row">
-              <span><b>Username luôn duyệt</b><br /><span class="muted small">Bỏ qua mọi quy tắc khác</span></span>
+              <span><b>Username luôn duyệt</b> <button type="button" class="tip-i" data-tip="Bỏ qua mọi quy tắc khác" aria-label="Gợi ý: Bỏ qua mọi quy tắc khác">i</button></span>
               <textarea id="allowUsernames" rows="3" placeholder="@username, mỗi người cách nhau dấu phẩy"></textarea>
             </label>
           </div>
@@ -1252,33 +1246,32 @@
 
       <section class="card" id="post-rules">
         <div class="card-head">
-          <h2>Quy tắc bài viết <span class="scope-tag" id="post-rules-scope-tag"></span></h2>
+          <h2>Quy tắc bài viết <button type="button" class="tip-i" data-tip="Dùng cho Duyệt bài, Bài mới đăng và Bình luận: vi phạm → Gợi ý từ chối / Vi phạm; từ khoá cần xem, liên hệ riêng, link ngoài (nếu bật) → Cần xem. Không vi phạm gì → Gợi ý duyệt. Addon chỉ tự duyệt / tự ẩn khi bạn bật ở Cài đặt → Tự xử lý." aria-label="Gợi ý: Dùng cho Duyệt bài, Bài mới đăng và Bình luận: vi phạm → Gợi ý từ chối / Vi phạm; từ khoá cần xem, liên hệ riêng, link ngoài (nếu bật) → Cần xem. Không vi phạm gì → Gợi ý duyệt. Addon chỉ tự duyệt / tự ẩn khi bạn bật ở Cài đặt → Tự xử lý.">i</button><button type="button" class="ghost sm help-btn" data-help="rules" data-tip="Hướng dẫn" aria-label="Hướng dẫn">❓</button> <span class="scope-tag" id="post-rules-scope-tag"></span></h2>
           <span class="muted small" id="post-rules-saved"></span>
         </div>
-        <p class="muted small intro">Dùng cho <b>Duyệt bài</b>, <b>Bài mới đăng</b> và <b>Bình luận</b>: vi phạm → <b>Gợi ý từ chối</b> / <b>Vi phạm</b>; từ khoá cần xem, liên hệ riêng, link ngoài (nếu bật) → <b>Cần xem</b>. Không vi phạm gì → <b>Gợi ý duyệt</b>. Addon chỉ tự duyệt / tự ẩn khi bạn bật ở Cài đặt → Tự xử lý.</p>
         <div class="rules-grid">
           <div class="group">
             <div class="group-title">✕ Vi phạm khi có</div>
             <label class="text-row">
-              <span><b>Từ khoá cấm</b><br /><span class="muted small">Cách nhau dấu phẩy, không phân biệt hoa thường và dấu.</span></span>
+              <span><b>Từ khoá cấm</b> <button type="button" class="tip-i" data-tip="Cách nhau dấu phẩy, không phân biệt hoa thường và dấu." aria-label="Gợi ý: Cách nhau dấu phẩy, không phân biệt hoa thường và dấu.">i</button></span>
               <textarea id="post-bannedKeywords" rows="3" placeholder="vd: lừa đảo, x100 tài khoản, cam kết lợi nhuận"></textarea>
             </label>
           </div>
           <div class="group">
             <div class="group-title">🔗 Link</div>
             <label class="text-row">
-              <span><b>Tên miền cấm</b><br /><span class="muted small">Gồm cả tên miền con: <code>t.me</code> chặn cả <code>www.t.me</code>.</span></span>
+              <span><b>Tên miền cấm</b> <button type="button" class="tip-i" data-tip="Gồm cả tên miền con: t.me chặn cả www.t.me." aria-label="Gợi ý: Gồm cả tên miền con: t.me chặn cả www.t.me.">i</button></span>
               <textarea id="post-blockedDomains" rows="3" placeholder="vd: t.me, bit.ly, tinyurl.com"></textarea>
             </label>
           </div>
           <div class="group">
             <div class="group-title">⚠ Cần xem khi</div>
             <label class="text-row">
-              <span><b>Từ khoá cần xem</b><br /><span class="muted small">Đáng ngờ nhưng chưa chắc vi phạm (vd có trong bài cảnh báo).</span></span>
+              <span><b>Từ khoá cần xem</b> <button type="button" class="tip-i" data-tip="Đáng ngờ nhưng chưa chắc vi phạm (vd có trong bài cảnh báo)." aria-label="Gợi ý: Đáng ngờ nhưng chưa chắc vi phạm (vd có trong bài cảnh báo).">i</button></span>
               <textarea id="post-reviewKeywords" rows="2" placeholder="vd: inbox, kèo vip, x100, seed phrase"></textarea>
             </label>
-            <label class="switch-row"><input type="checkbox" id="post-reviewContacts" /><span><b>Có liên hệ riêng</b><br /><span class="muted small">Số điện thoại, link Zalo / Telegram / WhatsApp — dấu hiệu kéo người ra ngoài nói chuyện riêng</span></span></label>
-            <label class="switch-row"><input type="checkbox" id="post-reviewExternalLinks" /><span><b>Có link ra ngoài</b><br /><span class="muted small">Trừ các tên miền cho phép bên dưới</span></span></label>
+            <label class="switch-row"><input type="checkbox" id="post-reviewContacts" /><span><b>Có liên hệ riêng</b> <button type="button" class="tip-i" data-tip="Số điện thoại, link Zalo / Telegram / WhatsApp — dấu hiệu kéo người ra ngoài nói chuyện riêng" aria-label="Gợi ý: Số điện thoại, link Zalo / Telegram / WhatsApp — dấu hiệu kéo người ra ngoài nói chuyện riêng">i</button></span></label>
+            <label class="switch-row"><input type="checkbox" id="post-reviewExternalLinks" /><span><b>Có link ra ngoài</b> <button type="button" class="tip-i" data-tip="Trừ các tên miền cho phép bên dưới" aria-label="Gợi ý: Trừ các tên miền cho phép bên dưới">i</button></span></label>
             <label class="text-row" data-requires="reviewExternalLinks">
               <span><b>Tên miền cho phép</b></span>
               <textarea id="post-allowedDomains" rows="2" placeholder="beincom.com, coingecko.com"></textarea>
@@ -1294,19 +1287,19 @@
       </div>
       <label class="master-row" id="master-row">
         <span class="toggle"><input type="checkbox" id="active" /><i></i></span>
-        <span><b id="master-title">Addon đang hoạt động</b><br /><span class="muted small">Tắt để dừng quét tự động, thông báo và tự xử lý. Nút Quét ngay và Duyệt vẫn dùng được.</span></span>
+        <span><b id="master-title">Addon đang hoạt động</b> <button type="button" class="tip-i" data-tip="Tắt để dừng quét tự động, thông báo và tự xử lý. Nút Quét ngay và Duyệt vẫn dùng được." aria-label="Gợi ý: Tắt để dừng quét tự động, thông báo và tự xử lý. Nút Quét ngay và Duyệt vẫn dùng được.">i</button></span>
       </label>
       <div class="group" id="settings-group">
         <label class="switch-row dry"><input type="checkbox" id="dryRun" /><span><b>Chạy thử</b><br /><span class="muted small">Duyệt/từ chối chỉ ghi nhật ký, chưa gửi lên Beincom. Tắt khi đã kiểm tra quy tắc ổn.</span></span></label>
-        <label class="switch-row"><input type="checkbox" id="notify" /><span><b>Thông báo</b><br /><span class="muted small">Khi có yêu cầu tham gia, bài chờ duyệt, bài mới vi phạm hoặc báo cáo vi phạm</span></span></label>
-        <label class="switch-row"><input type="checkbox" id="scanPosts" /><span><b>Quét bài mới đăng</b><br /><span class="muted small">20 bài mới nhất của mỗi group, chấm theo quy tắc bài viết</span></span></label>
-        <label class="switch-row"><input type="checkbox" id="scanComments" /><span><b>Quét bình luận mới</b><br /><span class="muted small">Mỗi lần quét đọc bình luận mới nhất của tối đa 8 bài có bình luận mới, chấm theo quy tắc bài viết. Cần bật Quét bài mới đăng.</span></span></label>
-        <label class="switch-row"><input type="checkbox" id="scanReports" /><span><b>Quét báo cáo vi phạm</b><br /><span class="muted small">Báo cáo chờ xử lý (community bạn làm chủ / admin) và bài bị Beincom gắn cờ tự động</span></span></label>
-        <label class="switch-row"><input type="checkbox" id="spamWaves" /><span><b>Báo đợt spam</b><br /><span class="muted small">Cùng một link (hoặc cùng nội dung) từ 3 tài khoản trở lên trong 6 giờ: thông báo và hiện ở đầu tab Bài viết.</span></span></label>
-        <label class="switch-row"><input type="checkbox" id="welcomeReminder" /><span><b>Nhắc việc đầu tuần</b><br /><span class="muted small">Sáng thứ Hai (sau 8 giờ) thông báo nhắc chào thành viên mới và vinh danh thành viên tích cực; bấm vào thì addon tìm sẵn người mới và người tích cực trong 7 ngày.</span></span></label>
-        <label class="switch-row"><input type="checkbox" id="weeklyReport" /><span><b>Tóm tắt tuần</b><br /><span class="muted small">Sáng thứ Hai (sau 8 giờ) thông báo tóm tắt tuần trước. Xem bất cứ lúc nào ở Tổng quan → Tóm tắt hoạt động.</span></span></label>
-        <label class="switch-row"><input type="checkbox" id="monthlyReport" /><span><b>Báo cáo tháng</b><br /><span class="muted small">Đầu tháng (từ 8 giờ sáng ngày 1) thông báo nhắc xem báo cáo tháng trước. Xem bất cứ lúc nào ở Thống kê → Báo cáo tháng.</span></span></label>
-        <label class="switch-row"><input type="checkbox" id="trackViolations" /><span><b>Ghi hồ sơ vi phạm</b><br /><span class="muted small">Ghi lại ai bị cấm, xoá, ẩn bài, báo cáo… (mỗi lần quét đọc thêm nhật ký hoạt động của group). Chỉ lưu trong trình duyệt này.</span></span></label>
+        <label class="switch-row"><input type="checkbox" id="notify" /><span><b>Thông báo</b> <button type="button" class="tip-i" data-tip="Khi có yêu cầu tham gia, bài chờ duyệt, bài mới vi phạm hoặc báo cáo vi phạm" aria-label="Gợi ý: Khi có yêu cầu tham gia, bài chờ duyệt, bài mới vi phạm hoặc báo cáo vi phạm">i</button></span></label>
+        <label class="switch-row"><input type="checkbox" id="scanPosts" /><span><b>Quét bài mới đăng</b> <button type="button" class="tip-i" data-tip="20 bài mới nhất của mỗi group, chấm theo quy tắc bài viết" aria-label="Gợi ý: 20 bài mới nhất của mỗi group, chấm theo quy tắc bài viết">i</button></span></label>
+        <label class="switch-row"><input type="checkbox" id="scanComments" /><span><b>Quét bình luận mới</b> <button type="button" class="tip-i" data-tip="Mỗi lần quét đọc bình luận mới nhất của tối đa 8 bài có bình luận mới, chấm theo quy tắc bài viết. Cần bật Quét bài mới đăng." aria-label="Gợi ý: Mỗi lần quét đọc bình luận mới nhất của tối đa 8 bài có bình luận mới, chấm theo quy tắc bài viết. Cần bật Quét bài mới đăng.">i</button></span></label>
+        <label class="switch-row"><input type="checkbox" id="scanReports" /><span><b>Quét báo cáo vi phạm</b> <button type="button" class="tip-i" data-tip="Báo cáo chờ xử lý (community bạn làm chủ / admin) và bài bị Beincom gắn cờ tự động" aria-label="Gợi ý: Báo cáo chờ xử lý (community bạn làm chủ / admin) và bài bị Beincom gắn cờ tự động">i</button></span></label>
+        <label class="switch-row"><input type="checkbox" id="spamWaves" /><span><b>Báo đợt spam</b> <button type="button" class="tip-i" data-tip="Cùng một link (hoặc cùng nội dung) từ 3 tài khoản trở lên trong 6 giờ: thông báo và hiện ở đầu tab Bài viết." aria-label="Gợi ý: Cùng một link (hoặc cùng nội dung) từ 3 tài khoản trở lên trong 6 giờ: thông báo và hiện ở đầu tab Bài viết.">i</button></span></label>
+        <label class="switch-row"><input type="checkbox" id="welcomeReminder" /><span><b>Nhắc việc đầu tuần</b> <button type="button" class="tip-i" data-tip="Sáng thứ Hai (sau 8 giờ) thông báo nhắc chào thành viên mới và vinh danh thành viên tích cực; bấm vào thì addon tìm sẵn người mới và người tích cực trong 7 ngày." aria-label="Gợi ý: Sáng thứ Hai (sau 8 giờ) thông báo nhắc chào thành viên mới và vinh danh thành viên tích cực; bấm vào thì addon tìm sẵn người mới và người tích cực trong 7 ngày.">i</button></span></label>
+        <label class="switch-row"><input type="checkbox" id="weeklyReport" /><span><b>Tóm tắt tuần</b> <button type="button" class="tip-i" data-tip="Sáng thứ Hai (sau 8 giờ) thông báo tóm tắt tuần trước. Xem bất cứ lúc nào ở Tổng quan → Tóm tắt hoạt động." aria-label="Gợi ý: Sáng thứ Hai (sau 8 giờ) thông báo tóm tắt tuần trước. Xem bất cứ lúc nào ở Tổng quan → Tóm tắt hoạt động.">i</button></span></label>
+        <label class="switch-row"><input type="checkbox" id="monthlyReport" /><span><b>Báo cáo tháng</b> <button type="button" class="tip-i" data-tip="Đầu tháng (từ 8 giờ sáng ngày 1) thông báo nhắc xem báo cáo tháng trước. Xem bất cứ lúc nào ở Thống kê → Báo cáo tháng." aria-label="Gợi ý: Đầu tháng (từ 8 giờ sáng ngày 1) thông báo nhắc xem báo cáo tháng trước. Xem bất cứ lúc nào ở Thống kê → Báo cáo tháng.">i</button></span></label>
+        <label class="switch-row"><input type="checkbox" id="trackViolations" /><span><b>Ghi hồ sơ vi phạm</b> <button type="button" class="tip-i" data-tip="Ghi lại ai bị cấm, xoá, ẩn bài, báo cáo… (mỗi lần quét đọc thêm nhật ký hoạt động của group). Chỉ lưu trong trình duyệt này." aria-label="Gợi ý: Ghi lại ai bị cấm, xoá, ẩn bài, báo cáo… (mỗi lần quét đọc thêm nhật ký hoạt động của group). Chỉ lưu trong trình duyệt này.">i</button></span></label>
         <label class="select-row">
           <span><b>Chu kỳ quét</b></span>
           <select id="intervalMin">
@@ -1318,7 +1311,7 @@
           </select>
         </label>
         <label class="select-row">
-          <span><b>Nghỉ giữa hai thao tác</b><br /><span class="muted small">Khi duyệt hàng loạt</span></span>
+          <span><b>Nghỉ giữa hai thao tác</b> <button type="button" class="tip-i" data-tip="Khi duyệt hàng loạt" aria-label="Gợi ý: Khi duyệt hàng loạt">i</button></span>
           <select id="actionDelaySec">
             <option value="1">1 giây</option>
             <option value="2">2 giây</option>
@@ -1329,14 +1322,14 @@
         <div class="group-title auto-title">🤖 Tự xử lý sau mỗi lần quét</div>
         <label class="switch-row"><input type="checkbox" id="autoApprove" /><span><b>Tự duyệt "Gợi ý duyệt"</b></span></label>
         <label class="switch-row"><input type="checkbox" id="autoDecline" /><span><b>Tự từ chối "Gợi ý từ chối"</b></span></label>
-        <label class="switch-row"><input type="checkbox" id="autoHideSpam" /><span><b>Tự ẩn spam có link cấm</b><br /><span class="muted small">Bài và bình luận <b>mới</b> có link tới <b>Tên miền cấm</b> (quy tắc bài viết) bị ẩn ngay sau lần quét, lý do Spam. Chỉ xét tên miền cấm, không xét từ khoá; không ẩn bài của chính bạn; tối đa 20 mục mỗi lần quét.</span></span></label>
-        <label class="switch-row"><input type="checkbox" id="autoApprovePosts" /><span><b>Tự duyệt bài của thành viên tin cậy</b><br /><span class="muted small">Bài chờ duyệt <b>đạt mọi quy tắc bài viết</b> của người trong danh sách dưới đây, hoặc người đã được duyệt đủ số bài qua addon (Dashboard, Telegram, tự duyệt) và chưa bị từ chối bài nào. Người có hồ sơ vi phạm không bao giờ được tự duyệt. Tối đa 20 bài mỗi lần quét.</span></span></label>
+        <label class="switch-row"><input type="checkbox" id="autoHideSpam" /><span><b>Tự ẩn spam có link cấm</b> <button type="button" class="tip-i" data-tip="Bài và bình luận mới có link tới Tên miền cấm (quy tắc bài viết) bị ẩn ngay sau lần quét, lý do Spam. Chỉ xét tên miền cấm, không xét từ khoá; không ẩn bài của chính bạn; tối đa 20 mục mỗi lần quét." aria-label="Gợi ý: Bài và bình luận mới có link tới Tên miền cấm (quy tắc bài viết) bị ẩn ngay sau lần quét, lý do Spam. Chỉ xét tên miền cấm, không xét từ khoá; không ẩn bài của chính bạn; tối đa 20 mục mỗi lần quét.">i</button></span></label>
+        <label class="switch-row"><input type="checkbox" id="autoApprovePosts" /><span><b>Tự duyệt bài của thành viên tin cậy</b> <button type="button" class="tip-i" data-tip="Bài chờ duyệt đạt mọi quy tắc bài viết của người trong danh sách dưới đây, hoặc người đã được duyệt đủ số bài qua addon (Dashboard, Telegram, tự duyệt) và chưa bị từ chối bài nào. Người có hồ sơ vi phạm không bao giờ được tự duyệt. Tối đa 20 bài mỗi lần quét." aria-label="Gợi ý: Bài chờ duyệt đạt mọi quy tắc bài viết của người trong danh sách dưới đây, hoặc người đã được duyệt đủ số bài qua addon (Dashboard, Telegram, tự duyệt) và chưa bị từ chối bài nào. Người có hồ sơ vi phạm không bao giờ được tự duyệt. Tối đa 20 bài mỗi lần quét.">i</button></span></label>
         <label class="text-row" data-requires="autoApprovePosts">
-          <span><b>Thành viên tin cậy</b><br /><span class="muted small">Username, cách nhau dấu phẩy (vd @kai, lan). Thêm nhanh bằng nút ⭐ ở hàng chờ duyệt bài.</span></span>
+          <span><b>Thành viên tin cậy</b> <button type="button" class="tip-i" data-tip="Username, cách nhau dấu phẩy (vd @kai, lan). Thêm nhanh bằng nút ⭐ ở hàng chờ duyệt bài." aria-label="Gợi ý: Username, cách nhau dấu phẩy (vd @kai, lan). Thêm nhanh bằng nút ⭐ ở hàng chờ duyệt bài.">i</button></span>
           <textarea id="trustedMembers" rows="2" placeholder="vd: @kai, @lananh"></textarea>
         </label>
         <label class="select-row" data-requires="autoApprovePosts">
-          <span><b>Hoặc tin cậy người đã được duyệt</b><br /><span class="muted small">Chỉ đếm bài duyệt qua addon; bị từ chối một bài thì thôi</span></span>
+          <span><b>Hoặc tin cậy người đã được duyệt</b> <button type="button" class="tip-i" data-tip="Chỉ đếm bài duyệt qua addon; bị từ chối một bài thì thôi" aria-label="Gợi ý: Chỉ đếm bài duyệt qua addon; bị từ chối một bài thì thôi">i</button></span>
           <select id="trustAfterApproved">
             <option value="0">Không dùng</option>
             <option value="3">3 bài</option>
@@ -1349,12 +1342,12 @@
       <div class="group watch-group">
         <div class="group-title">🔔 Theo dõi</div>
         <label class="text-row">
-          <span><b>Từ khoá cần để ý</b><br /><span class="muted small">Không phải vi phạm: bài / bình luận mới nhắc tới thì thông báo và hiện ở Việc cần làm (vd: lừa đảo, mất tiền, rút tiền, tên dự án). Cách nhau dấu phẩy, không phân biệt hoa thường và dấu.</span></span>
+          <span><b>Từ khoá cần để ý</b> <button type="button" class="tip-i" data-tip="Không phải vi phạm: bài / bình luận mới nhắc tới thì thông báo và hiện ở Việc cần làm (vd: lừa đảo, mất tiền, rút tiền, tên dự án). Cách nhau dấu phẩy, không phân biệt hoa thường và dấu." aria-label="Gợi ý: Không phải vi phạm: bài / bình luận mới nhắc tới thì thông báo và hiện ở Việc cần làm (vd: lừa đảo, mất tiền, rút tiền, tên dự án). Cách nhau dấu phẩy, không phân biệt hoa thường và dấu.">i</button></span>
           <textarea id="watchKeywords" rows="2" placeholder="vd: lừa đảo, mất tiền, không rút được"></textarea>
         </label>
-        <label class="switch-row"><input type="checkbox" id="remindUnanswered" /><span><b>Nhắc bài chưa ai trả lời</b><br /><span class="muted small">Bài của thành viên quá số giờ dưới đây mà chưa có bình luận: thông báo, mỗi bài một lần.</span></span></label>
+        <label class="switch-row"><input type="checkbox" id="remindUnanswered" /><span><b>Nhắc bài chưa ai trả lời</b> <button type="button" class="tip-i" data-tip="Bài của thành viên quá số giờ dưới đây mà chưa có bình luận: thông báo, mỗi bài một lần." aria-label="Gợi ý: Bài của thành viên quá số giờ dưới đây mà chưa có bình luận: thông báo, mỗi bài một lần.">i</button></span></label>
         <label class="select-row" data-requires="remindUnanswered">
-          <span><b>Coi là bỏ ngỏ sau</b><br /><span class="muted small">Dùng cho cả mục Chưa ai trả lời và Việc cần làm</span></span>
+          <span><b>Coi là bỏ ngỏ sau</b> <button type="button" class="tip-i" data-tip="Dùng cho cả mục Chưa ai trả lời và Việc cần làm" aria-label="Gợi ý: Dùng cho cả mục Chưa ai trả lời và Việc cần làm">i</button></span>
           <select id="unansweredHours">
             <option value="3">3 giờ</option>
             <option value="6">6 giờ</option>
@@ -1362,7 +1355,7 @@
             <option value="24">24 giờ</option>
           </select>
         </label>
-        <label class="switch-row"><input type="checkbox" id="remindPending" /><span><b>Nhắc việc chờ lâu</b><br /><span class="muted small">Yêu cầu tham gia và bài chờ duyệt đã chờ quá số giờ dưới đây: thông báo (và Telegram nếu bật), mỗi việc một lần; hiện ở Việc cần làm → Chờ lâu.</span></span></label>
+        <label class="switch-row"><input type="checkbox" id="remindPending" /><span><b>Nhắc việc chờ lâu</b> <button type="button" class="tip-i" data-tip="Yêu cầu tham gia và bài chờ duyệt đã chờ quá số giờ dưới đây: thông báo (và Telegram nếu bật), mỗi việc một lần; hiện ở Việc cần làm → Chờ lâu." aria-label="Gợi ý: Yêu cầu tham gia và bài chờ duyệt đã chờ quá số giờ dưới đây: thông báo (và Telegram nếu bật), mỗi việc một lần; hiện ở Việc cần làm → Chờ lâu.">i</button></span></label>
         <label class="select-row" data-requires="remindPending">
           <span><b>Coi là chờ lâu sau</b></span>
           <select id="pendingHours">
@@ -1372,9 +1365,9 @@
             <option value="48">48 giờ</option>
           </select>
         </label>
-        <label class="switch-row"><input type="checkbox" id="guardJoins" /><span><b>Bảo vệ: theo dõi người mới vào</b><br /><span class="muted small">Sau mỗi lần quét xem ai vừa vào community (chỉ đọc): báo tài khoản giống admin và đợt vào ồ ạt (thường là tài khoản ảo trước một đợt spam). Xem ở Thành viên → Bảo vệ community; Telegram loại "Tài khoản giống admin, đợt vào ồ ạt".</span></span></label>
+        <label class="switch-row"><input type="checkbox" id="guardJoins" /><span><b>Bảo vệ: theo dõi người mới vào</b> <button type="button" class="tip-i" data-tip="Sau mỗi lần quét xem ai vừa vào community (chỉ đọc): báo tài khoản giống admin và đợt vào ồ ạt (thường là tài khoản ảo trước một đợt spam). Xem ở Thành viên → Bảo vệ community; Telegram loại &quot;Tài khoản giống admin, đợt vào ồ ạt&quot;." aria-label="Gợi ý: Sau mỗi lần quét xem ai vừa vào community (chỉ đọc): báo tài khoản giống admin và đợt vào ồ ạt (thường là tài khoản ảo trước một đợt spam). Xem ở Thành viên → Bảo vệ community; Telegram loại &quot;Tài khoản giống admin, đợt vào ồ ạt&quot;.">i</button></span></label>
         <label class="select-row" data-requires="guardJoins">
-          <span><b>Báo đợt vào ồ ạt khi</b><br /><span class="muted small">Số người vào trong 60 phút</span></span>
+          <span><b>Báo đợt vào ồ ạt khi</b> <button type="button" class="tip-i" data-tip="Số người vào trong 60 phút" aria-label="Gợi ý: Số người vào trong 60 phút">i</button></span>
           <select id="burstJoins">
             <option value="20">từ 20 người</option>
             <option value="30">từ 30 người</option>
@@ -1385,11 +1378,11 @@
       </div>
       <div class="group chat-group">
         <div class="group-title">💬 Chat Beincom</div>
-        <label class="switch-row"><input type="checkbox" id="chatEnabled" /><span><b>Kết nối chat Beincom</b><br /><span class="muted small">Addon xin quyền kết nối <code>chat.beincom.com</code> và dùng chính phiên đăng nhập của bạn (như web). Đọc tin mới trong kênh chat của các group bạn quản trị, báo tin nhắn riêng chưa đọc, gửi tin kèm bài khi bạn chọn. Không đọc nội dung tin nhắn riêng.</span></span></label>
-        <label class="switch-row" data-requires="chatEnabled"><input type="checkbox" id="chatScan" /><span><b>Quét tin nhắn kênh chat</b><br /><span class="muted small">Sau mỗi lần quét: chấm tin mới theo quy tắc bài viết, tìm tài khoản giống admin và đợt spam. Xem ở Bài viết → Tin nhắn chat.</span></span></label>
-        <label class="switch-row" data-requires="chatEnabled"><input type="checkbox" id="chatUnread" /><span><b>Báo tin nhắn riêng và nhắc tên</b><br /><span class="muted small">Thông báo (và Telegram loại "Tin nhắn riêng, nhắc tên trong chat") khi có tin nhắn riêng mới hoặc bạn được nhắc tên — chỉ tên người gửi, không kèm nội dung.</span></span></label>
-        <label class="switch-row" data-requires="chatEnabled"><input type="checkbox" id="chatThreads" /><span><b>Báo bình luận mới ở thread bạn theo dõi</b><br /><span class="muted small">Sau mỗi lần quét: thông báo (và Telegram loại "Tin nhắn riêng, nhắc tên trong chat") khi tin bạn theo dõi có bình luận mới — số thread và tên người tham gia, không kèm nội dung. Bấm để mở trang Thread đang theo dõi.</span></span></label>
-        <label class="switch-row" data-requires="chatEnabled"><input type="checkbox" id="chatFast" /><span><b>Kiểm tra nhanh mỗi phút</b><br /><span class="muted small">Tin nhắn riêng, nhắc tên, bình luận thread được báo trong khoảng 1 phút thay vì chờ lần quét. Mỗi lần chỉ vài lệnh đọc nhẹ, không mở tab Beincom; đang quét thì bỏ lượt.</span></span></label>
+        <label class="switch-row"><input type="checkbox" id="chatEnabled" /><span><b>Kết nối chat Beincom</b> <button type="button" class="tip-i" data-tip="Addon xin quyền kết nối chat.beincom.com và dùng chính phiên đăng nhập của bạn (như web). Đọc tin mới trong kênh chat của các group bạn quản trị, báo tin nhắn riêng chưa đọc, gửi tin kèm bài khi bạn chọn. Không đọc nội dung tin nhắn riêng." aria-label="Gợi ý: Addon xin quyền kết nối chat.beincom.com và dùng chính phiên đăng nhập của bạn (như web). Đọc tin mới trong kênh chat của các group bạn quản trị, báo tin nhắn riêng chưa đọc, gửi tin kèm bài khi bạn chọn. Không đọc nội dung tin nhắn riêng.">i</button></span></label>
+        <label class="switch-row" data-requires="chatEnabled"><input type="checkbox" id="chatScan" /><span><b>Quét tin nhắn kênh chat</b> <button type="button" class="tip-i" data-tip="Sau mỗi lần quét: chấm tin mới theo quy tắc bài viết, tìm tài khoản giống admin và đợt spam. Xem ở Bài viết → Tin nhắn chat." aria-label="Gợi ý: Sau mỗi lần quét: chấm tin mới theo quy tắc bài viết, tìm tài khoản giống admin và đợt spam. Xem ở Bài viết → Tin nhắn chat.">i</button></span></label>
+        <label class="switch-row" data-requires="chatEnabled"><input type="checkbox" id="chatUnread" /><span><b>Báo tin nhắn riêng và nhắc tên</b> <button type="button" class="tip-i" data-tip="Thông báo (và Telegram loại &quot;Tin nhắn riêng, nhắc tên trong chat&quot;) khi có tin nhắn riêng mới hoặc bạn được nhắc tên — chỉ tên người gửi, không kèm nội dung." aria-label="Gợi ý: Thông báo (và Telegram loại &quot;Tin nhắn riêng, nhắc tên trong chat&quot;) khi có tin nhắn riêng mới hoặc bạn được nhắc tên — chỉ tên người gửi, không kèm nội dung.">i</button></span></label>
+        <label class="switch-row" data-requires="chatEnabled"><input type="checkbox" id="chatThreads" /><span><b>Báo bình luận mới ở thread bạn theo dõi</b> <button type="button" class="tip-i" data-tip="Sau mỗi lần quét: thông báo (và Telegram loại &quot;Tin nhắn riêng, nhắc tên trong chat&quot;) khi tin bạn theo dõi có bình luận mới — số thread và tên người tham gia, không kèm nội dung. Bấm để mở trang Thread đang theo dõi." aria-label="Gợi ý: Sau mỗi lần quét: thông báo (và Telegram loại &quot;Tin nhắn riêng, nhắc tên trong chat&quot;) khi tin bạn theo dõi có bình luận mới — số thread và tên người tham gia, không kèm nội dung. Bấm để mở trang Thread đang theo dõi.">i</button></span></label>
+        <label class="switch-row" data-requires="chatEnabled"><input type="checkbox" id="chatFast" /><span><b>Kiểm tra nhanh mỗi phút</b> <button type="button" class="tip-i" data-tip="Tin nhắn riêng, nhắc tên, bình luận thread được báo trong khoảng 1 phút thay vì chờ lần quét. Mỗi lần chỉ vài lệnh đọc nhẹ, không mở tab Beincom; đang quét thì bỏ lượt." aria-label="Gợi ý: Tin nhắn riêng, nhắc tên, bình luận thread được báo trong khoảng 1 phút thay vì chờ lần quét. Mỗi lần chỉ vài lệnh đọc nhẹ, không mở tab Beincom; đang quét thì bỏ lượt.">i</button></span></label>
         <div class="sync-row img-cache-row">
           <span class="muted small" id="img-cache-info" title="Bộ nhớ đệm (Cache Storage) của addon trong trình duyệt — xem ở trang Chat: F12 → Application → Cache storage → beingroup-img-v1"></span>
           <button type="button" class="ghost sm" id="btn-img-clear">Xoá ảnh đã lưu</button>
@@ -1397,15 +1390,8 @@
       </div>
       <div class="group tg-group">
         <div class="group-title">📱 Gửi thông báo về Telegram</div>
-        <label class="switch-row"><input type="checkbox" id="tg-enabled" /><span><b>Gửi về Telegram</b><br /><span class="muted small">Thông báo của addon gửi thêm vào Telegram qua bot của chính bạn (kể cả khi đã tắt thông báo trên máy tính). Token chỉ lưu trong trình duyệt này, không có trong sao lưu / đồng bộ.</span></span></label>
-        <details class="tg-help">
-          <summary>Cách tạo bot (2 phút)</summary>
-          <ol>
-            <li>Trong Telegram, nhắn <b>@BotFather</b> lệnh <code>/newbot</code>, đặt tên → nhận <b>token</b> dạng <code>123456789:AA…</code>.</li>
-            <li>Mở bot vừa tạo, bấm <b>Start</b> (hoặc nhắn <code>/start</code>).</li>
-            <li>Dán token vào ô dưới, bấm <b>Lấy chat ID</b>, rồi <b>Gửi thử</b>. Muốn nhận trong một nhóm Telegram: thêm bot vào nhóm, nhắn một tin trong nhóm rồi bấm Lấy chat ID.</li>
-          </ol>
-        </details>
+        <label class="switch-row"><input type="checkbox" id="tg-enabled" /><span><b>Gửi về Telegram</b> <button type="button" class="tip-i" data-tip="Thông báo của addon gửi thêm vào Telegram qua bot của chính bạn (kể cả khi đã tắt thông báo trên máy tính). Token chỉ lưu trong trình duyệt này, không có trong sao lưu / đồng bộ." aria-label="Gợi ý: Thông báo của addon gửi thêm vào Telegram qua bot của chính bạn (kể cả khi đã tắt thông báo trên máy tính). Token chỉ lưu trong trình duyệt này, không có trong sao lưu / đồng bộ.">i</button></span></label>
+        <div class="muted small"><button type="button" class="link-btn" data-help="telegram">❓ Cách tạo bot Telegram (2 phút)</button></div>
         <label class="text-row">
           <span><b>Token bot</b></span>
           <span class="tg-line"><input type="password" id="tg-token" autocomplete="off" spellcheck="false" placeholder="123456789:AA…" /><button type="button" class="ghost sm" id="btn-tg-show">Hiện</button></span>
@@ -1416,8 +1402,7 @@
         </label>
         <div class="tg-kinds" id="tg-kinds"></div>
         <label class="check small"><input type="checkbox" id="tg-quiet" /> Không gửi từ 23:00 đến 7:00 (trừ đợt spam và cần đăng nhập)</label>
-        <label class="check small"><input type="checkbox" id="tg-actions" /> <span><b>Kèm nút xử lý ngay trong tin</b>: Duyệt / Từ chối yêu cầu tham gia, Duyệt bài chờ duyệt, Ẩn / Bỏ qua bài và bình luận vi phạm, đợt spam</span></label>
-        <div class="muted small tg-act-hint">Mỗi việc mới là một tin riêng có nút (tối đa 10 tin mỗi lần quét) thay cho tin gộp; nhớ bật loại tin tương ứng ở trên (vd "Yêu cầu tham gia, bài chờ duyệt"). Addon đọc nút bấm mỗi 30 giây khi trình duyệt đang mở; bấm nút có tác dụng như bấm trong Dashboard (đang Chạy thử thì chỉ ghi nhật ký, nguồn ghi "Telegram"). Chỉ nhận nút bấm trong đúng chat ở trên — nếu là nhóm Telegram thì mọi thành viên nhóm đều bấm được.</div>
+        <label class="check small"><input type="checkbox" id="tg-actions" /> <span><b>Kèm nút xử lý ngay trong tin</b>: Duyệt / Từ chối yêu cầu tham gia, Duyệt bài chờ duyệt, Ẩn / Bỏ qua bài và bình luận vi phạm, đợt spam <button type="button" class="tip-i" data-tip="Mỗi việc mới là một tin riêng có nút (tối đa 10 tin mỗi lần quét) thay cho tin gộp; nhớ bật loại tin tương ứng ở trên (vd &quot;Yêu cầu tham gia, bài chờ duyệt&quot;). Addon đọc nút bấm mỗi 30 giây khi trình duyệt đang mở; bấm nút có tác dụng như bấm trong Dashboard (đang Chạy thử thì chỉ ghi nhật ký, nguồn ghi &quot;Telegram&quot;). Chỉ nhận nút bấm trong đúng chat ở trên — nếu là nhóm Telegram thì mọi thành viên nhóm đều bấm được." aria-label="Gợi ý: Mỗi việc mới là một tin riêng có nút (tối đa 10 tin mỗi lần quét) thay cho tin gộp; nhớ bật loại tin tương ứng ở trên (vd &quot;Yêu cầu tham gia, bài chờ duyệt&quot;). Addon đọc nút bấm mỗi 30 giây khi trình duyệt đang mở; bấm nút có tác dụng như bấm trong Dashboard (đang Chạy thử thì chỉ ghi nhật ký, nguồn ghi &quot;Telegram&quot;). Chỉ nhận nút bấm trong đúng chat ở trên — nếu là nhóm Telegram thì mọi thành viên nhóm đều bấm được.">i</button></span></label>
         <div class="sync-row">
           <span class="muted small" id="tg-status"></span>
           <span class="tg-actions"><button type="button" class="ghost sm" id="btn-tg-test">Gửi thử</button><button type="button" class="primary sm" id="btn-tg-save">Lưu</button></span>
@@ -1443,7 +1428,7 @@
       </div>
       <div class="group sync-group">
         <div class="group-title">☁ Đồng bộ giữa các máy</div>
-        <label class="switch-row"><input type="checkbox" id="syncSettings" /><span><b>Đồng bộ qua tài khoản Chrome / Edge</b><br /><span class="muted small">Cài đặt, quy tắc (chung và riêng từng group), mẫu bài chào / vinh danh đi theo tài khoản trình duyệt sang máy khác có cài BeinFusion. Không đồng bộ: công tắc bật addon, mẫu bài đăng, hồ sơ vi phạm (dùng Sao lưu).</span></span></label>
+        <label class="switch-row"><input type="checkbox" id="syncSettings" /><span><b>Đồng bộ qua tài khoản Chrome / Edge</b> <button type="button" class="tip-i" data-tip="Cài đặt, quy tắc (chung và riêng từng group), mẫu bài chào / vinh danh đi theo tài khoản trình duyệt sang máy khác có cài BeinFusion. Không đồng bộ: công tắc bật addon, mẫu bài đăng, hồ sơ vi phạm (dùng Sao lưu)." aria-label="Gợi ý: Cài đặt, quy tắc (chung và riêng từng group), mẫu bài chào / vinh danh đi theo tài khoản trình duyệt sang máy khác có cài BeinFusion. Không đồng bộ: công tắc bật addon, mẫu bài đăng, hồ sơ vi phạm (dùng Sao lưu).">i</button></span></label>
         <div class="sync-row">
           <span class="muted small" id="sync-status"></span>
           <button class="ghost sm" id="btn-sync-now" hidden>Đồng bộ ngay</button>
@@ -1451,9 +1436,9 @@
       </div>
       <div class="group backup-group">
         <div class="group-title">💾 Sao lưu cài đặt</div>
-        <div class="muted small">Cài đặt, quy tắc (chung và riêng từng group), mẫu bài — để chuyển sang máy / trình duyệt khác hoặc giữ lại khi cài lại addon. Không chứa mật khẩu hay phiên đăng nhập.</div>
+        <div class="muted small">Chuyển sang máy / trình duyệt khác, hoặc giữ lại khi cài lại addon. <button type="button" class="tip-i" data-tip="Cài đặt, quy tắc (chung và riêng từng group), mẫu bài — để chuyển sang máy / trình duyệt khác hoặc giữ lại khi cài lại addon. Không chứa mật khẩu hay phiên đăng nhập." aria-label="Gợi ý: Cài đặt, quy tắc (chung và riêng từng group), mẫu bài — để chuyển sang máy / trình duyệt khác hoặc giữ lại khi cài lại addon. Không chứa mật khẩu hay phiên đăng nhập.">i</button></div>
         <label class="check small"><input type="checkbox" id="backup-profiles" /> Kèm hồ sơ vi phạm <span class="muted" id="backup-profiles-n"></span></label>
-        <label class="check small"><input type="checkbox" id="backup-history" /> Kèm lịch sử số liệu <span class="muted">(hiệu quả bài, các lần nhắc người mới, số thành viên theo ngày, nhật ký thao tác — để đổi máy / cài lại không mất số liệu)</span></label>
+        <label class="check small"><input type="checkbox" id="backup-history" /> Kèm lịch sử số liệu <button type="button" class="tip-i" data-tip="Hiệu quả bài, các lần nhắc người mới, số thành viên theo ngày, nhật ký thao tác — để đổi máy / cài lại không mất số liệu" aria-label="Gợi ý: Hiệu quả bài, các lần nhắc người mới, số thành viên theo ngày, nhật ký thao tác — để đổi máy / cài lại không mất số liệu">i</button></label>
         <div class="backup-actions">
           <button class="ghost" id="btn-backup">Tải bản sao lưu</button>
           <button class="ghost" id="btn-restore">Khôi phục từ tệp…</button>
@@ -1464,10 +1449,14 @@
       </div>
       <div class="group beinios-group" id="beinios-group">
         <div class="group-title">📱 BeinIOS (iPhone)</div>
-        <div class="muted small">BeinIOS là BeinFusion chạy như ứng dụng trên iPhone (<a href="https://phungnhan.github.io/BeinIOS/" target="_blank" rel="noopener">phungnhan.github.io/BeinIOS</a>, cần proxy riêng của bạn). Nút dưới chép phiên đăng nhập Beincom sang BeinIOS: quét mã QR bằng Camera iPhone, hoặc bấm Chép rồi dán ở BeinIOS → Cài đặt → Dán từ addon. Addon xin quyền đọc cookie Beincom khi bấm lần đầu; không gửi cookie đi đâu.</div>
+        <div class="muted small">Chép phiên đăng nhập Beincom sang BeinIOS trên iPhone: quét mã QR bằng Camera hoặc Chép rồi dán. Addon không gửi cookie đi đâu. <button type="button" class="link-btn" data-help="beinios">❓ Hướng dẫn</button></div>
         <div class="backup-actions">
           <button type="button" class="ghost" id="btn-beinios">Chuyển đăng nhập sang BeinIOS</button>
         </div>
+      </div>
+      <div class="group help-group-set" id="help-set">
+        <div class="group-title">❓ Hướng dẫn</div>
+        <div class="help-topics" id="help-set-list"></div>
       </div>
     </section>
 
@@ -1522,16 +1511,15 @@
 
     <section class="card span-3" id="usage-card" data-tab="log">
       <div class="card-head">
-        <h2>Báo cáo sử dụng</h2>
+        <h2>Báo cáo sử dụng <button type="button" class="tip-i" data-tip="Giúp tác giả biết addon được dùng thế nào và chỗ nào hay lỗi. Addon chỉ đếm trong máy (tính năng nào dùng bao nhiêu lần, cài đặt nào đang bật, lỗi kỹ thuật, kết quả tự kiểm tra) — không có tên group, tên thành viên hay nội dung bài, và không tự gửi đi đâu. Xem bên dưới rồi tự gửi cho tác giả (Kai | Crypto Life)." aria-label="Gợi ý: Giúp tác giả biết addon được dùng thế nào và chỗ nào hay lỗi. Addon chỉ đếm trong máy (tính năng nào dùng bao nhiêu lần, cài đặt nào đang bật, lỗi kỹ thuật, kết quả tự kiểm tra) — không có tên group, tên thành viên hay nội dung bài, và không tự gửi đi đâu. Xem bên dưới rồi tự gửi cho tác giả (Kai | Crypto Life).">i</button><button type="button" class="ghost sm help-btn" data-help="support" data-tip="Hướng dẫn" aria-label="Hướng dẫn">❓</button></h2>
         <div class="review-tools">
           <button type="button" class="primary sm" id="btn-usage-copy">📋 Sao chép</button>
           <button type="button" class="ghost sm" id="btn-usage-tg" title="Gửi vào chat Telegram đã cài, rồi chuyển tiếp cho tác giả">Gửi về Telegram</button>
           <button type="button" class="ghost sm" id="btn-usage-file">Tải tệp .txt</button>
         </div>
       </div>
-      <div class="muted small review-note">Giúp tác giả biết addon được dùng thế nào và chỗ nào hay lỗi. Addon chỉ đếm trong máy (tính năng nào dùng bao nhiêu lần, cài đặt nào đang bật, lỗi kỹ thuật, kết quả tự kiểm tra) — <b>không có tên group, tên thành viên hay nội dung bài, và không tự gửi đi đâu</b>. Xem bên dưới rồi tự gửi cho tác giả (Kai | Crypto Life).</div>
       <div class="usage-share" id="usage-share" hidden>
-        <label class="switch-row"><input type="checkbox" id="usage-auto" /><span><b>Tự gửi mỗi tuần cho tác giả</b> <span class="muted small" id="usage-auto-note"></span><br /><span class="muted small">Gửi đúng nội dung bên dưới (ẩn danh, kèm một mã cài đặt ngẫu nhiên) tới bảng tính của tác giả qua Google Script. Tắt bất cứ lúc nào.</span></span></label>
+        <label class="switch-row"><input type="checkbox" id="usage-auto" /><span><b>Tự gửi mỗi tuần cho tác giả</b> <span class="muted small" id="usage-auto-note"></span> <button type="button" class="tip-i" data-tip="Gửi đúng nội dung bên dưới (ẩn danh, kèm một mã cài đặt ngẫu nhiên) tới bảng tính của tác giả qua Google Script. Tắt bất cứ lúc nào." aria-label="Gợi ý: Gửi đúng nội dung bên dưới (ẩn danh, kèm một mã cài đặt ngẫu nhiên) tới bảng tính của tác giả qua Google Script. Tắt bất cứ lúc nào.">i</button></span></label>
         <button type="button" class="ghost sm" id="btn-usage-send">Gửi ngay</button>
       </div>
       <label class="text-row small usage-note"><span>Tên / ghi chú của bạn (không bắt buộc)</span><input type="text" id="usage-note" maxlength="80" placeholder="vd. Lan — admin Crypto Life" /></label>
@@ -1540,7 +1528,7 @@
 
     <section class="card span-3" id="diag-card" data-tab="log">
       <div class="card-head">
-        <h2>Lỗi kỹ thuật</h2>
+        <h2>Lỗi kỹ thuật <button type="button" class="tip-i" data-tip="Addon tự ghi lỗi khi chạy (của nền, Dashboard, cửa sổ nhỏ) và lỗi Beincom trả về khi gọi API — không ghi nội dung bài, mật khẩu hay token. Gặp trục trặc thì bấm Sao chép báo cáo rồi dán cho người hỗ trợ. Hết phiên đăng nhập và bài đã bị xoá trên web không tính là lỗi." aria-label="Gợi ý: Addon tự ghi lỗi khi chạy (của nền, Dashboard, cửa sổ nhỏ) và lỗi Beincom trả về khi gọi API — không ghi nội dung bài, mật khẩu hay token. Gặp trục trặc thì bấm Sao chép báo cáo rồi dán cho người hỗ trợ. Hết phiên đăng nhập và bài đã bị xoá trên web không tính là lỗi.">i</button><button type="button" class="ghost sm help-btn" data-help="support" data-tip="Hướng dẫn" aria-label="Hướng dẫn">❓</button></h2>
         <div class="review-tools">
           <span class="muted small" id="diag-count"></span>
           <button type="button" class="ghost sm" id="btn-diag-reload" title="Đọc lại">↻</button>
@@ -1548,7 +1536,6 @@
           <button type="button" class="ghost sm danger" id="btn-diag-clear">Xoá</button>
         </div>
       </div>
-      <div class="muted small review-note">Addon tự ghi lỗi khi chạy (của nền, Dashboard, cửa sổ nhỏ) và lỗi Beincom trả về khi gọi API — không ghi nội dung bài, mật khẩu hay token. Gặp trục trặc thì bấm <b>Sao chép báo cáo</b> rồi dán cho người hỗ trợ. Hết phiên đăng nhập và bài đã bị xoá trên web không tính là lỗi.</div>
       <div class="table-wrap">
         <table class="requests diag-table">
           <thead>
@@ -1776,7 +1763,7 @@
   </div>
 
   <footer class="muted small">
-    Dữ liệu lưu trong trình duyệt này · <span id="version"></span> · <a href="#" id="btn-whatsnew">Có gì mới</a> · <a href="#" id="btn-onboard">Bắt đầu nhanh</a> · <a href="HUONG-DAN-CAI.html" target="_blank">Hướng dẫn cài</a> · Tác giả: <b>Kai | Crypto Life</b>
+    Dữ liệu lưu trong trình duyệt này · <span id="version"></span> · <a href="#" id="btn-whatsnew">Có gì mới</a> · <a href="#" id="btn-onboard">Bắt đầu nhanh</a> · <button type="button" class="link-btn" id="btn-help" data-help="">Hướng dẫn</button> · <a href="HUONG-DAN-CAI.html" target="_blank">Hướng dẫn cài</a> · Tác giả: <b>Kai | Crypto Life</b>
   </footer>
 
   <script src="common.js"></script>
@@ -1793,6 +1780,7 @@
   <script src="lib/transfer.js"></script>
   <script src="lib/self.js"></script>
   <script src="lib/ai.js"></script>
+  <script src="lib/help.js"></script>
   <script src="upload.js"></script>
   <script src="charts.js"></script>
   <script src="dash/core.js"></script>

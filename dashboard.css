@@ -508,7 +508,6 @@ tr.csv-bad td { background: color-mix(in srgb, var(--err-soft) 50%, transparent)
 .art-chip { border: 1px solid var(--border); background: var(--surface); color: var(--text); border-radius: 99px; padding: 3px 10px; font-size: 12px; cursor: pointer; }
 .art-chip.on { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); font-weight: 600; }
 .art-when { display: inline-flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.art-help code { font-size: 11px; }
 .art-preview { padding: 12px 16px; }
 .art-preview h1 { font-size: 24px; margin: 14px 0 8px; }
 .art-preview h2 { font-size: 20px; margin: 14px 0 6px; }
@@ -574,9 +573,6 @@ code { font-size: 12px; background: var(--none); padding: 0 4px; border-radius: 
 .tg-line { display: flex; gap: 6px; align-items: center; }
 .tg-line input { flex: 1; min-width: 0; }
 .tg-kinds { display: flex; flex-direction: column; gap: 4px; }
-.tg-help { font-size: 13px; }
-.tg-help summary { cursor: pointer; color: var(--accent); font-weight: 600; }
-.tg-help ol { margin: 6px 0 0; padding-left: 20px; display: flex; flex-direction: column; gap: 4px; }
 .tg-actions { display: flex; gap: 6px; }
 .err-text { color: var(--err); }
 .sync-row { display: flex; gap: 8px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
@@ -1077,3 +1073,24 @@ dialog.help-dlg { max-width: 620px; width: calc(100% - 32px); padding: 0; }
 .help-body ol { margin: 4px 0 6px; padding-left: 22px; }
 .help-body li { margin: 2px 0; }
 .help-dlg .dialog-actions { padding: 10px 18px 14px; }
+/* Mục lục Hướng dẫn (hộp và Cài đặt): các chủ đề là ô bấm, chia theo nhóm */
+.help-group h4 { color: var(--muted); font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
+.help-topics { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 6px; margin: 2px 0 6px; }
+.help-topic {
+  padding: 8px 11px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--fg);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+.help-topic:hover, .help-topic:focus-visible { border-color: var(--accent); color: var(--accent); }
+.help-back { display: inline-block; margin: 10px 0 0; font-size: 13px; }
+.help-group-set .help-topics { margin: 0; }
+/* Mô tả dài đã gọn vào ⓘ: tiêu đề thẻ, tiêu đề nhóm, nhãn ô */
+h2 > .tip-i, .group-title > .tip-i { vertical-align: 2px; }
+.card-head h2 .help-btn, .group-title .link-btn { margin-left: 6px; }
+.warn-note { color: var(--warn); }

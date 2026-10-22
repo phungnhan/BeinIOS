@@ -2,6 +2,11 @@
 
 Mỗi bản một mục, bản mới nhất ở trên. Dashboard tự hiện các mục mới sau khi cập nhật (bấm "Có gì mới" ở cuối trang để xem lại).
 
+## v0.56.0 — 23/10/2026
+- **❓ Hướng dẫn trong ứng dụng**: mọi hướng dẫn gom vào một chỗ, viết sẵn ngay trong addon (không phải mở trang ngoài). Mở ở **Cài đặt → ❓ Hướng dẫn**, chân trang **Hướng dẫn**, hoặc nút ❓ ở từng phần. Có mục lục 17 chủ đề: Bắt đầu, Thành viên, Bài viết & bình luận, Báo cáo, Đăng bài, Nhập CSV, Article & Series, Thống kê, Quy tắc lọc, Tự xử lý, Thông báo & theo dõi, Telegram, Chat, AI, Sao lưu, BeinIOS, Khi gặp trục trặc; mỗi chủ đề có nút **‹ Mọi hướng dẫn**.
+- **Dashboard gọn hơn**: mô tả dưới các dòng cài đặt / quy tắc và ghi chú đầu các thẻ nằm trong gợi ý ⓘ (rê chuột hoặc chạm để xem); hướng dẫn dài (các cột CSV, cách tạo bot Telegram, BeinIOS) chuyển vào ❓ Hướng dẫn. Cảnh báo quan trọng vẫn hiện rõ: Chạy thử, tắt Duyệt thành viên, ẩn bài là một chiều.
+- **AI trên web trên iPhone (BeinIOS)**: **Chép đề bài & mở Claude** mở thẳng **ứng dụng Claude** đã đăng nhập sẵn, khỏi đăng nhập lại trên trang web; chưa cài ứng dụng thì bấm **Mở Claude trên web**. ChatGPT / Gemini chưa có liên kết mở ứng dụng chính thức nên vẫn mở bằng link (iPhone tự mở ứng dụng nếu được). Máy tính giữ như cũ.
+
 ## v0.55.0 — 22/10/2026
 - **✨ AI viết bài chào / vinh danh** (tab Đăng bài → Chào thành viên mới / Vinh danh thành viên tích cực → **✨ AI viết bài**): AI viết mẫu bài mới có chỗ trống `{danh_sach}`, addon vẫn tự điền @tên đúng những người bạn đã chọn rồi soạn sẵn vào ô đăng bài. Mẫu cũ chỉ bị thay khi bạn bấm Dùng (bấm Lưu mẫu nếu muốn giữ).
 - **✨ Tóm tắt bình luận** (cửa sổ Bài viết & bình luận): AI đọc bài và các bình luận đang hiện, tóm tắt ý chính, câu hỏi còn chờ admin trả lời, phàn nàn / dấu hiệu spam, không khí chung và việc nên làm; bấm **Chép tóm tắt**.

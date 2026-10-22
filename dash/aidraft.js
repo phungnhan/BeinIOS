@@ -55,14 +55,17 @@ const adSet = (text) => {
 };
 const adPrompt = () => AD.opts.prompt([AD.cfg?.note, $('ad-note').value.trim()].filter(Boolean).join('\n'));
 
-// Chép đề bài và mở trang chat ngay trong lúc bấm (Safari chặn nếu làm sau khi chờ)
+// Chép đề bài và mở trang chat (iPhone: ứng dụng) ngay trong lúc bấm (Safari chặn nếu làm sau khi chờ)
 function adWebCopy() {
   const site = BG.AI_WEB_SITES[$('ad-site').value] ? $('ad-site').value : 'claude';
   const copying = arCopy(adPrompt());
-  window.open(BG.AI_WEB_SITES[site].url, '_blank', 'noopener');
+  const app = aiOpenSite(site);
   AD.cfg = { ...AD.cfg, site, mode: 'web' };
   chrome.storage.local.set({ aiConfig: AD.cfg });
-  copying.then((ok) => adStatus(ok ? `Đã chép đề bài và mở ${BG.AI_WEB_SITES[site].label}.` : 'Trình duyệt không cho chép tự động — thử lại, hoặc dùng khoá API.', ok ? '' : 'err-text'));
+  copying.then((ok) => {
+    adStatus(ok ? `Đã chép đề bài và ${aiOpenedText(site, app)}.` : 'Trình duyệt không cho chép tự động — thử lại, hoặc dùng khoá API.', ok ? '' : 'err-text');
+    if (app) aiWebFallback($('ad-status'), site);
+  });
 }
 
 async function adWebPaste() {
