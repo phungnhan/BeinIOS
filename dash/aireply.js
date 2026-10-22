@@ -341,20 +341,22 @@ async function arCopy(text) {
 }
 
 // Bước 1: soạn đề bài (giọng văn, ghi chú, bài, bình luận chưa gửi), chép, mở trang chat AI ở thẻ mới
-async function arWebCopy() {
+// Safari (iPhone) chỉ cho chép và mở thẻ mới ngay trong lúc bấm: soạn đề bài từ cài đặt đã đọc lúc mở hộp, chép và mở trang
+// trước mọi việc phải chờ
+function arWebCopy() {
   const todo = arTodo();
   if (!todo.length) return toast('Các bình luận đã được trả lời hết.', 'warn');
-  const cfg = (AR.cfg = await aiConfig());
+  const cfg = AR.cfg || BG.DEFAULT_AI;
   const site = BG.AI_WEB_SITES[$('ar-site').value] ? $('ar-site').value : 'claude';
   const style = $('ar-style').value;
   const note = [cfg.note, $('ar-note').value.trim()].filter(Boolean).join('\n');
   const p = BG.aiWebPrompt({ comments: todo, posts: AR.posts, style, note, community: arCommunity(todo) });
   AR.webIds = p.ids;
-  chrome.storage.local.set({ aiConfig: { ...cfg, site, style, mode: 'web' } });
-  const copied = await arCopy(p.text);
+  const copying = arCopy(p.text);
   window.open(BG.AI_WEB_SITES[site].url, '_blank', 'noopener');
-  arStatus(copied ? `Đã chép đề bài (${todo.length} bình luận) và mở ${BG.AI_WEB_SITES[site].label}. Dán vào ô chat, gửi, rồi chép câu trả lời dán vào bước 2.` : 'Trình duyệt không cho chép tự động — thử lại, hoặc dùng khoá API.', copied ? '' : 'err-text');
-  $('ar-paste').focus();
+  AR.cfg = { ...cfg, site, style, mode: 'web' };
+  chrome.storage.local.set({ aiConfig: AR.cfg });
+  copying.then((copied) => arStatus(copied ? `Đã chép đề bài (${todo.length} bình luận) và mở ${BG.AI_WEB_SITES[site].label}. Dán vào ô chat, gửi, rồi chép câu trả lời và bấm Dán ở bước 2.` : 'Trình duyệt không cho chép tự động — thử lại, hoặc dùng khoá API.', copied ? '' : 'err-text'));
 }
 
 // Bước 2: đọc khối JSON dán về, điền nháp
@@ -377,15 +379,24 @@ function arWebFill() {
   renderAr();
 }
 
-// Nút Dán: đọc bộ nhớ tạm (addon xin quyền đọc bộ nhớ tạm lúc bấm, một lần) rồi điền luôn; không đọc được thì nhắc dán tay
+// Nút Dán: đọc bộ nhớ tạm rồi điền luôn; không đọc được thì nhắc dán tay
 async function arWebPaste() {
-  try {
-    await chrome.permissions?.request?.({ permissions: ['clipboardRead'] });
-  } catch {}
-  let text = '';
-  try {
-    text = await navigator.clipboard.readText();
-  } catch {}
+  // Đọc ngay trong lúc bấm (Safari cần vậy); addon chưa có quyền đọc bộ nhớ tạm thì xin rồi đọc lại
+  const read = async () => {
+    try {
+      return await navigator.clipboard.readText();
+    } catch {
+      return null;
+    }
+  };
+  let text = await read();
+  if (text == null && chrome.permissions?.request) {
+    try {
+      await chrome.permissions.request({ permissions: ['clipboardRead'] });
+    } catch {}
+    text = await read();
+  }
+  text = text || '';
   if (!text.trim()) {
     $('ar-paste').focus();
     return arStatus('Không đọc được bộ nhớ tạm — bấm vào ô rồi dán (Ctrl + V).', 'warn-text');
