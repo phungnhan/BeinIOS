@@ -240,28 +240,48 @@ document.addEventListener('keydown', (e) => e.key === 'Escape' && hideTip());
 window.addEventListener('scroll', hideTip, true);
 window.addEventListener('resize', hideTip);
 
-// Hộp Hướng dẫn: HELP_TOPICS[chủ đề] = { title, sections: [{ h, items: [chuỗi | [chuỗi…] (danh sách đánh số)] }] }
-const HELP_TOPICS = {};
-function openHelp(topic) {
-  const t = HELP_TOPICS[topic];
-  if (!t) return;
-  hideTip();
-  $('help-title').textContent = t.title;
-  $('help-body').replaceChildren(
-    ...t.sections.map((s) =>
-      el(
-        'section',
-        {},
-        el('h4', { text: s.h }),
-        ...s.items.map((it) => (Array.isArray(it) ? el('ol', {}, it.map((x) => el('li', { text: x }))) : el('p', { text: it }))),
-      ),
+// Hộp Hướng dẫn: nội dung ở lib/help.js (BG.HELP_TOPICS, mục lục BG.HELP_INDEX). openHelp('') mở mục lục mọi chủ đề;
+// mỗi chủ đề có nút quay về mục lục
+const HELP_TOPICS = BG.HELP_TOPICS;
+function helpIndex() {
+  return BG.HELP_INDEX.map((g) =>
+    el(
+      'section',
+      { class: 'help-group' },
+      el('h4', { text: g.label }),
+      el('div', { class: 'help-topics' }, g.topics.filter((k) => HELP_TOPICS[k]).map((k) => el('button', { type: 'button', class: 'help-topic', 'data-help': k, text: HELP_TOPICS[k].title }))),
     ),
   );
+}
+function openHelp(topic) {
+  const t = HELP_TOPICS[topic];
+  if (topic && !t) return;
+  hideTip();
+  $('help-title').textContent = t ? t.title : '❓ Hướng dẫn';
+  $('help-body').replaceChildren(
+    ...(t
+      ? [
+          el('button', { type: 'button', class: 'link-btn help-back', 'data-help': '', text: '‹ Mọi hướng dẫn' }),
+          ...t.sections.map((s) =>
+            el(
+              'section',
+              {},
+              el('h4', { text: s.h }),
+              ...s.items.map((it) => (Array.isArray(it) ? el('ol', {}, it.map((x) => el('li', { text: x }))) : el('p', { text: it }))),
+            ),
+          ),
+        ]
+      : helpIndex()),
+  );
   $('help-body').scrollTop = 0;
-  $('help-dlg').showModal();
+  if (!$('help-dlg').open) $('help-dlg').showModal();
 }
 document.addEventListener('click', (e) => {
   const b = e.target.closest?.('[data-help]');
-  if (b) openHelp(b.dataset.help);
+  if (!b) return;
+  e.preventDefault(); // nút ❓ nằm trong <label> / link: không bật ô, không đổi địa chỉ trang
+  openHelp(b.dataset.help);
 });
+// Cài đặt → ❓ Hướng dẫn: mọi chủ đề theo thứ tự mục lục
+$('help-set-list')?.replaceChildren(...BG.HELP_INDEX.flatMap((g) => g.topics).filter((k) => HELP_TOPICS[k]).map((k) => el('button', { type: 'button', class: 'help-topic', 'data-help': k, text: HELP_TOPICS[k].title })));
 for (const id of ['help-x', 'help-ok']) $(id).addEventListener('click', () => $('help-dlg').close());

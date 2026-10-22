@@ -1196,7 +1196,12 @@ export const scenarios = [
       await page.until(() => !document.getElementById('tipbox').matches(':popover-open'));
       await page.ev(`document.querySelector('#ai-reply [data-help=ai]').click(); true`);
       await page.until(() => document.getElementById('help-dlg').open && document.querySelectorAll('#help-body h4').length >= 4);
-      assert.equal(await page.ev(`document.getElementById('help-title').textContent`), '✨ Hướng dẫn dùng AI');
+      assert.equal(await page.ev(`document.getElementById('help-title').textContent`), '✨ Dùng AI');
+      // ‹ Mọi hướng dẫn: về mục lục mọi chủ đề, bấm một chủ đề để xem
+      await page.ev(`document.querySelector('#help-body .help-back').click(); true`);
+      await page.until(() => document.getElementById('help-title').textContent === '❓ Hướng dẫn' && document.querySelectorAll('#help-body .help-topic').length >= 15);
+      await page.ev(`document.querySelector('#help-body .help-topic[data-help=ai]').click(); true`);
+      await page.until(() => document.getElementById('help-title').textContent === '✨ Dùng AI' && document.getElementById('help-dlg').open);
       await page.ev(`document.getElementById('help-ok').click(); true`);
       await page.until(() => !document.getElementById('help-dlg').open && document.getElementById('ai-reply').open);
       await setValue(page, 'ar-site', 'chatgpt');
@@ -1239,6 +1244,67 @@ export const scenarios = [
       assert.deepEqual(await page.ev(`[window.__lastCommentWrite.commentId, window.__lastCommentWrite.content]`), ['cw1', '@thanhha Bạn nhắn admin kèm mã giao dịch nhé, mình kiểm tra ngay.']);
       assert.deepEqual(await page.ev(`chrome.storage.local.get('aiConfig').then((r) => [r.aiConfig.mode, r.aiConfig.site, r.aiConfig.key])`), ['web', 'chatgpt', '']);
       await page.ev(`document.getElementById('ar-close').click(); true`);
+    },
+  },
+  {
+    name: 'AI trên web ở iPhone: Claude mở thẳng ứng dụng (claude://), có nút mở bản web; ChatGPT vẫn mở link web',
+    async run({ page, url, assert }) {
+      await page.open(url('dashboard', 'tab=content'));
+      await page.ev(`document.querySelector('#comment-filter button[data-f=all]').click(); true`);
+      await page.until(() => !!document.querySelector('#comments-body input[aria-label="Chọn bình luận của Thanh Hà"]'));
+      await page.ev(`document.querySelector('#comments-body input[aria-label="Chọn bình luận của Thanh Hà"]').click(); true`);
+      await page.until(() => !document.getElementById('btn-ai-comments').disabled);
+      // Giả iPhone; chặn link ứng dụng để ghi lại (trình duyệt thử không có ứng dụng Claude)
+      await page.ev(`(() => {
+        Object.defineProperty(navigator, 'userAgent', { configurable: true, value: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1' });
+        Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async (t) => { window.__clip = t; }, readText: async () => '' } });
+        window.open = (u) => { window.__opened = u; return null; };
+        document.addEventListener('click', (e) => { const a = e.target.closest?.('a[href^="claude:"]'); if (a) { e.preventDefault(); window.__app = a.getAttribute('href') + '|' + a.target; } }, true);
+        return true;
+      })()`);
+      await page.ev(`document.getElementById('btn-ai-comments').click(); true`);
+      await page.until(() => document.getElementById('ai-reply').open && !document.getElementById('ar-web').hidden);
+      await setValue(page, 'ar-site', 'claude');
+      await page.ev(`document.getElementById('ar-copy').click(); true`);
+      await page.until(() => window.__app === 'claude://|_top' && /mở ứng dụng Claude — dán vào ô chat/.test(document.getElementById('ar-status').textContent));
+      assert.equal(await page.ev(`window.__opened || ''`), '');
+      assert.match(await page.ev(`window.__clip`), /^Bạn giúp admin một cộng đồng trên Beincom/);
+      // Chưa cài ứng dụng: nút mở bản web
+      await page.ev(`document.querySelector('#ar-status .link-btn').click(); true`);
+      await page.until(() => window.__opened === 'https://claude.ai/new');
+      // ChatGPT: không có liên kết ứng dụng chính thức — mở link web như cũ
+      await page.ev(`window.__app = ''; window.__opened = ''; true`);
+      await setValue(page, 'ar-site', 'chatgpt');
+      await page.ev(`document.getElementById('ar-copy').click(); true`);
+      await page.until(() => window.__opened === 'https://chatgpt.com/' && /và mở ChatGPT[.]/.test(document.getElementById('ar-status').textContent));
+      assert.equal(await page.ev(`window.__app`), '');
+      assert.equal(await page.ev(`document.querySelectorAll('#ar-status .link-btn').length`), 0);
+      await page.ev(`document.getElementById('ar-close').click(); true`);
+    },
+  },
+  {
+    name: 'Hướng dẫn: Cài đặt gom mọi chủ đề, chân trang mở mục lục; mô tả dài nằm trong ⓘ',
+    async run({ page, url, assert }) {
+      await page.open(url('dashboard', 'tab=settings'));
+      await page.until(() => document.querySelectorAll('#help-set-list .help-topic').length >= 15);
+      await page.ev(`document.querySelector('#help-set-list .help-topic[data-help=csv]').click(); true`);
+      await page.until(() => document.getElementById('help-dlg').open && document.getElementById('help-title').textContent === '📄 Nhập nhiều bài từ CSV');
+      assert.match(await page.ev(`document.getElementById('help-body').textContent`), /noi_dung[^]*group[^]*gio_dang/);
+      assert.equal(await page.ev(`document.querySelectorAll('#help-body a').length`), 0);
+      await page.ev(`document.getElementById('help-x').click(); true`);
+      await page.until(() => !document.getElementById('help-dlg').open);
+      // Chân trang: Hướng dẫn mở mục lục, không đổi tab đang xem
+      await page.ev(`document.getElementById('btn-help').click(); true`);
+      await page.until(() => document.getElementById('help-dlg').open && document.getElementById('help-title').textContent === '❓ Hướng dẫn');
+      assert.match(await page.ev(`location.hash`), /tab=settings/);
+      await page.ev(`document.getElementById('help-ok').click(); true`);
+      // Mô tả công tắc: trong ⓘ, chạm thì hiện, không bật / tắt công tắc
+      const before = await page.ev(`document.getElementById('scanComments').checked`);
+      await page.ev(`document.querySelector('#scanComments').closest('label').querySelector('.tip-i').click(); true`);
+      await page.until(() => document.getElementById('tipbox').matches(':popover-open') && /tối đa 8 bài/.test(document.getElementById('tipbox').textContent));
+      assert.equal(await page.ev(`document.getElementById('scanComments').checked`), before);
+      // Cảnh báo Chạy thử vẫn hiện rõ
+      assert.match(await page.ev(`document.getElementById('dryRun').closest('label').textContent`), /chỉ ghi nhật ký/);
     },
   },
   {
