@@ -148,6 +148,10 @@ node test/pwa/pwa.e2e.mjs
 
 ## Lịch sử BeinIOS
 
+- **1.6.1 (22/10/2026).** Đi cùng addon BeinFusion 0.55.0:
+  - **✨ AI viết bài** (Quản trị → Đăng bài → Chào thành viên mới / Vinh danh): AI viết mẫu bài mới, addon tự điền @tên những người đã chọn rồi soạn vào ô đăng bài.
+  - **✨ Tóm tắt bình luận** trong cửa sổ bài viết: ý chính, câu hỏi còn chờ, phàn nàn / spam, việc nên làm → Chép tóm tắt.
+  - Các phần AI gọn hơn: mô tả ngắn nằm trong gợi ý ⓘ (chạm để xem), hướng dẫn dài trong hộp ❓ Hướng dẫn.
 - **1.6.0 (22/10/2026).** Đi cùng addon BeinFusion 0.54.1 — **✨ Trả lời bình luận bằng AI**:
   - Quản trị → Bài viết → **Bình luận mới**: chọn bình luận → **✨ Trả lời bằng AI** (hoặc mở một bài → **✨ Trả lời hàng loạt bằng AI**). AI viết nháp một câu trả lời cho từng bình luận; xem, sửa, bỏ chọn rồi **Trả lời tất cả**.
   - Trên iPhone dùng cách **AI trên web (chép – dán)**: bấm **Chép đề bài & mở Claude** (hoặc ChatGPT / Gemini — có ứng dụng thì iPhone mở ứng dụng), dán vào ô chat, gửi, chép câu trả lời, quay lại BeinIOS bấm **📋 Dán**. Hoặc dán khoá API Claude để tự động hoàn toàn.
