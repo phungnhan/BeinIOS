@@ -723,6 +723,34 @@ dialog.postview[open] { display: flex; }
 .pv-to { font-size: 13px; color: var(--accent); }
 .pv-actions { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
 @media (max-width: 640px) { dialog.postview { width: 100%; height: 100dvh; max-height: none; border-radius: 0; } .pv-replies { margin-left: 10px; } }
+/* Trả lời bình luận bằng AI (dash/aireply.js): dùng khung cửa sổ Bài viết; mỗi bình luận một thẻ có ô sửa câu trả lời */
+.pv-ctools { display: inline-flex; align-items: center; gap: 14px; }
+.ar-opts { display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap; }
+.ar-opt { display: flex; flex-direction: column; gap: 4px; }
+.ar-opt select { width: auto; }
+.ar-note { flex: 1; min-width: 220px; }
+.ar-note input { width: 100%; }
+#ar-status { margin: 10px 0 6px; }
+#ar-status:empty { display: none; }
+#ar-dry { margin: 6px 0; }
+.ar-setup { margin: 10px 0; padding: 10px 12px; border-radius: 10px; background: var(--warn-soft); font-size: 13px; }
+.ar-list { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
+.ar-item { padding: 10px 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg); }
+.ar-item.skip { border-style: dashed; }
+.ar-item.done { opacity: .7; }
+.ar-item .ar-text { width: 100%; min-height: 60px; margin-top: 6px; resize: vertical; font: inherit; }
+.ar-post { margin-top: 2px; }
+.ar-btns { display: inline-flex; gap: 8px; }
+.ar-mode { margin-bottom: 12px; }
+.ar-mode button { font-size: 13px; padding: 6px 14px; }
+.ar-web { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; padding: 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg); }
+.ar-web[hidden] { display: none; }
+.ar-step { display: flex; gap: 10px; align-items: flex-start; }
+.ar-num { flex: none; display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: var(--accent); color: #fff; font-size: 12px; font-weight: 700; }
+.ar-step-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.ar-step-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.ar-step-row select { width: auto; }
+#ar-paste { width: 100%; min-height: 80px; resize: vertical; font: 12.5px/1.4 ui-monospace, Menlo, Consolas, monospace; }
 .onboard { max-width: 560px; }
 .onb-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
 .onboard h4 { margin: 8px 0 6px; font-size: 15px; }

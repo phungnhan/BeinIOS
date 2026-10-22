@@ -1,15 +1,15 @@
 {
   "manifest_version": 3,
   "name": "BeinFusion — Quản lý Group Beincom",
-  "version": "0.53.1",
+  "version": "0.54.0",
   "description": "Quản lý các Group Beincom bạn quản trị: duyệt thành viên và bài viết theo quy tắc, ẩn bài vi phạm, quản lý thành viên, soạn và hẹn giờ đăng bài, thống kê thành viên và bài viết. Tác giả: Kai | Crypto Life.",
   "permissions": ["alarms", "storage", "unlimitedStorage", "notifications", "scripting"],
   "host_permissions": [
     "https://api.beincom.com/*",
     "https://group.beincom.com/*"
   ],
-  "optional_permissions": ["cookies"],
-  "optional_host_permissions": ["https://api.telegram.org/*", "https://script.google.com/*", "https://script.googleusercontent.com/*", "https://chat.beincom.com/*", "https://auth.beincom.com/*", "https://beincom.com/*"],
+  "optional_permissions": ["cookies", "clipboardRead"],
+  "optional_host_permissions": ["https://api.telegram.org/*", "https://api.anthropic.com/*", "https://script.google.com/*", "https://script.googleusercontent.com/*", "https://chat.beincom.com/*", "https://auth.beincom.com/*", "https://beincom.com/*"],
   "options_ui": {
     "page": "dashboard.html",
     "open_in_tab": true

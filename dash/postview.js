@@ -162,6 +162,8 @@ function renderPvComments() {
   $('pv-older').disabled = PV.loading;
   $('pv-older').textContent = PV.loading ? 'Đang tải…' : 'Xem bình luận cũ hơn';
   $('pv-reload').disabled = PV.loading;
+  // Trả lời hàng loạt bằng AI (dash/aireply.js): khi còn bình luận chưa được mình trả lời
+  $('pv-ai').hidden = PV.loading || typeof pvAiTargets !== 'function' || !pvAiTargets().length;
   const list = $('pv-list');
   if (PV.error) return list.replaceChildren(el('p', { class: 'err-text small', text: PV.error }));
   if (!roots.length) return list.replaceChildren(el('p', { class: 'muted small pv-empty', text: PV.loading ? 'Đang tải…' : 'Chưa có bình luận nào — hãy là người đầu tiên.' }));
