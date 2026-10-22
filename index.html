@@ -19,6 +19,7 @@
   <!-- Hồ sơ cá nhân (Cài đặt › Tài khoản): cùng nội dung với addon (BG.selfProfile) -->
   <script src="common.js"></script>
   <script src="lib/self.js"></script>
+  <script src="lib/ai.js"></script>
   <style>
     :root {
       --bg: #f2f2f7;
@@ -456,6 +457,10 @@
             <i class="ic" style="--c: #2aabee"><svg class="i" viewBox="0 0 24 24"><path d="M21 3.5 3 10.8l6.3 2.4L12 20l3-4.6 4.6 3.4Z" /><path d="M9.3 13.2 21 3.5" /></svg></i>
             <span>Telegram</span><em id="st-tg"></em><svg class="i chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg>
           </button>
+          <button type="button" class="row" data-sec="ai">
+            <i class="ic" style="--c: #af52de"><svg class="i" viewBox="0 0 24 24"><path d="M12 3.5l1.7 4.6 4.6 1.7-4.6 1.7L12 16.1l-1.7-4.6-4.6-1.7 4.6-1.7Z" /><path d="M18.5 15l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8Z" /></svg></i>
+            <span>AI trả lời bình luận</span><em id="st-ai"></em><svg class="i chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg>
+          </button>
           <button type="button" class="row" data-sec="backup">
             <i class="ic" style="--c: #8e8e93"><svg class="i" viewBox="0 0 24 24"><path d="M7.5 18.5a4 4 0 0 1-.6-8A5.8 5.8 0 0 1 18 9.6a4.5 4.5 0 0 1-.5 8.9Z" /><path d="M12 15.5v-5M9.8 12.6 12 10.4l2.2 2.2" /></svg></i>
             <span>Sao lưu &amp; khôi phục</span><svg class="i chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg>
@@ -813,7 +818,7 @@
       }
 
       // Nhóm cài đặt của Quản trị: tên hiện ở trang con (khớp pwa-ui.js BeinEmbed)
-      const SECTIONS = { scan: 'Hoạt động & quét', auto: 'Tự xử lý', watch: 'Theo dõi & nhắc việc', rules: 'Quy tắc thành viên', postRules: 'Quy tắc bài viết', chat: 'Chat Beincom', tg: 'Telegram', backup: 'Sao lưu & khôi phục' };
+      const SECTIONS = { scan: 'Hoạt động & quét', auto: 'Tự xử lý', watch: 'Theo dõi & nhắc việc', rules: 'Quy tắc thành viên', postRules: 'Quy tắc bài viết', chat: 'Chat Beincom', tg: 'Telegram', ai: 'AI trả lời bình luận', backup: 'Sao lưu & khôi phục' };
       let dsetSec = 'scan';
       function openDset(sec) {
         dsetSec = SECTIONS[sec] ? sec : 'scan';
@@ -831,7 +836,7 @@
 
       // Giá trị nhanh bên phải các dòng Quản trị / Tích hợp
       async function renderAdminStates() {
-        const { settings: raw, telegram } = await page.store.get('local', ['settings', 'telegram']);
+        const { settings: raw, telegram, aiConfig } = await page.store.get('local', ['settings', 'telegram', 'aiConfig']);
         const st = { ...BG.DEFAULT_SETTINGS, ...raw };
         const every = st.intervalMin % 60 ? st.intervalMin + ' phút' : st.intervalMin / 60 + ' giờ';
         const put = (id, text, cls = '') => Object.assign($(id), { textContent: text, className: cls });
@@ -839,6 +844,7 @@
         put('st-auto', st.autoApprove || st.autoDecline || st.autoHideSpam || st.autoApprovePosts ? 'Bật' : 'Tắt');
         put('st-chat', st.chatEnabled ? 'Bật' : 'Tắt');
         put('st-tg', telegram?.enabled ? 'Bật' : 'Tắt');
+        put('st-ai', BG.validAiKey?.(aiConfig?.key) ? 'Khoá API' : 'Chép – dán');
       }
 
       // Tài khoản / Hồ sơ cá nhân kiểu Telegram: cùng nội dung với addon (BG.selfProfile) + trạng thái đăng nhập của BeinIOS
@@ -1308,7 +1314,7 @@
 
       page.store.onChanged.addListener((changes, area) => {
         if ((area === 'pwa' && changes.config) || (area === 'local' && changes.chatOverviewCache)) renderAccount();
-        if (area === 'local' && (changes.settings || changes.telegram)) renderAdminStates();
+        if (area === 'local' && (changes.settings || changes.telegram || changes.aiConfig)) renderAdminStates();
         if (area === 'local' && (changes.state || changes.chatOverviewCache) && !$('view-account').hidden) renderProfile();
       });
 

@@ -116,10 +116,10 @@
       tag(col, 'rules postRules');
       for (const ch of col?.children || []) tag(ch, { 'rules-scope': 'rules postRules', rules: 'rules', 'post-rules': 'postRules' }[ch.id] || '');
       const card = document.getElementById('settings');
-      tag(card, 'scan auto watch chat tg backup');
+      tag(card, 'scan auto watch chat tg ai backup');
       for (const ch of card?.children || []) {
         const c = ch.classList;
-        if (c.contains('card-head')) tag(ch, 'scan auto watch chat tg backup');
+        if (c.contains('card-head')) tag(ch, 'scan auto watch chat tg ai backup');
         else if (ch.id === 'master-row') tag(ch, 'scan');
         else if (ch.id === 'settings-group') {
           tag(ch, 'scan auto');
@@ -128,7 +128,7 @@
             if (x.classList.contains('auto-title')) sec = 'auto';
             tag(x, sec);
           }
-        } else tag(ch, c.contains('watch-group') ? 'watch' : c.contains('chat-group') ? 'chat' : c.contains('tg-group') ? 'tg' : c.contains('sync-group') || c.contains('backup-group') ? 'backup' : '');
+        } else tag(ch, c.contains('watch-group') ? 'watch' : c.contains('chat-group') ? 'chat' : c.contains('tg-group') ? 'tg' : c.contains('ai-group') ? 'ai' : c.contains('sync-group') || c.contains('backup-group') ? 'backup' : '');
       }
       if (typeof window.showTab === 'function') window.showTab('settings');
       // Dòng ô tích có chữ lẫn phần phụ (vd "Kèm hồ sơ vi phạm (chưa có)"): gói phần chữ lại để công tắc nằm gọn bên phải

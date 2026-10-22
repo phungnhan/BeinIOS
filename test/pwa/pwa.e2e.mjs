@@ -295,6 +295,11 @@ try {
   await page.until(new Function(`return ${isOpen('dset')} && ${embedSees('#settings .tg-group')}`), 5000);
   const tgView = await page.ev(`({ title: document.getElementById('dset-title').textContent, grp: ${embedSees('#settings-group')}, chat: ${embedSees('#settings .chat-group')}, rules: ${embedSees('.rules-col')}, head: ${embedSees('#settings > .card-head h2')} })`);
   ok(tgView.title === 'Telegram' && !tgView.grp && !tgView.chat && !tgView.rules && !tgView.head, 'Cài đặt › Telegram: chỉ nhóm Telegram');
+  // Tích hợp › Trả lời bình luận bằng AI: nhóm cài đặt AI của addon (khoá API không bắt buộc — chưa có khoá: chép – dán)
+  await page.ev(`document.querySelector('#view-dset [data-back]').click(); document.querySelector('[data-sec="ai"]').click(); true`);
+  await page.until(new Function(`return ${isOpen('dset')} && ${embedSees('#settings .ai-group')}`), 5000);
+  const aiView = await page.ev(`({ title: document.getElementById('dset-title').textContent, tg: ${embedSees('#settings .tg-group')}, key: ${embedSees('#ai-key')}, model: document.getElementById('f-set').contentDocument.getElementById('ai-model').options.length, state: document.getElementById('st-ai').textContent })`);
+  ok(aiView.title === 'AI trả lời bình luận' && !aiView.tg && aiView.key && aiView.model === 3 && aiView.state === 'Chép – dán', 'Cài đặt › Tích hợp › AI trả lời bình luận: chỉ nhóm AI (khoá API, mô hình); dòng báo "Chép – dán" khi chưa có khoá');
   await page.ev(`document.querySelector('#view-dset [data-back]').click(); document.querySelector('[data-sec="scan"]').click(); true`);
   await page.until(new Function(`return ${isOpen('dset')} && ${embedSees('#scanComments')} && !${embedSees('#autoApprove')}`), 5000);
   const scanBefore = await page.ev(`BeinPWA.page.store.get('local', ['settings']).then((r) => !!r.settings?.scanComments)`);
@@ -304,7 +309,7 @@ try {
   const sw = await page.ev(`(() => { const e = document.getElementById('f-set').contentDocument.getElementById('scanComments'); const cs = getComputedStyle(e); const row = e.closest('.switch-row'); return { w: cs.width, app: cs.appearance, last: row.lastElementChild === e || getComputedStyle(row).flexDirection === 'row-reverse', bg: getComputedStyle(row).backgroundColor }; })()`);
   ok(sw.w === '51px' && sw.app === 'none' && sw.last && sw.bg === 'rgb(255, 255, 255)', 'Cài đặt con cùng kiểu Cài đặt: dòng trắng, công tắc iPhone bên phải' + (sw.w === '51px' ? '' : ' ' + JSON.stringify(sw)));
   if (SHOTS) {
-    for (const sec of ['scan', 'auto', 'watch', 'rules', 'postRules', 'chat', 'tg', 'backup']) {
+    for (const sec of ['scan', 'auto', 'watch', 'rules', 'postRules', 'chat', 'tg', 'ai', 'backup']) {
       await page.ev(`document.querySelector('#view-dset [data-back]').click(); document.querySelector('[data-sec="${sec}"]').click(); true`);
       await sleep(500);
       await shot('6g-' + sec);

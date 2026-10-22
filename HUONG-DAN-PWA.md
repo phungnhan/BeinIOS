@@ -148,6 +148,10 @@ node test/pwa/pwa.e2e.mjs
 
 ## Lịch sử BeinIOS
 
+- **1.6.0 (22/10/2026).** Đi cùng addon BeinFusion 0.54.1 — **✨ Trả lời bình luận bằng AI**:
+  - Quản trị → Bài viết → **Bình luận mới**: chọn bình luận → **✨ Trả lời bằng AI** (hoặc mở một bài → **✨ Trả lời hàng loạt bằng AI**). AI viết nháp một câu trả lời cho từng bình luận; xem, sửa, bỏ chọn rồi **Trả lời tất cả**.
+  - Trên iPhone dùng cách **AI trên web (chép – dán)**: bấm **Chép đề bài & mở Claude** (hoặc ChatGPT / Gemini — có ứng dụng thì iPhone mở ứng dụng), dán vào ô chat, gửi, chép câu trả lời, quay lại BeinIOS bấm **📋 Dán**. Hoặc dán khoá API Claude để tự động hoàn toàn.
+  - Cài đặt → Tích hợp → **AI trả lời bình luận**: khoá API (không bắt buộc), mô hình, giọng văn, hướng dẫn thêm cho AI.
 - **1.5.2 (21/10/2026).** Thanh dưới của trang Chat gọn và cân đối:
   - Trang Chat kéo hết màn hình, không còn dải xám ngăn cách với thanh Chat · Quản trị · Cài đặt.
   - Giao diện Silk: thanh cộng đồng thành một viên kính nổi ngay trên thanh dưới, cùng bề rộng, icon gọn hơn, không còn khoảng trống thừa bên dưới.
