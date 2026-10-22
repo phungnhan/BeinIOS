@@ -12,7 +12,9 @@ async function openAiDraft(opts) {
   AD.mode = AD.cfg.mode === 'api' || AD.cfg.mode === 'web' ? AD.cfg.mode : BG.validAiKey(AD.cfg.key) ? 'api' : 'web';
   AD.busy = false;
   $('ad-title').textContent = opts.title;
-  $('ad-desc').textContent = opts.desc || '';
+  $('ad-tip').dataset.tip = opts.desc || '';
+  $('ad-tip').setAttribute('aria-label', 'Gợi ý: ' + (opts.desc || ''));
+  $('ad-tip').hidden = !opts.desc;
   $('ad-note').value = '';
   $('ad-note').placeholder = opts.notePlaceholder || '';
   $('ad-site').replaceChildren(...Object.entries(BG.AI_WEB_SITES).map(([k, w]) => el('option', { value: k, text: w.label })));
@@ -39,7 +41,7 @@ function renderAd() {
   $('ad-copy').textContent = `Chép đề bài & mở ${BG.AI_WEB_SITES[$('ad-site').value]?.label || 'trang chat AI'}`;
   $('ad-gen').disabled = AD.busy || !hasKey;
   $('ad-gen').textContent = AD.busy ? 'AI đang viết…' : has ? 'Viết lại' : 'Nhờ AI viết';
-  $('ad-result').placeholder = web ? 'Dán câu trả lời của AI vào đây (hoặc bấm 📋 Dán ở bước 2)…' : 'Bấm Nhờ AI viết — kết quả hiện ở đây.';
+  $('ad-result').placeholder = web ? 'Câu trả lời của AI hiện ở đây (bấm 📋 Dán, hoặc dán tay)…' : 'Bấm Nhờ AI viết — kết quả hiện ở đây.';
   $('ad-use').disabled = AD.busy || !has;
 }
 
@@ -60,17 +62,17 @@ function adWebCopy() {
   window.open(BG.AI_WEB_SITES[site].url, '_blank', 'noopener');
   AD.cfg = { ...AD.cfg, site, mode: 'web' };
   chrome.storage.local.set({ aiConfig: AD.cfg });
-  copying.then((ok) => adStatus(ok ? `Đã chép đề bài và mở ${BG.AI_WEB_SITES[site].label}. Dán vào ô chat, gửi, rồi chép câu trả lời và bấm Dán ở bước 2.` : 'Trình duyệt không cho chép tự động — thử lại, hoặc dùng khoá API.', ok ? '' : 'err-text'));
+  copying.then((ok) => adStatus(ok ? `Đã chép đề bài và mở ${BG.AI_WEB_SITES[site].label}.` : 'Trình duyệt không cho chép tự động — thử lại, hoặc dùng khoá API.', ok ? '' : 'err-text'));
 }
 
 async function adWebPaste() {
   const text = await aiReadClipboard();
   if (!text.trim()) {
     $('ad-result').focus();
-    return adStatus('Không đọc được bộ nhớ tạm — bấm vào ô Kết quả rồi dán (Ctrl + V).', 'warn-text');
+    return adStatus('Không đọc được bộ nhớ tạm — dán tay vào ô Kết quả (Ctrl + V).', 'warn-text');
   }
   adSet(text);
-  adStatus(`Đã dán câu trả lời của AI — xem, sửa rồi bấm "${AD.opts.useLabel}".`);
+  adStatus('Đã dán câu trả lời của AI.');
 }
 
 async function adGenerate() {
@@ -85,7 +87,7 @@ async function adGenerate() {
     const body = await aiCall(BG.aiTextRequest({ key: AD.cfg.key, model: AD.cfg.model, input: adPrompt() }));
     adSet(BG.aiParseText(body));
     const cost = BG.aiCost(body.usage, body.model || AD.cfg.model);
-    adStatus(`AI đã viết xong · chi phí ước tính ${cost < 0.01 ? '< 0,01' : cost.toFixed(2).replace('.', ',')} USD. Xem, sửa rồi bấm "${AD.opts.useLabel}".`);
+    adStatus(`AI đã viết xong · chi phí ước tính ${cost < 0.01 ? '< 0,01' : cost.toFixed(2).replace('.', ',')} USD.`);
   } catch (e) {
     adStatus(e.message || String(e), 'err-text');
   } finally {
@@ -130,7 +132,7 @@ function aiTemplateDraft(kind) {
   const tpl = $(isWelcome ? 'welcome-template' : 'shout-template');
   openAiDraft({
     title: isWelcome ? '✨ AI viết bài chào thành viên mới' : '✨ AI viết bài vinh danh',
-    desc: `AI viết mẫu bài mới${g ? ' cho ' + g.name : ''} có chỗ trống {danh_sach}; addon tự điền @tên đúng những người bạn đã chọn. Bài chỉ được đăng khi bạn bấm Đăng ở ô soạn bài.`,
+    desc: `AI viết mẫu bài mới${g ? ' cho ' + g.name : ''} có chỗ trống {danh_sach}; addon tự điền @tên những người bạn đã chọn.`,
     notePlaceholder: isWelcome ? 'vd: nhắc buổi AMA tối thứ Sáu' : 'vd: người đứng đầu được tặng huy hiệu',
     prompt: (note) => BG.aiTemplatePrompt({ kind, groupName: g?.name || '', count, current: tpl.value, note }),
     fix: BG.aiTemplateFix,
@@ -154,7 +156,7 @@ $('pv-sum').addEventListener('click', () => {
   const all = [...new Map([...PV.items, ...Object.values(PV.replies).flat()].filter((c) => !c.isHidden).map((c) => [c.id, c])).values()].sort((a, b) => Date.parse(a.createdAt || 0) - Date.parse(b.createdAt || 0));
   openAiDraft({
     title: `✨ Tóm tắt ${all.length} bình luận`,
-    desc: 'AI đọc nội dung bài và các bình luận đang hiện trong cửa sổ (muốn tóm tắt nhiều hơn: bấm "Xem bình luận cũ hơn" / "Xem trả lời" trước).',
+    desc: 'AI đọc bài và các bình luận đang hiện trong cửa sổ — muốn tóm tắt nhiều hơn thì tải thêm bình luận trước.',
     notePlaceholder: 'vd: chú ý các câu hỏi về rút tiền',
     prompt: (note) => BG.aiSummaryPrompt({ post: [p.title, PV.full?.text || p.text].filter(Boolean).join('\n'), comments: all, note, community: (p.groups || []).map((g) => g.name).filter(Boolean).join(', ') }),
     useLabel: 'Chép tóm tắt',

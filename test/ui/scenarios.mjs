@@ -1189,6 +1189,16 @@ export const scenarios = [
       await page.until(() => document.getElementById('ai-reply').open && !document.getElementById('ar-web').hidden);
       assert.equal(await page.ev(`document.querySelector('#ar-mode button.active').dataset.m`), 'web');
       assert.equal(await page.ev(`document.getElementById('ar-copy').textContent`), 'Chép đề bài & mở Claude');
+      // Gợi ý ngắn: chạm ⓘ hiện bong bóng (nổi trên hộp thoại); chạm chỗ khác thì ẩn. Hướng dẫn dài: nút ❓ mở hộp Hướng dẫn
+      await page.ev(`document.querySelector('#ar-web .tip-i').click(); true`);
+      await page.until(() => document.getElementById('tipbox').matches(':popover-open') && /Trong trang chat AI: dán/.test(document.getElementById('tipbox').textContent));
+      await page.ev(`document.getElementById('ar-status').click(); true`);
+      await page.until(() => !document.getElementById('tipbox').matches(':popover-open'));
+      await page.ev(`document.querySelector('#ai-reply [data-help=ai]').click(); true`);
+      await page.until(() => document.getElementById('help-dlg').open && document.querySelectorAll('#help-body h4').length >= 4);
+      assert.equal(await page.ev(`document.getElementById('help-title').textContent`), '✨ Hướng dẫn dùng AI');
+      await page.ev(`document.getElementById('help-ok').click(); true`);
+      await page.until(() => !document.getElementById('help-dlg').open && document.getElementById('ai-reply').open);
       await setValue(page, 'ar-site', 'chatgpt');
       await setValue(page, 'ar-note', 'Nhắc đọc bài ghim');
       assert.equal(await page.ev(`document.getElementById('ar-copy').textContent`), 'Chép đề bài & mở ChatGPT');

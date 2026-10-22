@@ -94,6 +94,60 @@ $('btn-ai-test').addEventListener('click', async () => {
 
 loadAiForm();
 
+// Hộp Hướng dẫn (dash/ui.js openHelp): nút ❓ trong Cài đặt và các hộp AI
+HELP_TOPICS.ai = {
+  title: '✨ Hướng dẫn dùng AI',
+  sections: [
+    {
+      h: 'AI giúp được gì',
+      items: [
+        'Trả lời bình luận hàng loạt: tab Bài viết → Bình luận mới → chọn bình luận → ✨ Trả lời bằng AI (hoặc mở một bài → ✨ Trả lời hàng loạt bằng AI).',
+        'Viết bài chào thành viên mới / vinh danh: tab Đăng bài → ✨ AI viết bài. AI viết mẫu bài mới, addon tự điền @tên những người bạn đã chọn.',
+        'Tóm tắt bình luận của một bài: cửa sổ Bài viết & bình luận → ✨ Tóm tắt bình luận.',
+        'AI chỉ viết nháp: bạn xem, sửa, bỏ chọn rồi tự bấm Trả lời tất cả / Đăng. Đang bật Chạy thử thì chỉ ghi nhật ký.',
+      ],
+    },
+    {
+      h: 'Cách 1 — AI trên web (chép – dán), không cần khoá',
+      items: [
+        [
+          'Chọn trang chat AI (Claude, ChatGPT hoặc Gemini — đã đăng nhập sẵn) rồi bấm Chép đề bài & mở….',
+          'Trong trang chat: bấm vào ô nhập, dán (Ctrl + V; trên iPhone giữ ngón tay rồi chọn Dán), gửi.',
+          'Đợi AI viết xong, bấm nút chép câu trả lời của trang chat.',
+          'Quay lại addon bấm 📋 Dán — addon điền nháp vào từng bình luận / ô Kết quả.',
+        ],
+        'Addon chỉ chép đề bài và mở trang; mọi thao tác trên trang chat do bạn làm (các trang chat AI cấm phần mềm tự điều khiển).',
+      ],
+    },
+    {
+      h: 'Cách 2 — Khoá API Claude (tự động)',
+      items: [
+        [
+          'Tạo khoá ở console.anthropic.com → API Keys (cần nạp tiền vào tài khoản Anthropic).',
+          'Cài đặt → ✨ Trả lời bình luận bằng AI: dán khoá, bấm Kiểm tra rồi Lưu.',
+          'Trong hộp AI chọn Khoá API Claude (tự động) → Tạo câu trả lời.',
+        ],
+        'Chi phí tính vào tài khoản Anthropic của bạn: Opus 5.5 khoảng 0,02–0,1 USD cho 20 bình luận; Sonnet 5.5 rẻ bằng nửa, Haiku 5.5 rẻ nhất. Hộp báo chi phí ước tính sau mỗi lần tạo.',
+      ],
+    },
+    {
+      h: 'Mẹo',
+      items: [
+        'Ghi chú cho AI giúp câu trả lời sát ý: cách xưng hô, thông tin sự kiện, điều cần nhắc. Ghi chú dùng cho mọi lần thì đặt ở Cài đặt → Hướng dẫn thêm cho AI.',
+        'AI trả lời ngắn gọn, thân thiện, không lặp lại; bình luận chỉ có icon thì trả lời bằng icon; bình luận spam / lừa đảo được đề nghị bỏ qua (không chọn sẵn).',
+        'Mỗi lượt tối đa 60 bình luận. AI bỏ sót bình luận nào thì gõ tay hoặc nhờ AI viết thêm.',
+      ],
+    },
+    {
+      h: 'Riêng tư',
+      items: [
+        'Gửi cho AI: nội dung bài, các bình luận và tên người viết — không gửi mật khẩu hay phiên đăng nhập.',
+        'Khoá API chỉ lưu trong trình duyệt này, không có trong sao lưu / đồng bộ.',
+      ],
+    },
+  ],
+};
+
 // ---------- Hộp trả lời bằng AI ----------
 
 // comments: bình luận đã gọn; posts: { [postId]: chữ của bài } (thiếu thì lấy bài trong kết quả quét / đoạn đầu bài)
@@ -168,7 +222,7 @@ function arItem(c) {
     el('div', { class: 'pv-ctext', text: c.text || (c.images ? '(ảnh)' : c.giphy ? '(ảnh GIF)' : '(không có chữ)') }),
     !AR.fromPost && snippet ? el('div', { class: 'muted small ar-post', text: 'Trên bài: ' + snippet }) : null,
     d ? box : el('p', { class: 'muted small', text: AR.gen ? 'Đang chờ AI viết…' : AR.mode === 'web' ? 'Làm bước 1 và 2 ở trên để AI viết nháp.' : 'Bấm Tạo câu trả lời để AI viết nháp.' }),
-    d?.skip ? el('div', { class: 'warn-text small', text: 'AI đề nghị không trả lời' + (d.reason ? ': ' + d.reason : '') + ' — vẫn muốn trả lời thì gõ vào ô trên.' }) : null,
+    d?.skip ? el('div', { class: 'warn-text small', text: 'AI đề nghị không trả lời' + (d.reason ? ': ' + d.reason : '') }) : null,
     d?.status === 'error' || (d?.error && !d.status) ? el('div', { class: 'err-text small', text: d.error }) : null,
   );
 }
@@ -247,7 +301,7 @@ async function arGenerate() {
   }
   const cost = AR.cost ? ` · chi phí ước tính ${AR.cost < 0.01 ? '< 0,01' : AR.cost.toFixed(2).replace('.', ',')} USD` : '';
   if (AR.error) arStatus(`${AR.error}${done ? ` (đã viết xong ${done}/${todo.length})` : ''}${cost}`, 'err-text');
-  else arStatus(`AI đã viết nháp cho ${done} bình luận${cost}. Xem, sửa hoặc bỏ chọn từng câu rồi bấm Trả lời tất cả.`);
+  else arStatus(`AI đã viết nháp cho ${done} bình luận${cost}.`);
   renderAr();
 }
 
@@ -356,7 +410,7 @@ function arWebCopy() {
   window.open(BG.AI_WEB_SITES[site].url, '_blank', 'noopener');
   AR.cfg = { ...cfg, site, style, mode: 'web' };
   chrome.storage.local.set({ aiConfig: AR.cfg });
-  copying.then((copied) => arStatus(copied ? `Đã chép đề bài (${todo.length} bình luận) và mở ${BG.AI_WEB_SITES[site].label}. Dán vào ô chat, gửi, rồi chép câu trả lời và bấm Dán ở bước 2.` : 'Trình duyệt không cho chép tự động — thử lại, hoặc dùng khoá API.', copied ? '' : 'err-text'));
+  copying.then((copied) => arStatus(copied ? `Đã chép đề bài (${todo.length} bình luận) và mở ${BG.AI_WEB_SITES[site].label}.` : 'Trình duyệt không cho chép tự động — thử lại, hoặc dùng khoá API.', copied ? '' : 'err-text'));
 }
 
 // Bước 2: đọc khối JSON dán về, điền nháp
@@ -375,7 +429,7 @@ function arWebFill() {
   const list = AR.list.filter((c) => want.has(String(c.id)));
   arApply(list, out);
   const got = list.filter((c) => out[c.id]).length;
-  arStatus(got === list.length ? `Đã điền nháp cho ${got} bình luận. Xem, sửa hoặc bỏ chọn từng câu rồi bấm Trả lời tất cả.` : `Đã điền ${got}/${list.length} bình luận — AI bỏ sót ${list.length - got} bình luận (gõ tay, hoặc nhờ AI viết thêm).`, got === list.length ? '' : 'warn-text');
+  arStatus(got === list.length ? `Đã điền nháp cho ${got} bình luận.` : `Đã điền ${got}/${list.length} bình luận — AI bỏ sót ${list.length - got} (gõ tay, hoặc nhờ AI viết thêm).`, got === list.length ? '' : 'warn-text');
   renderAr();
 }
 
@@ -403,7 +457,7 @@ async function arWebPaste() {
   const text = await aiReadClipboard();
   if (!text.trim()) {
     $('ar-paste').focus();
-    return arStatus('Không đọc được bộ nhớ tạm — bấm vào ô rồi dán (Ctrl + V).', 'warn-text');
+    return arStatus('Không đọc được bộ nhớ tạm — dán tay vào ô (Ctrl + V).', 'warn-text');
   }
   $('ar-paste').value = text;
   arWebFill();
