@@ -148,6 +148,10 @@ node test/pwa/pwa.e2e.mjs
 
 ## Lịch sử BeinIOS
 
+- **1.7.0 (23/10/2026).** Đi cùng addon BeinFusion 0.56.0:
+  - **Hướng dẫn ngay trong ứng dụng**: Cài đặt → Về → **Hướng dẫn** mở trang hướng dẫn viết sẵn (không mở GitHub), gom các chủ đề của BeinIOS (cài lên iPhone, dựng proxy, đăng nhập, thông báo, giới hạn, an toàn, lịch sử) và mọi chủ đề của addon. Dòng **BeinIOS** ở mục Về mở Lịch sử BeinIOS ngay trong ứng dụng.
+  - **AI trên web**: **Chép đề bài & mở Claude** mở thẳng **ứng dụng Claude** đã đăng nhập sẵn, khỏi đăng nhập lại trên trang web; chưa cài ứng dụng thì bấm **Mở Claude trên web**. ChatGPT / Gemini chưa có liên kết mở ứng dụng chính thức nên vẫn mở link.
+  - Gọn hơn: Proxy & Login và các trang của addon (Quản trị, cài đặt con) để mô tả trong gợi ý ⓘ (chạm để xem), các bước dài trong ❓ Hướng dẫn. Cảnh báo đăng nhập là chìa khoá tài khoản vẫn hiện.
 - **1.6.1 (22/10/2026).** Đi cùng addon BeinFusion 0.55.0:
   - **✨ AI viết bài** (Quản trị → Đăng bài → Chào thành viên mới / Vinh danh): AI viết mẫu bài mới, addon tự điền @tên những người đã chọn rồi soạn vào ô đăng bài.
   - **✨ Tóm tắt bình luận** trong cửa sổ bài viết: ý chính, câu hỏi còn chờ, phàn nàn / spam, việc nên làm → Chép tóm tắt.

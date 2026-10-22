@@ -382,6 +382,42 @@ try {
   await page.until(() => document.querySelector('nav button.on')?.dataset.tab === 'dash' && !!document.getElementById('f-dash').contentDocument?.getElementById('whatsnew')?.open, 8000);
   ok(true, 'Cài đặt → Addon BeinFusion: mở bảng Có gì mới của addon ở Quản trị');
   await page.ev(frame('f-dash', "document.getElementById('whatsnew').close(), true"));
+  // Cài đặt → Về → Hướng dẫn: trang viết sẵn trong ứng dụng (không link GitHub), mục lục → chủ đề → quay lại
+  await page.ev(`document.querySelector('nav button[data-tab="setup"]').click(); true`);
+  await page.until(new Function(`return ${isOpen('main')}`), 3000);
+  ok(!(await page.ev(`!!document.querySelector('#setup a[href*="github.com"]')`)), 'Cài đặt: không còn link ra GitHub');
+  await page.ev(`document.getElementById('go-help').click(); true`);
+  await page.until(new Function(`return ${isOpen('help')} && document.querySelectorAll('#help-body .help-row').length >= 20`), 3000);
+  const helpIdx = await page.ev(`({ groups: [...document.querySelectorAll('#help-body .group-label')].map((x) => x.textContent), title: document.getElementById('help-title').textContent, beinios: !!document.querySelector('#help-body [data-help="beinios"]') })`);
+  ok(helpIdx.title === 'Hướng dẫn' && helpIdx.groups[0] === 'BeinIOS' && helpIdx.groups.length === 5 && !helpIdx.beinios, 'Hướng dẫn: mục lục BeinIOS + các chủ đề của addon (' + helpIdx.groups.join(', ') + ')');
+  await sleep(300);
+  await shot('6h-huong-dan');
+  await page.ev(`document.querySelector('#help-body [data-help="ios-login"]').click(); true`);
+  await page.until(() => document.getElementById('help-title').textContent === 'Đăng nhập Beincom' && document.querySelectorAll('#help-body .help-card ol li').length >= 5, 3000);
+  await sleep(200);
+  await shot('6i-huong-dan-chu-de');
+  await page.ev(`document.getElementById('help-back').click(); true`);
+  await page.until(() => document.getElementById('help-title').textContent === 'Hướng dẫn', 3000);
+  await page.ev(`document.getElementById('help-back').click(); true`);
+  await page.until(new Function(`return ${isOpen('main')}`), 3000);
+  await page.ev(`document.getElementById('go-ioshist').click(); true`);
+  await page.until(() => document.getElementById('help-title').textContent === 'Lịch sử BeinIOS' && /1\.7\.0/.test(document.getElementById('help-body').textContent), 3000);
+  await page.ev(`document.getElementById('help-back').click(); true`);
+  await page.until(new Function(`return ${isOpen('main')}`), 3000);
+  ok(true, 'Hướng dẫn: chủ đề Đăng nhập Beincom, quay lại mục lục / Cài đặt; dòng BeinIOS mở Lịch sử ngay trong ứng dụng');
+  // Proxy & Login: mô tả trong ⓘ (chạm để xem), các bước trong ❓, cảnh báo đăng nhập vẫn hiện
+  await page.ev(`document.getElementById('go-login').click(); true`);
+  await page.until(new Function(`return ${isOpen('login')}`), 3000);
+  await page.ev(`document.getElementById('origin-tip').click(); true`);
+  await page.until(() => !document.querySelector('.tipbox').hidden && document.querySelector('.tipbox').textContent.includes(location.origin), 3000);
+  const loginView = await page.ev(`({ warn: /chìa khoá tài khoản/.test(document.getElementById('view-login').innerText), steps: document.querySelectorAll('#view-login ol').length })`);
+  ok(loginView.warn && loginView.steps === 0, 'Proxy & Login: cảnh báo vẫn hiện, gợi ý ⓘ có nơi lưu dữ liệu, các bước dài đã chuyển vào Hướng dẫn');
+  await page.ev(`document.querySelector('#view-login [data-help="ios-proxy"]').click(); true`);
+  await page.until(() => document.getElementById('help-title').textContent === 'Dựng proxy Cloudflare' && !document.getElementById('view-help').hidden, 3000);
+  await page.ev(`document.getElementById('help-back').click(); true`);
+  await page.until(new Function(`return ${isOpen('login')}`), 3000);
+  ok(true, 'Proxy & Login → ❓ Cách dựng proxy → quay lại đúng Proxy & Login');
+  await page.ev(`document.getElementById('close-login').click(); true`);
   // Cài đặt › Tài khoản › Trang cá nhân: thông tin cơ bản trên Beincom
   await page.ev(`document.querySelector('nav button[data-tab="setup"]').click(); document.getElementById('acct').click(); true`);
   await page.until(new Function(`return ${isOpen('account')}`), 3000);

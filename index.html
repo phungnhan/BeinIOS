@@ -20,6 +20,8 @@
   <script src="common.js"></script>
   <script src="lib/self.js"></script>
   <script src="lib/ai.js"></script>
+  <script src="lib/help.js"></script>
+  <script src="pwa-help.js"></script>
   <style>
     :root {
       --bg: #f2f2f7;
@@ -387,6 +389,20 @@
     #result .warn { color: var(--warn); }
     #result .bad { color: var(--bad); }
     code { font-size: 12.5px; background: var(--field); border-radius: 5px; padding: 0 4px; }
+    /* Gợi ý ngắn ⓘ (chạm để xem) và trang Hướng dẫn (viết sẵn trong ứng dụng) */
+    .tip-i { display: inline-grid; place-items: center; width: 18px; height: 18px; margin: 0 0 0 6px; padding: 0; border: 1px solid #c4c4c7; border-radius: 50%; background: none; color: var(--sub); font: italic 600 11.5px/1 Georgia, 'Times New Roman', serif; text-transform: none; letter-spacing: 0; vertical-align: 1px; cursor: pointer; flex: none; }
+    .tip-i[aria-expanded='true'] { border-color: var(--accent); color: var(--accent); }
+    .tipbox { position: fixed; z-index: 1000; max-width: min(300px, calc(100vw - 24px)); padding: 8px 12px; border-radius: 12px; background: rgba(29, 27, 43, 0.94); color: #f6f5fb; font-size: 13.5px; line-height: 1.45; box-shadow: 0 8px 28px rgba(20, 16, 50, 0.22); pointer-events: none; }
+    .tipbox[hidden] { display: none; }
+    @media (prefers-color-scheme: dark) { .tipbox { background: rgba(244, 242, 252, 0.96); color: #1d1d2b; } }
+    .help-link { border: 0; background: none; padding: 0; color: var(--accent); font: inherit; cursor: pointer; }
+    .warn-line { color: var(--warn); }
+    .group-note.in { margin: 0 0 10px; }
+    .help-card { padding: 6px 16px 10px; background: var(--card); border-radius: 22px; font-size: 15px; line-height: 1.5; }
+    .help-card p { margin: 6px 0; }
+    .help-card ol { margin: 6px 0; padding-left: 20px; }
+    .help-card li { margin: 4px 0; }
+    .help-row .help-em { font-size: 20px; width: 30px; text-align: center; flex: none; }
   </style>
 </head>
 <body>
@@ -499,19 +515,19 @@
 
         <div class="group-label">Về</div>
         <div class="list">
-          <a class="row" href="https://github.com/phungnhan/BeinIOS/blob/main/HUONG-DAN-PWA.md" target="_blank" rel="noopener">
+          <button type="button" class="row" id="go-help">
             <i class="ic" style="--c: #ff9500"><svg class="i" viewBox="0 0 24 24"><path d="M5 5.5A2.5 2.5 0 0 1 7.5 3H19v15H7.5A2.5 2.5 0 0 0 5 20.5Z" /><path d="M5 20.5A2.5 2.5 0 0 1 7.5 18H19v3H7.5" /></svg></i>
             <span>Hướng dẫn</span>
             <svg class="i chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg>
-          </a>
+          </button>
           <button type="button" class="row" id="go-whatsnew">
             <i class="ic" style="--c: #6b3fe7"><svg class="i" viewBox="0 0 24 24"><path d="M12 3.5l2.4 5.1 5.6.7-4.1 3.9 1 5.5L12 16l-4.9 2.7 1-5.5L4 9.3l5.6-.7Z" /></svg></i>
             <span>Addon BeinFusion</span><em id="ver-addon"></em><svg class="i chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg>
           </button>
-          <a class="row" href="https://github.com/phungnhan/BeinIOS/blob/main/HUONG-DAN-PWA.md#l%E1%BB%8Bch-s%E1%BB%AD-beinios" target="_blank" rel="noopener">
+          <button type="button" class="row" id="go-ioshist">
             <i class="ic" style="--c: #636366"><svg class="i" viewBox="0 0 24 24"><rect x="6.5" y="2.5" width="11" height="19" rx="2.6" /><path d="M10.5 18.5h3" /></svg></i>
             <span>BeinIOS</span><em id="ver-ios"></em><svg class="i chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg>
-          </a>
+          </button>
           <button type="button" class="row" id="upd" hidden>
             <i class="ic" style="--c: #34c759"><svg class="i" viewBox="0 0 24 24"><path d="M12 4v11M7.5 10.5 12 15l4.5-4.5M5 19.5h14" /></svg></i>
             <span>Có bản mới · chạm để cập nhật</span>
@@ -570,6 +586,18 @@
       </div>
     </div>
 
+    <!-- Hướng dẫn: mục lục (BG.IOS_HELP_INDEX) hoặc một chủ đề (BG.HELP_TOPICS) — viết sẵn, không dẫn link -->
+    <div class="view tg" id="view-help" hidden>
+      <div class="tg-top" id="help-top">
+        <div class="wrap">
+          <button type="button" class="glass round" id="help-back" aria-label="Quay lại"><svg class="i" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M15 5l-7 7 7 7" /></svg></button>
+          <b class="tg-title on" id="help-title">Hướng dẫn</b>
+          <button type="button" class="glass" data-close>Xong</button>
+        </div>
+      </div>
+      <div class="wrap" id="help-body"></div>
+    </div>
+
     <!-- Một nhóm cài đặt của Quản trị (trang cài đặt thật của addon, chỉ hiện nhóm đang chọn) -->
     <div class="view dset" id="view-dset" hidden>
       <div class="tg-top">
@@ -599,12 +627,12 @@
           <div class="row static"><span>Đăng nhập Beincom</span><em id="st-login"></em></div>
         </div>
 
-        <div class="group-label">Cloudflare proxy</div>
+        <div class="group-label">Cloudflare proxy <button type="button" class="tip-i" data-tip="Mọi lệnh tới Beincom đi qua proxy của riêng bạn trên Cloudflare: có khoá, chỉ nhận trang BeinIOS của bạn, không ghi nhật ký." aria-label="Gợi ý: Mọi lệnh tới Beincom đi qua proxy của riêng bạn trên Cloudflare: có khoá, chỉ nhận trang BeinIOS của bạn, không ghi nhật ký.">i</button></div>
         <div class="list">
           <label class="field"><span>Địa chỉ</span><input type="url" id="proxy-url" inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="https://beinios-proxy.….workers.dev" /></label>
           <label class="field"><span>Khoá</span><input type="password" id="proxy-key" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="PROXY_KEY" /></label>
         </div>
-        <p class="group-note">Mọi lệnh tới Beincom đi qua proxy của riêng bạn (dựng theo <code>cloudflare-proxy/README.md</code>).</p>
+        <p class="group-note"><button type="button" class="help-link" data-help="ios-proxy">❓ Cách dựng proxy</button></p>
 
         <div class="group-label">Đăng nhập Beincom</div>
         <div class="list pad">
@@ -613,21 +641,10 @@
           <div class="saved none" id="saved-all"></div>
           <label class="check"><input type="checkbox" id="refresh" checked /> Tự làm mới phiên khi Beincom báo hết hạn</label>
         </div>
-        <details class="help">
-          <summary>Cách lấy đăng nhập từ addon</summary>
-          <ol>
-            <li>Trên máy tính, mở <b>cửa sổ ẩn danh</b>, đăng nhập <code>group.beincom.com</code> (dùng Chat thì mở cả <code>chat.beincom.com</code>).</li>
-            <li>Dashboard addon → <b>Cài đặt</b> → 📱 BeinIOS → <b>Chuyển đăng nhập sang BeinIOS</b>. Lần đầu: mở mục <b>Proxy của BeinIOS</b>, điền địa chỉ + khoá như trên để có <b>mã QR ngắn</b>.</li>
-            <li>Quét mã bằng Camera iPhone → mở trang → <b>Chép</b>, rồi bấm <b>Dán từ addon</b> ở đây.</li>
-            <li>Đóng cửa sổ ẩn danh — <b>đừng bấm Đăng xuất</b>.</li>
-          </ol>
-        </details>
+        <p class="group-note"><button type="button" class="help-link" data-help="ios-login">❓ Cách lấy đăng nhập từ addon</button></p>
         <details class="help" id="curl-box">
           <summary>Cách khác: dán cURL từ F12</summary>
-          <ol>
-            <li>Cửa sổ ẩn danh, đăng nhập <code>group.beincom.com</code>, bấm F12 → <b>Network</b>, lọc <code>api.beincom.com</code>, tải lại trang.</li>
-            <li>Chuột phải một dòng → <b>Copy</b> → <b>Copy as cURL (bash)</b>, dán vào ô dưới. Chat: làm tương tự với <code>chat.beincom.com/api</code>.</li>
-          </ol>
+          <p class="group-note in"><button type="button" class="help-link" data-help="ios-login">❓ Các bước lấy cURL</button></p>
           <label for="cookie-api">Beincom (api.beincom.com)</label>
           <textarea id="cookie-api" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Dán cURL hoặc dòng Cookie… (để trống: giữ cookie đã lưu)"></textarea>
           <label for="cookie-chat">Chat (chat.beincom.com) — không bắt buộc</label>
@@ -636,7 +653,7 @@
 
         <div class="save-wrap"><button type="button" class="btn primary" id="save">Lưu &amp; kiểm tra</button></div>
         <div id="result" role="status" aria-live="polite"></div>
-        <p class="group-note">Đăng nhập là chìa khoá tài khoản Beincom: chỉ dán trên máy của bạn, xoá ghi chú / tin dùng để chuyển. Dữ liệu lưu theo địa chỉ <code id="origin"></code> — các trang GitHub Pages khác của bạn cùng địa chỉ này cũng đọc được.</p>
+        <p class="group-note warn-line">⚠ Đăng nhập là chìa khoá tài khoản Beincom — chỉ dán trên máy của bạn. <button type="button" class="tip-i" id="origin-tip" data-tip="" aria-label="Gợi ý">i</button></p>
 
         <div class="group-label">&nbsp;</div>
         <div class="list"><button type="button" class="row danger" id="forget"><span>Xoá đăng nhập khỏi máy này</span></button></div>
@@ -804,7 +821,7 @@
       }
 
       // ---------- Cài đặt: Cài đặt chung · Tài khoản · một nhóm Quản trị · Proxy & Login ----------
-      const VIEWS = ['main', 'account', 'bprofile', 'dset', 'login'];
+      const VIEWS = ['main', 'account', 'bprofile', 'dset', 'login', 'help'];
       function showView(view) {
         const was = VIEWS.find((v) => !$('view-' + v).hidden);
         for (const v of VIEWS) $('view-' + v).hidden = v !== view;
@@ -833,6 +850,49 @@
         }
       }
       for (const b of document.querySelectorAll('[data-sec]')) b.addEventListener('click', () => openSetup('dset', b.dataset.sec));
+
+      // ---------- Hướng dẫn: viết sẵn trong ứng dụng (lib/help.js của addon + pwa-help.js), không dẫn link ----------
+      // Mục lục → một chủ đề; nút quay lại về mục lục, hoặc về trang đã mở Hướng dẫn (Cài đặt, Proxy & Login)
+      const help = { from: 'main', direct: false, topic: '' };
+      function renderHelp(topic) {
+        const t = topic && BG.HELP_TOPICS[topic];
+        help.topic = t ? topic : '';
+        $('help-title').textContent = t ? t.title.replace(/^\S+\s+/, '') : 'Hướng dẫn';
+        const body = $('help-body');
+        if (!t) {
+          body.replaceChildren(
+            ...BG.IOS_HELP_INDEX.flatMap((g) => [
+              make('div', { className: 'group-label', textContent: g.label }),
+              make(
+                'div',
+                { className: 'list' },
+                ...g.topics
+                  .filter((k) => BG.HELP_TOPICS[k])
+                  .map((k) => {
+                    const [em, ...rest] = BG.HELP_TOPICS[k].title.split(' ');
+                    const b = make('button', { type: 'button', className: 'row help-row' }, make('span', { className: 'help-em', textContent: em }), make('span', { textContent: rest.join(' ') }));
+                    b.insertAdjacentHTML('beforeend', '<svg class="i chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg>');
+                    b.dataset.help = k;
+                    return b;
+                  }),
+              ),
+            ]),
+          );
+        } else {
+          body.replaceChildren(
+            ...t.sections.flatMap((sec) => [
+              make('div', { className: 'group-label', textContent: sec.h }),
+              make(
+                'div',
+                { className: 'help-card' },
+                ...sec.items.map((it) => (Array.isArray(it) ? make('ol', {}, ...it.map((x) => make('li', { textContent: x }))) : make('p', { textContent: it }))),
+              ),
+            ]),
+          );
+        }
+        $('view-help').scrollTop = 0;
+      }
+      $('help-back').onclick = () => (help.topic && !help.direct ? renderHelp('') : showView(help.from));
 
       // Giá trị nhanh bên phải các dòng Quản trị / Tích hợp
       async function renderAdminStates() {
@@ -1118,6 +1178,7 @@
         if (view === 'account') renderProfile();
         if (view === 'bprofile') loadBprofile();
         if (view === 'dset') openDset(arg);
+        if (view === 'help') renderHelp(arg);
         if (view === 'main') checkUpdate();
         renderNotif();
         renderAccount();
@@ -1133,6 +1194,47 @@
       for (const b of document.querySelectorAll('#setup [data-close]')) b.onclick = closeSetup;
       $('acct').onclick = () => openSetup('account');
       $('go-login').onclick = () => openSetup('login');
+      $('go-help').onclick = () => ((help.from = 'main'), (help.direct = false), openSetup('help'));
+      $('go-ioshist').onclick = () => ((help.from = 'main'), (help.direct = true), openSetup('help', 'ios-history'));
+      // Nút ❓ trong các trang Cài đặt (vd Proxy & Login) và các dòng của mục lục
+      document.addEventListener('click', (e) => {
+        const b = e.target.closest?.('#setup [data-help]');
+        if (!b) return;
+        if (b.closest('#view-help')) return void ((help.direct = false), renderHelp(b.dataset.help));
+        help.from = VIEWS.find((v) => !$('view-' + v).hidden) || 'main';
+        help.direct = true;
+        openSetup('help', b.dataset.help);
+      });
+      // Gợi ý ngắn ⓘ: chạm để hiện / ẩn bong bóng; chạm chỗ khác, cuộn thì ẩn
+      const tipBox = Object.assign(document.createElement('div'), { className: 'tipbox', hidden: true });
+      tipBox.setAttribute('role', 'tooltip');
+      document.body.append(tipBox);
+      let tipFor = null;
+      const hideTip = () => {
+        tipBox.hidden = true;
+        tipFor?.setAttribute('aria-expanded', 'false');
+        tipFor = null;
+      };
+      function showTip(b) {
+        hideTip();
+        tipBox.textContent = b.dataset.tip;
+        tipBox.hidden = false;
+        tipFor = b;
+        b.setAttribute('aria-expanded', 'true');
+        const r = b.getBoundingClientRect();
+        const w = tipBox.offsetWidth;
+        const h = tipBox.offsetHeight;
+        tipBox.style.left = Math.min(Math.max(12, r.left + r.width / 2 - w / 2), innerWidth - w - 12) + 'px';
+        tipBox.style.top = (r.top - h - 8 > 12 ? r.top - h - 8 : r.bottom + 8) + 'px';
+      }
+      document.addEventListener('click', (e) => {
+        const b = e.target.closest?.('.tip-i');
+        if (!b) return hideTip();
+        e.preventDefault();
+        if (tipFor === b) hideTip();
+        else showTip(b);
+      });
+      document.addEventListener('scroll', hideTip, true);
       $('pf-login').onclick = () => openSetup('login');
       $('go-log').onclick = () => BeinShell.open('dashboard.html#tab=log');
       // Giao diện Chat: về tab Chat rồi mở bảng Giao diện của trang Chat (cả BeinFusion theme lẫn Silk)
@@ -1146,7 +1248,9 @@
         };
         tryOpen(20);
       };
-      $('origin').textContent = location.origin;
+      // Gợi ý ⓘ cạnh cảnh báo đăng nhập: nơi lưu dữ liệu
+      $('origin-tip').dataset.tip = `Xoá ghi chú / tin dùng để chuyển. Dữ liệu lưu theo địa chỉ ${location.origin} — các trang GitHub Pages khác của bạn cùng địa chỉ này cũng đọc được.`;
+      $('origin-tip').setAttribute('aria-label', 'Gợi ý: ' + $('origin-tip').dataset.tip);
 
       function line(text, cls = '') {
         const p = document.createElement('p');
