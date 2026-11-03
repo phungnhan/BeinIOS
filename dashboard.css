@@ -1223,3 +1223,11 @@ h2 > .tip-i, .group-title > .tip-i { vertical-align: 2px; }
   table.stack tr.empty-row td { padding: 0; }
   .table-wrap { max-height: none; }
 }
+
+/* ---------- Biểu tượng nét thay emoji (dash/icons.js): cùng màu chữ, cỡ theo chữ; emoji gốc giữ ẩn trong .ic-t ---------- */
+.ic { position: relative; display: inline-flex; align-items: center; vertical-align: -0.17em; flex: none; }
+.ic svg { width: 1.15em; height: 1.15em; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+.ic-t { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.group-title .ic svg, .tag .ic svg { width: 1.2em; height: 1.2em; }
+h2 .ic svg { width: 1.05em; height: 1.05em; color: var(--muted); }
+.media-icon .ic svg { width: 1em; height: 1em; }

@@ -2782,6 +2782,30 @@ export const scenarios = [
     },
   },
   {
+    name: 'Biểu tượng nét thay emoji (chữ gốc giữ nguyên), danh sách tự tải thêm khi cuộn tới cuối',
+    async run({ page, url, assert }) {
+      await page.open(url('dashboard', 'tab=content'));
+      // Nút 🧹 Dọn: có biểu tượng SVG, textContent vẫn như cũ; nội dung bài (xem trước) không bị đổi
+      await page.until(() => !!document.querySelector('#recent-body .cleanup-btn .ic svg'));
+      const btn = await page.ev(`(() => { const b = document.querySelector('#recent-body .cleanup-btn'); return { text: b.textContent, paths: b.querySelectorAll('.ic svg path').length, hidden: b.querySelector('.ic').getAttribute('aria-hidden') }; })()`);
+      assert.match(btn.text, /^🧹 Dọn/);
+      assert.ok(btn.paths >= 2 && btn.hidden === 'true');
+      // Nút vẽ lại sau (đổi textContent) cũng được đổi
+      await page.ev(`(() => { const b = document.querySelector('#recent-body .cleanup-btn'); b.textContent = '📌 Thử'; return true; })()`);
+      await page.until(() => !!document.querySelector('#recent-body .cleanup-btn .ic svg') && document.querySelector('#recent-body .cleanup-btn').textContent === '📌 Thử');
+      // Phần tử nằm trong vùng hay bị xét lại (vd dải "Đang sửa bài" — span lồng nhau): chỉ một biểu tượng, không lồng mãi
+      const nest = await page.ev(`(() => { const b = document.createElement('div'); b.className = 'edit-banner'; b.innerHTML = '<span>✎ Đang sửa bài hẹn giờ ở <b>Crypto Life</b></span>'; document.body.append(b); return new Promise((r) => setTimeout(() => r([b.querySelectorAll('.ic').length, b.textContent]), 50)); })()`);
+      assert.deepEqual(nest, [1, '✎ Đang sửa bài hẹn giờ ở Crypto Life']);
+      // Emoji không có trong bộ (🎉) và emoji giữa chữ giữ nguyên
+      assert.equal(await page.ev(`(() => { const d = document.createElement('button'); d.textContent = 'Xong 🎉'; document.body.append(d); return new Promise((r) => setTimeout(() => r(d.querySelector('.ic') ? 'đổi' : d.textContent), 0)); })()`), 'Xong 🎉');
+      // Thành viên: chưa cuộn thì không tự tải; cuộn bảng tới cuối thì tải thêm 50 người
+      await page.ev(`showTab('members'); true`);
+      await page.until(() => document.querySelectorAll('#members-body tr').length === 50 && !document.getElementById('btn-members-more').hidden);
+      await page.ev(`(() => { const w = document.getElementById('members-body').closest('.table-wrap'); w.scrollIntoView({ block: 'start' }); w.scrollTop = w.scrollHeight; return true; })()`);
+      await page.until(() => document.querySelectorAll('#members-body tr').length === 100, 5000);
+    },
+  },
+  {
     name: 'Màn hình điện thoại: không tràn ngang, bảng xếp dọc có nhãn cột, thanh chọn đổi nền khi đã chọn',
     async run({ page, url, assert }) {
       await page.open(url('dashboard'), { width: 390, height: 844, mobile: true });

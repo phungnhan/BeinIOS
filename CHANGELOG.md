@@ -2,6 +2,11 @@
 
 Mỗi bản một mục, bản mới nhất ở trên. Dashboard tự hiện các mục mới sau khi cập nhật (bấm "Có gì mới" ở cuối trang để xem lại).
 
+## v0.59.0 — 03/11/2026
+- **Giao diện Dashboard gọn hơn, đợt 3**:
+  - **Biểu tượng nét một màu** thay cho emoji ở nút, tiêu đề, nhãn nhóm, nhãn bài (🧹 Dọn, 📌 Ghim, ⚙ Cài đặt, ✎ Sửa, 💬 Bình luận, ✨ AI, 📋 Sao chép, 🖼 Ảnh, 🎬 Video, 📎 Tệp, 🔗 Link, ⚠, 🛡, 🔔… — hơn 40 loại, cả mục lục Hướng dẫn): cùng màu và cỡ với chữ, máy nào cũng vẽ giống nhau. Nội dung bài / bình luận của thành viên và mẫu bài giữ nguyên emoji.
+  - **Danh sách dài tự tải thêm khi cuộn tới dòng cuối**: Thành viên, Bị cấm, Vào / rời, Bài mới đăng, Bình luận mới, Tin nhắn chat, Tìm & dọn bài, Nhật ký, Việc cần làm. Chỉ tải khi bạn cuộn (mở trang không tự tải); nút Tải thêm / Xem thêm vẫn còn để bấm tay.
+
 ## v0.58.0 — 03/11/2026
 - **Giao diện Dashboard gọn hơn, đợt 2**:
   - **Điện thoại (BeinIOS)**: các bảng (yêu cầu tham gia, thành viên, bài mới, bình luận, báo cáo, nhật ký, bài hẹn giờ…) xếp mỗi dòng thành một thẻ, ô có nhãn cột ("Vào lúc: 1 giờ trước"), nút thao tác luôn thấy — không còn cuộn ngang.
