@@ -2283,6 +2283,48 @@ export const scenarios = [
     },
   },
   {
+    name: 'Thread nhanh: mở lại không gọi lại khi còn mới, lần đọc lại kênh giữ bản nhớ mới, danh sách Thread tải sẵn và nhớ 30 giây, mở từ danh sách tải song song',
+    async run({ page, url, assert }) {
+      await page.open(url('chat', 'chat=1&c=chMain'), { width: 1280, height: 820 });
+      await page.until(() => !!document.querySelector('#m-n2 .tbar-n'));
+      const nThread = () => page.ev(`window.__chatThreads || 0`);
+      await page.ev(`document.querySelector('#m-n2 .tbar-n').click(); true`);
+      await page.until(() => !document.getElementById('thread').hidden && !!document.getElementById('t-n3'));
+      const n1 = await nThread();
+      // Đóng rồi mở lại trong 1 phút: hiện ngay, không gọi lại; vẫn đánh dấu đã đọc
+      await page.ev(`window.__msgs.length = 0; document.getElementById('t-close').click(); document.querySelector('#m-n2 .tbar-n').click(); true`);
+      await page.until(() => !!document.getElementById('t-n3'));
+      await new Promise((r) => setTimeout(r, 300));
+      assert.deepEqual(await page.ev(`[window.__chatThreads, window.__msgs.map((m) => m.type)]`), [n1, ['chatThreadRead']]);
+      // Bản nhớ đã cũ nhưng lần đọc lại kênh (4 giây một lần) đã gồm mọi bình luận mới: bản nhớ lại mới, mở không gọi lại
+      await page.ev(`document.getElementById('t-close').click(); threadCache.get('n2').at = Date.now() - 10 * THREAD_FRESH; true`);
+      await page.ev(`pollChat(true).then(() => true)`);
+      assert.ok(await page.ev(`Date.now() - threadCache.get('n2').at < 3000`), 'lần đọc lại kênh làm mới bản nhớ thread');
+      await page.ev(`document.querySelector('#m-n2 .tbar-n').click(); true`);
+      await page.until(() => !!document.getElementById('t-n3'));
+      await new Promise((r) => setTimeout(r, 300));
+      assert.equal(await nThread(), n1);
+      // Bản nhớ cũ của kênh khác (không được đọc lại): gọi lại như trước
+      await page.ev(`document.getElementById('t-close').click(); threadCache.get('n2').at = Date.now() - 10 * THREAD_FRESH; threadCache.get('n2').channelId = 'chKhac'; document.querySelector('#m-n2 .tbar-n').click(); true`);
+      await page.until((n) => (window.__chatThreads || 0) === n + 1, 4000, n1);
+      // Danh sách Thread: tải sẵn lúc trang rảnh (không đụng số chưa đọc), mở là hiện ngay; ẩn rồi mở lại trong 30 giây không đọc lại
+      await page.until(() => !!S.tlist && S.tlistOf === 'all', 8000);
+      const calls = () => page.ev(`window.__chatThreadsCalls.length`);
+      const c0 = await calls();
+      assert.equal(await page.ev(`document.querySelector('.tl-entry .badge').textContent`), '1'); // 2 lúc mở trang, trừ 1 vì đã mở thread n2; tải sẵn không ghi đè
+      await page.ev(`document.getElementById('t-close').click(); document.querySelector('.tl-entry').click(); true`);
+      await page.until(() => !document.getElementById('tview').hidden && document.querySelectorAll('#tv-list .tcard').length === 3);
+      await page.ev(`hideThreads(); showThreads(); true`);
+      await new Promise((r) => setTimeout(r, 300));
+      assert.equal(await calls(), c0);
+      // Mở từ danh sách: lệnh đọc bình luận gửi ngay, không chờ cuộc trò chuyện tải xong
+      await page.ev(`window.__msgs.length = 0; document.querySelectorAll('#tv-list .tcard')[2].click(); true`);
+      await page.until(() => !document.getElementById('thread').hidden && document.getElementById('tview').hidden && !!S.sel, 6000);
+      const order = await page.ev(`window.__msgs.map((m) => m.type).filter((t) => t === 'chatThread' || t === 'chatPosts')`);
+      assert.ok(order.indexOf('chatThread') === 0, 'đọc bình luận song song với cuộc trò chuyện: ' + order.join(','));
+    },
+  },
+  {
     name: 'Trang Chat: hồ sơ người, ghim tin, gợi ý @tên, sửa tin, bản nháp',
     async run({ page, url, assert }) {
       await page.open(url('chat', 'chat=1&c=chMain'), { width: 1280, height: 820 });

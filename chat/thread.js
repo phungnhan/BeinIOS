@@ -9,7 +9,7 @@ function threadBar(p) {
     'div',
     { class: 'tbar' },
     people.length ? el('span', { class: 'tbar-people' }, people.map((u) => avatar({ name: u.fullname || u.username, chatId: u.chatId, pictureAt: u.pictureAt, size: 'xs' }))) : null,
-    el('button', { type: 'button', class: 'tbar-n', onclick: () => openThread(p), onmouseenter: () => hoverThread(p.id), onfocus: () => hoverThread(p.id), onmouseleave: unhoverConv }, svg('M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2Zm0 14H6l-2 2V4h16v12Z'), `${p.replyCount} bình luận`),
+    el('button', { type: 'button', class: 'tbar-n', onclick: () => openThread(p), onmouseenter: () => hoverThread(p.id), onfocus: () => hoverThread(p.id), onmouseleave: unhoverThread }, svg('M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2Zm0 14H6l-2 2V4h16v12Z'), `${p.replyCount} bình luận`),
     el('button', { type: 'button', class: 'tbar-follow' + (p.following ? ' on' : ''), 'aria-pressed': String(!!p.following), title: p.following ? 'Bấm để bỏ theo dõi' : 'Theo dõi để nhận thông báo bình luận mới', onclick: () => toggleFollow(p) }, p.following ? 'Đang theo dõi' : 'Theo dõi'),
   );
 }
@@ -35,8 +35,10 @@ async function openThread(p) {
   const root = S.posts.get(p.id) || p;
   threadSeen(root.id);
   saveThread(S.thread);
-  // Bình luận vừa xem / vừa tải trước (chat/cache.js): hiện ngay, rồi đọc lại
+  // Bình luận vừa xem / vừa tải trước (chat/cache.js): hiện ngay; bản nhớ còn mới (vừa đọc, hoặc lần đọc lại kênh vừa xác nhận)
+  // thì không gọi lại, cũ hơn thì đọc lại sau khi đã hiện
   const cached = threadCache.get(root.id);
+  const fresh = threadFresh(root.id);
   S.thread = { root, posts: new Map([[root.id, root], ...(cached ? cached.posts.map((x) => [x.id, x]) : [])]), hasNext: cached?.hasNext || false, loading: !cached, channelId: c.id, at: cached?.at || 0 };
   $('thread').hidden = false;
   $('t-sub').textContent = chatTitle(c);
@@ -52,8 +54,12 @@ async function openThread(p) {
   renderThread({ scroll: cached ? 'bottom' : 'keep' });
   tAutosize();
   $('t-text').focus();
+  if (fresh) {
+    if (c.teamId) call('chatThreadRead', { teamId: c.teamId, rootId: root.id });
+    return;
+  }
   const at = Date.now();
-  const r = await fetchThread(root.id);
+  const r = await fetchThread(root.id, c.id);
   if (S.thread?.root.id !== root.id) return;
   S.thread.loading = false;
   S.thread.at = at;
@@ -292,7 +298,8 @@ async function showThreads({ fromHash = false } = {}) {
   $('tview').hidden = false;
   renderList();
   renderThreads();
-  await loadThreads();
+  // Danh sách vừa đọc (cùng bộ lọc, trong TLIST_FRESH): dùng luôn
+  if (!(S.tlist && S.tlistOf === S.tlistFilter && Date.now() - (S.tlistAt || 0) < TLIST_FRESH)) await loadThreads();
 }
 
 function hideThreads() {
@@ -300,22 +307,37 @@ function hideThreads() {
   $('tview').hidden = true;
 }
 
-async function loadThreads() {
-  if (S.tlistLoading) return;
+// quiet: tải sẵn lúc trang rảnh (chat/cache.js warmThreads) — chỉ nhớ danh sách, không đụng giao diện / số chưa đọc
+let tlistInflight = null;
+async function loadThreads({ quiet = false } = {}) {
+  if (tlistInflight) {
+    if (quiet) return;
+    await tlistInflight; // lần tải sẵn (hoặc lần trước) đang chạy: chờ xong, còn mới và đúng bộ lọc thì dùng luôn
+    if (S.tlist && S.tlistOf === S.tlistFilter && Date.now() - (S.tlistAt || 0) < TLIST_FRESH) {
+      if (S.view === 'threads') (renderThreads(), renderList());
+      return;
+    }
+  }
   S.tlistLoading = true;
-  renderThreads();
-  const filter = S.tlistFilter;
-  const r = await call('chatThreads', { unread: filter === 'unread' });
+  if (!quiet) renderThreads();
+  const filter = quiet ? 'all' : S.tlistFilter;
+  const at = Date.now();
+  tlistInflight = call('chatThreads', { unread: filter === 'unread' });
+  const r = await tlistInflight;
+  tlistInflight = null;
   S.tlistLoading = false;
-  if (S.view !== 'threads') return;
   if (r.status !== 'ok') {
+    if (quiet) return;
     S.tlistError = r.message || 'Không đọc được thread';
-    return renderThreads();
+    return void (S.view === 'threads' && renderThreads());
   }
   S.tlistError = '';
   S.tlist = r.threads;
   S.tlistOf = filter;
+  S.tlistAt = at;
+  if (quiet) return;
   if (typeof r.unreadThreads === 'number') S.threadUnread = r.unreadThreads;
+  if (S.view !== 'threads') return;
   renderThreads();
   renderList();
 }
@@ -328,7 +350,7 @@ function threadCard(t) {
   const at = t.lastReplyAt || t.root.createAt;
   return el(
     'button',
-    { type: 'button', class: 'tcard' + (t.unreadReplies ? ' unread' : ''), onclick: () => openFromThreads(t) },
+    { type: 'button', class: 'tcard' + (t.unreadReplies ? ' unread' : ''), onclick: () => openFromThreads(t), onmouseenter: () => hoverThreadCard(t), onfocus: () => hoverThreadCard(t), onmouseleave: unhoverThread },
     avatar({ name, chatId: u.chatId, pictureAt: u.pictureAt, size: 'sm' }),
     el(
       'span',
@@ -358,8 +380,15 @@ function renderThreads() {
   list.replaceChildren(...items.map(threadCard));
 }
 
+// Rê chuột / chọn một thread trong danh sách: tải trước cuộc trò chuyện và bình luận (chat/cache.js)
+function hoverThreadCard(t) {
+  hoverConv(t.channelId);
+  hoverThread(t.root.id, t.channelId);
+}
+
 async function openFromThreads(t) {
   if (!findChat(t.channelId)) return toast('Kênh này không có trong danh sách chat của bạn — mở trên web Beincom', 'err');
+  if (!threadFresh(t.root.id)) fetchThread(t.root.id, t.channelId); // đọc bình luận song song với cuộc trò chuyện
   await openChat(t.channelId);
   if (S.sel?.id === t.channelId) openThread(S.posts.get(t.root.id) || t.root);
 }
