@@ -148,6 +148,7 @@ node test/pwa/pwa.e2e.mjs
 
 ## Lịch sử BeinIOS
 
+- **1.7.4 (03/11/2026).** Gộp addon BeinFusion 0.60.0 (trên máy tính, tab Quy tắc & cài đặt chia mục như Cài đặt của iPhone). Trang cài đặt con của BeinIOS giữ nguyên.
 - **1.7.3 (03/11/2026).** Gộp addon BeinFusion 0.59.0 — tab Quản trị dùng biểu tượng nét một màu thay emoji (nút, tiêu đề, nhãn), danh sách dài (thành viên, bài mới, bình luận, nhật ký…) tự tải thêm khi cuộn tới cuối.
 - **1.7.2 (03/11/2026).** Gộp addon BeinFusion 0.58.0 — Dashboard trên iPhone không còn cuộn ngang: các bảng (yêu cầu tham gia, thành viên, bài mới, bình luận, báo cáo, nhật ký…) xếp mỗi dòng thành một khối có nhãn cột, nút thao tác luôn thấy; Đăng bài gộp Bài viết / Article / Series thành ba nút chọn trong một thẻ; mô tả dài của thẻ nằm ở ⓘ cạnh tiêu đề; thanh Chọn tất cả đổi nền khi đã chọn.
 - **1.7.1 (03/11/2026).** Gộp addon BeinFusion 0.57.0 — giao diện Dashboard (tab Quản trị) gọn hơn: chữ Be Vietnam Pro, dải số liệu liền, thẻ nổi bật đánh dấu bằng chấm màu, nút trong bảng bỏ viền, nút ❓ thành vòng tròn "?"; thanh trên của Dashboard trên iPhone chỉ còn biểu tượng. Trang cài đặt con giữ kiểu iPhone như cũ.
