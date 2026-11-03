@@ -348,7 +348,7 @@ async function doUsageSend({ force = false, now = Date.now() } = {}) {
       now,
     });
     try {
-      const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(body) });
+      const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(body), signal: AbortSignal.timeout(20000) });
       let j = null;
       try {
         j = await r.json();

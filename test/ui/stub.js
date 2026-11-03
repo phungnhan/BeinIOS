@@ -218,6 +218,11 @@
       sendMessage: async (m) => {
         window.__msgs.push(m);
         await new Promise((res) => setTimeout(res, 150));
+        // window.__dropOnce = ['members', …]: lần gửi đầu của các lệnh này báo nền bị tắt giữa chừng (như Chrome)
+        if ((window.__dropOnce || []).includes(m.type)) {
+          window.__dropOnce = window.__dropOnce.filter((t) => t !== m.type);
+          throw new Error('A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received');
+        }
         if (m.type === 'members') {
           const key = (m.key || '').toLowerCase();
           let all = members.filter((x) => !key || `${x.fullname} ${x.username}`.toLowerCase().includes(key));

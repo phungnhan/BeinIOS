@@ -2824,6 +2824,24 @@ export const scenarios = [
     },
   },
   {
+    name: 'Nền của addon bị tắt giữa chừng: lệnh đọc tự gửi lại (danh sách vẫn hiện), lệnh ghi báo lỗi rõ, Lỗi kỹ thuật ghi tên lệnh',
+    async run({ page, url, assert }) {
+      await page.open(url('dashboard', 'tab=overview'));
+      assert.equal(await page.ev(`chrome.runtime.sendMessage.beinSafe === true`), true);
+      // Đọc danh sách thành viên: lần gửi đầu báo nền bị tắt, gửi lại được
+      await page.ev(`window.__dropOnce = ['members']; showTab('members'); true`);
+      await page.until(() => document.querySelectorAll('#members-body tr').length === 50, 6000);
+      assert.ok(await page.ev(`window.__msgs.some((m) => m.type === 'diag' && /Lệnh "members": nền của addon bị tắt khi đang chờ — đã gửi lại/.test(m.entry.message))`));
+      assert.equal(await page.ev(`window.__msgs.filter((m) => m.type === 'members').length >= 2`), true);
+      // Lệnh ghi: không gửi lại, trả lỗi để trang báo
+      const w = await page.ev(`(async () => { window.__dropOnce = ['act']; const n = window.__msgs.filter((m) => m.type === 'act').length; const r = await chrome.runtime.sendMessage({ type: 'act', action: 'approve', items: [] }); return [r.status, /khởi động lại giữa chừng/.test(r.message), window.__msgs.filter((m) => m.type === 'act').length - n]; })()`);
+      assert.deepEqual(w, ['error', true, 1]);
+      // Trang Chat cũng dùng bản gửi an toàn
+      await page.open(url('chat', 'chat=1'));
+      assert.equal(await page.ev(`chrome.runtime.sendMessage.beinSafe === true`), true);
+    },
+  },
+  {
     name: 'Quy tắc & cài đặt chia mục: danh sách mục bên trái, chỉ hiện một mục, trạng thái nhanh, mở thẳng bằng #sec=',
     async run({ page, url, assert }) {
       await page.open(url('dashboard', 'tab=settings'));

@@ -171,8 +171,46 @@
   }
 
   // Beincom báo bài không còn (đã bị xoá trên web): code content.not_found / "Content not found"
+  // Bài / bình luận đã bị xoá (Beincom), tin chat đã bị xoá (Mattermost: 404 app.post.get…): chuyện thường, không phải lỗi
   function isContentGone(r) {
-    return /(content|comment)[._ ]?not[._ ]?found/i.test(`${r?.body?.code || ''} ${r?.body?.meta?.message || ''}`);
+    return /(content|comment)[._ ]?not[._ ]?found/i.test(`${r?.body?.code || ''} ${r?.body?.meta?.message || ''}`) || (r?.status === 404 && /^app\.post\.get/.test(r?.body?.id || ''));
+  }
+
+  // ---------- Gửi lệnh từ trang tới nền (service worker) ----------
+  // Trình duyệt có thể tắt / khởi động lại nền giữa chừng (máy ngủ, cập nhật addon, một lần gọi mạng chờ quá lâu): lệnh đang chờ
+  // báo "message channel closed". Lệnh chỉ đọc (SAFE_RESEND) thì gửi lại một lần; lệnh ghi không gửi lại (không biết nền đã làm
+  // chưa) mà trả lỗi rõ ràng. Cả hai đều gọi onLost(câu báo kèm tên lệnh) để trang ghi Lỗi kỹ thuật.
+  const SAFE_RESEND = new Set([
+    'chatQuotes', 'beinLinkNames', 'postFull', 'postComments', 'members', 'activity', 'scheduled', 'stats', 'reports', 'reportDetail',
+    'mentionable', 'postDetail', 'pinned', 'groupSettings', 'banned', 'tagsSeries', 'tags', 'newMembers', 'syncStatus', 'storageUsage',
+    'chatOverview', 'chatPosts', 'chatThread', 'chatThreads', 'chatPinned', 'chatMentions', 'chatReactions', 'chatSearch', 'userPosts',
+    'sweepSearch', 'monthly', 'linkPreview', 'retention', 'categories', 'refreshBadge', 'selfCheck', 'nudgeEffect', 'postStatsRefresh',
+  ]);
+  const LOST_RE = /message channel closed|message port closed|Receiving end does not exist|Could not establish connection/i;
+  const STALE_RE = /Extension context invalidated/i;
+  async function sendSafe(raw, msg, onLost) {
+    for (let i = 0; ; i++) {
+      try {
+        return await raw(msg);
+      } catch (e) {
+        const text = String(e?.message || e);
+        if (STALE_RE.test(text)) return { status: 'error', message: 'Addon vừa được cập nhật — tải lại trang này (F5).' };
+        if (!LOST_RE.test(text)) throw e;
+        const again = i === 0 && SAFE_RESEND.has(msg?.type);
+        if (msg?.type !== 'diag') onLost?.(`Lệnh "${msg?.type}": nền của addon bị tắt khi đang chờ${again ? ' — đã gửi lại' : ''}`);
+        if (!again) return { status: 'error', message: 'Nền của addon vừa khởi động lại giữa chừng — xem Nhật ký rồi bấm lại nếu việc chưa xong.' };
+        await new Promise((r) => setTimeout(r, 300));
+      }
+    }
+  }
+  // Thay chrome.runtime.sendMessage của trang bằng bản an toàn (dash/core.js, chat/core.js, popup.js)
+  function guardSendMessage(onLost) {
+    const rt = typeof chrome === 'object' && chrome.runtime;
+    if (!rt?.sendMessage || rt.sendMessage.beinSafe) return;
+    const raw = rt.sendMessage.bind(rt);
+    const safe = (msg) => sendSafe(raw, msg, onLost);
+    safe.beinSafe = true;
+    rt.sendMessage = safe;
   }
 
   // Mã lỗi Beincom có câu tiếng Việt dễ hiểu hơn câu gốc
@@ -193,6 +231,7 @@
     if (r.status === 0) return 'Không kết nối được API Beincom' + (r.error ? ` — ${r.error}` : '');
     if ([502, 503, 504].includes(r.status)) return `Máy chủ Beincom không phản hồi kịp (HTTP ${r.status}), thường tự hết — lần quét sau sẽ thử lại`;
     if (r.status === 401) return 'Phiên đăng nhập hết hạn';
+    if (r.status === 407) return 'Mạng của máy đòi đăng nhập proxy (HTTP 407) — kiểm tra VPN / proxy; không phải lỗi Beincom';
     if (r.status === 403) return 'Không có quyền hoặc bị Cloudflare chặn (403)';
     return r.error || `HTTP ${r.status}`;
   }
@@ -308,6 +347,9 @@
     parseList,
     vnDay,
     isOk,
+    SAFE_RESEND,
+    sendSafe,
+    guardSendMessage,
     errMsg,
     isContentGone,
     adminGroups,
