@@ -79,7 +79,7 @@ function chatProbes(g, settings) {
     P({ id: 'chatReports', label: 'Chat: tin nhắn bị báo cáo', uses: 'tab Báo cáo → Tin nhắn chat', path: `v4/communities/${g.communityId}/reports?per_page=1`, need: !!(g.isCommunity && g.isCommunityAdmin && g.communityId), why: 'chỉ chủ / admin community (chọn group gốc)', shape: (d) => arr(d?.reports) || arr(d?.data?.reports), detail: (d) => ((d.reports || d.data?.reports).length ? 'có tin đang chờ xử lý' : 'không có tin nào chờ') }),
     P({ id: 'chatPosts', label: 'Chat: tin trong kênh', uses: 'đọc tin, quét tin vi phạm', after: true, path: (ctx) => (channel(ctx) ? `v5/channels/${channel(ctx).id}/posts?page=0&per_page=1&${crt}` : null), why: noTeam, shape: (d) => arr(d?.order) && !!d.posts, detail: (d) => (d.order.length ? '' : 'kênh chưa có tin') }),
     P({ id: 'chatThread', label: 'Chat: bình luận (thread)', uses: 'khung bình luận', after: true, path: (ctx) => (post(ctx) ? `v5/posts/${post(ctx)}/thread?${crt}&direction=down&perPage=1` : null), why: 'kênh chưa có tin để thử', shape: (d) => arr(d?.order) }),
-    P({ id: 'chatReactions', label: 'Chat: biểu cảm', uses: 'xem ai đã thả biểu cảm', after: true, path: (ctx) => (post(ctx) ? `v4/posts/${post(ctx)}/reactions` : null), why: 'kênh chưa có tin để thử', shape: arr }),
+    P({ id: 'chatReactions', label: 'Chat: biểu cảm', uses: 'xem ai đã thả biểu cảm', after: true, path: (ctx) => (post(ctx) ? `v4/posts/${post(ctx)}/reactions` : null), why: 'kênh chưa có tin để thử', shape: (d) => d == null || arr(d) }), // tin chưa có biểu cảm: Beincom trả null (gặp thật 03/11/2026)
     P({ id: 'chatPinned', label: 'Chat: tin đã ghim', uses: 'khung Tin nhắn đã ghim', after: true, path: (ctx) => (channel(ctx) ? `v4/channels/${channel(ctx).id}/pinned` : null), why: noTeam, shape: (d) => arr(d?.order), detail: (d) => `${d.order.length} tin đã ghim` }),
     P({ id: 'chatMention', label: 'Chat: gợi ý @tên', uses: 'gõ @ trong ô chat', after: true, path: (ctx) => (channel(ctx) ? `v4/users/autocomplete?in_team=${channel(ctx).team_id}&in_channel=${channel(ctx).id}&name=a&limit=1` : null), why: noTeam, shape: (d) => arr(d?.users) }),
     P({ id: 'chatRoles', label: 'Chat: quyền theo vai trò', uses: 'nút Xoá tin, Ghim, gửi tin', after: true, path: (ctx) => (role(ctx) ? `v4/roles/name/${encodeURIComponent(role(ctx))}` : null), why: noTeam, shape: (d) => arr(d?.permissions), detail: (d) => (d.permissions.includes('delete_others_posts') ? 'vai trò này xoá được tin người khác' : '') }),
@@ -119,6 +119,13 @@ function checkVerdict(r, probe) {
   return { status: 'fail', detail: BG.errMsg(r) };
 }
 
+// "Bài mới đăng" không trả lời nhưng "Tìm bài theo thời gian" thấy 0 bài trong 30 ngày: group không có bài mới, Beincom treo API
+// bài mới (lần quét cũng coi như không có bài mới) — ghi là bỏ qua kèm lý do, không tính lỗi
+function softenTimeline(x, ctx) {
+  if (x?.id !== 'timeline' || x.status !== 'fail' || x.httpStatus !== 0 || ctx.search?.meta?.total !== 0) return x;
+  return { ...x, status: 'skip', detail: 'group không có bài mới trong 30 ngày — Beincom không trả lời mục này khi chưa có bài, quét coi như không có bài mới' };
+}
+
 // Chạy mọi mục kiểm tra cho group g; trả kết quả (không lưu)
 async function runSelfCheck(g) {
   const { state } = await load();
@@ -146,14 +153,16 @@ async function runSelfCheck(g) {
       // Chat Beincom: trả JSON thường (không có code api.ok)
       if (p.chat) {
         const res = await client.call('GET', BG.CHAT_API + path, null, '', CHECK_TIMEOUT, { quiet: true });
+        // shape quyết định nhận dữ liệu nào, kể cả null (biểu cảm của tin chưa ai thả: 200 với null)
+        const ok2xx = res.status >= 200 && res.status < 300;
         let good = false;
         try {
-          good = BG.chatOk(res) && !!p.shape(res.body);
+          good = ok2xx && !!p.shape(res.body);
         } catch {}
         if (good) ctx[p.id] = res.body;
         let detail = '';
         try {
-          detail = good ? (p.detail ? p.detail(res.body) || '' : '') : res.status === 401 ? 'Chat chưa nhận phiên đăng nhập — mở chat trên web một lần rồi thử lại' : BG.chatOk(res) ? 'Chat trả dữ liệu khác trước — có thể đã đổi API' : res.status === 404 ? 'Không thấy API (404) — có thể đã đổi đường dẫn' : res.status === 403 ? 'Tài khoản không có quyền với mục này' : BG.errMsg(res);
+          detail = good ? (p.detail ? p.detail(res.body) || '' : '') : res.status === 401 ? 'Chat chưa nhận phiên đăng nhập — mở chat trên web một lần rồi thử lại' : ok2xx ? 'Chat trả dữ liệu khác trước — có thể đã đổi API' : res.status === 404 ? 'Không thấy API (404) — có thể đã đổi đường dẫn' : res.status === 403 ? 'Tài khoản không có quyền với mục này' : BG.errMsg(res);
         } catch {}
         return { id: p.id, label: p.label, uses: p.uses, path: 'chat:' + path.split('?')[0], status: good ? 'ok' : res.status === 403 ? 'skip' : 'fail', detail, httpStatus: res.status, ms: Date.now() - t0 };
       }
@@ -168,7 +177,7 @@ async function runSelfCheck(g) {
       (await mapLimit(list, PARALLEL, run)).forEach((x, i) => results.set(list[i].id, x));
     }
     for (const p of probes.filter((x) => stage(x) === 2)) results.set(p.id, await run(p));
-    const items = probes.map((p) => results.get(p.id));
+    const items = probes.map((p) => softenTimeline(results.get(p.id), ctx));
     if (items.some((x) => x.status === 'login')) return { ...NEED_LOGIN };
     return { status: 'ok', items };
   });

@@ -2,6 +2,10 @@
 
 Mỗi bản một mục, bản mới nhất ở trên. Dashboard tự hiện các mục mới sau khi cập nhật (bấm "Có gì mới" ở cuối trang để xem lại).
 
+## v0.61.2 — 03/11/2026
+- **Tự kiểm tra hết báo nhầm "Chat: biểu cảm — HTTP 200"**: tin dùng để thử chưa có ai thả biểu cảm thì Beincom trả về rỗng thay vì danh sách trống. Giờ mục này là dùng được; khung "ai đã thả" ở trang Chat cũng không còn lỗi khi biểu cảm của tin vừa bị bỏ hết.
+- **Group không có bài mới**: Beincom có lúc không trả lời phần bài mới của group chưa có bài (Tự kiểm tra: "Bài mới đăng" không trả lời trong khi "Tìm bài theo thời gian" 0 bài trong 30 ngày). Lần quét và Thống kê giờ chờ tối đa 15 giây rồi coi như group không có bài mới: không thử lại, không ghi Lỗi kỹ thuật, quét không còn bị kéo dài gần một phút vì group đó. Tự kiểm tra ghi mục này là "bỏ qua" kèm lý do; group có bài mà vẫn không trả lời thì vẫn báo lỗi như cũ.
+
 ## v0.61.1 — 03/11/2026
 - **Sửa lỗi "message channel closed" ở Dashboard**: khi Beincom treo, một lệnh tới api.beincom.com chờ không giới hạn, quá 30 giây thì trình duyệt tắt nền của addon, kéo theo mọi lệnh Dashboard đang chờ. Giờ mọi lệnh tới Beincom (cả chat, Telegram, báo cáo sử dụng) có hạn chờ tối đa 25 giây.
 - **Nền bị tắt giữa chừng** (máy ngủ, cập nhật addon…): Dashboard, trang Chat, popup tự gửi lại lệnh chỉ đọc một lần; lệnh ghi không gửi lại (tránh làm hai lần) mà báo rõ để bạn xem Nhật ký rồi bấm lại. Lỗi kỹ thuật ghi kèm tên lệnh để biết lệnh nào bị ảnh hưởng.
