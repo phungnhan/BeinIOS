@@ -148,6 +148,7 @@ node test/pwa/pwa.e2e.mjs
 
 ## Lịch sử BeinIOS
 
+- **1.7.6 (03/11/2026).** Gộp addon BeinFusion 0.61.1 — mọi lệnh tới Beincom có hạn chờ 25 giây và tự thử lại một lần khi mạng chập chờn; Lỗi kỹ thuật bớt dòng nhiễu.
 - **1.7.5 (03/11/2026).** Gộp addon BeinFusion 0.61.0 — trang Chat: mở lại thread đã xem hiện ngay không gọi máy chủ; danh sách Thread tải sẵn lúc rảnh và nhớ 30 giây; mở thread từ danh sách tải song song với cuộc trò chuyện.
 - **1.7.4 (03/11/2026).** Gộp addon BeinFusion 0.60.0 (trên máy tính, tab Quy tắc & cài đặt chia mục như Cài đặt của iPhone). Trang cài đặt con của BeinIOS giữ nguyên.
 - **1.7.3 (03/11/2026).** Gộp addon BeinFusion 0.59.0 — tab Quản trị dùng biểu tượng nét một màu thay emoji (nút, tiêu đề, nhãn), danh sách dài (thành viên, bài mới, bình luận, nhật ký…) tự tải thêm khi cuộn tới cuối.
