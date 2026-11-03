@@ -282,7 +282,7 @@ document.addEventListener('click', (e) => {
   e.preventDefault(); // nút ❓ nằm trong <label> / link: không bật ô, không đổi địa chỉ trang
   openHelp(b.dataset.help);
 });
-// Cài đặt → ❓ Hướng dẫn: mọi chủ đề theo thứ tự mục lục
+// Quy tắc & cài đặt → Hướng dẫn: mọi chủ đề theo thứ tự mục lục
 $('help-set-list')?.replaceChildren(...BG.HELP_INDEX.flatMap((g) => g.topics).filter((k) => HELP_TOPICS[k]).map((k) => el('button', { type: 'button', class: 'help-topic', 'data-help': k, text: HELP_TOPICS[k].title })));
 for (const id of ['help-x', 'help-ok']) $(id).addEventListener('click', () => $('help-dlg').close());
 

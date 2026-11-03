@@ -2,6 +2,12 @@
 
 Mỗi bản một mục, bản mới nhất ở trên. Dashboard tự hiện các mục mới sau khi cập nhật (bấm "Có gì mới" ở cuối trang để xem lại).
 
+## v0.60.0 — 03/11/2026
+- **Quy tắc & cài đặt chia mục** (như Cài đặt của iPhone / BeinIOS): bên trái là danh sách mục — Hoạt động & quét, Tự xử lý, Theo dõi & nhắc việc, Quy tắc thành viên, Quy tắc bài viết, Chat Beincom, Telegram, Trợ lý AI, Sao lưu & đồng bộ, BeinIOS, Hướng dẫn — kèm trạng thái nhanh (chu kỳ quét / Chạy thử / Đang tắt, Bật / Tắt, Khoá API / Chép – dán); bên phải chỉ hiện mục đang chọn, một cột, chữ nhẹ hơn. Trước đây là hai cột lệch nhau và cột Cài đặt dài gần mười màn hình.
+  - Quy tắc thành viên / bài viết xếp một cột (không còn ba cột hộp cao thấp không đều).
+  - Mở lại tab thì về mục vừa xem; mở thẳng một mục bằng địa chỉ `#tab=settings&sec=tg`; nút Cài đặt trong hộp AI mở thẳng mục Trợ lý AI. Phím ↑ ↓ chuyển mục.
+  - Điện thoại: danh sách mục thành hàng nút cuộn ngang ở đầu trang.
+
 ## v0.59.0 — 03/11/2026
 - **Giao diện Dashboard gọn hơn, đợt 3**:
   - **Biểu tượng nét một màu** thay cho emoji ở nút, tiêu đề, nhãn nhóm, nhãn bài (🧹 Dọn, 📌 Ghim, ⚙ Cài đặt, ✎ Sửa, 💬 Bình luận, ✨ AI, 📋 Sao chép, 🖼 Ảnh, 🎬 Video, 📎 Tệp, 🔗 Link, ⚠, 🛡, 🔔… — hơn 40 loại, cả mục lục Hướng dẫn): cùng màu và cỡ với chữ, máy nào cũng vẽ giống nhau. Nội dung bài / bình luận của thành viên và mẫu bài giữ nguyên emoji.

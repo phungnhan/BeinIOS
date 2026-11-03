@@ -2782,6 +2782,48 @@ export const scenarios = [
     },
   },
   {
+    name: 'Quy tắc & cài đặt chia mục: danh sách mục bên trái, chỉ hiện một mục, trạng thái nhanh, mở thẳng bằng #sec=',
+    async run({ page, url, assert }) {
+      await page.open(url('dashboard', 'tab=settings'));
+      await page.ev(`localStorage.removeItem('beingroup-set-sec'); true`);
+      await page.open(url('dashboard', 'tab=settings'));
+      const vis = (sel) => `!!document.querySelector(${JSON.stringify(sel)})?.offsetParent`;
+      // Mọi phần của tab đều thuộc một mục (phần mới thêm mà quên gắn mục thì không bao giờ hiện)
+      assert.deepEqual(await page.ev(`[...document.querySelectorAll('.rules-col > *, #settings > *, #settings-group > *')].filter((e) => !e.dataset.setSec).map((e) => e.id || e.className)`), []);
+      assert.equal(await page.ev(`document.querySelectorAll('#set-nav button[data-sec]').length`), 11);
+      // Mặc định: Hoạt động & quét; quy tắc, Telegram ẩn; mục lục nhanh không hiện ở tab này
+      assert.equal(await page.ev(`document.querySelector('#set-nav .active').dataset.sec`), 'scan');
+      assert.equal(await page.ev(`document.querySelector('#settings > .card-head h2').textContent`), 'Hoạt động & quét');
+      assert.deepEqual(await page.ev(`[${vis('#dryRun')}, ${vis('#rules')}, ${vis('#tg-enabled')}, ${vis('#tab-toc')}]`), [true, false, false, false]);
+      // Trạng thái nhanh: chu kỳ quét; bật Chạy thử thì ghi Chạy thử (màu cảnh báo)
+      await page.until(() => document.querySelector('#set-nav [data-sec=scan] em').textContent === (document.getElementById('dryRun').checked ? 'Chạy thử' : document.getElementById('intervalMin').selectedOptions[0].text));
+      if (!(await page.ev(`document.getElementById('dryRun').checked`))) {
+        await page.ev(`document.getElementById('dryRun').click(); true`);
+        await page.until(() => document.querySelector('#set-nav [data-sec=scan] em').textContent === 'Chạy thử' && document.querySelector('#set-nav [data-sec=scan] em').classList.contains('warn'));
+      }
+      // Chuyển mục: Telegram
+      await page.ev(`document.querySelector('#set-nav [data-sec=tg]').click(); true`);
+      await page.until(() => !!document.getElementById('tg-enabled').offsetParent && !document.getElementById('dryRun').offsetParent);
+      assert.equal(await page.ev(`document.querySelector('#settings > .card-head h2').textContent`), 'Telegram');
+      assert.match(await page.ev(`location.hash`), /tab=settings.*sec=tg/);
+      // Bật Gửi về Telegram: trạng thái bên trái đổi theo
+      await page.ev(`document.getElementById('tg-enabled').click(); true`);
+      await page.until(() => document.querySelector('#set-nav [data-sec=tg] em').textContent === 'Bật');
+      // Quy tắc thành viên: thẻ Áp dụng quy tắc cho + Quy tắc lọc thành viên, không có Quy tắc bài viết
+      await page.ev(`document.querySelector('#set-nav [data-sec=rules]').click(); true`);
+      await page.until(() => !!document.getElementById('rules').offsetParent);
+      assert.deepEqual(await page.ev(`[${vis('#rules-scope')}, ${vis('#post-rules')}, ${vis('#settings')}]`), [true, false, false]);
+      // Mở thẳng một mục bằng địa chỉ; nút Cài đặt trong hộp AI mở mục AI
+      await page.ev(`location.hash = 'tab=settings&sec=backup'; true`);
+      await page.until(() => document.querySelector('#set-nav .active')?.dataset.sec === 'backup' && !!document.getElementById('btn-backup').offsetParent);
+      await page.ev(`showTab('content'); showTab('settings'); showSettingsSec('ai'); true`);
+      await page.until(() => !!document.getElementById('ai-key').offsetParent && document.querySelector('#settings > .card-head h2').textContent === 'Trợ lý AI');
+      // Mở lại trang: nhớ mục vừa xem
+      await page.open(url('dashboard', 'tab=settings'));
+      await page.until(() => document.querySelector('#set-nav .active')?.dataset.sec === 'ai');
+    },
+  },
+  {
     name: 'Biểu tượng nét thay emoji (chữ gốc giữ nguyên), danh sách tự tải thêm khi cuộn tới cuối',
     async run({ page, url, assert }) {
       await page.open(url('dashboard', 'tab=content'));
