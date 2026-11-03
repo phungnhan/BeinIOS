@@ -2703,7 +2703,10 @@ export const scenarios = [
       await page.ev(`document.getElementById('check-daily').click(); true`);
       await page.until(() => chrome.storage.local.get('settings').then((o) => o.settings.selfCheckDaily === false));
       await setValue(page, 'check-group', 'gCL');
-      await page.ev(`document.getElementById('btn-check-run').click(); true`);
+      // Đang chạy: dòng trạng thái hiện số mục đã xong (nền ghi khoá selfCheckProgress)
+      await page.ev(`window.__checkHold = 700; document.getElementById('btn-check-run').click(); true`);
+      await page.until(() => / \(chỉ đọc\)… 3\/8 mục$/.test(document.getElementById('check-note').textContent));
+      assert.equal(await page.ev(`document.getElementById('btn-check-run').textContent`), 'Đang kiểm tra…');
       await page.until(() => document.querySelectorAll('#check-body tr:not(.empty-row)').length === 9); // 8 mục + dòng tiêu đề nhóm Chat
       assert.deepEqual(await page.ev(`window.__selfCheck`), { type: 'selfCheck', groupId: 'gCL' });
       const info = await page.call(() => ({
@@ -2713,11 +2716,12 @@ export const scenarios = [
       }));
       assert.deepEqual(info.tags, ['✓ Dùng được', '✓ Dùng được', '✓ Dùng được', '✓ Dùng được', 'Bỏ qua', '✗ Lỗi', '✓ Dùng được', 'Bỏ qua']);
       assert.deepEqual(info.sec, [['💬 Chat Beincom (chat.beincom.com)', 'Chat: đăng nhập']]);
-      assert.match(info.note, /^Crypto Life · lúc .* · 5 dùng được · 2 bỏ qua · 1 lỗi\. Bấm Sao chép kết quả/);
+      assert.match(info.note, /^Crypto Life · lúc .* · 5 dùng được · 2 bỏ qua · 1 lỗi · chạy 6 giây\. Bấm Sao chép kết quả/);
       await page.ev(`navigator.clipboard.writeText = async (t) => { window.__clip = t; }; document.getElementById('btn-check-copy').click(); true`);
       await page.until(() => !!window.__clip);
       const clip = await page.ev(`window.__clip`);
       assert.match(clip.split('\n')[0], /^BeinFusion v\d+\.\d+\.\d+ · .* · tự kiểm tra Crypto Life lúc /);
+      assert.deepEqual(clip.split('\n').slice(1, 3), ['5 dùng được · 2 bỏ qua · 1 lỗi', 'Chạy 6 giây · chậm: Nhật ký thành viên theo ngày 4,2 giây']);
       assert.match(clip, /\n✗ Bài ghim: Không thấy API \(404\) — Beincom có thể đã đổi đường dẫn \[404 content\/contents\/pinned-content\/groups\/gCL\]\n— Chat Beincom —\n✓ Chat: đăng nhập: @kaicrypto\n– Chat: tin nhắn bị báo cáo: chỉ chủ/);
       // Gửi về Telegram: tiêu đề có tên group và số lỗi, nội dung là bản chữ đầy đủ
       await page.ev(`document.getElementById('btn-check-tg').click(); true`);

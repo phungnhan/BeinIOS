@@ -2090,3 +2090,23 @@ test('lỗi dễ hiểu: 407 là proxy / VPN của máy; tin chat đã bị xoá
   assert.equal(BG.isContentGone({ status: 404, body: { id: 'app.post.get.app_error', message: 'Không thể nhận được bài viết.', status_code: 404 } }), true);
   assert.equal(BG.isContentGone({ status: 404, body: { id: 'api.context.404.app_error' } }), false);
 });
+
+test('Tự kiểm tra — bản chữ: dòng thời gian chạy và các mục chậm (từ 2 giây, chậm nhất trước); kết quả cũ không có dòng này', () => {
+  const r = {
+    group: { name: 'Healthy Living' },
+    at: Date.parse('2026-11-03T13:01:00Z'),
+    summary: { ok: 2, skip: 1, fail: 0 },
+    ms: 7400,
+    items: [
+      { id: 'tags', label: 'Tag', status: 'ok', ms: 400 },
+      { id: 'search', label: 'Tìm bài theo thời gian', status: 'ok', ms: 2300 },
+      { id: 'timeline', label: 'Bài mới đăng', status: 'skip', detail: 'group không có bài mới', ms: 5012 },
+    ],
+  };
+  const lines = BG.selfCheckText(r, { version: '0.61.3' }).split('\n');
+  assert.equal(lines[1], '2 dùng được · 1 bỏ qua · 0 lỗi');
+  assert.equal(lines[2], 'Chạy 7 giây · chậm: Bài mới đăng 5,0 giây, Tìm bài theo thời gian 2,3 giây');
+  assert.equal(BG.selfCheckText({ ...r, ms: 600, items: [] }).split('\n')[2], 'Chạy dưới 1 giây');
+  assert.equal(BG.selfCheckText({ ...r, ms: undefined }).split('\n')[2], '✓ Tag');
+  assert.deepEqual([BG.checkSecs(999), BG.checkSecs(6400), BG.checkSecs(4249, true)], ['dưới 1 giây', '6 giây', '4,2 giây']);
+});

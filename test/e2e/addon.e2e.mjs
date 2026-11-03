@@ -53,10 +53,10 @@ chrome.stdio[4].on('data', (d) => {
   }
 });
 const sessions = new Map();
-const send = (method, params = {}, sessionId) =>
+const send = (method, params = {}, sessionId, timeoutMs = 20000) =>
   new Promise((resolve, reject) => {
     const id = ++seq;
-    const timer = setTimeout(() => reject(new Error('Hết giờ chờ ' + method)), 20000);
+    const timer = setTimeout(() => reject(new Error('Hết giờ chờ ' + method)), timeoutMs);
     pending.set(id, (m) => {
       clearTimeout(timer);
       m.error ? reject(new Error(`${method}: ${m.error.message}`)) : resolve(m.result);
@@ -69,8 +69,8 @@ const attach = async (targetId, name) => {
   await send('Runtime.enable', {}, sessionId);
   return sessionId;
 };
-const evalIn = async (sid, expression) => {
-  const r = await send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true }, sid);
+const evalIn = async (sid, expression, timeoutMs) => {
+  const r = await send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true }, sid, timeoutMs);
   if (r.exceptionDetails) throw new Error(r.exceptionDetails.exception?.description || r.exceptionDetails.text);
   return r.result.value;
 };
@@ -124,9 +124,10 @@ try {
   const missing = await evalIn(swSid, `['doScan','doRefresh','doCompose','doComposeArticle','doComposeSeries','doCategories','doStats','doSyncNow','doTelegramTest','pollTelegram','scheduleTelegramPoll','doEditScheduled','postAutoItems','doTags','doTagAct','doCleanupUser','measurePostStats','trackPostStat','doRetention','doMonthly','doTelegramReport','readMemberEvents','searchPosts','readActorPosts','doSelfCheck','runSelfCheck','dailySelfCheck','prepareNudge','recordNudge','doNudgeEffect','preparePrompt','recordPromptUse','noteUsage','flushUsage','readTeamEvents','syncChat','doChatOverview','doChatPosts','doChatSend','doChatView','doChatDeleteMsg','readChatMap','doChatAct','doChatRefresh','shareToChat','readChatMonth','guardJoins','doGuardSearch','doGuardAct','refreshAdmins','recoverJournal','cancelActions','storageUsage','doUserPosts','doSweepSearch','doHidePosts','sweepSearch','remindPending','exclusive','notify'].filter((f) => typeof globalThis[f] !== 'function')`);
   if (missing.length) fail('Service worker thiếu hàm: ' + missing.join(', '));
   // Nạp dữ liệu mẫu qua hàng đợi của service worker: chạy sau lần quét lúc cài (đang chờ hoặc đang chạy),
-  // và dữ liệu mẫu tắt addon (active: false) nên không có lần quét tự động nào ghi đè sau đó.
+  // và dữ liệu mẫu tắt addon (active: false) nên không có lần quét tự động nào ghi đè sau đó. Lần quét lúc cài gọi Beincom thật
+  // (chưa đăng nhập: thử API tới 25 giây rồi mở tab Beincom chờ tải tới 30 giây) nên chờ tới 90 giây — mạng chậm thì 20 giây không đủ
   const now = Date.now();
-  await evalIn(swSid, `exclusive(() => chrome.storage.local.set(${JSON.stringify(sample(now))})).then(() => true)`);
+  await evalIn(swSid, `exclusive(() => chrome.storage.local.set(${JSON.stringify(sample(now))})).then(() => true)`, 90000);
   const seeded = await evalIn(swSid, 'chrome.storage.local.get("state").then((s) => s.state?.snapshot?.groups?.length === 2)');
   if (!seeded) throw new Error('Không nạp được dữ liệu mẫu');
 

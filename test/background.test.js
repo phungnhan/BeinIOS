@@ -626,7 +626,8 @@ function makeEnv({ data = fixture(), settings = {}, rules = {}, postRules = {}, 
 
   // structuredClone: đưa kết quả về realm của test để deepEqual so được
   const send = (msg) => new Promise((resolve) => listeners.message(msg, {}, (r) => resolve(structuredClone(r))));
-  return { send, storage, calls, bodies, headers, notifications, tabsCreated, badge, data, listeners, syncStore, syncWrites, tg };
+  // ctx: phạm vi của service worker — test gọi thẳng hàm bên trong (vd. runProbes)
+  return { send, storage, calls, bodies, headers, notifications, tabsCreated, badge, data, listeners, syncStore, syncWrites, tg, ctx };
 }
 
 const scan = (env, source = 'dashboard') => env.send({ type: 'scan', source });
@@ -4086,6 +4087,9 @@ test('Tự kiểm tra: gọi thử các API đọc (chỉ GET), báo dùng đư�
   assert.match(by.storage.detail, /^[\d,]+ MB \/ 10 MB · nhiều nhất: Kết quả quét/);
   assert.equal(by.teamLog.status, 'ok');
   assert.equal(r.summary.ok + r.summary.skip + r.summary.fail, r.items.length);
+  assert.equal(typeof r.ms, 'number');
+  // Tiến độ cho Dashboard (khoá selfCheckProgress): lần ghi cuối là đủ mục
+  assert.deepEqual([env.storage.selfCheckProgress.groupId, env.storage.selfCheckProgress.done, env.storage.selfCheckProgress.total], ['gFood', r.items.length, r.items.length]);
   assert.ok(env.calls.slice(before).every((c) => c.startsWith('GET ')));
   assert.deepEqual(env.storage.selfCheck.items.length, r.items.length);
   // Admin group (không phải admin community): mục chỉ dành cho chủ / admin community bị bỏ qua, không gọi API
@@ -4253,6 +4257,7 @@ test('Tự kiểm tra mỗi ngày: lần quét tự động đầu ngày kiểm 
   await scan(env, 'popup');
   const auto = env.storage.selfCheckAuto;
   assert.deepEqual(Object.keys(auto.groups).sort(), ['gCL', 'gFood']); // chỉ group gốc của community
+  assert.equal(env.storage.selfCheckProgress, undefined); // tự chạy: không ghi tiến độ
   assert.equal(auto.groups.gFood.items.find((x) => x.id === 'tagPerm').status, 'ok');
   assert.equal(env.notifications.filter((n) => n.id === 'bg-selfcheck').length, 0); // lần đầu chỉ ghi mốc
   assert.equal(env.storage.state.selfCheckDay, '2026-10-13');
@@ -4485,8 +4490,11 @@ test('bài mới của group treo (group không có bài): quét không chờ qu
   assert.ok(state.recentPosts.some((p) => p.id === 't1')); // group khác vẫn đọc được
   await new Promise((res) => setTimeout(res, 50));
   assert.ok(!(env.storage.diagLog || []).some((e) => String(e.path).includes('content/timeline')));
-  // Tự kiểm tra: "Tìm bài theo thời gian" 0 bài -> Bài mới đăng là bỏ qua (không phải lỗi)
+  // Tự kiểm tra: "Tìm bài theo thời gian" 0 bài -> Bài mới đăng là bỏ qua (không phải lỗi); gọi sau mục Tìm bài (chờ ngắn hơn)
+  const mark = env.calls.length;
   const r = await env.send({ type: 'selfCheck', groupId: 'gFood' });
+  const sc = env.calls.slice(mark);
+  assert.ok(sc.findIndex((c) => c.startsWith('GET content/contents?groupId=gFood')) < sc.findIndex((c) => c.startsWith('GET content/timeline/gFood')));
   const t = r.items.find((x) => x.id === 'timeline');
   assert.equal(t.status, 'skip');
   assert.match(t.detail, /không có bài mới trong 30 ngày/);
@@ -4494,4 +4502,41 @@ test('bài mới của group treo (group không có bài): quét không chờ qu
   data.search = [{ id: 's1', content: 'Bài', publishedAt: new Date(Date.now() - 864e5).toISOString(), actor: { id: 'u1' }, isHidden: false }];
   const r2 = await env.send({ type: 'selfCheck', groupId: 'gFood' });
   assert.equal(r2.items.find((x) => x.id === 'timeline').status, 'fail');
+});
+
+test('Tự kiểm tra chạy theo mục cần nhau: mục chạy ngay khi mục nó cần xong, không chờ mục chậm không liên quan, không quá giới hạn cùng lúc', async () => {
+  const env = makeEnv();
+  const runProbes = vm.runInContext('runProbes', env.ctx);
+  const wait = { slow: 300, a: 15, b: 15, c: 15, d: 15, e: 15 };
+  const probes = [{ id: 'slow' }, { id: 'a' }, { id: 'b', deps: ['a'] }, { id: 'c', deps: ['b', 'nope'] }, { id: 'd', deps: ['slow'] }, { id: 'e' }];
+  const t0 = Date.now();
+  const end = {};
+  const progress = [];
+  let active = 0;
+  let peak = 0;
+  const run = async (p, results) => {
+    for (const d of p.deps || []) if (d !== 'nope') assert.ok(results.has(d), `${p.id} chạy khi ${d} chưa xong`);
+    active++;
+    peak = Math.max(peak, active);
+    await new Promise((res) => setTimeout(res, wait[p.id]));
+    active--;
+    end[p.id] = Date.now() - t0;
+    return { id: p.id, status: 'ok' };
+  };
+  const res = await runProbes(probes, run, 2, (done, total) => progress.push(`${done}/${total}`));
+  assert.deepEqual([...res.keys()].sort(), ['a', 'b', 'c', 'd', 'e', 'slow']);
+  assert.ok(end.c < end.slow, 'chuỗi a → b → c không chờ mục chậm');
+  assert.ok(end.e < end.slow);
+  assert.ok(end.d > end.slow);
+  assert.equal(peak, 2);
+  assert.deepEqual(progress, ['1/6', '2/6', '3/6', '4/6', '5/6', '6/6']);
+  // Chuỗi dài đi trước: mục được mục khác cần gọi trước (dù đứng sau trong danh sách), mục vừa đủ điều kiện được chỗ trước
+  const first = [];
+  await runProbes([{ id: 'x' }, { id: 'y' }, { id: 'z' }, { id: 'root' }, { id: 'leaf', deps: ['root'] }], async (p) => (first.push(p.id), { id: p.id }), 1);
+  assert.deepEqual(first, ['root', 'leaf', 'x', 'y', 'z']);
+  // Mục Tự kiểm tra: Bài mới đăng chờ Tìm bài (group không có bài thì chờ ngắn), Bình luận chờ Bài mới đăng, mục chat chờ đăng nhập chat
+  const ps = vm.runInContext('selfCheckProbes', env.ctx)({ id: 'g1', communityId: 'c1', isCommunity: true, isCommunityAdmin: true, canBan: true }, { root: null, now: Date.now(), tg: null, settings: { chatEnabled: true } });
+  const by = Object.fromEntries(ps.map((p) => [p.id, p]));
+  assert.deepEqual(structuredClone([by.timeline.deps, by.comments.deps, by.chat.deps, by.chatTeams.deps, by.chatThread.deps, by.chatRoles.deps]), [['search'], ['timeline'], [], ['chat'], ['chat', 'chatPosts'], ['chat', 'chatTeams', 'chatTeamRoles']]);
+  assert.deepEqual([by.timeline.timeout({ search: { meta: { total: 0 } } }), by.timeline.timeout({ search: { meta: { total: 3 } } }), by.timeline.timeout({})], [5000, 15000, 15000]);
 });

@@ -1,7 +1,7 @@
 // Dashboard — tab Nhật ký: Tự kiểm tra. Service worker gọi thử (chỉ GET) các API đọc mà từng tính năng dùng
 // (bg/selfcheck.js), kết quả lần gần nhất lưu ở khoá `selfCheck`.
 
-const check = { groupId: null, running: false, result: null, auto: null, stored: false, error: '' };
+const check = { groupId: null, running: false, result: null, auto: null, stored: false, error: '', progress: null };
 const CHECK_TAG = { ok: ['ok', '✓ Dùng được'], skip: ['info', 'Bỏ qua'], fail: ['err', '✗ Lỗi'] };
 
 function checkGroup() {
@@ -34,13 +34,13 @@ async function renderCheck() {
 
   const note = $('check-note');
   note.classList.toggle('err-text', !!check.error);
-  if (check.running) note.textContent = `Đang gọi thử các API của Beincom${data.settings.chatEnabled ? ' và Chat' : ''} (chỉ đọc, khoảng 5–25 giây)…`;
+  if (check.running) note.textContent = checkRunningNote();
   else if (check.error) note.textContent = check.error;
   else if (!g) note.textContent = data.state.snapshot ? 'Không có group nào để kiểm tra.' : 'Chưa quét lần nào — bấm Quét ngay trước.';
   else if (!r) note.textContent = '';
   else {
     const s = r.summary;
-    note.textContent = `${r.group.name} · lúc ${fmtTime(r.at)} · ${s.ok} dùng được · ${s.skip} bỏ qua · ${s.fail} lỗi.` + (s.fail ? ' Bấm Sao chép kết quả và gửi cho người hỗ trợ.' : s.skip ? ' "Bỏ qua" là mục tài khoản này không có quyền hoặc chưa bật — tính năng tương ứng sẽ ẩn.' : ' Mọi mục đều dùng được.');
+    note.textContent = `${r.group.name} · lúc ${fmtTime(r.at)} · ${s.ok} dùng được · ${s.skip} bỏ qua · ${s.fail} lỗi${r.ms != null ? ' · chạy ' + BG.checkSecs(r.ms) : ''}.` + (s.fail ? ' Bấm Sao chép kết quả và gửi cho người hỗ trợ.' : s.skip ? ' "Bỏ qua" là mục tài khoản này không có quyền hoặc chưa bật — tính năng tương ứng sẽ ẩn.' : ' Mọi mục đều dùng được.');
   }
 
   const body = $('check-body');
@@ -63,10 +63,22 @@ async function renderCheck() {
   });
 }
 
+// Dòng trạng thái lúc đang chạy: số mục đã xong (nền ghi khoá selfCheckProgress — dashboard.js gọi checkProgress khi khoá đổi)
+function checkRunningNote() {
+  const p = check.progress;
+  return `Đang gọi thử các API của Beincom${data.settings.chatEnabled ? ' và Chat' : ''} (chỉ đọc)…${p ? ` ${p.done}/${p.total} mục` : ''}`;
+}
+
+function checkProgress(p) {
+  if (!check.running || !p || p.groupId !== check.groupId) return;
+  check.progress = p;
+  $('check-note').textContent = checkRunningNote();
+}
+
 async function runCheck() {
   const g = checkGroup();
   if (!g || check.running) return;
-  Object.assign(check, { groupId: g.id, running: true, error: '' });
+  Object.assign(check, { groupId: g.id, running: true, error: '', progress: null });
   renderCheck();
   try {
     const r = await chrome.runtime.sendMessage({ type: 'selfCheck', groupId: g.id });
