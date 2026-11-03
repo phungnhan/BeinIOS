@@ -2,6 +2,15 @@
 
 Mỗi bản một mục, bản mới nhất ở trên. Dashboard tự hiện các mục mới sau khi cập nhật (bấm "Có gì mới" ở cuối trang để xem lại).
 
+## v0.57.0 — 03/11/2026
+- **Giao diện Dashboard gọn hơn** (đợt 1, chỉ đổi cách hiện — mọi chức năng, vị trí nút giữ nguyên):
+  - Chữ **Be Vietnam Pro** (gói sẵn, cùng bộ với trang Chat), tiêu đề thẻ rõ hơn, nhãn nhóm viết hoa nhỏ.
+  - **Cài đặt và Quy tắc**: các dòng liền nhau ghép thành một khối có vạch mảnh, không còn mỗi dòng một hộp viền.
+  - **Tổng quan**: sáu ô số liệu thành một dải liền; Việc đầu tuần / Việc cần làm / Đợt spam bỏ viền màu quanh thẻ, thay bằng chấm màu cạnh tiêu đề; danh sách việc chỉ còn vạch mảnh, số phím tắt mờ hơn.
+  - Nút chọn (Tất cả / Gợi ý duyệt…) kiểu viên trượt, thanh "Chọn tất cả" không còn nền xám, nút hàng loạt mờ khi chưa chọn gì; nút thao tác từng dòng trong bảng bỏ viền (hiện nền khi rê chuột).
+  - Nút ❓ thành vòng tròn "?" cùng cỡ với ⓘ.
+  - Điện thoại (BeinIOS): thanh trên gọn một dòng, thanh tab mờ dần ở mép phải, nút đủ cao để chạm.
+
 ## v0.56.0 — 23/10/2026
 - **❓ Hướng dẫn trong ứng dụng**: mọi hướng dẫn gom vào một chỗ, viết sẵn ngay trong addon (không phải mở trang ngoài). Mở ở **Cài đặt → ❓ Hướng dẫn**, chân trang **Hướng dẫn**, hoặc nút ❓ ở từng phần. Có mục lục 17 chủ đề: Bắt đầu, Thành viên, Bài viết & bình luận, Báo cáo, Đăng bài, Nhập CSV, Article & Series, Thống kê, Quy tắc lọc, Tự xử lý, Thông báo & theo dõi, Telegram, Chat, AI, Sao lưu, BeinIOS, Khi gặp trục trặc; mỗi chủ đề có nút **‹ Mọi hướng dẫn**.
 - **Dashboard gọn hơn**: mô tả dưới các dòng cài đặt / quy tắc và ghi chú đầu các thẻ nằm trong gợi ý ⓘ (rê chuột hoặc chạm để xem); hướng dẫn dài (các cột CSV, cách tạo bot Telegram, BeinIOS) chuyển vào ❓ Hướng dẫn. Cảnh báo quan trọng vẫn hiện rõ: Chạy thử, tắt Duyệt thành viên, ẩn bài là một chiều.
