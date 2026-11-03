@@ -2,6 +2,12 @@
 
 Mỗi bản một mục, bản mới nhất ở trên. Dashboard tự hiện các mục mới sau khi cập nhật (bấm "Có gì mới" ở cuối trang để xem lại).
 
+## v0.61.1 — 03/11/2026
+- **Sửa lỗi "message channel closed" ở Dashboard**: khi Beincom treo, một lệnh tới api.beincom.com chờ không giới hạn, quá 30 giây thì trình duyệt tắt nền của addon, kéo theo mọi lệnh Dashboard đang chờ. Giờ mọi lệnh tới Beincom (cả chat, Telegram, báo cáo sử dụng) có hạn chờ tối đa 25 giây.
+- **Nền bị tắt giữa chừng** (máy ngủ, cập nhật addon…): Dashboard, trang Chat, popup tự gửi lại lệnh chỉ đọc một lần; lệnh ghi không gửi lại (tránh làm hai lần) mà báo rõ để bạn xem Nhật ký rồi bấm lại. Lỗi kỹ thuật ghi kèm tên lệnh để biết lệnh nào bị ảnh hưởng.
+- **Mạng chập chờn**: lệnh đọc hết hạn chờ hoặc mất kết nối thì tự thử lại một lần sau 1,5 giây; chỉ ghi Lỗi kỹ thuật khi hỏng cả hai lần (trước đây mỗi lần Beincom chậm đều thành một dòng lỗi).
+- Lỗi kỹ thuật bớt dòng nhiễu: trang Chat không ghi "lệnh chậm" khi trang bị ẩn / máy ngủ trong lúc chờ; tin chat đã bị xoá (404) không tính là lỗi; HTTP 407 ghi rõ là proxy / VPN của máy, không phải Beincom.
+
 ## v0.61.0 — 03/11/2026
 - **Trang Chat: thread nhanh hơn** (đo trước: mở lại thread đã xem vẫn gọi máy chủ; danh sách Thread mỗi lần mở đều đọc lại từ đầu, 1–3 giây):
   - Mở lại thread đã xem / đã tải trước trong 1 phút: hiện ngay, **không gọi lại**. Lần đọc lại cuộc trò chuyện (4 giây một lần) đã gồm mọi bình luận mới, nên mọi thread của kênh đang xem luôn được coi là mới — bấm "N bình luận" là hiện tức thì.

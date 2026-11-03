@@ -149,6 +149,9 @@ try {
   await sleep(300);
   result.todo = await evalIn(dSid, `document.querySelectorAll('#todo-list .todo-item').length`);
   if (result.todo < 4) fail(`Hộp Việc cần làm chỉ có ${result.todo} việc (mong ≥ 4)`);
+  // Trang dùng bản gửi lệnh an toàn (common.js guardSendMessage) — trên Chrome thật phải thay được chrome.runtime.sendMessage
+  result.safeSend = await evalIn(dSid, `chrome.runtime.sendMessage.beinSafe === true`);
+  if (!result.safeSend) fail('Dashboard: chưa thay được chrome.runtime.sendMessage');
   result.footer = await evalIn(dSid, `document.getElementById('version').textContent`);
   if (result.footer !== 'v' + result.version) fail('Chân trang không đúng phiên bản: ' + result.footer);
 

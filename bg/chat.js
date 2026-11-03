@@ -10,7 +10,8 @@ const CHAT_MAP_TTL = 6 * 3600e3;
 const CHAT_FIRST_MS = 6 * 3600e3; // lần đầu: đọc tin trong 6 giờ qua
 const CHAT_MONTH_PAGES = 10; // tối đa 2000 tin mỗi kênh cho báo cáo tháng
 
-const chatGet = (client, path, timeoutMs = 20000) => client.call('GET', BG.CHAT_API + path, null, '', timeoutMs);
+// Hạn chờ mặc định của client (25 giây) và thử lại 1 lần khi hết hạn chờ / mất kết nối (bg/core.js withRetry)
+const chatGet = (client, path) => client.call('GET', BG.CHAT_API + path, null, '');
 
 // Bản đồ kênh: tài khoản chat của mình, team của các community mình quản trị, kênh của group mình quản trị hoặc có quyền xoá tin
 async function readChatMap(client, groups) {

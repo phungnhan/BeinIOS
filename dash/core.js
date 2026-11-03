@@ -12,6 +12,8 @@ function reportDiag(where, e) {
 }
 window.addEventListener('error', (e) => reportDiag(WHERE_PAGE, { message: e.message, stack: e.error?.stack || `${e.filename}:${e.lineno}:${e.colno}` }));
 window.addEventListener('unhandledrejection', (e) => reportDiag(WHERE_PAGE, { message: String(e.reason?.message || e.reason), stack: e.reason?.stack || '' }));
+// Nền bị trình duyệt tắt giữa chừng: lệnh đọc tự gửi lại, lệnh ghi báo lỗi rõ ràng, ghi Lỗi kỹ thuật kèm tên lệnh (common.js)
+BG.guardSendMessage((message) => reportDiag(WHERE_PAGE, { message }));
 
 const RULE_BOOLS = ['requireAvatar', 'requireAnswers', 'requireVerified', 'declineDeactivated', 'reviewViolators', 'reviewImpersonation'];
 const RULE_LISTS = { bannedKeywords: false, allowUsernames: true, blockUsernames: true }; // true = danh sách username

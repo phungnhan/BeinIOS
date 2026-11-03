@@ -147,6 +147,12 @@ function makeEnv({ data = fixture(), settings = {}, rules = {}, postRules = {}, 
     if (url.startsWith('https://chat.beincom.com/api/')) {
       const p = url.slice('https://chat.beincom.com/api/'.length);
       calls.push(`${method} chat:${p}`);
+      // data.hangOnce: mỗi phần tử là một lần lệnh này treo tới khi bị huỷ vì quá hạn chờ (giả mạng chập chờn)
+      const hang = (data.hangOnce || []).indexOf(p);
+      if (hang >= 0) {
+        data.hangOnce.splice(hang, 1);
+        return new Promise((_, rej) => opts.signal?.addEventListener('abort', () => rej(new Error('The operation was aborted.'))));
+      }
       // Thân lệnh: JSON, hoặc FormData (tải tệp lên: ghi tên trường, tệp thì tên / loại / cỡ)
       if (opts.body) bodies.push([`${method} chat:${p}`, typeof opts.body === 'string' ? JSON.parse(opts.body) : Object.fromEntries([...opts.body.entries()].map(([k, v]) => [k, typeof v === 'string' ? v : { name: v.name, type: v.type, size: v.size }]))]);
       headers[`${method} chat:${p}`] = opts.headers;
@@ -607,6 +613,7 @@ function makeEnv({ data = fixture(), settings = {}, rules = {}, postRules = {}, 
     TextEncoder,
     URL,
     AbortController,
+    AbortSignal,
     FormData,
     Blob,
     atob,
@@ -4411,4 +4418,23 @@ test('báo cáo sử dụng tự gửi: chỉ khi có nơi nhận, admin đồng
   // Link nơi nhận sai dạng: coi như không có
   assert.equal(BG.isUsageEndpoint('https://evil.example/exec'), false);
   assert.equal(BG.isUsageEndpoint(URL), true);
+});
+
+test('mạng chập chờn: lệnh đọc hết hạn chờ thì thử lại một lần (không ghi Lỗi kỹ thuật); hỏng cả hai lần mới ghi', async () => {
+  const data = fixture();
+  data.chat = chatFixture(Date.now());
+  data.hangOnce = ['v4/users/me/teams'];
+  const env = makeEnv({ data, settings: { chatEnabled: true } });
+  const r = await env.send({ type: 'chatThreads' });
+  assert.equal(r.status, 'ok');
+  assert.equal(env.calls.filter((c) => c === 'GET chat:v4/users/me/teams').length, 2);
+  await new Promise((res) => setTimeout(res, 50));
+  assert.ok(!(env.storage.diagLog || []).some((e) => /v4\/users\/me\/teams$/.test(e.path || '')));
+  // Hỏng cả hai lần: một dòng "Beincom không phản hồi" (timeout)
+  data.hangOnce = ['v4/users/me/teams', 'v4/users/me/teams'];
+  const r2 = await env.send({ type: 'chatThreads' });
+  assert.equal(r2.status, 'error');
+  await new Promise((res) => setTimeout(res, 50));
+  const e = (env.storage.diagLog || []).find((x) => /v4\/users\/me\/teams$/.test(x.path || ''));
+  assert.ok(e && e.code === 'timeout', JSON.stringify(e));
 });

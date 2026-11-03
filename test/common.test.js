@@ -2039,3 +2039,54 @@ test('Giao diện trang Chat: lựa chọn đọc từ máy được làm sạch
   assert.equal(pale.onAccent, '#14111F');
   assert.equal(BG.chatLookColors('#6B3FE7', false).fixed, false);
 });
+
+test('gửi lệnh tới nền: nền bị tắt giữa chừng thì lệnh đọc gửi lại một lần, lệnh ghi trả lỗi rõ, ghi kèm tên lệnh', async () => {
+  const lost = new Error('A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received');
+  const notes = [];
+  let n = 0;
+  const flaky = async (m) => {
+    n++;
+    if (n === 1) throw lost;
+    return { status: 'ok', type: m.type };
+  };
+  assert.deepEqual(await BG.sendSafe(flaky, { type: 'members' }, (x) => notes.push(x)), { status: 'ok', type: 'members' });
+  assert.equal(n, 2);
+  n = 0;
+  const w = await BG.sendSafe(flaky, { type: 'act' }, (x) => notes.push(x));
+  assert.equal(w.status, 'error');
+  assert.match(w.message, /khởi động lại giữa chừng/);
+  assert.equal(n, 1, 'lệnh ghi không gửi lại');
+  assert.deepEqual(notes, ['Lệnh "members": nền của addon bị tắt khi đang chờ — đã gửi lại', 'Lệnh "act": nền của addon bị tắt khi đang chờ']);
+  // Gửi lại cũng hỏng: chỉ gửi lại một lần
+  let k = 0;
+  const twice = await BG.sendSafe(async () => (k++, Promise.reject(lost)), { type: 'chatPosts' });
+  assert.deepEqual([k, twice.status], [2, 'error']);
+  // Lỗi khác: ném tiếp như cũ; addon vừa cập nhật: nhắc tải lại trang; lệnh diag không ghi (khỏi vòng lặp)
+  await assert.rejects(BG.sendSafe(async () => Promise.reject(new Error('lỗi khác')), { type: 'members' }), /lỗi khác/);
+  assert.match((await BG.sendSafe(async () => Promise.reject(new Error('Extension context invalidated.')), { type: 'members' })).message, /tải lại trang/);
+  const quiet = [];
+  await BG.sendSafe(async () => Promise.reject(lost), { type: 'diag' }, (x) => quiet.push(x));
+  assert.deepEqual(quiet, []);
+  // Chỉ lệnh đọc mới được gửi lại: mọi tên trong danh sách là lệnh có thật của nền, không có lệnh ghi
+  const bgSrc = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'background.js'), 'utf8');
+  for (const t of BG.SAFE_RESEND) assert.match(bgSrc, new RegExp(`\\b${t}: (async )?\\(`), t);
+  for (const t of ['act', 'scan', 'compose', 'chatSend', 'chatEdit', 'chatDeleteMsg', 'chatReact', 'memberAct', 'hidePosts', 'cleanupUser', 'reportAct', 'commentWrite', 'diag']) assert.ok(!BG.SAFE_RESEND.has(t), t);
+  // guardSendMessage: thay một lần, đánh dấu
+  const orig = globalThis.chrome;
+  globalThis.chrome = { runtime: { sendMessage: async (m) => ({ status: 'ok', m }) } };
+  try {
+    BG.guardSendMessage(() => {});
+    const once = chrome.runtime.sendMessage;
+    BG.guardSendMessage(() => {});
+    assert.ok(once.beinSafe && chrome.runtime.sendMessage === once);
+    assert.deepEqual(await chrome.runtime.sendMessage({ type: 'x' }), { status: 'ok', m: { type: 'x' } });
+  } finally {
+    globalThis.chrome = orig;
+  }
+});
+
+test('lỗi dễ hiểu: 407 là proxy / VPN của máy; tin chat đã bị xoá (404 app.post.get…) không phải lỗi', () => {
+  assert.match(BG.errMsg({ status: 407 }), /proxy.*không phải lỗi Beincom/);
+  assert.equal(BG.isContentGone({ status: 404, body: { id: 'app.post.get.app_error', message: 'Không thể nhận được bài viết.', status_code: 404 } }), true);
+  assert.equal(BG.isContentGone({ status: 404, body: { id: 'api.context.404.app_error' } }), false);
+});

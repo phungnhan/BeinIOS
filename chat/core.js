@@ -92,16 +92,19 @@ async function call(type, extra = {}) {
   } catch (e) {
     return { status: 'error', message: String(e?.message || e) };
   } finally {
-    noteSlow(type, performance.now() - t0);
+    noteSlow(type, performance.now() - t0, t0);
   }
 }
 
 // Lệnh chậm (quá 5 giây, trừ tải tệp lên): ghi vào Nhật ký → Lỗi kỹ thuật để biết chậm ở đâu — chỉ tên lệnh và thời gian,
 // không kèm nội dung; mỗi lệnh tối đa một dòng mỗi 10 phút
+// Trang bị ẩn trong lúc chờ (máy ngủ, chuyển tab): thời gian không phản ánh độ chậm của lệnh nên không ghi
 const SLOW_MS = 5000;
 const slowSeen = new Map();
-function noteSlow(type, ms) {
-  if (ms < SLOW_MS || type === 'chatUpload' || type === 'diag' || Date.now() - (slowSeen.get(type) || 0) < 600e3) return;
+let hiddenAt = -1;
+document.addEventListener('visibilitychange', () => document.hidden && (hiddenAt = performance.now()));
+function noteSlow(type, ms, t0 = 0) {
+  if (ms < SLOW_MS || type === 'chatUpload' || type === 'diag' || document.hidden || hiddenAt >= t0 || Date.now() - (slowSeen.get(type) || 0) < 600e3) return;
   slowSeen.set(type, Date.now());
   reportChatDiag({ message: `Trang Chat: lệnh ${type} chậm ${(ms / 1000).toLocaleString('vi-VN', { maximumFractionDigits: 1 })} giây`, stack: `trang mở ${Math.round(performance.now() / 1000)} giây · ${document.hidden ? 'đang ẩn' : 'đang xem'}` });
 }
@@ -114,6 +117,7 @@ function reportChatDiag(e) {
 }
 window.addEventListener('error', (e) => reportChatDiag({ message: e.message, stack: e.error?.stack || `${e.filename}:${e.lineno}:${e.colno}` }));
 window.addEventListener('unhandledrejection', (e) => reportChatDiag({ message: String(e.reason?.message || e.reason), stack: e.reason?.stack || '' }));
+BG.guardSendMessage((message) => reportChatDiag({ message })); // nền bị tắt giữa chừng: xem common.js sendSafe
 
 let toastTimer = 0;
 function toast(text, kind = '') {

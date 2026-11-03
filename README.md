@@ -564,5 +564,6 @@ node test/ui/run.mjs
 - **Bài định kỳ** là các bài hẹn giờ đặt trước (tối đa 30 bài mỗi lần), không phải lặp mãi; hết chuỗi thì tạo chuỗi mới. Danh sách chuỗi chỉ lưu trong trình duyệt này; bài đăng trên máy khác vẫn hiện ở Bài đã hẹn giờ nhưng không có nhãn 🔁.
 - Chưa kiểm chứng với dữ liệu thật: cách nhận ra ảnh đại diện mặc định, dạng dữ liệu câu trả lời câu hỏi gia nhập.
 - Mỗi lần quét tải tối đa 500 yêu cầu mỗi group và 200 bài chờ duyệt mỗi community. Xử lý bớt rồi quét lại để tải tiếp.
+- **Hạn chờ mạng** (v0.61.1): trình duyệt tắt nền của addon khi một lần gọi mạng chờ quá 30 giây, nên mọi lệnh tới Beincom có hạn chờ tối đa 25 giây (`beincomRequest`), lệnh đọc hết hạn chờ / mất kết nối được thử lại 1 lần (`withRetry`, trừ lệnh tự đặt hạn chờ ngắn như API báo cáo vi phạm). Trang gửi lệnh qua `BG.guardSendMessage` (common.js): nền bị tắt giữa chừng thì lệnh trong `BG.SAFE_RESEND` (chỉ đọc) gửi lại một lần, lệnh ghi trả lỗi rõ. Tải tệp lên chat (gửi từ nền) mà quá 30 giây trên mạng chậm vẫn có thể bị ngắt.
 - Chỉ chạy khi trình duyệt đang mở. Beincom đổi API thì cần cập nhật `background.js`.
 - Tự động hoá có thể trái Điều khoản sử dụng của Beincom — tự cân nhắc.

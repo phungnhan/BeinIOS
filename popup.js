@@ -9,6 +9,7 @@ function reportDiag(where, e) {
 }
 window.addEventListener('error', (e) => reportDiag(WHERE_PAGE, { message: e.message, stack: e.error?.stack || `${e.filename}:${e.lineno}:${e.colno}` }));
 window.addEventListener('unhandledrejection', (e) => reportDiag(WHERE_PAGE, { message: String(e.reason?.message || e.reason), stack: e.reason?.stack || '' }));
+BG.guardSendMessage((message) => reportDiag(WHERE_PAGE, { message })); // nền bị tắt giữa chừng: xem common.js sendSafe
 
 const POPUP_SETTINGS = ['active', 'dryRun', 'notify'];
 

@@ -16,7 +16,8 @@ const telegramOn = (cfg = tgConfig) => !!(cfg?.enabled && cfg.token && cfg.chatI
 
 async function tgApi(token, method, body = null) {
   try {
-    const r = await fetch(TELEGRAM_API + String(token).trim() + '/' + method, body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {});
+    // Hạn chờ 20 giây: nền của addon bị tắt nếu một lần gọi mạng chờ quá 30 giây
+    const r = await fetch(TELEGRAM_API + String(token).trim() + '/' + method, { ...(body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {}), signal: AbortSignal.timeout(20000) });
     let j = null;
     try {
       j = await r.json();

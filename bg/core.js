@@ -21,10 +21,11 @@ const REPORT_SCAN_TIMEOUT = 15000; // quét định kỳ chờ API báo cáo ng�
 
 // Phải tự chứa (không dùng biến ngoài) vì còn được inject vào tab group.beincom.com.
 // version: header x-version-id; '' = không gửi (user/me/profile báo lỗi phiên bản nếu có header này)
-// timeoutMs: > 0 thì huỷ khi chờ quá lâu, trả { status: 0, timeout: true } (API báo cáo vi phạm có lúc treo)
+// timeoutMs: hạn chờ, quá thì huỷ và trả { status: 0, timeout: true }. Không truyền (0) thì 25 giây; tối đa 25 giây: trình duyệt
+// tắt nền của addon khi một lần gọi mạng chờ quá 30 giây, kéo theo mọi lệnh Dashboard / trang Chat đang chờ ("message channel closed")
 async function beincomRequest(method, url, body, version = '2.0.0', timeoutMs = 0) {
-  const ctl = timeoutMs > 0 ? new AbortController() : null;
-  const timer = ctl ? setTimeout(() => ctl.abort(), timeoutMs) : 0;
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), timeoutMs > 0 ? Math.min(timeoutMs, 25000) : 25000);
   try {
     const res = await fetch(url, {
       method,
@@ -47,9 +48,9 @@ async function beincomRequest(method, url, body, version = '2.0.0', timeoutMs = 
     } catch {}
     return { status: res.status, body: data };
   } catch (e) {
-    return ctl?.signal.aborted ? { status: 0, timeout: true, error: 'Beincom không phản hồi' } : { status: 0, error: String(e) };
+    return ctl.signal.aborted ? { status: 0, timeout: true, error: 'Beincom không phản hồi' } : { status: 0, error: String(e) };
   } finally {
-    if (timer) clearTimeout(timer);
+    clearTimeout(timer);
   }
 }
 
@@ -127,12 +128,18 @@ async function tabOnLoginPage(tabId) {
 // Gọi trực tiếp vừa chạy được thì 5 phút sau khỏi gọi thử lại (tải nhiều trang thành viên liên tiếp)
 let directUntil = 0;
 
-// Lệnh đọc (GET) gặp lỗi tạm thời ở máy chủ Beincom (502 / 503 / 504) thì thử lại tối đa 2 lần, cách 1,5 rồi 3 giây
+// Lệnh đọc (GET) gặp lỗi tạm thời ở máy chủ Beincom (502 / 503 / 504) thì thử lại tối đa 2 lần, cách 1,5 rồi 3 giây. Hết hạn chờ
+// hoặc mất kết nối thì thử lại 1 lần sau 1,5 giây (mạng chập chờn) — trừ lệnh tự đặt hạn chờ ngắn (API báo cáo vi phạm hay treo khi
+// community không có báo cáo: chờ lại cũng vô ích)
 const RETRY_STATUS = new Set([502, 503, 504]);
 // quiet: không ghi Lỗi kỹ thuật (Tự kiểm tra gọi thử cả API tài khoản không có quyền)
 function withRetry(call) {
   return async (method, path, body, version, timeoutMs, { quiet = false } = {}) => {
     let r = await call(method, path, body, version, timeoutMs);
+    if (method === 'GET' && r.status === 0 && !timeoutMs) {
+      await sleep(1500);
+      r = await call(method, path, body, version, timeoutMs);
+    }
     for (let i = 0; i < 2 && method === 'GET' && RETRY_STATUS.has(r.status); i++) {
       await sleep(1500 * (i + 1));
       r = await call(method, path, body, version, timeoutMs);
