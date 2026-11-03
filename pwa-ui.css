@@ -179,7 +179,7 @@ html[data-bein-embed] :is(.switch-row, .select-row, .text-row, .master-row) > sp
 html[data-bein-embed] .master-row #master-title { font-size: 17px; font-weight: 400; color: var(--fg); }
 html[data-bein-embed] :is(.switch-row, .select-row, .text-row, .master-row) .muted.small { display: inline-block; margin-top: 2px; font-size: 13px; line-height: 1.35; }
 html[data-bein-embed] label.check { align-items: center; font-size: 15px; }
-html[data-bein-embed] .switch-row.dry { border: 0; }
+html[data-bein-embed] .switch-row.dry { border: 0; box-shadow: none; } /* addon v0.57.0 đánh dấu bằng vạch trái; iPhone chỉ giữ nền vàng nhạt */
 html[data-bein-embed] .is-disabled { opacity: 0.45; }
 
 /* Công tắc iPhone ở bên phải (ô tích của addon; nút gạt chính) — núm vẽ bằng nền nên không cần ::before */

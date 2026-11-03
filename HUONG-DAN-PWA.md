@@ -148,6 +148,7 @@ node test/pwa/pwa.e2e.mjs
 
 ## Lịch sử BeinIOS
 
+- **1.7.1 (03/11/2026).** Gộp addon BeinFusion 0.57.0 — giao diện Dashboard (tab Quản trị) gọn hơn: chữ Be Vietnam Pro, dải số liệu liền, thẻ nổi bật đánh dấu bằng chấm màu, nút trong bảng bỏ viền, nút ❓ thành vòng tròn "?"; thanh trên của Dashboard trên iPhone chỉ còn biểu tượng. Trang cài đặt con giữ kiểu iPhone như cũ.
 - **1.7.0 (23/10/2026).** Đi cùng addon BeinFusion 0.56.0:
   - **Hướng dẫn ngay trong ứng dụng**: Cài đặt → Về → **Hướng dẫn** mở trang hướng dẫn viết sẵn (không mở GitHub), gom các chủ đề của BeinIOS (cài lên iPhone, dựng proxy, đăng nhập, thông báo, giới hạn, an toàn, lịch sử) và mọi chủ đề của addon. Dòng **BeinIOS** ở mục Về mở Lịch sử BeinIOS ngay trong ứng dụng.
   - **AI trên web**: **Chép đề bài & mở Claude** mở thẳng **ứng dụng Claude** đã đăng nhập sẵn, khỏi đăng nhập lại trên trang web; chưa cài ứng dụng thì bấm **Mở Claude trên web**. ChatGPT / Gemini chưa có liên kết mở ứng dụng chính thức nên vẫn mở link.
