@@ -2,6 +2,10 @@
 
 Mỗi bản một mục, bản mới nhất ở trên. Dashboard tự hiện các mục mới sau khi cập nhật (bấm "Có gì mới" ở cuối trang để xem lại).
 
+## v0.61.3 — 03/11/2026
+- **Tự kiểm tra nhanh hơn nhiều**: trước đây các mục chạy theo ba lượt — lượt sau chờ lượt trước xong hết (một mục chậm như "Bài mới đăng" giữ chân cả nhóm Chat), lượt cuối gọi lần lượt từng mục, mỗi lúc chỉ 4 mục. Giờ mỗi mục chạy ngay khi mục nó cần đã xong, 8 mục cùng lúc; "Bài mới đăng" của group không có bài trong 30 ngày chỉ chờ 5 giây (trước đây 15 giây).
+- Trong lúc chạy, dòng trạng thái hiện số mục đã xong (vd. "12/41 mục"); xong thì ghi thời gian chạy. Bản Sao chép kết quả có thêm dòng thời gian chạy và các mục chậm (từ 2 giây) để biết chậm ở đâu.
+
 ## v0.61.2 — 03/11/2026
 - **Tự kiểm tra hết báo nhầm "Chat: biểu cảm — HTTP 200"**: tin dùng để thử chưa có ai thả biểu cảm thì Beincom trả về rỗng thay vì danh sách trống. Giờ mục này là dùng được; khung "ai đã thả" ở trang Chat cũng không còn lỗi khi biểu cảm của tin vừa bị bỏ hết.
 - **Group không có bài mới**: Beincom có lúc không trả lời phần bài mới của group chưa có bài (Tự kiểm tra: "Bài mới đăng" không trả lời trong khi "Tìm bài theo thời gian" 0 bài trong 30 ngày). Lần quét và Thống kê giờ chờ tối đa 15 giây rồi coi như group không có bài mới: không thử lại, không ghi Lỗi kỹ thuật, quét không còn bị kéo dài gần một phút vì group đó. Tự kiểm tra ghi mục này là "bỏ qua" kèm lý do; group có bài mà vẫn không trả lời thì vẫn báo lỗi như cũ.

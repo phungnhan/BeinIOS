@@ -788,7 +788,7 @@
           const items = [
             it('login', 'Đăng nhập Beincom', 'mọi tính năng', 'ok', '@kaicrypto'),
             it('group', 'Thông tin group', 'Tổng quan, số thành viên', 'ok', '12.361 thành viên'),
-            it('memberLog', 'Nhật ký thành viên theo ngày', 'báo cáo tháng, thành viên mới', 'ok', '61 sự kiện trong 30 ngày'),
+            it('memberLog', 'Nhật ký thành viên theo ngày', 'báo cáo tháng, thành viên mới', 'ok', '61 sự kiện trong 30 ngày', { ms: 4200 }),
             it('search', 'Tìm bài theo thời gian', 'báo cáo tháng, thành viên mới', 'ok', '1 bài trong 30 ngày'),
             it('reports', 'Báo cáo của người dùng', 'tab Báo cáo', 'skip', 'chỉ chủ / admin community xem được'),
             it('pinned', 'Bài ghim', 'ghim bài', 'fail', 'Không thấy API (404) — Beincom có thể đã đổi đường dẫn', { httpStatus: 404, path: 'content/contents/pinned-content/groups/' + m.groupId }),
@@ -796,7 +796,10 @@
             it('chat', 'Chat: đăng nhập', 'mọi phần Chat', 'ok', '@kaicrypto', { section: 'chat' }),
             it('chatReports', 'Chat: tin nhắn bị báo cáo', 'tab Báo cáo → Tin nhắn chat', 'skip', 'chỉ chủ / admin community (chọn group gốc)', { section: 'chat' }),
           ];
-          const r = { status: 'ok', at: Date.now(), group: { id: m.groupId, name: (groups.find((g) => g.id === m.groupId) || {}).name || '' }, mode: 'direct', items, summary: { ok: 5, skip: 2, fail: 1 } };
+          // Tiến độ như nền ghi trong lúc chạy (khoá selfCheckProgress); window.__checkHold: giữ kết quả lại để kịch bản thấy dòng tiến độ
+          listeners.forEach((fn) => fn({ selfCheckProgress: { newValue: { groupId: m.groupId, done: 3, total: items.length, at: Date.now() } } }, 'local'));
+          if (window.__checkHold) await new Promise((res) => setTimeout(res, window.__checkHold));
+          const r = { status: 'ok', at: Date.now(), group: { id: m.groupId, name: (groups.find((g) => g.id === m.groupId) || {}).name || '' }, mode: 'direct', ms: 6400, items, summary: { ok: 5, skip: 2, fail: 1 } };
           store.selfCheck = r;
           return r;
         }

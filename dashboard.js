@@ -192,9 +192,10 @@ chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== 'local') return;
   // Đánh dấu đã xem / lưu nháp: không cần vẽ lại cả trang
   // Nút Telegram: offset đọc nút bấm / danh sách việc đã gửi đổi thường xuyên, không cần vẽ lại (thao tác thật sẽ đổi state / log)
-  // Tiến độ thao tác hàng loạt (bg/core.js ghi sau mỗi mục): chỉ cập nhật thanh tiến độ
+  // Tiến độ thao tác hàng loạt (bg/core.js ghi sau mỗi mục): chỉ cập nhật thanh tiến độ; Tự kiểm tra: chỉ dòng "x/y mục"
   if (changes.actionJournal && run) renderRun(changes.actionJournal.newValue?.entries?.length || 0);
-  if (Object.keys(changes).every((k) => ['activitySeen', 'composeDraft', 'articleDraft', 'telegramPoll', 'tgActions', 'diagLog', 'seenVersion', 'usage', 'usageNote', 'usageConsent', 'usageSent', 'actionJournal', 'popupInfo', 'chatRoles', 'chatPeople', 'chatPins', 'chatNotify', 'chatReplies', 'chatGroups', 'chatOverviewCache', 'beiniosProxy'].includes(k))) return;
+  if (changes.selfCheckProgress) checkProgress(changes.selfCheckProgress.newValue);
+  if (Object.keys(changes).every((k) => ['activitySeen', 'composeDraft', 'articleDraft', 'telegramPoll', 'tgActions', 'diagLog', 'seenVersion', 'usage', 'usageNote', 'usageConsent', 'usageSent', 'actionJournal', 'selfCheckProgress', 'popupInfo', 'chatRoles', 'chatPeople', 'chatPins', 'chatNotify', 'chatReplies', 'chatGroups', 'chatOverviewCache', 'beiniosProxy'].includes(k))) return;
   loadAll();
 });
 $('version').textContent = 'v' + chrome.runtime.getManifest().version;

@@ -3,10 +3,14 @@
 // Không ghi vào Lỗi kỹ thuật (gọi với quiet) — kết quả lưu ở khoá `selfCheck` để xem lại / sao chép.
 
 const CHECK_TIMEOUT = 15000;
+// Group không có bài trong 30 ngày (mục "Tìm bài theo thời gian"): Beincom có lúc không trả lời "Bài mới đăng" — chờ ngắn hơn
+const EMPTY_CHECK_TIMEOUT = 5000;
+const CHECK_PARALLEL = 8; // các mục chỉ là lệnh GET nhỏ (limit=1)
 const isList = (d) => Array.isArray(d?.list);
 const isArr = (d) => Array.isArray(d);
 
-// Các mục kiểm tra cho group g. need = false: bỏ qua, ghi lý do (why). path có thể là hàm của kết quả mục trước (ctx).
+// Các mục kiểm tra cho group g. need = false: bỏ qua, ghi lý do (why). deps: các mục phải xong trước — path / timeout có thể
+// là hàm của kết quả các mục đó (ctx).
 function selfCheckProbes(g, { root, now, tg, settings = null }) {
   const iso = (t) => encodeURIComponent(new Date(t).toISOString());
   const from = now - 30 * 864e5;
@@ -23,9 +27,9 @@ function selfCheckProbes(g, { root, now, tg, settings = null }) {
     { id: 'memberLog', label: 'Nhật ký thành viên theo ngày', uses: 'báo cáo tháng, thành viên mới', path: `group/groups/${g.id}/activity-logs?limit=1&page=1&sort=desc&objectType=MEMBER&from=${Math.floor(from)}&to=${Math.ceil(now)}`, shape: isArr, detail: (d, b) => (b.meta?.total != null ? `${b.meta.total} sự kiện trong 30 ngày` : '') },
     { id: 'teamLog', label: 'Nhật ký việc của admin', uses: 'báo cáo tháng → đội admin', path: `group/groups/${g.id}/activity-logs?limit=1&page=1&sort=desc&useCase=${encodeURIComponent(Object.keys(BG.TEAM_CASES).join(','))}&from=${Math.floor(from)}&to=${Math.ceil(now)}`, shape: isArr, detail: (d, b) => (b.meta?.total != null ? `${b.meta.total} việc trong 30 ngày` : '') },
     { id: 'joinLog', label: 'Nhật ký người vào', uses: 'tài khoản giống admin, đợt vào ồ ạt', path: `group/groups/${g.id}/activity-logs?limit=1&page=1&sort=desc&useCase=${encodeURIComponent(JOIN_CASES)}&from=${Math.floor(now - 864e5)}&to=${Math.ceil(now)}`, shape: isArr, detail: (d, b) => (b.meta?.total != null ? `${b.meta.total} người vào trong 24 giờ` : '') },
-    { id: 'timeline', label: 'Bài mới đăng', uses: 'quét bài, thống kê', path: `content/timeline/${g.id}?limit=1`, shape: isList },
+    { id: 'timeline', label: 'Bài mới đăng', uses: 'quét bài, thống kê', path: `content/timeline/${g.id}?limit=1`, deps: ['search'], timeout: (ctx) => (ctx.search?.meta?.total === 0 ? EMPTY_CHECK_TIMEOUT : CHECK_TIMEOUT), shape: isList },
     { id: 'search', label: 'Tìm bài theo thời gian', uses: 'báo cáo tháng, thành viên mới, Tìm & dọn bài, dọn tài khoản', path: `content/contents?groupId=${g.id}&isIncludedInnerGroups=true&startTime=${iso(from)}&endTime=${iso(now)}&limit=1`, shape: (d) => isList(d) && d.meta?.total != null, detail: (d) => `${d.meta.total} bài trong 30 ngày` },
-    { id: 'comments', label: 'Bình luận', uses: 'quét bình luận', after: true, path: (ctx) => (ctx.timeline?.list?.[0]?.id ? `content/comments?postId=${ctx.timeline.list[0].id}&limit=1` : null), why: 'group chưa có bài nào để thử', shape: isList },
+    { id: 'comments', label: 'Bình luận', uses: 'quét bình luận', deps: ['timeline'], path: (ctx) => (ctx.timeline?.list?.[0]?.id ? `content/comments?postId=${ctx.timeline.list[0].id}&limit=1` : null), why: 'group chưa có bài nào để thử', shape: isList },
     { id: 'approvals', label: 'Bài chờ duyệt', uses: 'duyệt bài', path: `content/manage/communities/${rootId}/approval-contents/count?approvalStatus=WAITING_APPROVAL`, need: !!g.isCommunity, why: 'chỉ đọc ở group gốc của community', shape: (d) => typeof d === 'number', detail: (d) => `${d} bài đang chờ` },
     { id: 'reports', label: 'Báo cáo của người dùng', uses: 'tab Báo cáo', path: `content/manage/communities/${rootId}/content-reports/count`, timeout: CHECK_TIMEOUT, need: !!(g.isCommunity && g.isCommunityAdmin), why: 'chỉ chủ / admin community xem được', shape: (d) => d != null, detail: (d) => (d?.total != null ? `${d.total} chờ xử lý` : '') },
     { id: 'flagged', label: 'Bài Beincom gắn cờ', uses: 'tab Báo cáo', path: `content/manage/groups/${g.id}/contents/flagged?limit=1`, shape: isList },
@@ -46,10 +50,10 @@ function selfCheckProbes(g, { root, now, tg, settings = null }) {
 }
 
 // Chat Beincom (chỉ GET tới chat.beincom.com, JSON thường): mỗi phần của trang Chat / quét chat một mục. path tương đối
-// với BG.CHAT_API; ctx.<id> là thân trả về của mục trước. Chưa bật chat: chỉ một dòng "bỏ qua".
+// với BG.CHAT_API; ctx.<id> là thân trả về của mục trước. Mọi mục chat chờ mục đăng nhập chat. Chưa bật chat: chỉ một dòng "bỏ qua".
 function chatProbes(g, settings) {
   const login = { id: 'chat', label: 'Chat: đăng nhập', uses: 'mọi phần Chat', path: 'v4/users/me', shape: (d) => !!d?.id, detail: (d) => (d.username ? '@' + d.username : '') };
-  const P = (x) => ({ chat: true, section: 'chat', ...x });
+  const P = (x) => ({ chat: true, section: 'chat', ...x, deps: x.id === 'chat' ? [] : ['chat', ...(x.deps || [])] });
   if (!settings?.chatEnabled) return [P({ ...login, need: false, why: 'chưa bật Chat Beincom ở Cài đặt' })];
   const arr = Array.isArray;
   const mine = (t) => t?.props?.bic_group_team_id === g.communityId;
@@ -77,13 +81,13 @@ function chatProbes(g, settings) {
     P({ id: 'chatUnread', label: 'Chat: nhắc tên, thread chưa đọc', uses: 'kiểm tra nhanh mỗi phút, số Thread', path: 'v5/users/me/teams/unread?include_collapsed_threads=true', shape: arr, detail: (d) => (d.some((t) => typeof t.thread_count === 'number') ? 'có đếm thread' : 'không đếm thread — số Thread để trống') }),
     P({ id: 'chatTeamRoles', label: 'Chat: vai trò của bạn', uses: 'quyền xoá tin, ghim, gửi tin', path: 'v4/users/me/teams/members', shape: arr }),
     P({ id: 'chatReports', label: 'Chat: tin nhắn bị báo cáo', uses: 'tab Báo cáo → Tin nhắn chat', path: `v4/communities/${g.communityId}/reports?per_page=1`, need: !!(g.isCommunity && g.isCommunityAdmin && g.communityId), why: 'chỉ chủ / admin community (chọn group gốc)', shape: (d) => arr(d?.reports) || arr(d?.data?.reports), detail: (d) => ((d.reports || d.data?.reports).length ? 'có tin đang chờ xử lý' : 'không có tin nào chờ') }),
-    P({ id: 'chatPosts', label: 'Chat: tin trong kênh', uses: 'đọc tin, quét tin vi phạm', after: true, path: (ctx) => (channel(ctx) ? `v5/channels/${channel(ctx).id}/posts?page=0&per_page=1&${crt}` : null), why: noTeam, shape: (d) => arr(d?.order) && !!d.posts, detail: (d) => (d.order.length ? '' : 'kênh chưa có tin') }),
-    P({ id: 'chatThread', label: 'Chat: bình luận (thread)', uses: 'khung bình luận', after: true, path: (ctx) => (post(ctx) ? `v5/posts/${post(ctx)}/thread?${crt}&direction=down&perPage=1` : null), why: 'kênh chưa có tin để thử', shape: (d) => arr(d?.order) }),
-    P({ id: 'chatReactions', label: 'Chat: biểu cảm', uses: 'xem ai đã thả biểu cảm', after: true, path: (ctx) => (post(ctx) ? `v4/posts/${post(ctx)}/reactions` : null), why: 'kênh chưa có tin để thử', shape: (d) => d == null || arr(d) }), // tin chưa có biểu cảm: Beincom trả null (gặp thật 03/11/2026)
-    P({ id: 'chatPinned', label: 'Chat: tin đã ghim', uses: 'khung Tin nhắn đã ghim', after: true, path: (ctx) => (channel(ctx) ? `v4/channels/${channel(ctx).id}/pinned` : null), why: noTeam, shape: (d) => arr(d?.order), detail: (d) => `${d.order.length} tin đã ghim` }),
-    P({ id: 'chatMention', label: 'Chat: gợi ý @tên', uses: 'gõ @ trong ô chat', after: true, path: (ctx) => (channel(ctx) ? `v4/users/autocomplete?in_team=${channel(ctx).team_id}&in_channel=${channel(ctx).id}&name=a&limit=1` : null), why: noTeam, shape: (d) => arr(d?.users) }),
-    P({ id: 'chatRoles', label: 'Chat: quyền theo vai trò', uses: 'nút Xoá tin, Ghim, gửi tin', after: true, path: (ctx) => (role(ctx) ? `v4/roles/name/${encodeURIComponent(role(ctx))}` : null), why: noTeam, shape: (d) => arr(d?.permissions), detail: (d) => (d.permissions.includes('delete_others_posts') ? 'vai trò này xoá được tin người khác' : '') }),
-    P({ id: 'chatThreads', label: 'Chat: thread đang theo dõi', uses: 'trang Thread, báo bình luận mới', after: true, path: (ctx) => (team(ctx) ? `v4/users/me/teams/${team(ctx).id}/threads?per_page=1&extended=true` : null), why: noTeam, shape: (d) => arr(d?.threads), detail: (d) => (d.total != null ? `${d.total} thread` : '') }),
+    P({ id: 'chatPosts', label: 'Chat: tin trong kênh', uses: 'đọc tin, quét tin vi phạm', deps: ['chatTeams', 'chatChannels'], path: (ctx) => (channel(ctx) ? `v5/channels/${channel(ctx).id}/posts?page=0&per_page=1&${crt}` : null), why: noTeam, shape: (d) => arr(d?.order) && !!d.posts, detail: (d) => (d.order.length ? '' : 'kênh chưa có tin') }),
+    P({ id: 'chatThread', label: 'Chat: bình luận (thread)', uses: 'khung bình luận', deps: ['chatPosts'], path: (ctx) => (post(ctx) ? `v5/posts/${post(ctx)}/thread?${crt}&direction=down&perPage=1` : null), why: 'kênh chưa có tin để thử', shape: (d) => arr(d?.order) }),
+    P({ id: 'chatReactions', label: 'Chat: biểu cảm', uses: 'xem ai đã thả biểu cảm', deps: ['chatPosts'], path: (ctx) => (post(ctx) ? `v4/posts/${post(ctx)}/reactions` : null), why: 'kênh chưa có tin để thử', shape: (d) => d == null || arr(d) }), // tin chưa có biểu cảm: Beincom trả null (gặp thật 03/11/2026)
+    P({ id: 'chatPinned', label: 'Chat: tin đã ghim', uses: 'khung Tin nhắn đã ghim', deps: ['chatTeams', 'chatChannels'], path: (ctx) => (channel(ctx) ? `v4/channels/${channel(ctx).id}/pinned` : null), why: noTeam, shape: (d) => arr(d?.order), detail: (d) => `${d.order.length} tin đã ghim` }),
+    P({ id: 'chatMention', label: 'Chat: gợi ý @tên', uses: 'gõ @ trong ô chat', deps: ['chatTeams', 'chatChannels'], path: (ctx) => (channel(ctx) ? `v4/users/autocomplete?in_team=${channel(ctx).team_id}&in_channel=${channel(ctx).id}&name=a&limit=1` : null), why: noTeam, shape: (d) => arr(d?.users) }),
+    P({ id: 'chatRoles', label: 'Chat: quyền theo vai trò', uses: 'nút Xoá tin, Ghim, gửi tin', deps: ['chatTeams', 'chatTeamRoles'], path: (ctx) => (role(ctx) ? `v4/roles/name/${encodeURIComponent(role(ctx))}` : null), why: noTeam, shape: (d) => arr(d?.permissions), detail: (d) => (d.permissions.includes('delete_others_posts') ? 'vai trò này xoá được tin người khác' : '') }),
+    P({ id: 'chatThreads', label: 'Chat: thread đang theo dõi', uses: 'trang Thread, báo bình luận mới', deps: ['chatTeams'], path: (ctx) => (team(ctx) ? `v4/users/me/teams/${team(ctx).id}/threads?per_page=1&extended=true` : null), why: noTeam, shape: (d) => arr(d?.threads), detail: (d) => (d.total != null ? `${d.total} thread` : '') }),
   ];
 }
 
@@ -96,8 +100,8 @@ async function storageUsage() {
   return { bytes, unlimited, sizes };
 }
 
-// Kết luận một lần gọi
-function checkVerdict(r, probe) {
+// Kết luận một lần gọi (timeout: hạn chờ đã dùng)
+function checkVerdict(r, probe, timeout = CHECK_TIMEOUT) {
   if (r.status === 401) return { status: 'login', detail: 'Hết phiên đăng nhập' };
   if (BG.isOk(r)) {
     const d = r.body.data;
@@ -115,7 +119,7 @@ function checkVerdict(r, probe) {
   // 403, hoặc mã "không phải admin" (vd. content-reports trả 400 community.not_admin với admin group — gọi thật 11/10)
   if (r.status === 403 || /forbidden|not_admin/.test(r.body?.code || '')) return { status: 'skip', detail: 'Tài khoản không có quyền với mục này' };
   if (r.status === 404 && !BG.isContentGone(r)) return { status: 'fail', detail: 'Không thấy API (404) — Beincom có thể đã đổi đường dẫn' };
-  if (r.status === 0) return { status: 'fail', detail: r.timeout ? `Beincom không trả lời trong ${CHECK_TIMEOUT / 1000} giây` : 'Không kết nối được' };
+  if (r.status === 0) return { status: 'fail', detail: r.timeout ? `Beincom không trả lời trong ${timeout / 1000} giây` : 'Không kết nối được' };
   return { status: 'fail', detail: BG.errMsg(r) };
 }
 
@@ -126,8 +130,52 @@ function softenTimeline(x, ctx) {
   return { ...x, status: 'skip', detail: 'group không có bài mới trong 30 ngày — Beincom không trả lời mục này khi chưa có bài, quét coi như không có bài mới' };
 }
 
-// Chạy mọi mục kiểm tra cho group g; trả kết quả (không lưu)
-async function runSelfCheck(g) {
+// Chạy các mục: mỗi mục bắt đầu ngay khi các mục nó cần (deps) đã xong — không chờ cả lượt, mục chậm chỉ giữ chân mục cần
+// nó; tối đa `limit` mục cùng lúc. Chuỗi dài đi trước: mục mà mục khác cần được gọi trước, mục vừa đủ điều kiện được chỗ trống
+// đầu tiên. run(p, results) thấy kết quả các mục đã xong; onDone(số mục đã xong, tổng) sau mỗi mục
+async function runProbes(probes, run, limit, onDone = null) {
+  const byId = new Map(probes.map((p) => [p.id, p]));
+  const results = new Map();
+  const started = new Map();
+  const waiting = [];
+  let active = 0;
+  const acquire = (first) => (active < limit ? (active++, Promise.resolve()) : new Promise((res) => (first ? waiting.unshift(res) : waiting.push(res))));
+  // Trả chỗ rồi đợi một nhịp mới chia cho hàng chờ: mục vừa có kết quả mục nó cần kịp lấy chỗ trước
+  const release = () => {
+    active--;
+    setTimeout(() => {
+      while (active < limit && waiting.length) {
+        active++;
+        waiting.shift()();
+      }
+    }, 0);
+  };
+  const start = (p) => {
+    if (!started.has(p.id)) {
+      const deps = (p.deps || []).filter((d) => byId.has(d)).map((d) => start(byId.get(d)));
+      started.set(
+        p.id,
+        Promise.all(deps).then(async () => {
+          await acquire(deps.length > 0);
+          try {
+            results.set(p.id, await run(p, results));
+          } finally {
+            release();
+          }
+          onDone?.(results.size, probes.length);
+        }),
+      );
+    }
+    return started.get(p.id);
+  };
+  const needed = new Set(probes.flatMap((p) => p.deps || []));
+  await Promise.all([...probes.filter((p) => needed.has(p.id)), ...probes.filter((p) => !needed.has(p.id))].map(start));
+  return results;
+}
+
+// Chạy mọi mục kiểm tra cho group g; trả kết quả (không lưu). progress: ghi tiến độ vào khoá selfCheckProgress (Dashboard
+// hiện "x/y mục" trong lúc chạy) — chỉ khi bấm tay, lượt tự chạy mỗi ngày không ghi
+async function runSelfCheck(g, { progress = false } = {}) {
   const { state } = await load();
   const root = (state.snapshot?.groups || []).find((x) => x.communityId === g.communityId && x.isCommunity) || null;
   const tg = await loadTelegram();
@@ -136,9 +184,8 @@ async function runSelfCheck(g) {
   const probes = selfCheckProbes(g, { root, now, tg, settings });
   const r = await withClient(async (client) => {
     const ctx = {};
-    const results = new Map();
-    const run = async (p) => ({ ...(await run1(p)), ...(p.section ? { section: p.section } : {}) });
-    const run1 = async (p) => {
+    const run = async (p, results) => ({ ...(await run1(p, results)), ...(p.section ? { section: p.section } : {}) });
+    const run1 = async (p, results) => {
       const t0 = Date.now();
       if (p.need === false) return { id: p.id, label: p.label, uses: p.uses, status: 'skip', detail: p.why, ms: 0 };
       // Chưa đọc được tài khoản chat: các mục chat khác bỏ qua, không gọi
@@ -166,17 +213,19 @@ async function runSelfCheck(g) {
         } catch {}
         return { id: p.id, label: p.label, uses: p.uses, path: 'chat:' + path.split('?')[0], status: good ? 'ok' : res.status === 403 ? 'skip' : 'fail', detail, httpStatus: res.status, ms: Date.now() - t0 };
       }
-      const res = await client.call('GET', path, null, p.version ?? '2.0.0', p.timeout || CHECK_TIMEOUT, { quiet: true });
+      const timeout = (typeof p.timeout === 'function' ? p.timeout(ctx) : p.timeout) || CHECK_TIMEOUT;
+      const res = await client.call('GET', path, null, p.version ?? '2.0.0', timeout, { quiet: true });
       if (BG.isOk(res)) ctx[p.id] = res.body.data;
-      return { id: p.id, label: p.label, uses: p.uses, path: path.split('?')[0], ...checkVerdict(res, p), httpStatus: res.status, ms: Date.now() - t0 };
+      return { id: p.id, label: p.label, uses: p.uses, path: path.split('?')[0], ...checkVerdict(res, p, timeout), httpStatus: res.status, ms: Date.now() - t0 };
     };
-    // Ba lượt: (0) Beincom + tài khoản chat, song song; (1) các mục chat khác, song song; (2) mục cần kết quả mục trước, lần lượt
-    const stage = (p) => (p.after ? 2 : p.chat && p.id !== 'chat' ? 1 : 0);
-    for (const s of [0, 1]) {
-      const list = probes.filter((p) => stage(p) === s);
-      (await mapLimit(list, PARALLEL, run)).forEach((x, i) => results.set(list[i].id, x));
-    }
-    for (const p of probes.filter((x) => stage(x) === 2)) results.set(p.id, await run(p));
+    // Tiến độ cho Dashboard: ghi tối đa 4 lần mỗi giây, và lần cuối
+    let noted = 0;
+    const onDone = (done, total) => {
+      if (done < total && Date.now() - noted < 250) return;
+      noted = Date.now();
+      chrome.storage.local.set({ selfCheckProgress: { groupId: g.id, done, total, at: noted } }).catch(() => {});
+    };
+    const results = await runProbes(probes, run, CHECK_PARALLEL, progress ? onDone : null);
     const items = probes.map((p) => softenTimeline(results.get(p.id), ctx));
     if (items.some((x) => x.status === 'login')) return { ...NEED_LOGIN };
     return { status: 'ok', items };
@@ -187,6 +236,7 @@ async function runSelfCheck(g) {
     at: now,
     group: { id: g.id, name: g.name, isCommunity: !!g.isCommunity },
     mode: r.mode || '',
+    ms: Date.now() - now,
     items: r.items,
     summary: { ok: r.items.filter((x) => x.status === 'ok').length, skip: r.items.filter((x) => x.status === 'skip').length, fail: r.items.filter((x) => x.status === 'fail').length },
   };
@@ -196,7 +246,7 @@ async function runSelfCheck(g) {
 async function doSelfCheck({ groupId }) {
   const g = await findGroup(groupId);
   if (!g) return { status: 'error', message: 'Không tìm thấy group — hãy quét lại' };
-  const result = await runSelfCheck(g);
+  const result = await runSelfCheck(g, { progress: true });
   if (result.status === 'ok') await chrome.storage.local.set({ selfCheck: result });
   return result;
 }
