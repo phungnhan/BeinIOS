@@ -536,7 +536,10 @@ function makeEnv({ data = fixture(), settings = {}, rules = {}, postRules = {}, 
   };
 
   // Nhắc bài chưa ai trả lời tắt sẵn (bài mẫu chưa có bình luận); test riêng bật lại
-  const storage = { settings: { ...BG.DEFAULT_SETTINGS, remindUnanswered: false, remindPending: false, selfCheckDaily: false, ...settings }, rules: { ...BG.DEFAULT_RULES, ...rules }, postRules: { ...BG.DEFAULT_POST_RULES, ...postRules }, ...(initial ? structuredClone(initial) : {}) };
+  // Test chạy theo giờ thật (không truyền now): tắt các nhắc theo lịch (thứ Hai, 7 ngày đầu tháng) để danh sách thông báo không
+  // đổi theo ngày chạy test; test về nhắc tuần / tháng tự truyền now và bật lại trong settings
+  const calendarOff = now ? {} : { weeklyReport: false, monthlyReport: false, welcomeReminder: false };
+  const storage = { settings: { ...BG.DEFAULT_SETTINGS, remindUnanswered: false, remindPending: false, selfCheckDaily: false, ...calendarOff, ...settings }, rules: { ...BG.DEFAULT_RULES, ...rules }, postRules: { ...BG.DEFAULT_POST_RULES, ...postRules }, ...(initial ? structuredClone(initial) : {}) };
   if (groupRules) storage.groupRules = groupRules;
   const syncStore = {};
   const syncWrites = [];
