@@ -285,3 +285,34 @@ document.addEventListener('click', (e) => {
 // Cài đặt → ❓ Hướng dẫn: mọi chủ đề theo thứ tự mục lục
 $('help-set-list')?.replaceChildren(...BG.HELP_INDEX.flatMap((g) => g.topics).filter((k) => HELP_TOPICS[k]).map((k) => el('button', { type: 'button', class: 'help-topic', 'data-help': k, text: HELP_TOPICS[k].title })));
 for (const id of ['help-x', 'help-ok']) $(id).addEventListener('click', () => $('help-dlg').close());
+
+// Bảng xếp dọc trên màn hình hẹp (table.stack; dashboard.css ≤ 640px): mỗi ô mang nhãn cột (data-label) để hiện "Vào lúc: 1 giờ trước".
+// Không nhãn cho ô tick, ô thao tác, ô đầu (tên người / tiêu đề) và các cột tự hiểu
+const STACK_NOLABEL = new Set(['Nội dung', 'Bình luận', 'Tin nhắn', 'Đánh giá theo quy tắc', 'Thao tác', 'Nội dung bị báo cáo', 'Vi phạm', 'Sự kiện', 'Lỗi', 'Chi tiết', 'Mục', 'Câu hỏi', 'Bài', 'Kiểm tra']);
+function labelStackRows(rows) {
+  for (const tr of rows) {
+    const table = tr.closest('table.stack');
+    if (!table || tr.classList.contains('empty-row')) continue;
+    const heads = [...(table.tHead?.rows[0]?.cells || [])].map((th) => th.textContent.trim());
+    let first = true;
+    [...tr.cells].forEach((td, i) => {
+      if (td.classList.contains('cb') || td.classList.contains('act') || td.classList.contains('act-wrap') || td.colSpan > 1) return;
+      if (first) return void (first = false);
+      const hd = heads[i] || '';
+      if (hd && !STACK_NOLABEL.has(hd)) td.dataset.label = hd;
+      else delete td.dataset.label;
+    });
+  }
+}
+new MutationObserver((muts) => {
+  const rows = [];
+  for (const m of muts) {
+    for (const n of m.addedNodes) {
+      if (n.nodeType !== 1) continue;
+      if (n.tagName === 'TR') rows.push(n);
+      else if (n.tagName === 'TBODY' || n.tagName === 'TABLE' || n.querySelector) rows.push(...n.querySelectorAll('table.stack tr'));
+    }
+  }
+  if (rows.length) labelStackRows(rows);
+}).observe(document.querySelector('main'), { childList: true, subtree: true });
+labelStackRows(document.querySelectorAll('table.stack tr'));

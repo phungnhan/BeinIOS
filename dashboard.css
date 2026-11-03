@@ -1196,3 +1196,30 @@ h2 > .tip-i, .group-title > .tip-i { vertical-align: 2px; }
 @media (max-width: 430px) {
   .brand h1 { display: none; }
 }
+
+/* ---------- Thẻ Đăng bài: Bài viết / Article / Series chọn ở đầu thẻ (dash/article.js setComposeKind) ---------- */
+.compose-head h2 { margin-right: 0; }
+#compose-kind { margin-right: auto; }
+#compose:not(.kind-post) .post-only { display: none !important; }
+.compose-panel { min-width: 0; }
+
+/* ---------- Thanh chọn hàng loạt: nổi bật khi đã chọn (có nút làm được) ---------- */
+.bulk-bar { transition: background-color .15s, padding .15s; }
+.bulk-bar:has(button:is(.primary, .danger, .ok-btn):not(:disabled)) { background: var(--accent-soft); border-bottom: 0; border-radius: var(--radius-sm); padding: 8px 12px; margin-bottom: 8px; }
+
+/* ---------- Bảng xếp dọc trên màn hình hẹp: mỗi dòng thành một thẻ, ô có nhãn cột (dash/ui.js labelStackRows) ---------- */
+@media (max-width: 640px) {
+  table.stack, table.stack tbody, table.stack tr, table.stack td { display: block; }
+  table.stack thead { display: none; }
+  table.stack tr { position: relative; padding: 10px 0 10px 28px; border-bottom: 1px solid var(--border); }
+  table.stack tr:not(:has(> td.cb)) { padding-left: 0; }
+  table.stack td { padding: 2px 0; border: 0; white-space: normal; text-align: left; }
+  table.stack td:empty { display: none; }
+  table.stack td.cb { position: absolute; left: 0; top: 10px; width: auto; padding: 0; }
+  table.stack td[data-label]::before { content: attr(data-label) ": "; color: var(--muted); font-size: 12px; }
+  table.stack td.act, table.stack td.act-wrap > div { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-start; padding-top: 6px; }
+  table.stack .act-stack { flex-direction: row; }
+  table.stack tr.empty-row { padding: 18px 0; text-align: center; }
+  table.stack tr.empty-row td { padding: 0; }
+  .table-wrap { max-height: none; }
+}

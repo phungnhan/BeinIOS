@@ -40,7 +40,7 @@ function renderMonthly() {
   if (monthly.loading) note.textContent = 'Đang đọc số liệu từ Beincom… (chỉ đọc; community đông người có thể mất vài chục giây)';
   else if (monthly.error) note.textContent = monthly.error;
   else if (!g) note.textContent = data.state.snapshot ? 'Không có group nào để báo cáo.' : 'Chưa quét lần nào.';
-  else if (!r) note.textContent = 'Chọn community / group và tháng rồi bấm Tạo báo cáo. Addon chỉ đọc: nhật ký vào / rời, bài đăng trong tháng và tháng trước, bài của người mới, việc của đội admin trong nhật ký Beincom. Phần kiểm duyệt qua addon lấy từ nhật ký của addon.';
+  else if (!r) note.textContent = '';
   else {
     const parts = [`${r.group.name} · ${r.label}${r.partial ? ' (tới hôm nay)' : ''}, so với ${r.prevLabel}.`];
     parts.push(r.members.start == null ? 'Nhật ký vào / rời quá dài nên chưa tính được số thành viên đầu / cuối tháng.' : 'Số thành viên đầu / cuối tháng suy ra từ số hiện tại và nhật ký vào / rời.');

@@ -31,7 +31,7 @@ function renderWelcome() {
   const note = $('welcome-note');
   if (welcome.error) note.textContent = welcome.error;
   else if (welcome.loading) note.textContent = 'Đang tìm người mới…';
-  else if (!welcome.loaded) note.textContent = 'Chọn group và khoảng ngày rồi bấm Tìm người mới. Addon soạn sẵn bài chào có @tên từng người vào ô soạn bài ở trên; bạn xem lại rồi Đăng hoặc Hẹn giờ.';
+  else if (!welcome.loaded) note.textContent = '';
   else
     note.textContent =
       `${welcome.items.length} người vào ${g?.name || ''} trong ${welcome.days} ngày` +

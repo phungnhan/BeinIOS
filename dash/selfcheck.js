@@ -37,7 +37,7 @@ async function renderCheck() {
   if (check.running) note.textContent = `Đang gọi thử các API của Beincom${data.settings.chatEnabled ? ' và Chat' : ''} (chỉ đọc, khoảng 5–25 giây)…`;
   else if (check.error) note.textContent = check.error;
   else if (!g) note.textContent = data.state.snapshot ? 'Không có group nào để kiểm tra.' : 'Chưa quét lần nào — bấm Quét ngay trước.';
-  else if (!r) note.textContent = 'Bấm Chạy kiểm tra: addon gọi thử (chỉ đọc) các API mà từng tính năng dùng với group đã chọn, rồi báo mục nào dùng được. Nên chạy sau khi cài / cập nhật, hoặc khi có tính năng không chạy.';
+  else if (!r) note.textContent = '';
   else {
     const s = r.summary;
     note.textContent = `${r.group.name} · lúc ${fmtTime(r.at)} · ${s.ok} dùng được · ${s.skip} bỏ qua · ${s.fail} lỗi.` + (s.fail ? ' Bấm Sao chép kết quả và gửi cho người hỗ trợ.' : s.skip ? ' "Bỏ qua" là mục tài khoản này không có quyền hoặc chưa bật — tính năng tương ứng sẽ ẩn.' : ' Mọi mục đều dùng được.');

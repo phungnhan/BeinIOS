@@ -156,9 +156,9 @@ function renderReports() {
   else if (d?.error) note.textContent = d.error;
   else if (d?.none) note.textContent = 'Không có báo cáo nào đang chờ xử lý (Beincom đếm 0) — các báo cáo đã xử lý không được tải lại.';
   else if (d?.timedOut) note.textContent = 'Beincom không phản hồi sau 25 giây. Thường gặp khi community chưa có báo cáo nào — bấm Tải lại để thử lại.';
-  else if (rep.kind === 'reported') note.textContent = 'Bỏ qua: đánh dấu nội dung không vi phạm. Ẩn: ẩn nội dung bị báo cáo khỏi community (bình luận bị ẩn cũng biến mất khỏi bài).';
-  else if (rep.kind === 'chat') note.textContent = 'Tin nhắn trong chat của community bị thành viên báo cáo (như mục "Tin nhắn bị báo cáo" ở trang quản trị của web). Ẩn: ẩn tin khỏi kênh chat. Bỏ qua: giữ tin, đóng báo cáo.' + (d?.loaded ? '' : scannedChatReports(g)?.at ? ` Theo lần quét ${ago(scannedChatReports(g).at)} — bấm Tải lại để đọc mới.` : '');
-  else if (rep.kind === 'flagged') note.textContent = 'Bài do hệ thống kiểm duyệt tự động của Beincom phát hiện có dấu hiệu vi phạm. Ẩn bài: gỡ bài khỏi các group bạn quản trị mà bài được đăng vào.';
+  else if (rep.kind === 'reported') note.textContent = '';
+  else if (rep.kind === 'chat') note.textContent = (d?.loaded ? '' : scannedChatReports(g)?.at ? `Theo lần quét ${ago(scannedChatReports(g).at)} — bấm Tải lại để đọc mới.` : '');
+  else if (rep.kind === 'flagged') note.textContent = '';
   else note.textContent = 'Bài đã bị ẩn trong group (do admin hoặc do xử lý báo cáo). Bài đã ẩn không hiện lại được (Beincom không có lệnh hiện lại).';
 
   const ncol = reportHead();

@@ -173,7 +173,7 @@ function renderBest() {
   }
   const b = BG.bestTimes(posts);
   const n = (x) => Math.round(x).toLocaleString('vi-VN');
-  $('best-note').textContent = `Theo ${b.total} bài trong ${stats.days} ngày (giờ Việt Nam). Tương tác = cảm xúc + 2 × bình luận.${b.total < 20 ? ' Ít bài nên chỉ để tham khảo.' : ''}`;
+  $('best-note').textContent = `Theo ${b.total} bài trong ${stats.days} ngày.${b.total < 20 ? ' Ít bài nên chỉ để tham khảo.' : ''}`;
   $('best-top').replaceChildren(
     ...(b.top.length ? [el('b', { class: 'small', text: 'Nên đăng:' }), ...b.top.map((c) => el('span', { class: 'best-chip', title: `${c.posts} bài, trung bình ${n(c.avg)} tương tác`, text: bestLabel(c) }))] : [el('span', { class: 'muted small', text: 'Chưa có bài nào trong khoảng này.' })]),
   );

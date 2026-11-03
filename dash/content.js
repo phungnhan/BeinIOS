@@ -138,7 +138,7 @@ function renderRecent() {
   if (!data.settings.scanPosts) note.textContent = 'Đang tắt "Quét bài mới đăng" ở phần Cài đặt.';
   else if (!data.state.recentPosts) note.textContent = data.state.snapshot ? 'Chưa quét bài mới — bấm Quét ngay.' : '';
   else if (recentFilter === 'unanswered') note.textContent = `Bài đăng đã hơn ${data.settings.unansweredHours} giờ (trong 7 ngày) mà chưa có bình luận nào, theo số bình luận ở lần quét gần nhất (đổi số giờ ở Cài đặt → Theo dõi). Bấm 💬 Bình luận để trả lời ngay.`;
-  else note.textContent = 'Xoá bài: chỉ với bài của chính bạn (Beincom không cho admin xoá bài người khác). Ẩn bài: gỡ bài người khác khỏi các group bạn quản trị; không hiện lại được (Beincom không có lệnh hiện lại). Bỏ qua: chỉ ẩn khỏi danh sách này.';
+  else note.textContent = '';
 
   pruneSelection(selectedRecent, new Set(rows.map((r) => r.p.id)));
   const filtered = rows.filter((r) => inFilter(r, recentFilter));
@@ -494,7 +494,7 @@ function renderComments() {
   const note = $('comments-note');
   if (!data.settings.scanPosts || !data.settings.scanComments) note.textContent = 'Đang tắt "Quét bình luận mới" (hoặc "Quét bài mới đăng") ở phần Cài đặt.';
   else if (!data.state.recentComments) note.textContent = data.state.snapshot ? 'Chưa đọc bình luận — bấm Quét ngay.' : '';
-  else note.textContent = 'Mỗi lần quét đọc bình luận mới nhất của tối đa 8 bài có bình luận mới. Ẩn bình luận: như nút Ẩn trên web Beincom. Bỏ qua: chỉ ẩn khỏi danh sách này.';
+  else note.textContent = '';
 
   pruneSelection(selectedComments, new Set(rows.map((r) => r.p.id)));
   const filtered = rows.filter((r) => inFilter(r, commentFilter));
@@ -633,7 +633,7 @@ function renderPinned() {
   $('pinned-count').textContent = list ? `${list.length}/${BG.PIN_MAX} bài` : '';
   const note = $('pinned-note');
   note.classList.toggle('err-text', !!pins.error);
-  note.textContent = pins.error || (pins.loading ? 'Đang tải…' : list && list.length >= BG.PIN_MAX ? `Đã ghim đủ ${BG.PIN_MAX} bài — muốn ghim bài khác thì bỏ ghim bớt.` : 'Ghim bài: bấm "📌 Ghim" ở bài trong danh sách Bài mới đăng.');
+  note.textContent = pins.error || (pins.loading ? 'Đang tải…' : list && list.length >= BG.PIN_MAX ? `Đã ghim đủ ${BG.PIN_MAX} bài — muốn ghim bài khác thì bỏ ghim bớt.` : '');
   const body = $('pinned-body');
   body.replaceChildren();
   if (!list?.length) body.append(el('tr', { class: 'empty-row' }, el('td', { colspan: 4, text: pins.loading ? 'Đang tải…' : list ? 'Group chưa ghim bài nào' : 'Bấm "Tải lại" để xem' })));

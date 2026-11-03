@@ -45,7 +45,7 @@ function renderRetention() {
   if (ret.loading) note.textContent = 'Đang đọc nhật ký thành viên và bài của người mới… (chỉ đọc)';
   else if (ret.error) note.textContent = ret.error;
   else if (!g) note.textContent = data.state.snapshot ? 'Không có group nào.' : 'Chưa quét lần nào.';
-  else if (!v) note.textContent = 'Xem người vào trong 30 / 60 / 90 ngày qua: ai còn ở lại, ai đã rời và rời sau bao lâu, ai đã đăng bài hay bình luận. Bấm Phân tích (chỉ đọc nhật ký và bài trên Beincom).';
+  else if (!v) note.textContent = '';
   else {
     const parts = [`${g.name}: người vào trong ${ret.raw.days} ngày qua.`, '"Có hoạt động" = đã đăng bài (Beincom tìm theo người đăng) hoặc có bình luận trong các bình luận addon đã đọc khi quét — có thể còn bình luận / cảm xúc addon không thấy.'];
     if (ret.raw.truncated) parts.push('Nhật ký quá dài, mới đọc 2.000 sự kiện gần nhất.');

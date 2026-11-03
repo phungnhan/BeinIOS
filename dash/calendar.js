@@ -113,6 +113,7 @@ function composeOnDay(key) {
   $('compose-at').value = toLocalInput(new Date(t));
   updateCompose();
   saveDraft();
+  setComposeKind('post');
   $('compose').scrollIntoView({ block: 'start', behavior: 'smooth' });
   $('compose-text').focus({ preventScroll: true });
   toast(`Hẹn giờ lúc ${fmtTime(t)}${note}. Chọn group, viết bài rồi bấm Hẹn giờ.`);

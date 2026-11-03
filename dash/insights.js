@@ -23,7 +23,7 @@ function renderInsights() {
   setSegActive('ins-sort', insightsSort);
   $('ins-note').textContent = !sum.tracked
     ? 'Chưa có bài nào đăng qua addon. Bài và Article đăng / hẹn giờ ở tab Đăng bài (cả bài định kỳ, nhập CSV) sẽ được đo lượt xem, cảm xúc, bình luận sau 24 giờ và sau 7 ngày (tự động ở các lần quét).'
-    : `Theo dõi ${sum.tracked} bài, ${sum.measured} bài đã có số liệu. Trung bình mỗi bài (sau 7 ngày, chưa đủ thì lấy mốc gần nhất): 👁 ${f1(sum.avg.views)} · ❤ ${f1(sum.avg.reactions)} · 💬 ${f1(sum.avg.comments)}. Điểm = cảm xúc + 2 × bình luận.`;
+    : `Theo dõi ${sum.tracked} bài, ${sum.measured} bài đã có số liệu. Trung bình mỗi bài (sau 7 ngày, chưa đủ thì lấy mốc gần nhất): 👁 ${f1(sum.avg.views)} · ❤ ${f1(sum.avg.reactions)} · 💬 ${f1(sum.avg.comments)}.`;
   const top = sum.times?.top || [];
   $('ins-best').replaceChildren(
     ...(top.length

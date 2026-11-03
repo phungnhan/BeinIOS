@@ -307,7 +307,7 @@ function renderTodo() {
   }
   $('btn-todo-more').hidden = list.length <= todo.limit;
   $('btn-todo-more').textContent = `Xem thêm (${list.length - shown.length})`;
-  $('todo-note').textContent = data.state.lastScan ? `Theo lần quét lúc ${fmtTime(data.state.lastScan)}. Phím tắt: J / K chọn việc · 1, 2, 3 bấm nút tương ứng · O mở trên web.` : '';
+  $('todo-note').textContent = data.state.lastScan ? `Theo lần quét lúc ${fmtTime(data.state.lastScan)}.` : '';
 }
 
 function selectTodo(key, scroll = true) {

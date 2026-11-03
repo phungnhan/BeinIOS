@@ -407,12 +407,21 @@ function clearArticle(ask = true) {
 
 // ---------- Sự kiện ----------
 
-onSeg('article-mode', (m) => {
-  art.mode = m;
-  if (art.cover) art.cover.item = null; // ảnh bìa Article và Series tải với loại khác nhau
+// Thẻ Đăng bài gồm ba loại nội dung: Bài viết (ô soạn bài của compose.js), Article và Series (bảng #article) — chọn ở nút đầu thẻ.
+// Mã khác muốn đưa người dùng tới ô soạn bài thì gọi setComposeKind('post') (compose.js Sửa bài, calendar.js + ở một ngày)
+function setComposeKind(kind) {
+  const k = kind === 'article' || kind === 'series' ? kind : 'post';
+  $('compose').classList.toggle('kind-post', k === 'post');
+  $('article').hidden = k === 'post';
+  for (const b of $('compose-kind').querySelectorAll('button')) b.classList.toggle('active', b.dataset.f === k);
+  if (k === 'post') return;
+  if (art.mode !== k && art.cover) art.cover.item = null; // ảnh bìa Article và Series tải với loại khác nhau
+  art.mode = k;
   renderArticle();
   saveArticleDraft();
-});
+}
+onSeg('compose-kind', setComposeKind);
+onSeg('article-mode', setComposeKind);
 onSeg('art-view', (v) => {
   art.view = v;
   renderArtPreview();
