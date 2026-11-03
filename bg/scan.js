@@ -87,8 +87,10 @@ async function readApprovals(client, g, prevById) {
   });
 }
 
+// Không trả lời kịp (group không có bài, xem TIMELINE_TIMEOUT): coi như không có bài mới ở lần quét này
 async function readTimeline(client, g) {
-  const r = await client.call('GET', `content/timeline/${g.id}?limit=${TIMELINE_LIMIT}`);
+  const r = await client.call('GET', `content/timeline/${g.id}?limit=${TIMELINE_LIMIT}`, null, '2.0.0', TIMELINE_TIMEOUT, { quietTimeout: true });
+  if (r.timeout) return { posts: [] };
   if (!BG.isOk(r)) return { error: 'Đọc bài mới lỗi: ' + BG.errMsg(r), posts: [] };
   return { posts: (r.body.data?.list || []).map(BG.slimPost) };
 }

@@ -121,8 +121,13 @@ async function doStats({ groupId, days = 30 }) {
       const list = [];
       let after = '';
       for (let page = 0; page < STATS_TIMELINE_PAGES; page++) {
-        const r = await client.call('GET', `content/timeline/${sg.id}?${qs({ limit: TIMELINE_LIMIT, after })}`);
+        const r = await client.call('GET', `content/timeline/${sg.id}?${qs({ limit: TIMELINE_LIMIT, after })}`, null, '2.0.0', TIMELINE_TIMEOUT, { quietTimeout: true });
         if (r.status === 401) return (needLogin = true) && list;
+        // Trang đầu không trả lời kịp: group không có bài (xem TIMELINE_TIMEOUT); trang sau: báo số bài có thể thiếu
+        if (r.timeout) {
+          if (page) out.errors.push(`Bài viết ${sg.name}: Beincom không phản hồi khi đọc bài cũ hơn — số bài có thể thiếu`);
+          break;
+        }
         if (!BG.isOk(r)) {
           out.errors.push(`Bài viết ${sg.name}: ${BG.errMsg(r)}`);
           break;

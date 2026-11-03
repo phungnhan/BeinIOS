@@ -18,6 +18,10 @@ const COMMENT_PAGE = 25; // bình luận mới nhất đọc mỗi bài (API con
 const REPLY_FETCH_PER_SCAN = 10; // mỗi lần quét đọc trả lời của tối đa ngần này bình luận (có trả lời mới)
 const AUTO_HIDE_MAX = 20; // mỗi lần quét tự ẩn tối đa ngần này bài / bình luận
 const REPORT_SCAN_TIMEOUT = 15000; // quét định kỳ chờ API báo cáo ngắn hơn khi mở tab Báo cáo
+// Bài mới của group không có bài: Beincom có lúc không trả lời (gặp thật 03/11/2026 — Tự kiểm tra: "Bài mới đăng" treo, "Tìm bài
+// theo thời gian" 0 bài trong 30 ngày), như API báo cáo khi không có báo cáo. Chờ tối đa ngần này rồi coi như không có bài,
+// không thử lại, không ghi Lỗi kỹ thuật (lỗi khác vẫn báo như cũ)
+const TIMELINE_TIMEOUT = 15000;
 
 // Phải tự chứa (không dùng biến ngoài) vì còn được inject vào tab group.beincom.com.
 // version: header x-version-id; '' = không gửi (user/me/profile báo lỗi phiên bản nếu có header này)
@@ -132,9 +136,10 @@ let directUntil = 0;
 // hoặc mất kết nối thì thử lại 1 lần sau 1,5 giây (mạng chập chờn) — trừ lệnh tự đặt hạn chờ ngắn (API báo cáo vi phạm hay treo khi
 // community không có báo cáo: chờ lại cũng vô ích)
 const RETRY_STATUS = new Set([502, 503, 504]);
-// quiet: không ghi Lỗi kỹ thuật (Tự kiểm tra gọi thử cả API tài khoản không có quyền)
+// quiet: không ghi Lỗi kỹ thuật (Tự kiểm tra gọi thử cả API tài khoản không có quyền); quietTimeout: chỉ bỏ qua khi hết hạn chờ
+// (API hay treo khi không có dữ liệu: bài mới của group không có bài), lỗi khác vẫn ghi
 function withRetry(call) {
-  return async (method, path, body, version, timeoutMs, { quiet = false } = {}) => {
+  return async (method, path, body, version, timeoutMs, { quiet = false, quietTimeout = false } = {}) => {
     let r = await call(method, path, body, version, timeoutMs);
     if (method === 'GET' && r.status === 0 && !timeoutMs) {
       await sleep(1500);
@@ -145,7 +150,7 @@ function withRetry(call) {
       r = await call(method, path, body, version, timeoutMs);
     }
     // Lỗi kỹ thuật: Beincom báo lỗi hoặc không kết nối được (hết phiên đăng nhập, bài đã bị xoá là chuyện thường: bỏ qua)
-    if (!quiet && (r.status >= 400 || r.status === 0) && r.status !== 401 && !BG.isContentGone(r)) {
+    if (!quiet && !(quietTimeout && r.timeout) && (r.status >= 400 || r.status === 0) && r.status !== 401 && !BG.isContentGone(r)) {
       recordDiag({ where: 'sw', kind: 'api', method, path, status: r.status, code: r.body?.code || (r.timeout ? 'timeout' : ''), message: BG.errMsg(r) });
     }
     return r;

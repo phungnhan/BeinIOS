@@ -1060,7 +1060,8 @@ async function doChatReactions({ postId }) {
   return withChatRead(async (client) => {
     const r = await chatGet(client, `v4/posts/${postId}/reactions`);
     if (r.status === 401) return { ...chatLoginErr };
-    if (!BG.chatOk(r)) return { status: 'error', message: BG.errMsg(r) };
+    // Tin chưa có (hoặc vừa hết) biểu cảm: Beincom trả 200 với null thay vì [] (gặp thật 03/11/2026)
+    if (!BG.chatOk(r) && !(r.status === 200 && r.body == null)) return { status: 'error', message: BG.errMsg(r) };
     const list = (Array.isArray(r.body) ? r.body : []).filter((x) => x?.emoji_name && x.user_id);
     const users = await chatUsersOf(client, list.map((x) => x.user_id));
     const by = {};

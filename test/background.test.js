@@ -185,7 +185,7 @@ function makeEnv({ data = fixture(), settings = {}, rules = {}, postRules = {}, 
       // Thả biểu cảm: máy chủ Beincom nhận ở v5 (v4/reactions trả 404 như máy chủ thật — lỗi trước v0.43.1)
       if (path === 'v5/reactions' && method === 'POST') return res(201, { ...JSON.parse(opts.body), create_at: 1 });
       if ((m = path.match(/^v5\/users\/(\w+)\/posts\/(\w+)\/reactions\/([\w+%-]+)$/)) && method === 'DELETE') return res(200, { status: 'OK' });
-      if ((m = path.match(/^v4\/posts\/(\w+)\/reactions$/))) return res(200, (c.reactions || {})[m[1]] || []);
+      if ((m = path.match(/^v4\/posts\/(\w+)\/reactions$/))) return res(200, (c.reactions || {})[m[1]] || (c.reactionsNull ? null : []));
       const searchIn = (teamIds, terms) => {
         const chans = new Set(Object.entries(c.channels).filter(([t]) => !teamIds || teamIds.includes(t)).flatMap(([, l]) => l.map((x) => x.id)));
         const list = Object.values(c.posts).flat().filter((x) => chans.has(x.channel_id) && x.message.toLowerCase().includes(terms.toLowerCase()));
@@ -284,6 +284,8 @@ function makeEnv({ data = fixture(), settings = {}, rules = {}, postRules = {}, 
     }
     const p = url.replace(API, '');
     calls.push(`${method} ${p}`);
+    // data.hangApi: lệnh api.beincom.com (đường dẫn bắt đầu bằng) treo tới khi bị huỷ vì quá hạn chờ
+    if ((data.hangApi || []).some((x) => p.startsWith(x))) return new Promise((_, rej) => opts.signal?.addEventListener('abort', () => rej(new Error('The operation was aborted.'))));
     if (opts.body) bodies.push([`${method} ${p}`, JSON.parse(opts.body)]);
     headers[`${method} ${p}`] = opts.headers;
     const reply = (status, body) => ({ status, json: async () => body });
@@ -1780,6 +1782,29 @@ test('thống kê admin group: tự tính từ nhật ký và timeline (gộp gr
   assert.deepEqual([s.totals.posts, s.totals.joined, s.totals.left, s.totals.reactions, s.totals.comments], [2, 1, 1, 3, 2]);
   assert.deepEqual(s.sources, { members: 'history', joinLeave: 'activity', posts: 'timeline' });
   assert.equal(s.topPosts[0].id, 't1');
+});
+
+test('thống kê: group con không có bài (bài mới không trả lời) không chờ lâu, không báo lỗi; trang sau không trả lời thì báo số bài có thể thiếu', async () => {
+  const data = fixture();
+  const recentIso = new Date(Date.now() - 3600e3).toISOString();
+  data.timeline.gCL = [post('t1', 'Mới', { publishedAt: recentIso })];
+  data.hangApi = ['content/timeline/gCLsub'];
+  const env = makeEnv({ data });
+  await scan(env);
+  const r = await env.send({ type: 'stats', groupId: 'gCL', days: 30 });
+  assert.equal(r.status, 'ok');
+  assert.deepEqual(r.posts.map((p) => p.id), ['t1']);
+  assert.deepEqual(r.errors, []);
+  assert.equal(env.calls.filter((c) => c.startsWith('GET content/timeline/gCLsub')).length, 2); // một lần khi quét, một lần khi thống kê: không thử lại
+  await new Promise((res) => setTimeout(res, 50));
+  assert.ok(!(env.storage.diagLog || []).some((e) => String(e.path).includes('content/timeline')));
+  // Nhiều bài, trang 2 không trả lời: giữ bài trang 1, báo thiếu
+  data.timeline.gCL = Array.from({ length: 25 }, (_, i) => post('n' + i, 'Bài ' + i, { publishedAt: recentIso }));
+  data.hangApi = ['content/timeline/gCLsub', 'content/timeline/gCL?limit=20&after=20'];
+  const r2 = await env.send({ type: 'stats', groupId: 'gCL', days: 30 });
+  assert.equal(r2.posts.length, 20);
+  assert.equal(r2.errors.length, 1);
+  assert.match(r2.errors[0], /^Bài viết .+: Beincom không phản hồi khi đọc bài cũ hơn — số bài có thể thiếu$/);
 });
 
 // ---------- Sao lưu & khôi phục ----------
@@ -3411,6 +3436,11 @@ test('trang Chat: biểu cảm (thả / bỏ, ai đã thả), tìm tin trong kê
   // Ai đã thả: theo emoji, có tên
   const who = await env.send({ type: 'chatReactions', postId: 'p1' });
   assert.deepEqual(who.reactions, { '+1': [{ chatId: 'cu60', fullname: 'Người 60' }, { chatId: 'cu61', fullname: 'Người 61' }], heart: [{ chatId: 'cu1', fullname: '' }] }); // chính mình: trang ghi "Bạn"
+  // Tin chưa có biểu cảm: Beincom trả null thay vì [] (gặp thật 03/11/2026) — không phải lỗi
+  c.reactionsNull = true;
+  const none = await env.send({ type: 'chatReactions', postId: 'x1' });
+  assert.deepEqual([none.status, none.reactions], ['ok', {}]);
+  c.reactionsNull = false;
   // Tìm trong kênh: tìm trong team của kênh rồi lọc theo kênh
   const inCh = await env.send({ type: 'chatSearch', terms: 'ví lạnh', channelId: 'chSub', teamId: 'tCL' });
   assert.deepEqual([inCh.status, inCh.posts.map((p) => [p.id, p.user.fullname])], ['ok', [['s1', 'Người 61']]]);
@@ -4126,6 +4156,11 @@ test('Tự kiểm tra: nhóm Chat Beincom — mỗi phần của trang Chat mộ
   assert.ok(calls.includes('GET chat:v5/channels/chFood/posts?page=0&per_page=1&skipFetchThreads=false&collapsedThreads=true&collapsedThreadsExtended=true'));
   assert.ok(calls.includes('GET chat:v4/roles/name/team_admin') && calls.includes('GET chat:v4/posts/fp1/reactions'));
   assert.match(BG.selfCheckText(r, { version: '0.43.0' }), /\n— Chat Beincom —\n✓ Chat: đăng nhập: @kai\n/);
+  // Tin chưa có biểu cảm: Beincom trả null thay vì [] (gặp thật 03/11/2026) — vẫn là dùng được
+  c.reactionsNull = true;
+  const rn = await env.send({ type: 'selfCheck', groupId: 'gFood' });
+  assert.deepEqual(rn.items.filter((x) => x.id === 'chatReactions').map((x) => [x.status, x.httpStatus]), [['ok', 200]]);
+  c.reactionsNull = false;
   // Group không có kênh chat của mình (community chưa có chat): các mục cần kênh bỏ qua, ghi rõ lý do
   const other = await env.send({ type: 'selfCheck', groupId: 'gCL' });
   const ob = Object.fromEntries(other.items.filter((x) => x.section === 'chat').map((x) => [x.id, x]));
@@ -4437,4 +4472,26 @@ test('mạng chập chờn: lệnh đọc hết hạn chờ thì thử lại m�
   await new Promise((res) => setTimeout(res, 50));
   const e = (env.storage.diagLog || []).find((x) => /v4\/users\/me\/teams$/.test(x.path || ''));
   assert.ok(e && e.code === 'timeout', JSON.stringify(e));
+});
+
+test('bài mới của group treo (group không có bài): quét không chờ quá 15 giây, không thử lại, không ghi lỗi; Tự kiểm tra ghi bỏ qua kèm lý do', async () => {
+  const data = fixture();
+  data.hangApi = ['content/timeline/gFood'];
+  const env = makeEnv({ data });
+  const state = await scan(env);
+  const gs = Object.fromEntries(state.snapshot.groups.map((g) => [g.id, g]));
+  assert.equal(gs.gFood.timelineError, undefined);
+  assert.equal(env.calls.filter((c) => c.startsWith('GET content/timeline/gFood')).length, 1);
+  assert.ok(state.recentPosts.some((p) => p.id === 't1')); // group khác vẫn đọc được
+  await new Promise((res) => setTimeout(res, 50));
+  assert.ok(!(env.storage.diagLog || []).some((e) => String(e.path).includes('content/timeline')));
+  // Tự kiểm tra: "Tìm bài theo thời gian" 0 bài -> Bài mới đăng là bỏ qua (không phải lỗi)
+  const r = await env.send({ type: 'selfCheck', groupId: 'gFood' });
+  const t = r.items.find((x) => x.id === 'timeline');
+  assert.equal(t.status, 'skip');
+  assert.match(t.detail, /không có bài mới trong 30 ngày/);
+  // Có bài trong 30 ngày mà vẫn treo: vẫn là lỗi
+  data.search = [{ id: 's1', content: 'Bài', publishedAt: new Date(Date.now() - 864e5).toISOString(), actor: { id: 'u1' }, isHidden: false }];
+  const r2 = await env.send({ type: 'selfCheck', groupId: 'gFood' });
+  assert.equal(r2.items.find((x) => x.id === 'timeline').status, 'fail');
 });
