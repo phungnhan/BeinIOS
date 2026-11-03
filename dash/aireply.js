@@ -4,7 +4,7 @@
 //     tự dán, gửi, rồi dán câu trả lời về (không tự điều khiển trang chat: điều khoản các trang này cấm truy cập tự động)
 //   - Khoá API Claude: gọi thẳng Claude Messages API, tự động hoàn toàn
 // Mở từ bảng Bình luận mới (các bình luận đã chọn) và cửa sổ Bài viết & bình luận (bình luận chưa được mình trả lời).
-// Khoá API, mô hình, giọng văn: Cài đặt → ✨ Trả lời bình luận bằng AI (chrome.storage.local `aiConfig`, ngoài sao lưu / đồng bộ).
+// Khoá API, mô hình, giọng văn: Quy tắc & cài đặt → Trợ lý AI (chrome.storage.local `aiConfig`, ngoài sao lưu / đồng bộ).
 // Nạp sau postview.js (dùng PV, loadPostComments, postOf).
 
 // drafts[id] = { text, on, skip, reason, status: '' | 'sending' | 'sent' | 'dry' | 'error', error }
@@ -472,7 +472,7 @@ $('ar-open-settings').addEventListener('click', () => {
   $('ai-reply').close();
   if ($('postview').open) $('postview').close();
   showTab('settings');
-  document.querySelector('#settings .ai-group')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  showSettingsSec('ai');
 });
 
 // Bảng Bình luận mới: các bình luận đã chọn

@@ -1231,3 +1231,62 @@ h2 > .tip-i, .group-title > .tip-i { vertical-align: 2px; }
 .group-title .ic svg, .tag .ic svg { width: 1.2em; height: 1.2em; }
 h2 .ic svg { width: 1.05em; height: 1.05em; color: var(--muted); }
 .media-icon .ic svg { width: 1em; height: 1em; }
+
+/* ---------- Tab Quy tắc & cài đặt chia mục (dash/setnav.js): danh sách mục bên trái, bên phải chỉ một mục, một cột ---------- */
+.set-nav { display: none; }
+main.set-view:has(> .set-nav:not([hidden])) { grid-template-columns: 236px minmax(0, 760px); justify-content: center; column-gap: 28px; }
+main.set-view:has(> .set-nav:not([hidden])) > .tab-toc { display: none !important; }
+main.set-view:has(> .set-nav:not([hidden])) > :is(.rules-col, #settings) { grid-column: 2; }
+main.set-view > .set-nav:not([hidden]) {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  grid-column: 1;
+  grid-row: 1 / span 4;
+  align-self: start;
+  position: sticky;
+  top: calc(var(--topbar-h, 61px) + var(--tabs-h, 49px) + 16px);
+}
+main.set-view .set-off { display: none !important; }
+.set-nav-label { margin: 16px 10px 5px; font-size: 11.5px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+.set-nav-label:first-child { margin-top: 2px; }
+.set-nav-item { display: flex; align-items: center; gap: 10px; width: 100%; padding: 7px 10px; border: 0; border-radius: 9px; background: transparent; color: var(--fg); font-size: 13.5px; font-weight: 500; text-align: left; }
+.set-nav-item:hover:not(:disabled) { background: var(--surface-2); }
+.set-nav-item.active { background: var(--surface); color: var(--accent); box-shadow: 0 0 0 1px var(--border), var(--shadow); }
+.set-nav-ic { display: grid; place-items: center; color: var(--muted); }
+.set-nav-item.active .set-nav-ic { color: var(--accent); }
+.set-nav-ic svg { display: block; width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+.set-nav-name { flex: 1; min-width: 0; }
+.set-nav-item em { font-style: normal; font-size: 12px; font-weight: 500; color: var(--muted); white-space: nowrap; }
+.set-nav-item em.warn { color: var(--warn); font-weight: 600; }
+/* Nội dung một mục: không gập thẻ, quy tắc một cột, tên nhóm trùng tên mục thì ẩn, chữ dòng nhẹ hơn */
+main.set-view :is(.rules-col, #settings) .card-fold { display: none; }
+main.set-view .rules-col { gap: 14px; }
+main.set-view .rules-grid { grid-template-columns: minmax(0, 1fr); gap: 18px; }
+main.set-view #settings > .set-solo > .group-title:first-child,
+main.set-view #settings .auto-title { display: none; }
+/* Nhóm đầu của mục nằm ngay dưới tiêu đề (không vạch ngăn); nhóm sau trong cùng mục cách ra, có vạch mảnh */
+main.set-view #settings > .group { margin-top: 0; padding-top: 0; border-top: 0; }
+main.set-view #settings > .group:not(.set-off) ~ .group:not(.set-off) { margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--border); }
+main.set-view #settings > .card-head h2 { font-size: 18px; }
+main.set-view :is(.rules-col, #settings) :is(.switch-row, .select-row, .text-row) > span > b:first-child { font-weight: 500; }
+main.set-view :is(.rules-col, #settings) :is(.switch-row, .select-row, .text-row) { padding: 11px 14px; }
+@media (max-width: 900px) {
+  main.set-view:has(> .set-nav:not([hidden])) { grid-template-columns: minmax(0, 1fr); }
+  main.set-view:has(> .set-nav:not([hidden])) > :is(.rules-col, #settings) { grid-column: 1; }
+  main.set-view > .set-nav:not([hidden]) {
+    grid-row: auto;
+    flex-direction: row;
+    gap: 6px;
+    overflow-x: auto;
+    z-index: 2;
+    top: calc(var(--topbar-h, 61px) + var(--tabs-h, 49px));
+    margin: -8px 0 0;
+    padding: 8px 0;
+    background: var(--bg);
+    scrollbar-width: none;
+  }
+  .set-nav-label, .set-nav-item em { display: none; }
+  .set-nav-item { width: auto; flex: none; padding: 5px 12px; border-radius: 99px; background: var(--surface); box-shadow: var(--shadow); white-space: nowrap; font-size: 13px; }
+  .set-nav-item.active { box-shadow: 0 0 0 1px var(--accent); }
+}

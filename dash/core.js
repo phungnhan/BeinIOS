@@ -312,6 +312,7 @@ function writeHash() {
   const p = new URLSearchParams();
   p.set('tab', currentTab);
   if (selectedGroupId) p.set('group', selectedGroupId);
+  if (currentTab === 'settings' && typeof settingsSec === 'string' && settingsSec) p.set('sec', settingsSec); // dash/setnav.js
   try {
     history.replaceState(null, '', location.pathname + '#' + p.toString());
   } catch {}

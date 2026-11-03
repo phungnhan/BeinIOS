@@ -22,6 +22,7 @@ window.addEventListener('hashchange', () => {
     if (currentTab === 'reports') rep.data[repKey()]?.loaded ? renderReports() : loadReports();
   }
   if (p.get('tab') && p.get('tab') !== currentTab) showTab(p.get('tab'));
+  if (p.get('sec') && p.get('sec') !== settingsSec) showSettingsSec(p.get('sec'));
   if (p.get('welcome')) openWelcome();
   if (p.get('monthly')) openMonthly();
   if (p.get('nudge')) openNudge();
