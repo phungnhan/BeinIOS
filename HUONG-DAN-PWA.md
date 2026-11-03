@@ -148,6 +148,7 @@ node test/pwa/pwa.e2e.mjs
 
 ## Lịch sử BeinIOS
 
+- **1.7.8 (03/11/2026).** Gộp addon BeinFusion 0.61.3 — Tự kiểm tra nhanh hơn nhiều: mỗi mục chạy ngay khi mục nó cần đã xong, 8 mục cùng lúc, group chưa có bài chỉ chờ "Bài mới đăng" 5 giây; trong lúc chạy hiện "x/y mục", xong ghi thời gian chạy. Trên iPhone (mỗi lệnh đi qua proxy) càng thấy rõ.
 - **1.7.7 (03/11/2026).** Gộp addon BeinFusion 0.61.2 — Tự kiểm tra hết báo nhầm "Chat: biểu cảm — HTTP 200" (tin chưa có biểu cảm) và "Bài mới đăng" ở group chưa có bài; quét và Thống kê chờ bài mới tối đa 15 giây rồi coi như không có bài, không ghi Lỗi kỹ thuật.
 - **1.7.6 (03/11/2026).** Gộp addon BeinFusion 0.61.1 — mọi lệnh tới Beincom có hạn chờ 25 giây và tự thử lại một lần khi mạng chập chờn; Lỗi kỹ thuật bớt dòng nhiễu.
 - **1.7.5 (03/11/2026).** Gộp addon BeinFusion 0.61.0 — trang Chat: mở lại thread đã xem hiện ngay không gọi máy chủ; danh sách Thread tải sẵn lúc rảnh và nhớ 30 giây; mở thread từ danh sách tải song song với cuộc trò chuyện.
