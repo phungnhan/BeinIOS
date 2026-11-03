@@ -226,7 +226,7 @@ function renderWeekly() {
       ? [el('b', { text: 'Vi phạm nhiều nhất: ' }), ...r.violators.flatMap((v, i) => [i ? ', ' : '', el('span', { text: `${v.user.fullname || v.user.username || '?'} (${v.count} lần: ${v.types.join(', ')})` })])]
       : []),
   );
-  $('weekly-note').textContent = `Từ ${fmtTime(r.from)} đến nay, theo nhật ký addon, số thành viên addon ghi sau mỗi lần quét và hồ sơ vi phạm. Việc làm trực tiếp trên web Beincom không có trong nhật ký addon.`;
+  $('weekly-note').textContent = `Từ ${fmtTime(r.from)} đến nay.`;
 }
 
 onSeg('weekly-range', (f) => {

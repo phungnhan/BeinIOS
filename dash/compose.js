@@ -318,6 +318,7 @@ function enterEdit(post, { scheduled = false } = {}) {
   renderTagsSeries();
   updateCompose();
   renderEditBanner();
+  setComposeKind('post');
   $('compose').scrollIntoView({ block: 'start' });
 }
 

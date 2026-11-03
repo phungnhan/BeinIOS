@@ -89,7 +89,7 @@
 
     <section class="card span-3 todo-card" id="todo" data-tab="overview">
       <div class="card-head">
-        <h2>Việc cần làm <span class="tag accent" id="todo-count"></span></h2>
+        <h2>Việc cần làm <button type="button" class="tip-i" data-tip="Gom việc đang chờ ở mọi tab, việc gấp lên trước. Phím tắt: J / K chọn việc · 1, 2, 3 bấm nút tương ứng · O mở trên web." aria-label="Gợi ý: Gom việc đang chờ ở mọi tab, việc gấp lên trước. Phím tắt: J / K chọn việc · 1, 2, 3 bấm nút tương ứng · O mở trên web.">i</button> <span class="tag accent" id="todo-count"></span></h2>
         <div class="seg" id="todo-filter">
           <button data-f="all" class="active">Tất cả <span id="tcnt-all"></span></button>
           <button data-f="urgent">Gấp <span id="tcnt-urgent"></span></button>
@@ -106,11 +106,10 @@
 
     <section class="card span-3" id="groups" data-tab="overview">
       <div class="card-head">
-        <h2>Group bạn quản trị</h2>
-        <span class="muted small">Bấm một dòng để xem yêu cầu tham gia của group đó</span>
+        <h2>Group bạn quản trị <button type="button" class="tip-i" data-tip="Bấm một dòng để xem yêu cầu tham gia của group đó. Số thành viên, duyệt thành viên / duyệt bài đọc ở lần quét gần nhất." aria-label="Gợi ý: Bấm một dòng để xem yêu cầu tham gia của group đó. Số thành viên, duyệt thành viên / duyệt bài đọc ở lần quét gần nhất.">i</button></h2>
       </div>
       <div class="table-wrap">
-        <table>
+        <table class="stack">
           <thead>
             <tr><th>Group</th><th>Vai trò</th><th class="num">Thành viên</th><th>Duyệt thành viên</th><th>Duyệt bài</th><th class="num">Yêu cầu chờ</th><th class="num">Bài chờ</th><th class="num">Báo cáo</th><th>Mở trên Beincom</th></tr>
           </thead>
@@ -121,7 +120,7 @@
 
     <section class="card span-3" id="weekly" data-tab="overview">
       <div class="card-head">
-        <h2>Tóm tắt hoạt động</h2>
+        <h2>Tóm tắt hoạt động <button type="button" class="tip-i" data-tip="Theo nhật ký addon, số thành viên addon ghi sau mỗi lần quét và hồ sơ vi phạm. Việc làm trực tiếp trên web Beincom không có trong nhật ký addon." aria-label="Gợi ý: Theo nhật ký addon, số thành viên addon ghi sau mỗi lần quét và hồ sơ vi phạm. Việc làm trực tiếp trên web Beincom không có trong nhật ký addon.">i</button></h2>
         <div class="review-tools">
           <div class="seg" id="weekly-range">
             <button data-f="7" class="active">7 ngày</button>
@@ -149,7 +148,7 @@
         <button id="btn-gsettings-off" class="ghost" disabled>Tắt cho đã chọn</button>
       </div>
       <div class="table-wrap">
-        <table class="requests">
+        <table class="stack requests">
           <thead id="gsettings-head"></thead>
           <tbody id="gsettings-body"></tbody>
         </table>
@@ -166,7 +165,7 @@
       <div id="guard-bursts"></div>
       <h3 class="sub-h">Tài khoản giống admin</h3>
       <div class="table-wrap">
-        <table>
+        <table class="stack">
           <thead><tr><th>Tài khoản</th><th>Vì sao</th><th>Ở đâu, lúc nào</th><th class="act">Thao tác</th></tr></thead>
           <tbody id="guard-imps"></tbody>
         </table>
@@ -196,7 +195,7 @@
         <button id="btn-decline-selected" class="danger" disabled>✕ Từ chối đã chọn</button>
       </div>
       <div class="table-wrap">
-        <table class="requests">
+        <table class="stack requests">
           <thead>
             <tr><th class="cb"></th><th>Người xin vào</th><th>Câu trả lời</th><th>Gửi lúc</th><th>Đánh giá theo quy tắc</th><th class="act">Thao tác</th></tr>
           </thead>
@@ -241,7 +240,7 @@
         </div>
         <div id="members-note" class="muted small review-note"></div>
         <div class="table-wrap">
-          <table class="requests">
+          <table class="stack requests">
             <thead>
               <tr><th class="cb"></th><th>Thành viên</th><th>Vào lúc</th><th class="num">Số group đã vào</th><th class="act">Thao tác</th></tr>
             </thead>
@@ -261,7 +260,7 @@
         </div>
         <div id="banned-note" class="muted small review-note"></div>
         <div class="table-wrap">
-          <table class="requests">
+          <table class="stack requests">
             <thead>
               <tr><th class="cb"></th><th>Thành viên</th><th>Lý do cấm</th><th>Bị cấm lúc</th><th class="act">Thao tác</th></tr>
             </thead>
@@ -285,7 +284,7 @@
         </div>
         <div id="profiles-note" class="muted small review-note"></div>
         <div class="table-wrap">
-          <table class="requests">
+          <table class="stack requests">
             <thead>
               <tr><th>Thành viên</th><th>Vi phạm</th><th class="num">Điểm</th><th>Gần nhất</th><th class="act">Thao tác</th></tr>
             </thead>
@@ -306,7 +305,7 @@
         </div>
         <div id="activity-note" class="muted small review-note"></div>
         <div class="table-wrap">
-          <table>
+          <table class="stack">
             <thead>
               <tr><th>Thời gian</th><th>Sự kiện</th><th>Thành viên</th><th>Người thực hiện</th><th>Ghi chú</th></tr>
             </thead>
@@ -347,7 +346,7 @@
         <button id="btn-reject-posts" class="danger" disabled>✕ Từ chối đã chọn</button>
       </div>
       <div class="table-wrap">
-        <table class="requests posts">
+        <table class="stack requests posts">
           <thead>
             <tr><th class="cb"></th><th>Người đăng</th><th>Nội dung</th><th>Đăng vào</th><th>Gửi lúc</th><th>Đánh giá theo quy tắc</th><th class="act">Thao tác</th></tr>
           </thead>
@@ -358,7 +357,7 @@
 
     <section class="card span-3" id="recent" data-tab="content">
       <div class="card-head">
-        <h2>Bài mới đăng</h2>
+        <h2>Bài mới đăng <button type="button" class="tip-i" data-tip="Xoá bài: chỉ với bài của chính bạn (Beincom không cho admin xoá bài người khác). Ẩn bài: gỡ bài người khác khỏi các group bạn quản trị; không hiện lại được. Bỏ qua: chỉ ẩn khỏi danh sách này." aria-label="Gợi ý: Xoá bài: chỉ với bài của chính bạn (Beincom không cho admin xoá bài người khác). Ẩn bài: gỡ bài người khác khỏi các group bạn quản trị; không hiện lại được. Bỏ qua: chỉ ẩn khỏi danh sách này.">i</button></h2>
         <div class="review-tools">
           <div class="seg" id="recent-filter">
             <button data-f="flagged" class="active">Cần xử lý <span id="rcnt-flagged"></span></button>
@@ -379,7 +378,7 @@
         <button id="btn-hide-posts" class="danger" disabled>Ẩn đã chọn</button>
       </div>
       <div class="table-wrap">
-        <table class="requests posts">
+        <table class="stack requests posts">
           <thead>
             <tr><th class="cb"></th><th>Người đăng</th><th>Nội dung</th><th>Group</th><th>Đăng lúc</th><th>Đánh giá theo quy tắc</th><th class="act">Thao tác</th></tr>
           </thead>
@@ -391,7 +390,7 @@
 
     <section class="card span-3" id="comments" data-tab="content">
       <div class="card-head">
-        <h2>Bình luận mới</h2>
+        <h2>Bình luận mới <button type="button" class="tip-i" data-tip="Mỗi lần quét đọc bình luận mới nhất của tối đa 8 bài có bình luận mới. Ẩn bình luận: như nút Ẩn trên web Beincom. Bỏ qua: chỉ ẩn khỏi danh sách này." aria-label="Gợi ý: Mỗi lần quét đọc bình luận mới nhất của tối đa 8 bài có bình luận mới. Ẩn bình luận: như nút Ẩn trên web Beincom. Bỏ qua: chỉ ẩn khỏi danh sách này.">i</button></h2>
         <div class="review-tools">
           <div class="seg" id="comment-filter">
             <button data-f="flagged" class="active">Cần xử lý <span id="ccnt-flagged"></span></button>
@@ -412,7 +411,7 @@
         <button id="btn-hide-comments" class="danger" disabled>Ẩn đã chọn</button>
       </div>
       <div class="table-wrap">
-        <table class="requests posts">
+        <table class="stack requests posts">
           <thead>
             <tr><th class="cb"></th><th>Người viết</th><th>Bình luận</th><th>Trong bài</th><th>Lúc</th><th>Đánh giá theo quy tắc</th><th class="act">Thao tác</th></tr>
           </thead>
@@ -424,7 +423,7 @@
 
     <section class="card span-3" id="chat-card" data-tab="content">
       <div class="card-head">
-        <h2>💬 Tin nhắn chat</h2>
+        <h2>💬 Tin nhắn chat <button type="button" class="tip-i" data-tip="Cần bật Chat Beincom ở Quy tắc &amp; cài đặt: addon đọc tin mới trong kênh chat của các group bạn quản trị, chấm theo quy tắc bài viết và báo tin nhắn riêng chưa đọc." aria-label="Gợi ý: Cần bật Chat Beincom ở Quy tắc &amp; cài đặt: addon đọc tin mới trong kênh chat của các group bạn quản trị, chấm theo quy tắc bài viết và báo tin nhắn riêng chưa đọc.">i</button></h2>
         <div class="review-tools">
           <div class="seg" id="chat-filter">
             <button data-f="flagged" class="active">Cần xử lý <span id="chcnt-flagged"></span></button>
@@ -447,7 +446,7 @@
         <button id="btn-chat-delete" class="danger" disabled>Xoá đã chọn</button>
       </div>
       <div class="table-wrap">
-        <table class="requests posts">
+        <table class="stack requests posts">
           <thead>
             <tr><th class="cb"></th><th>Người gửi</th><th>Tin nhắn</th><th>Kênh</th><th>Lúc</th><th>Đánh giá theo quy tắc</th><th class="act">Thao tác</th></tr>
           </thead>
@@ -483,7 +482,7 @@
         <button id="btn-sweep-hide" class="danger" disabled>Ẩn đã chọn</button>
       </div>
       <div class="table-wrap" id="sweep-table" hidden>
-        <table class="requests posts">
+        <table class="stack requests posts">
           <thead>
             <tr><th class="cb"></th><th>Người đăng</th><th>Nội dung</th><th>Group</th><th>Đăng lúc</th></tr>
           </thead>
@@ -495,7 +494,7 @@
 
     <section class="card span-3" id="pinned" data-tab="content">
       <div class="card-head">
-        <h2>Bài đang ghim</h2>
+        <h2>Bài đang ghim <button type="button" class="tip-i" data-tip="Ghim bài: bấm 📌 Ghim ở bài trong danh sách Bài mới đăng. Mỗi group tối đa 5 bài." aria-label="Gợi ý: Ghim bài: bấm 📌 Ghim ở bài trong danh sách Bài mới đăng. Mỗi group tối đa 5 bài.">i</button></h2>
         <div class="review-tools">
           <select id="pinned-group" aria-label="Chọn group"></select>
           <span class="muted small" id="pinned-count"></span>
@@ -503,7 +502,7 @@
       </div>
       <div id="pinned-note" class="muted small review-note"></div>
       <div class="table-wrap">
-        <table class="requests posts">
+        <table class="stack requests posts">
           <thead>
             <tr><th>Người đăng</th><th>Nội dung</th><th>Đăng lúc</th><th class="act">Thao tác</th></tr>
           </thead>
@@ -539,7 +538,7 @@
 
     <section class="card span-3" id="reports" data-tab="reports">
       <div class="card-head">
-        <h2>Báo cáo vi phạm</h2>
+        <h2>Báo cáo vi phạm <button type="button" class="tip-i" data-tip="Bỏ qua: đánh dấu nội dung không vi phạm. Ẩn: ẩn nội dung bị báo cáo khỏi community (bình luận bị ẩn cũng biến mất khỏi bài). Gắn cờ tự động: bài hệ thống Beincom phát hiện có dấu hiệu vi phạm. Tin nhắn chat: tin trong chat bị thành viên báo cáo; Ẩn gỡ tin khỏi kênh." aria-label="Gợi ý: Bỏ qua: đánh dấu nội dung không vi phạm. Ẩn: ẩn nội dung bị báo cáo khỏi community (bình luận bị ẩn cũng biến mất khỏi bài). Gắn cờ tự động: bài hệ thống Beincom phát hiện có dấu hiệu vi phạm. Tin nhắn chat: tin trong chat bị thành viên báo cáo; Ẩn gỡ tin khỏi kênh.">i</button></h2>
         <div class="review-tools">
           <select id="reports-group" aria-label="Chọn community hoặc group"></select>
           <div class="seg" id="reports-kind" aria-label="Loại">
@@ -563,25 +562,30 @@
         <button id="btn-reports-hide" class="danger" disabled>Ẩn đã chọn</button>
       </div>
       <div class="table-wrap">
-        <table class="requests posts">
+        <table class="stack requests posts">
           <thead id="reports-head"></thead>
           <tbody id="reports-body"></tbody>
         </table>
       </div>
     </section>
 
-    <section class="card span-3" id="compose" data-tab="compose">
-      <div class="card-head">
+    <section class="card span-3 kind-post" id="compose" data-tab="compose">
+      <div class="card-head compose-head">
         <h2>Đăng bài</h2>
-        <div class="review-tools">
+        <div class="seg" id="compose-kind" aria-label="Loại nội dung">
+          <button data-f="post" class="active">Bài viết</button>
+          <button data-f="article">Article</button>
+          <button data-f="series">Series</button>
+        </div>
+        <div class="review-tools post-only">
           <select id="tpl-select" aria-label="Mẫu bài"></select>
           <button id="btn-tpl-use" class="ghost sm">Dùng mẫu</button>
           <button id="btn-tpl-save" class="ghost sm">Lưu làm mẫu</button>
           <button id="btn-tpl-delete" class="ghost sm danger">Xoá mẫu</button>
         </div>
       </div>
-      <div id="compose-edit-banner" class="edit-banner" hidden></div>
-      <div class="compose-grid">
+      <div id="compose-edit-banner" class="edit-banner post-only" hidden></div>
+      <div class="compose-grid post-only">
         <div class="compose-groups">
           <div class="group-title">Đăng vào <button type="button" class="tip-i" data-tip="Một bài hiện ở mọi group đã chọn (giống chọn nhiều nơi đăng trên Beincom)." aria-label="Gợi ý: Một bài hiện ở mọi group đã chọn (giống chọn nhiều nơi đăng trên Beincom).">i</button></div>
           <div id="compose-groups" class="check-list"></div>
@@ -682,18 +686,12 @@
           <div class="muted small">Hẹn giờ: tới giờ Beincom tự đăng, không cần mở trình duyệt. <button type="button" class="tip-i" data-tip="Hẹn giờ dùng chức năng có sẵn của Beincom: tới giờ Beincom tự đăng, không cần mở trình duyệt. Lặp lại đặt trước từng bài hẹn giờ (tối đa 30) ngay lúc bấm. Ảnh, video, tệp được tải lên Beincom lúc bấm Đăng — mỗi bài định kỳ tải một lần (Chạy thử thì không tải)." aria-label="Gợi ý: Hẹn giờ dùng chức năng có sẵn của Beincom: tới giờ Beincom tự đăng, không cần mở trình duyệt. Lặp lại đặt trước từng bài hẹn giờ (tối đa 30) ngay lúc bấm. Ảnh, video, tệp được tải lên Beincom lúc bấm Đăng — mỗi bài định kỳ tải một lần (Chạy thử thì không tải).">i</button></div>
         </div>
       </div>
-    </section>
-
-    <section class="card span-3" id="article" data-tab="compose">
-      <div class="card-head">
-        <h2>Article &amp; Series</h2>
-        <div class="review-tools">
-          <div class="seg" id="article-mode" aria-label="Loại nội dung">
-            <button data-f="article" class="active">Soạn Article</button>
-            <button data-f="series">Tạo Series</button>
-          </div>
+      <!-- Article / Series: cùng thẻ Đăng bài, hiện theo nút chọn loại ở đầu thẻ (dash/article.js setComposeKind); nút cũ giữ ẩn cho mã dùng chung -->
+      <div id="article" class="compose-panel" hidden>
+        <div class="seg" id="article-mode" hidden aria-label="Loại nội dung">
+          <button data-f="article" class="active">Soạn Article</button>
+          <button data-f="series">Tạo Series</button>
         </div>
-      </div>
       <div class="compose-grid">
         <div class="compose-groups">
           <div class="group-title">Đăng vào</div>
@@ -786,11 +784,12 @@
           <div class="muted small"><span class="article-only">Article cần tiêu đề, ảnh bìa và ít nhất một chuyên mục. <button type="button" class="tip-i" data-tip="Giống web Beincom; hẹn giờ thì tới giờ Beincom tự đăng. Nháp chữ được lưu tự động (ảnh bìa thì không)." aria-label="Gợi ý: Giống web Beincom; hẹn giờ thì tới giờ Beincom tự đăng. Nháp chữ được lưu tự động (ảnh bìa thì không).">i</button></span><span class="series-only">Series gom các Article theo chủ đề. <button type="button" class="tip-i" data-tip="Tạo xong thì chọn series khi soạn Article. Nháp chữ được lưu tự động." aria-label="Gợi ý: Tạo xong thì chọn series khi soạn Article. Nháp chữ được lưu tự động.">i</button></span></div>
         </div>
       </div>
+      </div>
     </section>
 
     <section class="card span-3" id="welcome" data-tab="compose">
       <div class="card-head">
-        <h2>Chào thành viên mới</h2>
+        <h2>Chào thành viên mới <button type="button" class="tip-i" data-tip="Chọn group và khoảng ngày rồi bấm Tìm người mới. Addon soạn sẵn bài chào có @tên từng người vào ô soạn bài ở trên; bạn xem lại rồi Đăng hoặc Hẹn giờ." aria-label="Gợi ý: Chọn group và khoảng ngày rồi bấm Tìm người mới. Addon soạn sẵn bài chào có @tên từng người vào ô soạn bài ở trên; bạn xem lại rồi Đăng hoặc Hẹn giờ.">i</button></h2>
         <div class="review-tools">
           <select id="welcome-group" aria-label="Group"></select>
           <div class="seg" id="welcome-days">
@@ -821,7 +820,7 @@
     </section>
     <section class="card span-3" id="shoutout" data-tab="compose">
       <div class="card-head">
-        <h2>Vinh danh thành viên tích cực</h2>
+        <h2>Vinh danh thành viên tích cực <button type="button" class="tip-i" data-tip="Chọn group, khoảng ngày rồi bấm Tìm người tích cực. Điểm = 5 × số bài + số bình luận đã viết + nửa số cảm xúc bài nhận được. Bình luận chỉ tính những bài addon đã đọc bình luận." aria-label="Gợi ý: Chọn group, khoảng ngày rồi bấm Tìm người tích cực. Điểm = 5 × số bài + số bình luận đã viết + nửa số cảm xúc bài nhận được. Bình luận chỉ tính những bài addon đã đọc bình luận.">i</button></h2>
         <div class="review-tools">
           <select id="shout-group" aria-label="Group"></select>
           <div class="seg" id="shout-days">
@@ -844,7 +843,7 @@
         <button class="primary" id="btn-shout-compose" disabled>Soạn bài vinh danh</button>
       </div>
       <div class="table-wrap">
-        <table class="requests">
+        <table class="stack requests">
           <thead>
             <tr><th class="cb"></th><th class="num">#</th><th>Thành viên</th><th class="num">Bài</th><th class="num">Bình luận đã viết</th><th class="num">Cảm xúc nhận</th><th class="num">Bình luận nhận</th><th class="num">Điểm</th></tr>
           </thead>
@@ -884,7 +883,7 @@
       <label class="switch-row nudge-weekly"><input type="checkbox" id="prompt-weekly" /><span><b>Mỗi sáng thứ Hai soạn sẵn bài thảo luận</b> cho group đang chọn <span class="muted small" id="prompt-weekly-note"></span><br /><span class="muted small">Addon chỉ soạn và báo; bạn tự mở, sửa rồi hẹn giờ.</span></span></label>
       <h3 class="sub-h">Hiệu quả từng câu</h3>
       <div class="table-wrap">
-        <table class="requests posts">
+        <table class="stack requests posts">
           <thead><tr><th>Câu hỏi</th><th>Group</th><th>Đăng lúc</th><th>Số liệu</th><th class="num">Điểm</th></tr></thead>
           <tbody id="prompt-perf"></tbody>
         </table>
@@ -920,7 +919,7 @@
       <div class="table-wrap cal-wrap"><div class="cal" id="sched-cal" hidden></div></div>
       <div class="cal-foot muted small" id="cal-foot" hidden></div>
       <div class="table-wrap" id="sched-list">
-        <table class="requests posts">
+        <table class="stack requests posts">
           <thead>
             <tr><th>Giờ đăng</th><th>Người đăng</th><th>Nội dung</th><th>Đăng vào</th><th>Cài đặt</th><th class="act">Thao tác</th></tr>
           </thead>
@@ -948,7 +947,7 @@
           </span>
         </div>
         <div class="table-wrap">
-          <table class="requests posts">
+          <table class="stack requests posts">
             <thead>
               <tr><th>Dòng</th><th>Giờ đăng</th><th>Đăng vào</th><th>Nội dung</th><th>Cài đặt</th><th>Kiểm tra</th></tr>
             </thead>
@@ -1004,8 +1003,7 @@
 
     <section class="card" id="stats-top-posts" data-tab="stats">
       <div class="card-head">
-        <h2>Bài nổi bật</h2>
-        <span class="muted small">Theo cảm xúc + bình luận</span>
+        <h2>Bài nổi bật <button type="button" class="tip-i" data-tip="Xếp theo cảm xúc + bình luận." aria-label="Gợi ý: Xếp theo cảm xúc + bình luận.">i</button></h2>
       </div>
       <div class="table-wrap">
         <table>
@@ -1017,8 +1015,7 @@
 
     <section class="card span-2" id="stats-top-authors" data-tab="stats">
       <div class="card-head">
-        <h2>Người đăng tích cực</h2>
-        <span class="muted small">Theo số bài trong khoảng thời gian</span>
+        <h2>Người đăng tích cực <button type="button" class="tip-i" data-tip="Xếp theo số bài trong khoảng thời gian đã chọn." aria-label="Gợi ý: Xếp theo số bài trong khoảng thời gian đã chọn.">i</button></h2>
       </div>
       <div class="table-wrap">
         <table>
@@ -1030,7 +1027,7 @@
 
     <section class="card span-3" id="stats-best" data-tab="stats">
       <div class="card-head">
-        <h2>Giờ đăng tốt nhất</h2>
+        <h2>Giờ đăng tốt nhất <button type="button" class="tip-i" data-tip="Giờ Việt Nam. Tương tác = cảm xúc + 2 × bình luận; ô ít bài được kéo về mức trung bình nên khi ít bài chỉ để tham khảo." aria-label="Gợi ý: Giờ Việt Nam. Tương tác = cảm xúc + 2 × bình luận; ô ít bài được kéo về mức trung bình nên khi ít bài chỉ để tham khảo.">i</button></h2>
         <span class="muted small" id="best-note"></span>
       </div>
       <div class="best-top" id="best-top"></div>
@@ -1040,7 +1037,7 @@
 
     <section class="card span-3" id="monthly" data-tab="stats">
       <div class="card-head">
-        <h2>Báo cáo tháng</h2>
+        <h2>Báo cáo tháng <button type="button" class="tip-i" data-tip="Chọn community / group và tháng rồi bấm Tạo báo cáo. Addon chỉ đọc: nhật ký vào / rời, bài đăng trong tháng và tháng trước, bài của người mới, việc của đội admin trong nhật ký Beincom. Phần kiểm duyệt qua addon lấy từ nhật ký của addon." aria-label="Gợi ý: Chọn community / group và tháng rồi bấm Tạo báo cáo. Addon chỉ đọc: nhật ký vào / rời, bài đăng trong tháng và tháng trước, bài của người mới, việc của đội admin trong nhật ký Beincom. Phần kiểm duyệt qua addon lấy từ nhật ký của addon.">i</button></h2>
         <div class="review-tools">
           <select id="monthly-group" aria-label="Chọn community hoặc group"></select>
           <select id="monthly-month" aria-label="Chọn tháng"></select>
@@ -1094,7 +1091,7 @@
 
     <section class="card span-3" id="retention" data-tab="stats">
       <div class="card-head">
-        <h2>Thành viên mới có ở lại không?</h2>
+        <h2>Thành viên mới có ở lại không? <button type="button" class="tip-i" data-tip="Xem người vào trong 30 / 60 / 90 ngày qua: ai còn ở lại, ai đã rời và rời sau bao lâu, ai đã đăng bài hay bình luận. Phân tích chỉ đọc nhật ký và bài trên Beincom." aria-label="Gợi ý: Xem người vào trong 30 / 60 / 90 ngày qua: ai còn ở lại, ai đã rời và rời sau bao lâu, ai đã đăng bài hay bình luận. Phân tích chỉ đọc nhật ký và bài trên Beincom.">i</button></h2>
         <div class="review-tools">
           <select id="ret-group" aria-label="Chọn community hoặc group"></select>
           <div class="seg" id="ret-range" aria-label="Người vào trong">
@@ -1138,7 +1135,7 @@
           </div>
         </div>
         <div class="table-wrap">
-          <table class="requests">
+          <table class="stack requests">
             <thead><tr><th>Thành viên</th><th>Vào lúc</th><th>Tình trạng</th><th class="num">Bài</th><th class="num">Bình luận</th></tr></thead>
             <tbody id="ret-body"></tbody>
           </table>
@@ -1153,7 +1150,7 @@
           </div>
         </div>
         <div class="table-wrap">
-          <table class="requests">
+          <table class="stack requests">
             <thead><tr><th>Nhắc lúc</th><th>Group</th><th class="num">Đã nhắc</th><th>Có hoạt động sau khi nhắc</th><th class="num">Đã rời</th></tr></thead>
             <tbody id="nudge-effect-body"></tbody>
           </table>
@@ -1163,7 +1160,7 @@
 
     <section class="card span-3" id="stats-insights" data-tab="stats">
       <div class="card-head">
-        <h2>Hiệu quả bài đã đăng qua addon</h2>
+        <h2>Hiệu quả bài đã đăng qua addon <button type="button" class="tip-i" data-tip="Mọi bài / Article đăng hoặc hẹn giờ thật qua addon được đo lượt xem, cảm xúc, bình luận sau 24 giờ và 7 ngày. Điểm = cảm xúc + 2 × bình luận." aria-label="Gợi ý: Mọi bài / Article đăng hoặc hẹn giờ thật qua addon được đo lượt xem, cảm xúc, bình luận sau 24 giờ và 7 ngày. Điểm = cảm xúc + 2 × bình luận.">i</button></h2>
         <div class="review-tools">
           <div class="seg" id="ins-sort" aria-label="Sắp xếp">
             <button data-f="new" class="active">Mới nhất</button>
@@ -1175,7 +1172,7 @@
       <div class="muted small review-note" id="ins-note"></div>
       <div class="best-top" id="ins-best"></div>
       <div class="table-wrap">
-        <table class="requests posts">
+        <table class="stack requests posts">
           <thead>
             <tr><th>Bài</th><th>Đăng lúc</th><th>Nơi đăng</th><th>Sau 24 giờ</th><th>Sau 7 ngày</th><th>Hiện tại</th><th class="num">Điểm</th></tr>
           </thead>
@@ -1477,7 +1474,7 @@
         </div>
       </div>
       <div class="table-wrap">
-        <table>
+        <table class="stack">
           <thead>
             <tr><th>Thời gian</th><th>Nguồn</th><th>Thao tác</th><th>Kết quả</th><th>Group</th><th>Đối tượng</th><th>Ghi chú</th></tr>
           </thead>
@@ -1489,7 +1486,7 @@
 
     <section class="card span-3" id="check-card" data-tab="log">
       <div class="card-head">
-        <h2>Tự kiểm tra</h2>
+        <h2>Tự kiểm tra <button type="button" class="tip-i" data-tip="Addon gọi thử (chỉ đọc) các API mà từng tính năng dùng với group đã chọn, rồi báo mục nào dùng được. Nên chạy sau khi cài / cập nhật, hoặc khi có tính năng không chạy." aria-label="Gợi ý: Addon gọi thử (chỉ đọc) các API mà từng tính năng dùng với group đã chọn, rồi báo mục nào dùng được. Nên chạy sau khi cài / cập nhật, hoặc khi có tính năng không chạy.">i</button></h2>
         <div class="review-tools">
           <select id="check-group" aria-label="Chọn community hoặc group"></select>
           <button type="button" class="primary sm" id="btn-check-run">▶ Chạy kiểm tra</button>
@@ -1500,7 +1497,7 @@
       <div class="muted small review-note" id="check-note"></div>
       <label class="switch-row check-daily"><input type="checkbox" id="check-daily" /><span><b>Tự kiểm tra mỗi ngày</b> mọi community bạn quản trị <span class="muted small" id="check-daily-note"></span><br /><span class="muted small">Chạy ở lần quét tự động đầu tiên mỗi ngày (chỉ đọc). Chỉ báo khi một mục hôm trước dùng được nay bị lỗi — thường do Beincom vừa thay đổi.</span></span></label>
       <div class="table-wrap">
-        <table class="requests check-table">
+        <table class="stack requests check-table">
           <thead>
             <tr><th>Mục</th><th>Dùng cho</th><th>Kết quả</th><th>Chi tiết</th></tr>
           </thead>
@@ -1537,7 +1534,7 @@
         </div>
       </div>
       <div class="table-wrap">
-        <table class="requests diag-table">
+        <table class="stack requests diag-table">
           <thead>
             <tr><th>Lúc</th><th>Ở đâu</th><th>Lỗi</th><th class="num">Số lần</th></tr>
           </thead>

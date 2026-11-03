@@ -2,6 +2,13 @@
 
 Mỗi bản một mục, bản mới nhất ở trên. Dashboard tự hiện các mục mới sau khi cập nhật (bấm "Có gì mới" ở cuối trang để xem lại).
 
+## v0.58.0 — 03/11/2026
+- **Giao diện Dashboard gọn hơn, đợt 2**:
+  - **Điện thoại (BeinIOS)**: các bảng (yêu cầu tham gia, thành viên, bài mới, bình luận, báo cáo, nhật ký, bài hẹn giờ…) xếp mỗi dòng thành một thẻ, ô có nhãn cột ("Vào lúc: 1 giờ trước"), nút thao tác luôn thấy — không còn cuộn ngang.
+  - **Đăng bài**: Bài viết / Article / Series là ba nút chọn ở đầu một thẻ (trước là hai thẻ dài xếp chồng). "Sửa bài" và nút + trên lịch tự chuyển về Bài viết.
+  - Mô tả dưới tiêu đề của 17 thẻ (Bài mới đăng, Bình luận mới, Báo cáo, Báo cáo tháng, Tự kiểm tra, Chào thành viên mới…) chuyển vào gợi ý ⓘ cạnh tiêu đề; dòng dưới tiêu đề chỉ còn trạng thái ngắn.
+  - Thanh "Chọn tất cả" đổi nền tím nhạt khi đã chọn mục để thấy rõ nút hàng loạt đang sẵn sàng.
+
 ## v0.57.0 — 03/11/2026
 - **Giao diện Dashboard gọn hơn** (đợt 1, chỉ đổi cách hiện — mọi chức năng, vị trí nút giữ nguyên):
   - Chữ **Be Vietnam Pro** (gói sẵn, cùng bộ với trang Chat), tiêu đề thẻ rõ hơn, nhãn nhóm viết hoa nhỏ.

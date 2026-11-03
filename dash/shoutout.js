@@ -34,7 +34,7 @@ function renderShoutout() {
   const note = $('shout-note');
   if (shout.error) note.textContent = shout.error;
   else if (shout.loading) note.textContent = 'Đang đọc bài trong khoảng ngày đã chọn (có thể mất vài giây)…';
-  else if (!shout.loaded) note.textContent = 'Chọn group, khoảng ngày rồi bấm Tìm người tích cực. Điểm = 5 × số bài + số bình luận đã viết + nửa số cảm xúc bài nhận được. Bình luận chỉ tính những bài addon đã đọc bình luận.';
+  else if (!shout.loaded) note.textContent = '';
   else note.textContent = `Từ ${shout.scanned} bài trong ${shout.days} ngày ở ${g?.name || ''}${g?.isCommunity ? ' và các group con bạn quản trị' : ''}. Tick chọn người cần vinh danh (mặc định ${shout.top} người điểm cao nhất, bỏ người có hồ sơ vi phạm).`;
 
   const n = (x) => Number(x || 0).toLocaleString('vi-VN');

@@ -1479,7 +1479,9 @@ export const scenarios = [
       assert.equal(await page.ev(`document.getElementById('reports-group').selectedOptions[0].value`), 'gFood');
       assert.equal(await page.ev(`document.getElementById('rk-chat').textContent`), '(2)');
       assert.ok(await page.ev(`document.getElementById('reports-status').hidden && !document.getElementById('btn-reports-ignore').hidden`));
-      assert.match(await page.ev(`document.getElementById('reports-note').textContent`), /Tin nhắn trong chat của community bị thành viên báo cáo/);
+      // Mô tả nằm ở ⓘ cạnh tiêu đề thẻ (v0.58.0); dòng dưới tiêu đề chỉ còn trạng thái
+      assert.match(await page.ev(`document.querySelector('#reports .card-head .tip-i').dataset.tip`), /Tin nhắn chat: tin trong chat bị thành viên báo cáo/);
+      assert.doesNotMatch(await page.ev(`document.getElementById('reports-note').textContent`), /Tin nhắn trong chat của community/);
       assert.deepEqual(await page.ev(`[...document.querySelectorAll('#reports-head th')].map((th) => th.textContent)`), ['', 'Tin nhắn bị báo cáo', 'Người gửi', 'Lý do báo cáo', 'Báo cáo đầu', 'Thao tác']);
       const rows = await page.ev(`[...document.querySelectorAll('#reports-body tr')].map((tr) => [tr.children[1].textContent, tr.children[2].textContent, tr.children[3].textContent, [...tr.querySelectorAll('td.act button')].map((b) => b.textContent)])`);
       assert.match(rows[0][0], /# Food Research.*Vào nhóm kèo VIP t\.me\/keo.*Gửi 35 phút trước/);
@@ -2760,7 +2762,27 @@ export const scenarios = [
     },
   },
   {
-    name: 'Màn hình điện thoại: không tràn ngang',
+    name: 'Đăng bài: Bài viết / Article / Series trong một thẻ',
+    async run({ page, url, assert }) {
+      await page.open(url('dashboard', 'tab=compose'));
+      // Mặc định: ô soạn bài hiện, bảng Article ẩn; mục lục nhanh không còn thẻ Article & Series riêng
+      assert.equal(await page.ev(`document.getElementById('article').hidden`), true);
+      assert.ok(!(await page.ev(`[...document.querySelectorAll('#tab-toc .toc-chip')].map((b) => b.textContent)`)).includes('Article & Series'));
+      await page.ev(`document.querySelector('#compose-kind button[data-f=article]').click(); true`);
+      await page.until(() => !document.getElementById('article').hidden && !document.getElementById('compose').classList.contains('kind-post') && document.getElementById('art-title').placeholder === 'Tiêu đề Article');
+      assert.equal(await page.ev(`document.getElementById('compose-text').offsetParent`), null); // ô soạn bài ẩn
+      await page.ev(`document.querySelector('#compose-kind button[data-f=series]').click(); true`);
+      await page.until(() => document.getElementById('art-title').placeholder === 'Tên series' && document.querySelector('#compose-kind button.active').dataset.f === 'series');
+      // Nút cũ (ẩn, mã dùng chung) vẫn đổi loại; Sửa bài / nút + trên lịch gọi setComposeKind('post') để về ô soạn bài
+      await page.ev(`document.querySelector('#article-mode button[data-f=article]').click(); true`);
+      await page.until(() => document.querySelector('#compose-kind button.active').dataset.f === 'article');
+      await page.ev(`setComposeKind('post'); true`);
+      await page.until(() => document.getElementById('article').hidden && document.getElementById('compose').classList.contains('kind-post'));
+      assert.notEqual(await page.ev(`document.getElementById('compose-text').offsetParent`), null);
+    },
+  },
+  {
+    name: 'Màn hình điện thoại: không tràn ngang, bảng xếp dọc có nhãn cột, thanh chọn đổi nền khi đã chọn',
     async run({ page, url, assert }) {
       await page.open(url('dashboard'), { width: 390, height: 844, mobile: true });
       for (const t of TABS) {
@@ -2768,6 +2790,19 @@ export const scenarios = [
         const w = await page.ev(`document.documentElement.scrollWidth`);
         assert.ok(w <= 392, `tab ${t} rộng ${w}px`);
       }
+      // Bảng Thành viên: mỗi dòng là một khối, ô "Vào lúc" có nhãn, ô tên người và ô thao tác không nhãn
+      await page.ev(`showTab('members'); true`);
+      await page.until(() => !!document.querySelector('#members-body td[data-label="Vào lúc"]'));
+      const row = await page.ev(`(() => { const td = document.querySelector('#members-body td[data-label="Vào lúc"]'); const tr = td.closest('tr'); return { display: getComputedStyle(tr).display, label: getComputedStyle(td, '::before').content, first: tr.cells[1].dataset.label || '', act: tr.querySelector('td.act').dataset.label || '', th: getComputedStyle(td.closest('table').tHead).display }; })()`);
+      assert.equal(row.display, 'block');
+      assert.match(row.label, /Vào lúc/);
+      assert.equal(row.first + row.act, '');
+      assert.equal(row.th, 'none');
+      // Thanh chọn hàng loạt đổi nền khi đã chọn mục
+      const bar = () => getComputedStyle(document.getElementById('members-selected').closest('.bulk-bar')).backgroundColor;
+      assert.equal(await page.ev(`(${bar})()`), 'rgba(0, 0, 0, 0)');
+      await page.ev(`document.querySelector('#members-body input[type=checkbox]').click(); true`);
+      await page.until(() => !document.getElementById('btn-members-remove').disabled && getComputedStyle(document.getElementById('members-selected').closest('.bulk-bar')).backgroundColor !== 'rgba(0, 0, 0, 0)');
     },
   },
 ];

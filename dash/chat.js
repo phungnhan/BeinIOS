@@ -68,7 +68,7 @@ function renderChat() {
   const map = data.state.chatMap;
   const note = $('chat-note');
   note.classList.toggle('err-text', !!data.state.chatError);
-  if (!on) note.textContent = 'Chưa bật. Vào Quy tắc & cài đặt → 💬 Chat Beincom để kết nối: addon đọc tin mới trong kênh chat của các group bạn quản trị và báo tin nhắn riêng chưa đọc.';
+  if (!on) note.textContent = 'Chưa bật Chat Beincom — bật ở Quy tắc & cài đặt → 💬 Chat Beincom.';
   else if (data.state.chatError) note.textContent = 'Lỗi đọc chat: ' + data.state.chatError.message;
   else if (!map) note.textContent = 'Chưa đọc chat — bấm ↻ Đọc chat hoặc Quét ngay.';
   else {
