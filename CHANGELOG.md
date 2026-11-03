@@ -2,6 +2,12 @@
 
 Mỗi bản một mục, bản mới nhất ở trên. Dashboard tự hiện các mục mới sau khi cập nhật (bấm "Có gì mới" ở cuối trang để xem lại).
 
+## v0.61.0 — 03/11/2026
+- **Trang Chat: thread nhanh hơn** (đo trước: mở lại thread đã xem vẫn gọi máy chủ; danh sách Thread mỗi lần mở đều đọc lại từ đầu, 1–3 giây):
+  - Mở lại thread đã xem / đã tải trước trong 1 phút: hiện ngay, **không gọi lại**. Lần đọc lại cuộc trò chuyện (4 giây một lần) đã gồm mọi bình luận mới, nên mọi thread của kênh đang xem luôn được coi là mới — bấm "N bình luận" là hiện tức thì.
+  - **Danh sách Thread** tải sẵn lúc trang rảnh, mở là hiện ngay; ẩn rồi mở lại trong 30 giây không đọc lại (nút ↻ vẫn đọc lại ngay). Rê chuột vào một thread trong danh sách là tải trước cả cuộc trò chuyện lẫn bình luận.
+  - Mở một thread từ danh sách: đọc bình luận **song song** với cuộc trò chuyện thay vì chờ xong cái này mới tới cái kia.
+
 ## v0.60.0 — 03/11/2026
 - **Quy tắc & cài đặt chia mục** (như Cài đặt của iPhone / BeinIOS): bên trái là danh sách mục — Hoạt động & quét, Tự xử lý, Theo dõi & nhắc việc, Quy tắc thành viên, Quy tắc bài viết, Chat Beincom, Telegram, Trợ lý AI, Sao lưu & đồng bộ, BeinIOS, Hướng dẫn — kèm trạng thái nhanh (chu kỳ quét / Chạy thử / Đang tắt, Bật / Tắt, Khoá API / Chép – dán); bên phải chỉ hiện mục đang chọn, một cột, chữ nhẹ hơn. Trước đây là hai cột lệch nhau và cột Cài đặt dài gần mười màn hình.
   - Quy tắc thành viên / bài viết xếp một cột (không còn ba cột hộp cao thấp không đều).

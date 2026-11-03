@@ -3,18 +3,23 @@
 //   ngay rồi chỉ đọc phần mới;
 // - tải trước khi rê chuột / chọn bằng phím vào một mục ở danh sách hoặc nút "N bình luận", và vài cuộc trò chuyện chưa đọc
 //   đầu danh sách lúc trang rảnh. Tải trước chỉ đọc, không đánh dấu đã đọc;
-// - bình luận của thread vừa xem cũng nhớ như vậy.
+// - bình luận của thread vừa xem cũng nhớ như vậy; mở lại trong THREAD_FRESH thì không đọc lại. Lần đọc lại cuộc trò chuyện
+//   (4 giây một lần) đã gồm mọi bình luận mới / sửa / xoá của kênh, nên mỗi lần đọc lại là mọi thread đã nhớ của kênh đó
+//   được coi là mới (freshThreads) — mở thread nào của kênh đang xem cũng hiện ngay, không chờ mạng;
+// - danh sách Thread đang theo dõi tải sẵn lúc trang rảnh (warmThreads) và nhớ TLIST_FRESH; mở từ danh sách thì đọc bình
+//   luận song song với cuộc trò chuyện.
 
 const CONV_KEEP = 15; // số cuộc trò chuyện nhớ tin
 const CONV_SINCE_MAX = 30 * 60e3; // bản nhớ cũ hơn 30 phút: đọc lại trang mới nhất thay vì chỉ phần mới
 const THREAD_KEEP = 30;
-const THREAD_FRESH = 60e3; // rê chuột vào "N bình luận": bỏ qua nếu vừa đọc trong 1 phút
+const THREAD_FRESH = 60e3; // bản nhớ thread mới hơn 1 phút: mở / rê chuột không đọc lại
+const TLIST_FRESH = 30e3; // danh sách Thread vừa đọc trong 30 giây: mở lại không đọc lại
 const HOVER_MS = 120; // rê chuột lướt qua (dưới 0,12 giây) thì không tải
 const HOVER_PARALLEL = 2; // rê chuột qua nhiều mục: tải trước tối đa 2 cuộc trò chuyện cùng lúc (mỗi trang tin ~0,4 MB)
 const WARM_MAX = 3; // số cuộc trò chuyện chưa đọc tải sẵn lúc trang rảnh
 const convCache = new Map(); // kênh -> { posts, hasMore, lastSync, seenReplies, loadedAt, at }
 const convLoading = new Map(); // kênh -> lệnh chatPosts đang chạy (tải trước và mở dùng chung)
-const threadCache = new Map(); // tin gốc -> { posts: bình luận, hasNext, at }
+const threadCache = new Map(); // tin gốc -> { posts: bình luận, hasNext, at, channelId }
 const threadLoading = new Map();
 let hoverTimer = 0;
 let warmed = false;
@@ -90,11 +95,11 @@ function warmConvs() {
 
 // ---------- Bình luận (thread) ----------
 
-function fetchThread(rootId) {
+function fetchThread(rootId, channelId = S.sel?.id || '') {
   if (threadLoading.has(rootId)) return threadLoading.get(rootId);
   const p = call('chatThread', { rootId }).then((r) => {
     threadLoading.delete(rootId);
-    if (r.status === 'ok') keepRecent(threadCache, rootId, { posts: r.posts.filter((x) => x.id !== rootId), hasNext: !!r.hasNext, at: Date.now() }, THREAD_KEEP);
+    if (r.status === 'ok') keepRecent(threadCache, rootId, { posts: r.posts.filter((x) => x.id !== rootId), hasNext: !!r.hasNext, at: Date.now(), channelId }, THREAD_KEEP);
     return r;
   });
   threadLoading.set(rootId, p);
@@ -104,15 +109,46 @@ function fetchThread(rootId) {
 // Đóng khung bình luận: nhớ bình luận đang có (mở lại hiện ngay)
 function saveThread(t) {
   if (!t || t.loading) return;
-  keepRecent(threadCache, t.root.id, { posts: [...t.posts.values()].filter((x) => x.id !== t.root.id && !x.pending), hasNext: t.hasNext, at: t.at || Date.now() }, THREAD_KEEP);
+  keepRecent(threadCache, t.root.id, { posts: [...t.posts.values()].filter((x) => x.id !== t.root.id && !x.pending), hasNext: t.hasNext, at: t.at || Date.now(), channelId: t.channelId }, THREAD_KEEP);
 }
 
-function hoverThread(rootId) {
-  clearTimeout(hoverTimer);
-  hoverTimer = setTimeout(() => {
-    const c = threadCache.get(rootId);
-    if (!c || Date.now() - c.at >= THREAD_FRESH) fetchThread(rootId);
+// Bản nhớ còn mới (mở / rê chuột không cần đọc lại)
+function threadFresh(rootId) {
+  const c = threadCache.get(rootId);
+  return !!c && Date.now() - c.at < THREAD_FRESH;
+}
+
+// Lần đọc lại cuộc trò chuyện (chat/conv.js pollChat) kèm mọi bình luận mới / sửa / xoá của kênh từ lần trước: ghi vào bản nhớ
+// của thread tương ứng, và mọi thread đã nhớ của kênh được coi là mới tới lúc `at` (lúc bắt đầu đọc)
+function freshThreads(channelId, posts, at) {
+  for (const p of posts || []) {
+    if (!p.rootId) continue;
+    const c = threadCache.get(p.rootId);
+    if (!c) continue;
+    const i = c.posts.findIndex((x) => x.id === p.id);
+    if (i >= 0) c.posts[i] = p;
+    else c.posts.push(p);
+  }
+  for (const c of threadCache.values()) if (c.channelId === channelId) c.at = Math.max(c.at, at);
+}
+
+let threadHoverTimer = 0;
+function hoverThread(rootId, channelId = S.sel?.id || '') {
+  clearTimeout(threadHoverTimer);
+  threadHoverTimer = setTimeout(() => {
+    if (!threadFresh(rootId)) fetchThread(rootId, channelId);
   }, HOVER_MS);
+}
+const unhoverThread = () => clearTimeout(threadHoverTimer);
+
+// Sau lần đọc đủ đầu tiên: tải sẵn danh sách Thread đang theo dõi lúc trang rảnh (chỉ nhớ, không đụng giao diện)
+let warmedThreads = false;
+function warmThreads() {
+  if (warmedThreads) return;
+  warmedThreads = true;
+  (window.requestIdleCallback || ((f) => setTimeout(f, 2500)))(() => {
+    if (!document.hidden && !S.tlist && !S.tlistLoading) loadThreads({ quiet: true });
+  });
 }
 
 // ---------- Tin đang gửi ----------

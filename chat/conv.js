@@ -467,6 +467,7 @@ async function pollChat(force = false) {
   if (S.polling === c.id) S.polling = false;
   if (S.sel?.id !== c.id || r.status !== 'ok') return;
   S.syncedAt = at;
+  freshThreads(c.id, r.posts, at); // chat/cache.js: bản nhớ các thread của kênh này được coi là mới
   // Tin gốc mới / sửa / xoá hiện ở cuộc trò chuyện; bình luận cập nhật số bình luận và thread đang mở
   const changed = r.posts.filter((p) => {
     if (p.rootId) return !S.seenReplies.has(p.id) || !!S.thread?.posts.has(p.id);
@@ -512,7 +513,10 @@ async function loadOverview({ quiet = false, quick = false } = {}) {
   }
   applyOverview(r);
   afterOverview();
-  if (!r.quick) warmConvs();
+  if (!r.quick) {
+    warmConvs();
+    warmThreads();
+  }
   try {
     await chrome.storage.local.set({ [CACHE_KEY]: { at: Date.now(), me: S.me, teams: S.teams, dms: S.dms, requests: S.requests, dmTeam: r.dmTeam } });
   } catch {}
