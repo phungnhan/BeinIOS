@@ -28,6 +28,7 @@
     nudgeWeekly: false, // sáng thứ Hai soạn sẵn bài nhắc người mới chưa hoạt động (người dùng tự xem rồi đăng)
     nudgeGroupId: '', // group soạn bài nhắc
     selfCheckDaily: true, // mỗi ngày tự kiểm tra (chỉ đọc) mọi community, báo khi tính năng đang chạy bị lỗi
+    dashUi: 'classic', // giao diện Dashboard: classic (Cổ điển) | modern (Hiện đại) — Cài đặt › Giao diện
     promptWeekly: false, // sáng thứ Hai soạn sẵn bài thảo luận (câu hỏi mồi) cho promptGroupId
     promptGroupId: '',
     autoHideSpam: false, // tự ẩn bài / bình luận MỚI có link tới tên miền cấm (sau mỗi lần quét)

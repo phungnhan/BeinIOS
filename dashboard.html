@@ -6,6 +6,8 @@
   <title>BeinFusion · Dashboard</title>
   <link rel="icon" href="icons/icon48.png" />
   <link rel="stylesheet" href="dashboard.css" />
+  <link rel="stylesheet" href="dashboard-modern.css" />
+  <script src="dash/ui-early.js"></script>
 </head>
 <body>
   <header class="topbar">
@@ -1452,6 +1454,13 @@
           <button type="button" class="ghost" id="btn-beinios">Chuyển đăng nhập sang BeinIOS</button>
         </div>
       </div>
+      <div class="group look-group" id="look-set">
+        <div class="group-title">Giao diện Dashboard</div>
+        <div class="look-opts" role="radiogroup" aria-label="Giao diện Dashboard">
+          <label class="look-opt"><span class="look-prev classic" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span><b>Cổ điển <button type="button" class="tip-i" data-tip="Thanh tab ngang trên cùng, như các bản trước." aria-label="Gợi ý: Thanh tab ngang trên cùng, như các bản trước.">i</button></b><input type="radio" name="dashUi" value="classic" /></label>
+          <label class="look-opt"><span class="look-prev modern" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span><b>Hiện đại <button type="button" class="tip-i" data-tip="Màn hình rộng: thanh mục bên trái có biểu tượng, thanh trên trong mờ. Thẻ thoáng, bảng gọn, hiệu ứng chuyển động nhẹ (tự tắt khi máy bật Giảm chuyển động)." aria-label="Gợi ý: Màn hình rộng: thanh mục bên trái có biểu tượng, thanh trên trong mờ. Thẻ thoáng, bảng gọn, hiệu ứng chuyển động nhẹ (tự tắt khi máy bật Giảm chuyển động).">i</button></b><input type="radio" name="dashUi" value="modern" /></label>
+        </div>
+      </div>
       <div class="group help-group-set" id="help-set">
         <div class="group-title">❓ Hướng dẫn</div>
         <div class="help-topics" id="help-set-list"></div>
@@ -1822,6 +1831,7 @@
   <script src="dash/onboarding.js"></script>
   <script src="dash/beinios.js"></script>
   <script src="dash/self.js"></script>
+  <script src="dash/look.js"></script>
   <script src="dash/layout.js"></script>
   <script src="dashboard.js"></script>
 </body>

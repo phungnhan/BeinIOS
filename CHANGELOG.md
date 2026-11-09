@@ -2,6 +2,11 @@
 
 Mỗi bản một mục, bản mới nhất ở trên. Dashboard tự hiện các mục mới sau khi cập nhật (bấm "Có gì mới" ở cuối trang để xem lại).
 
+## v0.64.0 — 09/11/2026
+- **Giao diện Hiện đại cho Dashboard** (Quy tắc & cài đặt › Giao diện, chọn bằng hình xem trước; Cổ điển vẫn là mặc định): màn hình rộng có thanh mục bên trái với biểu tượng nét, thanh trên trong mờ, ô số liệu rời, thẻ thoáng, bảng gọn với tên cột chữ nhỏ, ô nhập có viền sáng khi gõ; cả chế độ sáng và tối. Màn hình hẹp: hàng tab dạng viên thuốc.
+- Hiệu ứng nhẹ, ngắn: thẻ hiện mờ dần khi đổi tab, ô số liệu nổi nhẹ khi rê chuột, vạch chọn mọc ra ở thanh mục, hộp thoại mở mềm với nền mờ, thông báo trượt lên. Máy bật "Giảm chuyển động" thì tắt hết.
+- Giao diện đã chọn áp ngay khi mở Dashboard (không nháy giao diện cũ) và theo Cài đặt đồng bộ sang máy khác.
+
 ## v0.63.1 — 09/11/2026
 - **Hồ sơ thành viên mới** (bấm tên một người ở các bảng, huy hiệu ⚠, hoặc từ trang Chat): cùng kiểu Hồ sơ cá nhân — ảnh bìa, avatar, @tên chép được, nhãn Cao cấp / NFT / Đã khoá, cảnh báo (vi phạm, giống admin, đang xin vào) ngay dưới tên; ô số liệu (vi phạm, bài, bình luận, tin chat, thao tác của admin, số group trên Beincom); bốn thẻ Tổng quan, Vi phạm, Bài viết, Thao tác.
 - Tổng quan cho biết người này có trong cộng đồng nào bạn quản trị và vào từ ngày nào (tìm trong danh sách thành viên, chỉ đọc), tham gia bao nhiêu group trên Beincom, đang xin vào group nào.
