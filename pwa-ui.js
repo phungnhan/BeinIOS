@@ -191,13 +191,24 @@
       },
       true,
     );
-    // Tab "Quy tắc & cài đặt" chuyển vào Cài đặt của ứng dụng: chỗ nào trong Quản trị mở tab đó -> mở Cài đặt
+    // Tab "Quy tắc & cài đặt" chuyển vào Cài đặt của ứng dụng: chỗ nào trong Quản trị mở tab đó -> mở Cài đặt;
+    // mở kèm một mục (showSettingsSec('ai') — nút Cài đặt AI) -> mở thẳng Cài đặt › nhóm đó
     const setTab = document.querySelector('#tabs [data-tab="settings"]');
     if (setTab) {
+      let sec = '';
+      const showSec = window.showSettingsSec;
+      if (typeof showSec === 'function') {
+        window.showSettingsSec = (s) => {
+          if (setTab.getAttribute('aria-selected') === 'true') sec = s;
+          return showSec(s);
+        };
+      }
       const away = () => {
         if (setTab.getAttribute('aria-selected') !== 'true') return;
         window.showTab?.('overview');
-        shell.setup('main');
+        if (sec) shell.setup('dset', sec);
+        else shell.setup('main');
+        sec = '';
       };
       new MutationObserver(away).observe(setTab, { attributes: true, attributeFilter: ['aria-selected'] });
       away();
