@@ -329,6 +329,26 @@
     return `${base}?comment_id=${c.id}` + (c.parentId ? `&parent_id=${c.parentId}` : '');
   }
 
+  // ---------- Kết quả quét: nhiều khoá ----------
+  // Khoá `state` từng chứa mọi thứ (~1 MB ở tài khoản thật): mỗi lần ghi (quét, mỗi thao tác) là cả khối, trang nào đang mở
+  // cũng nhận cả khối cũ lẫn mới. Giờ phần lớn nằm ở khoá riêng — nền ghi đủ các khoá trong một lần, Chrome (và kho của
+  // BeinIOS) chỉ ghi và báo khoá có nội dung đổi. Trường chat* vào stateChat; trường không liệt kê ở `state`.
+  const STATE_PARTS = { stateGroups: ['snapshot', 'memberHistory'], statePosts: ['recentPosts'], stateComments: ['recentComments', 'commentSeen'] };
+  const STATE_KEYS = ['state', ...Object.keys(STATE_PARTS), 'stateChat'];
+  const statePartOf = (field) => (field.startsWith('chat') ? 'stateChat' : Object.keys(STATE_PARTS).find((k) => STATE_PARTS[k].includes(field)) || 'state');
+  // Kho (kết quả get) -> state đầy đủ. Kho trước khi tách (mọi trường trong `state`) vẫn đọc được: khoá riêng có thì đè lên
+  function joinState(store) {
+    const out = { ...(store?.state || {}) };
+    for (const k of STATE_KEYS.slice(1)) if (store?.[k]) Object.assign(out, store[k]);
+    return out;
+  }
+  // state đầy đủ -> { state, stateGroups, … } — khoá nào cũng có (kể cả rỗng) để lần ghi đầu bỏ trường cũ khỏi `state`
+  function splitState(state) {
+    const out = Object.fromEntries(STATE_KEYS.map((k) => [k, {}]));
+    for (const [f, v] of Object.entries(state || {})) if (v !== undefined) out[statePartOf(f)][f] = v;
+    return out;
+  }
+
   // Các phần của BG trong lib/, theo thứ tự nạp
   const PARTS = ['content', 'members', 'compose', 'article', 'manage', 'reports', 'telegram', 'diag', 'chat', 'qr', 'transfer', 'self', 'ai', 'help'];
 
@@ -347,6 +367,9 @@
     parseList,
     vnDay,
     isOk,
+    STATE_KEYS,
+    joinState,
+    splitState,
     SAFE_RESEND,
     sendSafe,
     guardSendMessage,

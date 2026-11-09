@@ -77,7 +77,7 @@ async function finishCompose(r, { base, contentType, state, log }) {
   const message = r.dry ? 'Chạy thử — chưa gửi lên Beincom' : r.status === 'ok' ? BG.CONTENT_STATUS[r.postStatus] || r.postStatus || '' : r.message;
   pushLog(log, [{ time: Date.now(), ...base, contentId: r.contentId || '', contentType, status, message }]);
   const next = r.status === 'need_login' ? { ...state, lastResult: { status: 'need_login', message: NEED_LOGIN.message, mode: r.mode || '' } } : state;
-  await chrome.storage.local.set({ state: next, log });
+  await saveState(next, { log });
   if (r.status === 'need_login') await updateBadge();
   // Theo dõi hiệu quả (bg/insights.js): bài / Article đăng thật qua addon
   if (status === 'ok' && r.contentId && (contentType === 'POST' || contentType === 'ARTICLE')) {
@@ -281,7 +281,7 @@ async function doEditPost({ id, groupIds = [], content, media = null, mentions =
       p.id === id ? { ...p, text: body.content.slice(0, 4000), media: { images: body.media.images.length, videos: body.media.videos.length, files: body.media.files.length }, link: body.linkPreview?.url || '' } : p,
     );
   }
-  await chrome.storage.local.set({ state: next, log });
+  await saveState(next, { log });
   if (r.status === 'need_login') await updateBadge();
   return { status: r.status, message: r.message || r.warning || '', dryRun: !!r.dry, ok: status === 'ok' ? 1 : 0, dry: status === 'dry' ? 1 : 0, failed: status === 'error' ? 1 : 0, errors: status === 'error' ? [r.message] : [] };
 }
@@ -324,7 +324,7 @@ async function doEditScheduled({ id, groupIds = [], content, setting, scheduledA
   const status = r.dry ? 'dry' : r.status === 'ok' ? 'ok' : 'error';
   pushLog(log, [{ time: Date.now(), ...logBase, status, message: r.dry ? DRY_MSG : r.message || '' }]);
   const next = r.status === 'need_login' ? { ...state, lastResult: { status: 'need_login', message: NEED_LOGIN.message, mode: r.mode || '' } } : state;
-  await chrome.storage.local.set({ state: next, log });
+  await saveState(next, { log });
   if (r.status === 'need_login') await updateBadge();
   return { status: r.status, message: r.message || '', dryRun: !!r.dry, ok: status === 'ok' ? 1 : 0, dry: status === 'dry' ? 1 : 0, failed: status === 'error' ? 1 : 0, errors: status === 'error' ? [r.message] : [] };
 }
@@ -340,7 +340,7 @@ async function doPostSetting({ id, setting, snippet = '', groupName = '', actor 
   const r = await performActions([item], settings);
   pushLog(log, r.entries);
   const next = r.status === 'need_login' ? { ...state, lastResult: { status: 'need_login', message: NEED_LOGIN.message, mode: r.mode || '' } } : state;
-  await chrome.storage.local.set({ state: next, log });
+  await saveState(next, { log });
   if (r.status === 'need_login') await updateBadge();
   return summary(r, settings);
 }
@@ -388,7 +388,7 @@ async function doPinAct({ contentId, pin = [], unpin = [], snippet = '', actor =
   const r = await performActions([item], settings);
   pushLog(log, r.entries);
   const next = r.status === 'need_login' ? { ...state, lastResult: { status: 'need_login', message: NEED_LOGIN.message, mode: r.mode || '' } } : state;
-  await chrome.storage.local.set({ state: next, log });
+  await saveState(next, { log });
   if (r.status === 'need_login') await updateBadge();
   return summary(r, settings);
 }
@@ -440,7 +440,7 @@ async function doScheduleAct({ action, contentId, contentIds = null, contentType
   const r = await performActions(items, settings);
   pushLog(log, r.entries);
   const next = r.status === 'need_login' ? { ...state, lastResult: { status: 'need_login', message: NEED_LOGIN.message, mode: r.mode || '' } } : state;
-  await chrome.storage.local.set({ state: next, log });
+  await saveState(next, { log });
   if (r.status === 'need_login') await updateBadge();
   return summary(r, settings);
 }

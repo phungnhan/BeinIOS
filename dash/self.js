@@ -2,7 +2,8 @@
 // Nội dung dựng bằng BG.selfProfile (lib/self.js), dùng chung với trang Chat. Mở thẳng bằng địa chỉ #…&me=1.
 
 async function selfProfileData() {
-  const { state, settings, chatOverviewCache } = await chrome.storage.local.get(['state', 'settings', 'chatOverviewCache']);
+  const { settings, chatOverviewCache, ...parts } = await chrome.storage.local.get(['settings', 'chatOverviewCache', ...BG.STATE_KEYS]);
+  const state = BG.joinState(parts);
   return BG.selfProfile({
     me: state?.me,
     chatMe: chatOverviewCache?.me,

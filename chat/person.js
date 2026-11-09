@@ -51,7 +51,8 @@ async function openPerson(u) {
 async function readSelf() {
   let st = {};
   try {
-    st = await chrome.storage.local.get(['state', 'settings']);
+    st = await chrome.storage.local.get(['settings', ...BG.STATE_KEYS]);
+    st.state = BG.joinState(st);
   } catch {}
   const p = BG.selfProfile({ me: st.state?.me, chatMe: S.me, groups: st.state?.snapshot?.groups || [], settings: { ...BG.DEFAULT_SETTINGS, ...st.settings }, lastScan: st.state?.lastScan, lastResult: st.state?.lastResult });
   return p.sections.map((s) =>

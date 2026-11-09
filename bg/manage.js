@@ -43,7 +43,7 @@ async function doGroupSettingAct({ key, value, groupIds = [], source = 'manual' 
     next.snapshot = { ...state.snapshot, groups: groups.map((g) => (done.has(g.id) ? { ...g, settings: { ...g.settings, [key]: !!value } } : g)) };
   }
   if (r.status === 'need_login') next.lastResult = { status: 'need_login', message: NEED_LOGIN.message, mode: r.mode || '' };
-  await chrome.storage.local.set({ state: next, log });
+  await saveState(next, { log });
   if (r.status === 'need_login') await updateBadge();
   return { ...summary(r, settings), done: [...done] };
 }
@@ -58,7 +58,8 @@ async function doRestore({ data, keepDry = false }) {
     return { status: 'error', message: e.message };
   }
   const d = parsed.data;
-  const { profiles, log = [], settings: current, postStats, nudges, state } = await chrome.storage.local.get(['profiles', 'log', 'settings', 'postStats', 'nudges', 'state']);
+  const { profiles, log = [], settings: current, postStats, nudges } = await chrome.storage.local.get(['profiles', 'log', 'settings', 'postStats', 'nudges']);
+  const state = await loadState();
   const set = {};
   if (d.settings) set.settings = { ...BG.DEFAULT_SETTINGS, ...d.settings, ...(keepDry ? { dryRun: true } : {}), syncSettings: !!current?.syncSettings };
   if (d.rules) set.rules = { ...BG.DEFAULT_RULES, ...d.rules };
@@ -72,7 +73,7 @@ async function doRestore({ data, keepDry = false }) {
   if (d.history) {
     merged = BG.mergeHistory({ postStats, nudges, memberHistory: state?.memberHistory, log }, d.history);
     Object.assign(set, { postStats: merged.postStats, nudges: merged.nudges });
-    set.state = { ...(state || {}), memberHistory: merged.memberHistory };
+    Object.assign(set, BG.splitState({ ...(state || {}), memberHistory: merged.memberHistory }));
     log.length = 0;
     log.push(...merged.log);
   }
@@ -235,7 +236,7 @@ function syncReportCounts(groupId, kind, items) {
     if (!unseen.length && (g[field] || []).join() === ids.join()) return;
     g[field] = ids;
     if (unseen.length) state[known] = [...unseen, ...state[known]].slice(0, KNOWN_MAX);
-    await chrome.storage.local.set({ state });
+    await saveState(state);
     await updateBadge();
   });
 }
@@ -309,7 +310,7 @@ async function doReportAct({ action, groupId, items, reasonType = 'OTHERS', sour
   const ok = r.entries.filter((e) => e.status === 'ok');
   if (action === 'hidePost') next.snapshot = dropFromSnapshot(next.snapshot, 'flaggedIds', new Set(ok.map((e) => e.contentId)));
   else next.snapshot = dropFromSnapshot(next.snapshot, 'reportIds', new Set(ok.map((e) => e.reportId)));
-  await chrome.storage.local.set({ state: next, log });
+  await saveState(next, { log });
   if (r.status === 'need_login' || ok.length) await updateBadge();
   return { ...summary(r, settings), done: ok.map((e) => e.contentId) };
 }
@@ -360,7 +361,7 @@ async function doTagAct({ action, groupId, tagId = '', name = '', oldName = '', 
   const r = await performActions([item], settings);
   pushLog(log, r.entries);
   const next = r.status === 'need_login' ? { ...state, lastResult: { status: 'need_login', message: NEED_LOGIN.message, mode: r.mode || '' } } : state;
-  await chrome.storage.local.set({ state: next, log });
+  await saveState(next, { log });
   if (r.status === 'need_login') await updateBadge();
   return summary(r, settings);
 }

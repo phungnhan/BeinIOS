@@ -135,7 +135,7 @@ async function doBeinLinkNames({ links = [] }) {
     else todo.push(l);
   }
   if (!todo.length) return { status: 'ok', names };
-  const { state } = await chrome.storage.local.get('state');
+  const state = await loadState();
   const groups = state?.snapshot?.groups || [];
   const put = (key, v) => {
     names[key] = v;
@@ -219,11 +219,11 @@ async function doChatReports({ communityId }) {
     const r = await readChatReports(client, communityId);
     if (r.status === 401) return { ...chatLoginErr };
     if (!r.ok) return { status: 'error', code: r.status === 403 ? 'not_admin' : '', message: r.status === 403 ? 'Chỉ chủ / admin community đọc được tin nhắn chat bị báo cáo' : 'Đọc báo cáo chat lỗi: ' + r.message };
-    const { state } = await chrome.storage.local.get('state');
+    const state = await loadState();
     if (state) {
       const name = state.chatReports?.[communityId]?.name || (state.snapshot?.groups || []).find((g) => g.communityId === communityId && g.isCommunity)?.name || '';
       state.chatReports = { ...(state.chatReports || {}), [communityId]: { at: Date.now(), name, items: r.items, more: r.more } };
-      await chrome.storage.local.set({ state });
+      await saveState(state);
       await updateBadge();
     }
     return { status: 'ok', items: r.items, more: r.more };
@@ -249,11 +249,11 @@ async function doChatReportAct({ communityId, action, items = [], communityName 
     pushLog(log, r.entries);
     // Báo cáo đã xử lý (hoặc tin đã bị xoá) rời khỏi danh sách đang chờ
     const done = new Set(r.entries.filter((e) => e.status === 'ok').map((e) => e.contentId));
-    const { state } = await chrome.storage.local.get('state');
+    const state = await loadState();
     if (state?.chatReports?.[communityId] && done.size) {
       const c = state.chatReports[communityId];
       state.chatReports = { ...state.chatReports, [communityId]: { ...c, items: (c.items || []).filter((x) => !done.has(x.id)) } };
-      await chrome.storage.local.set({ state, log });
+      await saveState(state, { log });
     } else await chrome.storage.local.set({ log });
     await updateBadge();
     return { ...summary(r, settings), done: [...done] };
@@ -441,7 +441,7 @@ async function doChatRefresh() {
   if (!settings.chatEnabled) return { status: 'error', message: 'Chưa bật chat Beincom ở Cài đặt' };
   const next = { ...state };
   const r = await withClient((client) => syncChat(client, { settings, state, next, notifyAllowed: false, ctx: rulesCtx(loaded, state.snapshot?.groups), force: true }));
-  await chrome.storage.local.set({ state: next });
+  await saveState(next);
   return r.status === 'ok' ? { status: 'ok', channels: next.chatMap?.channels.length || 0 } : r;
 }
 
@@ -453,7 +453,7 @@ async function doChatAct({ action, ids = [], source = 'manual' }) {
   if (!list.length) return { status: 'error', message: 'Không còn tin nhắn này trong danh sách' };
   if (action === 'dismiss' || action === 'undismiss') {
     const next = { ...state, chatMessages: state.chatMessages.map((x) => (want.has(x.id) ? { ...x, dismissed: action === 'dismiss' } : x)) };
-    await chrome.storage.local.set({ state: next });
+    await saveState(next);
     return { status: 'ok', ok: list.length, dry: 0, failed: 0, errors: [], dryRun: false };
   }
   if (action !== 'delete') return { status: 'error', message: 'Thao tác không hợp lệ' };
@@ -472,7 +472,7 @@ async function doChatAct({ action, ids = [], source = 'manual' }) {
   pushLog(log, r.entries);
   const next = { ...state, chatMessages: BG.markChatDeleted(state.chatMessages, r.entries.filter((e) => e.status === 'ok').map((e) => e.contentId)) };
   if (r.status === 'need_login') next.lastResult = { status: 'need_login', message: NEED_LOGIN.message, mode: r.mode || '' };
-  await chrome.storage.local.set({ state: next, log });
+  await saveState(next, { log });
   return { ...summary(r, settings), deleted: r.entries.filter((e) => e.status === 'ok').map((e) => e.contentId), skipped: list.length - items.length };
 }
 
