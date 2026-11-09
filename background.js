@@ -150,6 +150,8 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     stats: () => doStats(msg),
     // Hồ sơ cá nhân: thông tin trang cá nhân Beincom (chỉ đọc, không lưu)
     selfInfo: () => doSelfInfo(),
+    // Hồ sơ một người: có trong các cộng đồng bạn quản trị không, ngày vào (chỉ đọc)
+    memberInfo: () => doMemberInfo(msg),
     reports: () => doReports(msg),
     reportDetail: () => doReportDetail(msg),
     // Tải file lên trước khi đăng: không chờ lần quét đang chạy

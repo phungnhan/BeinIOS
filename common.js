@@ -184,7 +184,7 @@
     'chatQuotes', 'beinLinkNames', 'postFull', 'postComments', 'members', 'activity', 'scheduled', 'stats', 'reports', 'reportDetail',
     'mentionable', 'postDetail', 'pinned', 'groupSettings', 'banned', 'tagsSeries', 'tags', 'newMembers', 'syncStatus', 'storageUsage',
     'chatOverview', 'chatPosts', 'chatThread', 'chatThreads', 'chatPinned', 'chatMentions', 'chatReactions', 'chatSearch', 'userPosts',
-    'sweepSearch', 'monthly', 'linkPreview', 'retention', 'categories', 'refreshBadge', 'selfCheck', 'nudgeEffect', 'postStatsRefresh', 'selfInfo',
+    'sweepSearch', 'monthly', 'linkPreview', 'retention', 'categories', 'refreshBadge', 'selfCheck', 'nudgeEffect', 'postStatsRefresh', 'selfInfo', 'memberInfo',
   ]);
   const LOST_RE = /message channel closed|message port closed|Receiving end does not exist|Could not establish connection/i;
   const STALE_RE = /Extension context invalidated/i;

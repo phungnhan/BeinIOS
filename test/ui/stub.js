@@ -782,6 +782,11 @@
           };
         }
         // Tự kiểm tra: phần lớn dùng được, vài mục bỏ qua vì quyền, một mục lỗi
+        // Hồ sơ một người: có trong cộng đồng nào của bạn (như nền trả)
+        if (m.type === 'memberInfo') {
+          window.__memberInfo = m;
+          return { status: 'ok', memberships: [{ groupId: 'gFood', name: 'Food Research', url: 'https://group.beincom.com/community-detail/cFood', joinedAt: '2026-03-12T00:00:00Z', admin: false }], person: { isVerified: false, isDeactivated: false, premium: true, nft: false, totalJoinedGroup: 7 }, checked: 2, errors: 0 };
+        }
         // Hồ sơ cá nhân: thông tin trang cá nhân Beincom (như nền trả: BG.slimSelfInfo)
         if (m.type === 'selfInfo') {
           window.__selfInfo = (window.__selfInfo || 0) + 1;
