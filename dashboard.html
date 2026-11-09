@@ -703,6 +703,7 @@
           <div id="art-groups" class="check-list"></div>
         </div>
         <div class="compose-main art-main">
+          <div class="art-ai article-only"><button type="button" class="ghost sm" id="btn-art-ai">✨ AI viết Article</button> <button type="button" class="tip-i" data-tip="AI viết tiêu đề, tóm tắt và nội dung có các mục theo loại bài bạn chọn; đang có chữ thì AI viết lại cho hay hơn. Bạn vẫn tự thêm ảnh bìa, chọn chuyên mục rồi đăng." aria-label="Gợi ý: AI viết tiêu đề, tóm tắt và nội dung có các mục theo loại bài bạn chọn; đang có chữ thì AI viết lại cho hay hơn. Bạn vẫn tự thêm ảnh bìa, chọn chuyên mục rồi đăng.">i</button></div>
           <label class="art-field">
             <span class="art-label"><b id="art-title-label">Tiêu đề</b><span class="muted small" id="art-title-n"></span></span>
             <input type="text" id="art-title" maxlength="64" />
@@ -1698,7 +1699,8 @@
         <button type="button" data-m="web" data-tip="Không cần khoá: dùng Claude / ChatGPT / Gemini bạn đang có — chép đề bài sang, dán câu trả lời về">AI trên web (chép – dán)</button>
         <button type="button" data-m="api" data-tip="Tự động hoàn toàn bằng khoá API Claude (tính phí theo lần dùng)">Khoá API Claude (tự động)</button>
       </div>
-      <label class="ar-opt ar-note ad-note"><span class="muted small">Ghi chú cho AI</span><input type="text" id="ad-note" maxlength="500" /></label>
+      <div class="ad-extra" id="ad-extra" hidden></div>
+      <label class="ar-opt ar-note ad-note"><span class="muted small" id="ad-note-label">Ghi chú cho AI</span><textarea id="ad-note" rows="2" maxlength="2000"></textarea></label>
       <div class="ar-web" id="ad-web">
         <div class="ar-step">
           <span class="ar-num">1</span>
@@ -1711,6 +1713,7 @@
       </div>
       <div class="ar-opts" id="ad-api"><button type="button" class="primary" id="ad-gen">Nhờ AI viết</button></div>
       <div class="ar-setup" id="ad-setup" hidden>Chưa có khoá API Claude — dùng AI trên web, hoặc dán khoá ở Cài đặt.</div>
+      <details class="ap-preview ad-prompt-box" id="ad-prompt-box"><summary>Xem đề bài gửi AI</summary><pre id="ad-prompt"></pre></details>
       <p class="small muted" id="ad-status" role="status" aria-live="polite"></p>
       <label class="ad-result-label" for="ad-result"><b>Kết quả</b> <span class="muted small">(sửa được)</span></label>
       <textarea id="ad-result" rows="10"></textarea>
