@@ -148,6 +148,7 @@ node test/pwa/pwa.e2e.mjs
 
 ## Lịch sử BeinIOS
 
+- **1.8.1 (09/11/2026).** Gộp addon BeinFusion 0.63.0 — Hồ sơ cá nhân mới; trang Tài khoản thêm dải số liệu dưới tên (cộng đồng, group, thành viên, việc đang chờ, thao tác 30 ngày) và mục Hoạt động 30 ngày theo Nhật ký; Quyền quản trị ghi thêm số thành viên và việc chờ của từng cộng đồng.
 - **1.8.0 (09/11/2026).** Gộp addon BeinFusion 0.62.0 — kết quả quét lưu thành nhiều phần, chỉ phần đổi được ghi và báo cho trang (trước đây cả khối ~1 MB mỗi lần quét / mỗi thao tác); kho của BeinIOS không ghi lại phần không đổi; Dashboard cập nhật thẳng từ phần thay đổi. Quét nhớ group chưa có bài, lần sau chỉ chờ 5 giây.
 - **1.7.8 (03/11/2026).** Gộp addon BeinFusion 0.61.3 — Tự kiểm tra nhanh hơn nhiều: mỗi mục chạy ngay khi mục nó cần đã xong, 8 mục cùng lúc, group chưa có bài chỉ chờ "Bài mới đăng" 5 giây; trong lúc chạy hiện "x/y mục", xong ghi thời gian chạy. Trên iPhone (mỗi lệnh đi qua proxy) càng thấy rõ.
 - **1.7.7 (03/11/2026).** Gộp addon BeinFusion 0.61.2 — Tự kiểm tra hết báo nhầm "Chat: biểu cảm — HTTP 200" (tin chưa có biểu cảm) và "Bài mới đăng" ở group chưa có bài; quét và Thống kê chờ bài mới tối đa 15 giây rồi coi như không có bài, không ghi Lỗi kỹ thuật.
