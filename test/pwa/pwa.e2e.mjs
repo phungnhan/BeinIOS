@@ -335,7 +335,7 @@ try {
   await page.ev(`document.getElementById('close').click(); true`);
   await page.until(() => !document.getElementById('setup').classList.contains('open'), 3000);
   await page.ev(frame('f-dash', "showTab('ai'), true"));
-  await page.until(() => document.getElementById('f-dash').contentDocument.querySelectorAll('#ai-hub-tasks .ai-task').length === 5, 5000);
+  await page.until(() => document.getElementById('f-dash').contentDocument.querySelectorAll('#ai-hub-tasks .ai-task').length === 6, 5000);
   await shot('8a-tro-ly-ai');
   await page.ev(frame('f-dash', "document.getElementById('btn-ai-hub-settings').click(), true"));
   await page.until(new Function(`return ${isOpen('dset')} && document.getElementById('dset-title').textContent === 'AI trả lời bình luận' && /tab=overview/.test(document.getElementById('f-dash').contentWindow.location.hash)`), 8000);
