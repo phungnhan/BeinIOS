@@ -36,6 +36,10 @@ html[data-ui="modern"] {
   }
 }
 
+/* Thanh cuộn, ô chọn có sẵn của trình duyệt theo chế độ sáng / tối; thanh cuộn mảnh */
+html[data-ui="modern"] { color-scheme: light dark; scrollbar-color: color-mix(in srgb, var(--muted) 40%, transparent) transparent; }
+html[data-ui="modern"] * { scrollbar-width: thin; }
+
 /* ---------- Chữ, nút, ô nhập ---------- */
 html[data-ui="modern"] body { font-size: 13.5px; letter-spacing: -.003em; }
 html[data-ui="modern"] h2 { font-size: 15px; font-weight: 600; letter-spacing: -.012em; }
