@@ -27,6 +27,9 @@
     return m ? m[1] : '';
   }
 
+  // Trường presigned_post gửi lên kho lưu trữ: như web Beincom (group.beincom.com, hàm tải ảnh của trình soạn bài)
+  const S3_FIELDS = ['key', 'bucket', 'X-Amz-Algorithm', 'X-Amz-Credential', 'X-Amz-Date', 'X-Amz-Security-Token', 'Policy', 'X-Amz-Signature'];
+
   // Hạn chờ tổng để Beincom xử lý xong (mỗi lượt uploadWait chỉ chờ tới khoảng 20 giây, chưa xong thì gọi lại)
   const WAIT_TOTAL_MS = { image: 180e3, video: 600e3 };
   const WAIT_GAP_MS = 2000; // lượt chờ trả lời ngay mà chưa xong: nghỉ chừng này rồi hỏi lại
@@ -80,10 +83,16 @@
         onProgress(1);
         return item;
       }
+      // Đúng các trường web Beincom gửi, đúng thứ tự (S3 cần file đứng sau cùng)
       const form = new FormData();
-      for (const [k, v] of Object.entries(init.fields || {})) form.append(k, v);
-      form.append('file', file, file.name || 'file'); // S3 cần file đứng sau cùng
-      const r = await post(init.url, form, { onProgress });
+      const fields = init.fields || {};
+      for (const k of S3_FIELDS) if (fields[k] != null) form.append(k, fields[k]);
+      form.append('file', file, file.name || 'file');
+      // KHÔNG theo dõi tiến độ: gắn theo dõi tiến độ tải lên buộc trình duyệt hỏi trước kho lưu trữ (CORS preflight), mà kho của
+      // Beincom chỉ nhận trang group.beincom.com -> từ chối, file không được gửi đi (rồi chờ xử lý mãi). Gửi dạng thường thì file
+      // lên kho bình thường, chỉ không đọc được phản hồi (status 0) — bước chờ xử lý kiểm tra. onProgress(-1): đang tải, chưa rõ %.
+      onProgress(-1);
+      const r = await post(init.url, form, {});
       // status 0: kho lưu trữ không cho trang addon đọc phản hồi (CORS); file có thể đã lên, bước chờ sẽ kiểm tra
       if (r.status && (r.status < 200 || r.status >= 300)) throw new Error('Tải lên kho lưu trữ lỗi: ' + (s3Error(r.text) || 'HTTP ' + r.status));
       onProgress(1);
@@ -96,5 +105,5 @@
     return { upload };
   }
 
-  return { xhrPost, s3Error, createUploader, WAIT_TOTAL_MS };
+  return { xhrPost, s3Error, createUploader, WAIT_TOTAL_MS, S3_FIELDS };
 });
