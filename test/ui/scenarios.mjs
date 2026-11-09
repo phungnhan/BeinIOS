@@ -3182,6 +3182,75 @@ export const scenarios = [
     },
   },
   {
+    name: 'Đăng bài: dán ảnh (Ctrl + V) / kéo thả vào ô soạn bài và ô Article; có chữ đi kèm thì dán chữ; Beincom xử lý ảnh lâu thì chờ nhiều lượt, nút Đăng ghi đang xử lý',
+    async run({ page, url, assert }) {
+      await page.open(url('dashboard', 'tab=compose'));
+      await page.until(() => !!document.getElementById('compose-text') && Array.isArray(compose.media));
+      const fire = (kind, target, name, type, text) =>
+        page.call(
+          (k, t, n, ty, tx, b64) => {
+            const bin = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+            const dt = new DataTransfer();
+            dt.items.add(new File([bin], n, { type: ty }));
+            if (tx) dt.setData('text/plain', tx);
+            const ev = k === 'paste' ? new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }) : new DragEvent('drop', { dataTransfer: dt, bubbles: true, cancelable: true });
+            document.getElementById(t).dispatchEvent(ev);
+            return { prevented: ev.defaultPrevented, names: compose.media.map((m) => m.name), tray: !document.getElementById('compose-media').hidden };
+          },
+          kind,
+          target,
+          name,
+          type,
+          text || '',
+          B64_PNG,
+        );
+      // Dán ảnh chụp màn hình: thành ảnh đính kèm, đặt tên theo giờ dán
+      const a = await fire('paste', 'compose-text', 'image.png', 'image/png');
+      assert.equal(a.prevented, true);
+      assert.equal(a.tray, true);
+      assert.equal(a.names.length, 1);
+      assert.match(a.names[0], /^anh-dan-\d{6}\.png$/);
+      // Có chữ đi kèm (vd chép ô Excel): dán chữ như thường, không thêm ảnh
+      const b = await fire('paste', 'compose-text', 'image.png', 'image/png', 'Bảng số liệu');
+      assert.deepEqual([b.prevented, b.names.length], [false, 1]);
+      // Kéo thả ảnh có tên thật: giữ tên
+      const c = await fire('drop', 'editor-body', 'DCA Crypto Investment Misconceptions.png', 'image/png');
+      assert.deepEqual([c.prevented, c.names[1]], [true, 'DCA Crypto Investment Misconceptions.png']);
+      // Kéo thả tệp khác loại khi bài đang có ảnh: không thêm (mỗi bài một loại)
+      const d = await fire('drop', 'editor-body', 'bao-cao.pdf', 'application/pdf');
+      assert.equal(d.names.length, 2);
+      // Beincom xử lý ảnh đầu lâu (2 lượt chưa xong): chờ tiếp, nút Đăng ghi đang xử lý; xong cả hai ảnh
+      await page.ev(`(() => {
+        const real = chrome.runtime.sendMessage.bind(chrome.runtime);
+        window.__waits = 0;
+        window.__btnTexts = [];
+        new MutationObserver(() => window.__btnTexts.push(document.getElementById('btn-compose').textContent)).observe(document.getElementById('btn-compose'), { childList: true, characterData: true, subtree: true });
+        chrome.runtime.sendMessage = async (m, ...rest) => {
+          if (m?.type === 'uploadWait' && ++window.__waits <= 2) return { status: 'pending' };
+          return real(m, ...rest);
+        };
+        return true;
+      })()`);
+      const n = await page.ev(`uploadMedia().then((r) => (r ? r.images.length : -1))`);
+      assert.equal(n, 2);
+      assert.deepEqual(await page.ev(`compose.media.map((m) => m.status)`), ['done', 'done']);
+      assert.equal(await page.ev(`window.__waits`), 4);
+      assert.ok((await page.ev(`window.__btnTexts`)).some((t) => /^Beincom đang xử lý ảnh 1\/2… \d+ giây$/.test(t)));
+      // Article: dán ảnh vào ô nội dung -> chèn vào chỗ con trỏ
+      await page.ev(`setComposeKind('article'); document.getElementById('art-content').value = 'Mở bài.'; document.getElementById('art-content').setSelectionRange(7, 7); true`);
+      const e = await page.call((b64) => {
+        const bin = Uint8Array.from(atob(b64), (ch) => ch.charCodeAt(0));
+        const dt = new DataTransfer();
+        dt.items.add(new File([bin], 'image.png', { type: 'image/png' }));
+        const ev = new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true });
+        document.getElementById('art-content').dispatchEvent(ev);
+        return { prevented: ev.defaultPrevented, value: document.getElementById('art-content').value };
+      }, B64_PNG);
+      assert.equal(e.prevented, true);
+      assert.match(e.value, /^Mở bài\.\n!\[anh-dan-\d{6}\.png\]\(local:\d+\)\n$/);
+    },
+  },
+  {
     name: 'Giao diện Dashboard: Cổ điển mặc định, chọn Hiện đại ở Cài đặt › Giao diện (thanh mục bên trái, nhớ khi mở lại), đổi lại được',
     async run({ page, url, assert }) {
       await page.open(url('dashboard', 'tab=settings&sec=look'));

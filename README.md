@@ -138,7 +138,9 @@ Tab Quy tắc & cài đặt và Nhật ký chỉ dùng dữ liệu trong máy n�
     - Video: 1, ≤ 300 MB.
     - Tệp: tối đa 25, mỗi tệp ≤ 5 MB (pdf, Word, Excel, PowerPoint, OpenDocument, txt, csv, zip, html).
     - Chọn file thì hiện ảnh thu nhỏ / tên tệp, bấm × để bỏ. File chỉ giữ trong lúc mở trang, không lưu vào nháp.
+    - **Dán ảnh** (Ctrl + V: ảnh chụp màn hình, ảnh chép từ web) hoặc **kéo thả** ảnh / video / tệp vào ô soạn (v0.69.2, `clipFiles` ở `dash/attach.js`): ảnh dán không có tên thật thì đặt `anh-dan-<giờ>.png`; bộ nhớ tạm có chữ đi kèm thì dán chữ như thường. Ô nội dung Article: dán / kéo thả ảnh chèn `![tên](local:N)` vào chỗ con trỏ.
     - File được tải lên Beincom **lúc bấm Đăng** (có thanh tiến độ), rồi mới đăng bài. Đang Chạy thử thì không tải gì lên, nhật ký ghi số file.
+    - Chờ Beincom xử lý ảnh / video (v0.69.2): mỗi lượt `uploadWait` chờ tới khoảng 20 giây (mỗi lần gọi mạng tối đa 25 giây), chưa xong thì trả `pending` và `upload.js` hỏi lại — tổng tới 3 phút với ảnh, 10 phút với video; nút Đăng ghi đang chờ bao lâu.
     - Một file lỗi thì dừng, không đăng; bấm Đăng lần nữa để thử lại (file đã tải xong không tải lại).
     - Có thể đăng bài chỉ có ảnh / video / tệp, không cần chữ.
   - Tuỳ chọn cho bình luận, cho thả cảm xúc, đánh dấu **Quan trọng** với hạn như trên Beincom: không hết hạn, 1 ngày, 3 ngày, 1 tuần, 2 tuần, 1 tháng, 3 tháng, 6 tháng, 1 năm, hoặc tự chọn ngày giờ. Hạn tính từ lúc bài được đăng (giờ hẹn nếu hẹn giờ).

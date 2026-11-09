@@ -102,8 +102,10 @@ async function finishCompose(r, { base, contentType, state, log }) {
 //  - video: POST upload/videos/ { properties: { mime_type } } (kèm x-version-id) -> { id, presigned_post }
 //  - tệp:  POST upload/files/ -> { id }; Dashboard gửi file tới upload/files/{id}
 // Ảnh / video: Dashboard gửi file lên presigned_post.url rồi gọi uploadWait để chờ Beincom xử lý.
+// Mỗi lần gọi mạng tối đa 25 giây (bg/core.js) nên một lần uploadWait chỉ chờ một lượt: chưa xong thì trả { status: 'pending' }
+// và Dashboard (upload.js) gọi lại tới khi xong hoặc hết hạn chờ tổng (ảnh PNG lớn Beincom có thể xử lý quá 25 giây).
 const UPLOAD_PATH = { image: 'upload/images/', video: 'upload/videos/', file: 'upload/files/' };
-const UPLOAD_WAIT_MS = { image: 120e3, video: 600e3 };
+const UPLOAD_WAIT_MS = { image: 20e3, video: 20e3 };
 
 const IMAGE_RESOURCES = ['post:content', 'article:cover', 'article:content', 'series:cover'];
 
@@ -128,11 +130,12 @@ async function doUploadWait({ kind, id, unsure = false }) {
   return withClient(async (client) => {
     const r = await client.call('GET', `${UPLOAD_PATH[kind]}${id}?wait=true`, null, kind === 'video' ? '2.0.0' : '', UPLOAD_WAIT_MS[kind]);
     if (r.status === 401) return { ...NEED_LOGIN };
-    if (r.timeout) return { status: 'error', message: kind === 'video' ? 'Beincom xử lý video quá lâu, thử lại sau' : 'Beincom xử lý ảnh quá lâu' };
+    if (r.timeout) return { status: 'pending' }; // lượt chờ này hết giờ: Dashboard gọi lại
     const d = r.body?.data;
     if (!BG.isOk(r) || !d) return { status: 'error', message: 'Beincom chưa nhận file: ' + BG.errMsg(r) };
     if (d.status === 'ERROR') return { status: 'error', message: 'Beincom báo lỗi file: ' + (d.error_message || 'không rõ') };
-    if (!d.url && (kind === 'image' || unsure)) return { status: 'error', message: unsure ? 'File chưa lên được kho lưu trữ (trình duyệt có thể đã chặn)' : 'Beincom chưa xử lý xong ảnh' };
+    // Chưa có link: ảnh còn đang xử lý (hoặc file chưa lên kho lưu trữ khi không đọc được phản hồi) — chờ tiếp
+    if (!d.url && (kind === 'image' || unsure)) return { status: 'pending', unsure };
     return { status: 'ok', item: BG.mediaItem(kind, id, d) };
   });
 }
