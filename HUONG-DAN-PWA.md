@@ -148,6 +148,7 @@ node test/pwa/pwa.e2e.mjs
 
 ## Lịch sử BeinIOS
 
+- **1.8.4 (09/11/2026).** Gộp addon BeinFusion 0.65.0 — giao diện Hiện đại của Dashboard trên máy tính: mỗi tab một thẻ với hàng mục con; hồ sơ không còn hiện Mã Beincom ở chỗ dễ thấy (Hồ sơ cá nhân: cuối thẻ Addon).
 - **1.8.3 (09/11/2026).** Gộp addon BeinFusion 0.64.0 — giao diện Dashboard Hiện đại cho máy tính (Cài đặt › Giao diện của addon). Trên iPhone, BeinIOS giữ giao diện riêng kiểu iPhone; mục Giao diện không hiện trong Cài đặt của BeinIOS.
 - **1.8.2 (09/11/2026).** Gộp addon BeinFusion 0.63.1 — Hồ sơ thành viên mới (ảnh bìa, ô số liệu, thẻ Tổng quan / Vi phạm / Bài viết / Thao tác; có trong cộng đồng nào của bạn, ngày vào, số group trên Beincom); Hồ sơ cá nhân hết chữ "null", tên đăng nhập chép được.
 - **1.8.1 (09/11/2026).** Gộp addon BeinFusion 0.63.0 — Hồ sơ cá nhân mới; trang Tài khoản thêm dải số liệu dưới tên (cộng đồng, group, thành viên, việc đang chờ, thao tác 30 ngày) và mục Hoạt động 30 ngày theo Nhật ký; Quyền quản trị ghi thêm số thành viên và việc chờ của từng cộng đồng.
