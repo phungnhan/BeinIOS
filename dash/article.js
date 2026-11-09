@@ -83,7 +83,7 @@ async function uploadArticleImages(md) {
   for (const [i, n] of refs.entries()) {
     const im = art.images[n];
     if (!im) throw new Error('Ảnh trong bài cần chọn lại (ảnh không được lưu trong nháp)');
-    if (!im.item) im.item = await uploader.upload('image', im.file, (p) => ($('btn-art-submit').textContent = `Đang tải ảnh ${i + 1}/${refs.length} · ${Math.round(p * 100)}%`), { resource: 'article:content', onWait: (ms) => ($('btn-art-submit').textContent = `Beincom đang xử lý ảnh ${i + 1}/${refs.length}… ${Math.round(ms / 1000)} giây`) });
+    if (!im.item) im.item = await uploader.upload('image', im.file, (p) => ($('btn-art-submit').textContent = `Đang tải ảnh ${i + 1}/${refs.length}${p >= 0 ? ' · ' + Math.round(p * 100) + '%' : '…'}`), { resource: 'article:content', onWait: (ms) => ($('btn-art-submit').textContent = `Beincom đang xử lý ảnh ${i + 1}/${refs.length}… ${Math.round(ms / 1000)} giây`) });
     out = out.split(`](local:${n})`).join(`](${im.item.url})`);
   }
   return out;
@@ -325,7 +325,7 @@ function renderArticle() {
 async function uploadCover() {
   if (art.cover.item) return art.cover.item;
   const resource = art.mode === 'article' ? 'article:cover' : 'series:cover';
-  art.cover.item = await uploader.upload('image', art.cover.file, (p) => ($('btn-art-submit').textContent = `Đang tải ảnh bìa ${Math.round(p * 100)}%…`), { resource, onWait: (ms) => ($('btn-art-submit').textContent = `Beincom đang xử lý ảnh bìa… ${Math.round(ms / 1000)} giây`) });
+  art.cover.item = await uploader.upload('image', art.cover.file, (p) => ($('btn-art-submit').textContent = `Đang tải ảnh bìa${p >= 0 ? ' ' + Math.round(p * 100) + '%' : ''}…`), { resource, onWait: (ms) => ($('btn-art-submit').textContent = `Beincom đang xử lý ảnh bìa… ${Math.round(ms / 1000)} giây`) });
   return art.cover.item;
 }
 

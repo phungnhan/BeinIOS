@@ -2,6 +2,10 @@
 
 Mỗi bản một mục, bản mới nhất ở trên. Dashboard tự hiện các mục mới sau khi cập nhật (bấm "Có gì mới" ở cuối trang để xem lại).
 
+## v0.69.3 — 09/11/2026
+- **Sửa tận gốc lỗi không đăng được bài có ảnh / video**: addon gắn "theo dõi tiến độ" khi gửi file lên kho lưu trữ của Beincom, việc này buộc trình duyệt hỏi trước kho (CORS) — mà kho chỉ chấp nhận trang group.beincom.com nên từ chối, **file không hề được gửi đi**; addon không đọc được phản hồi nên cứ chờ Beincom xử lý rồi báo "xử lý ảnh quá lâu". Giờ gửi như web Beincom nhưng không theo dõi tiến độ: file lên kho bình thường (đã kiểm chứng: có theo dõi tiến độ máy chủ chỉ nhận lời hỏi trước, 0 byte; không theo dõi thì nhận đủ file). Thanh tiến độ của ảnh / video chạy dạng "đang tải" thay cho phần trăm. Gửi đúng các trường như web (key, bucket, chữ ký…). Áp dụng cho bài thường, ảnh trong Article, ảnh bìa Article / Series.
+- Sau khi cập nhật: vào trang quản lý tiện ích (chrome://extensions hoặc edge://extensions) bấm **Tải lại** BeinFusion rồi mở lại Dashboard — phần chạy nền đổi, chỉ tải lại trang Dashboard là chưa đủ.
+
 ## v0.69.2 — 09/11/2026
 - **Sửa lỗi đăng ảnh "Beincom xử lý ảnh quá lâu"**: từ v0.61.1 mỗi lần gọi mạng chỉ chờ tối đa 25 giây (để trình duyệt không tắt nền addon), nên bước chờ Beincom xử lý ảnh vốn được 2 phút cũng bị cắt còn 25 giây — ảnh PNG lớn (như ảnh AI tạo) cần lâu hơn thì báo lỗi. Giờ addon chờ nhiều lượt ngắn liên tiếp: tới 3 phút với ảnh, 10 phút với video; nút Đăng ghi "Beincom đang xử lý ảnh 1/2… 35 giây" để biết không bị treo. Áp dụng cả ảnh trong Article và ảnh bìa.
 - **Dán ảnh vào ô soạn bài**: Ctrl + V ảnh chụp màn hình hay ảnh chép từ trang web / ứng dụng là thành ảnh đính kèm (ảnh dán đặt tên theo giờ, vd anh-dan-153012.png). Kéo thả ảnh, video hoặc tệp vào ô soạn cũng được. Ô nội dung Article: dán / kéo thả ảnh là chèn vào đúng chỗ con trỏ. Bộ nhớ tạm có chữ đi kèm (vd chép ô Excel) thì vẫn dán chữ như thường.

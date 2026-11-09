@@ -879,6 +879,10 @@ footer { text-align: center; padding: 8px 24px 28px; }
 .media-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .media-thumb.failed { border-color: var(--err); }
 .media-thumb .media-progress { position: absolute; left: 6px; right: 6px; bottom: 6px; }
+/* Đang tải lên kho lưu trữ, chưa rõ bao nhiêu % (upload.js báo -1): vạch chạy qua lại */
+.media-progress.indet span { width: 40%; animation: bf-indet 1.1s ease-in-out infinite alternate; }
+@keyframes bf-indet { from { margin-left: 0; } to { margin-left: 60%; } }
+@media (prefers-reduced-motion: reduce) { .media-progress.indet span { width: 100%; opacity: 0.5; animation: none; } }
 .media-done { position: absolute; left: 4px; top: 4px; width: 18px; height: 18px; border-radius: 50%; background: var(--ok, #1f9d55); color: #fff; font-size: 11px; display: grid; place-items: center; }
 .media-err { background: var(--err); font-weight: 700; }
 .media-remove { position: absolute; right: 4px; top: 4px; width: 22px; height: 22px; padding: 0; border-radius: 50%; border: 0; background: rgba(0, 0, 0, 0.6); color: #fff; font-size: 14px; line-height: 22px; cursor: pointer; }

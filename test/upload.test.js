@@ -38,7 +38,18 @@ test('tải ảnh: xin link, gửi lên kho lưu trữ (file đứng cuối), ch
   assert.equal(f.posts[0].url, S3.url);
   assert.deepEqual(f.posts[0].keys, ['key', 'bucket', 'Policy', 'X-Amz-Signature', 'file']);
   assert.equal(f.posts[0].opts.withCredentials, undefined); // kho lưu trữ không cần cookie
-  assert.deepEqual(progress, [0.5, 1]);
+  // Không gắn theo dõi tiến độ khi gửi lên kho lưu trữ: gắn thì trình duyệt hỏi trước (CORS preflight), kho của Beincom từ chối
+  // trang addon / BeinIOS và file không được gửi đi (lỗi thật: "Beincom xử lý ảnh quá lâu")
+  assert.equal(f.posts[0].opts.onProgress, undefined);
+  assert.deepEqual(progress, [-1, 1]); // -1: đang tải, chưa rõ bao nhiêu %
+});
+
+test('tải ảnh: gửi đúng các trường presigned_post như web Beincom, đúng thứ tự, bỏ trường lạ', async () => {
+  const fields = { 'X-Amz-Signature': 's', Policy: 'p', 'X-Amz-Security-Token': 't', 'X-Amz-Date': 'd', 'X-Amz-Credential': 'c', 'X-Amz-Algorithm': 'a', bucket: 'b', key: 'k', 'x-la': 'z' };
+  const f = fake({ sendReplies: { uploadInit: { ...S3, fields }, uploadWait: { status: 'ok', item: { url: 'u', id: 'up1' } } } });
+  await f.uploader.upload('image', png());
+  assert.deepEqual(f.posts[0].keys, [...Upload.S3_FIELDS, 'file']);
+  assert.deepEqual(Upload.S3_FIELDS, ['key', 'bucket', 'X-Amz-Algorithm', 'X-Amz-Credential', 'X-Amz-Date', 'X-Amz-Security-Token', 'Policy', 'X-Amz-Signature']);
 });
 
 test('tải ảnh: kho lưu trữ báo lỗi thì dừng, không chờ xử lý', async () => {

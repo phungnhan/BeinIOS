@@ -142,6 +142,7 @@ Tab Quy tắc & cài đặt và Nhật ký chỉ dùng dữ liệu trong máy n�
     - Chọn file thì hiện ảnh thu nhỏ / tên tệp, bấm × để bỏ. File chỉ giữ trong lúc mở trang, không lưu vào nháp.
     - **Dán ảnh** (Ctrl + V: ảnh chụp màn hình, ảnh chép từ web) hoặc **kéo thả** ảnh / video / tệp vào ô soạn (v0.69.2, `clipFiles` ở `dash/attach.js`): ảnh dán không có tên thật thì đặt `anh-dan-<giờ>.png`; bộ nhớ tạm có chữ đi kèm thì dán chữ như thường. Ô nội dung Article: dán / kéo thả ảnh chèn `![tên](local:N)` vào chỗ con trỏ.
     - File được tải lên Beincom **lúc bấm Đăng** (có thanh tiến độ), rồi mới đăng bài. Đang Chạy thử thì không tải gì lên, nhật ký ghi số file.
+    - Gửi lên kho lưu trữ (v0.69.3): đúng các trường như web (`Upload.S3_FIELDS`), **không** gắn theo dõi tiến độ — XHR có listener ở `upload` buộc CORS preflight, kho của Beincom chỉ nhận group.beincom.com nên từ chối và file không được gửi; không có listener thì là yêu cầu "đơn giản", file lên kho, chỉ không đọc được phản hồi (status 0, bước chờ kiểm tra). `onProgress(-1)` = đang tải chưa rõ %, thanh tiến độ chạy dạng vạch qua lại.
     - Chờ Beincom xử lý ảnh / video (v0.69.2): mỗi lượt `uploadWait` chờ tới khoảng 20 giây (mỗi lần gọi mạng tối đa 25 giây), chưa xong thì trả `pending` và `upload.js` hỏi lại — tổng tới 3 phút với ảnh, 10 phút với video; nút Đăng ghi đang chờ bao lâu.
     - Một file lỗi thì dừng, không đăng; bấm Đăng lần nữa để thử lại (file đã tải xong không tải lại).
     - Có thể đăng bài chỉ có ảnh / video / tệp, không cần chữ.

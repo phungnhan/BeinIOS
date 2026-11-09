@@ -72,9 +72,9 @@ function renderMedia() {
   const tray = $('compose-media');
   tray.hidden = !list.length;
   const bar = (m) => {
-    const fill = el('span', { style: `width:${Math.round(m.progress * 100)}%` });
+    const fill = el('span', { style: m.progress < 0 ? '' : `width:${Math.round(m.progress * 100)}%` });
     m.bar = fill; // cập nhật tiến độ trực tiếp, khỏi vẽ lại cả khay
-    return el('span', { class: 'media-progress' + (m.status === 'uploading' ? '' : ' idle') }, fill);
+    return el('span', { class: 'media-progress' + (m.status === 'uploading' ? '' : ' idle') + (m.status === 'uploading' && m.progress < 0 ? ' indet' : '') }, fill);
   };
   const remove = (m) => el('button', { type: 'button', class: 'media-remove', title: 'Bỏ ' + m.name, 'aria-label': 'Bỏ ' + m.name, disabled: busy || uploading, text: '×', onclick: () => removeMedia(m.key) });
   const state = (m) => (m.status === 'error' ? el('span', { class: 'err-text small', title: m.error, text: 'Lỗi: ' + m.error }) : m.status === 'local' ? null : el('span', { class: 'muted small', text: MEDIA_STATUS[m.status] }));
@@ -133,8 +133,10 @@ async function uploadMedia() {
           m.kind,
           m.file,
           (p) => {
-            m.progress = p;
-            if (m.bar) m.bar.style.width = Math.round(p * 100) + '%';
+            m.progress = p; // < 0: đang tải, chưa rõ bao nhiêu % (ảnh / video gửi lên kho lưu trữ)
+            if (!m.bar) return;
+            m.bar.parentElement.classList.toggle('indet', p < 0);
+            m.bar.style.width = p < 0 ? '' : Math.round(p * 100) + '%';
           },
           // Ảnh PNG lớn / video: Beincom xử lý lâu — ghi rõ đang chờ, khỏi tưởng treo
           { onWait: (ms) => ($('btn-compose').textContent = `Beincom đang xử lý ${m.kind === 'video' ? 'video' : 'ảnh'} ${i + 1}/${compose.media.length}… ${Math.round(ms / 1000)} giây`) },
