@@ -83,7 +83,7 @@ async function uploadArticleImages(md) {
   for (const [i, n] of refs.entries()) {
     const im = art.images[n];
     if (!im) throw new Error('Ảnh trong bài cần chọn lại (ảnh không được lưu trong nháp)');
-    if (!im.item) im.item = await uploader.upload('image', im.file, (p) => ($('btn-art-submit').textContent = `Đang tải ảnh ${i + 1}/${refs.length} · ${Math.round(p * 100)}%`), { resource: 'article:content' });
+    if (!im.item) im.item = await uploader.upload('image', im.file, (p) => ($('btn-art-submit').textContent = `Đang tải ảnh ${i + 1}/${refs.length} · ${Math.round(p * 100)}%`), { resource: 'article:content', onWait: (ms) => ($('btn-art-submit').textContent = `Beincom đang xử lý ảnh ${i + 1}/${refs.length}… ${Math.round(ms / 1000)} giây`) });
     out = out.split(`](local:${n})`).join(`](${im.item.url})`);
   }
   return out;
@@ -325,7 +325,7 @@ function renderArticle() {
 async function uploadCover() {
   if (art.cover.item) return art.cover.item;
   const resource = art.mode === 'article' ? 'article:cover' : 'series:cover';
-  art.cover.item = await uploader.upload('image', art.cover.file, (p) => ($('btn-art-submit').textContent = `Đang tải ảnh bìa ${Math.round(p * 100)}%…`), { resource });
+  art.cover.item = await uploader.upload('image', art.cover.file, (p) => ($('btn-art-submit').textContent = `Đang tải ảnh bìa ${Math.round(p * 100)}%…`), { resource, onWait: (ms) => ($('btn-art-submit').textContent = `Beincom đang xử lý ảnh bìa… ${Math.round(ms / 1000)} giây`) });
   return art.cover.item;
 }
 
@@ -506,6 +506,24 @@ $('art-content').addEventListener('keydown', (e) => {
 $('art-img-file').addEventListener('change', (e) => {
   insertImages(e.target.files);
   e.target.value = '';
+});
+// Dán ảnh (Ctrl + V) / kéo thả ảnh vào ô nội dung: chèn vào chỗ con trỏ như nút Ảnh (clipFiles ở dash/attach.js)
+$('art-content').addEventListener('paste', (e) => {
+  const imgs = clipFiles(e.clipboardData, { paste: true });
+  if (!imgs.length) return;
+  e.preventDefault();
+  insertImages(imgs);
+});
+$('art-editor').addEventListener('dragover', (e) => {
+  if (![...(e.dataTransfer?.types || [])].includes('Files')) return;
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'copy';
+});
+$('art-editor').addEventListener('drop', (e) => {
+  const files = clipFiles(e.dataTransfer);
+  if (!files.length) return;
+  e.preventDefault();
+  insertImages(files);
 });
 // Nhắc tên trong nội dung Article: dùng chung ô gợi ý của khung soạn bài (dash/attach.js)
 MENTION_TARGETS.article = {

@@ -27,8 +27,33 @@
     return m ? m[1] : '';
   }
 
-  // send: gửi tin nhắn tới background (chrome.runtime.sendMessage); post: gửi multipart (xhrPost). Đổi được khi kiểm thử.
-  function createUploader({ send, post = xhrPost }) {
+  // Hạn chờ tổng để Beincom xử lý xong (mỗi lượt uploadWait chỉ chờ tới khoảng 20 giây, chưa xong thì gọi lại)
+  const WAIT_TOTAL_MS = { image: 180e3, video: 600e3 };
+  const WAIT_GAP_MS = 2000; // lượt chờ trả lời ngay mà chưa xong: nghỉ chừng này rồi hỏi lại
+  const sleepMs = (ms) => new Promise((r) => setTimeout(r, ms));
+
+  // send: gửi tin nhắn tới background (chrome.runtime.sendMessage); post: gửi multipart (xhrPost); now / sleep: đồng hồ.
+  // Đổi được khi kiểm thử.
+  function createUploader({ send, post = xhrPost, now = Date.now, sleep = sleepMs }) {
+    // Chờ Beincom xử lý ảnh / video: gọi uploadWait nhiều lượt tới khi xong, báo lỗi, hoặc hết hạn chờ tổng
+    // onWait(ms): báo đã chờ bao lâu sau mỗi lượt chưa xong (Dashboard ghi lên nút Đăng)
+    async function waitProcessed(kind, id, unsure, onWait = () => {}) {
+      const start = now();
+      const deadline = start + WAIT_TOTAL_MS[kind];
+      for (;;) {
+        const t0 = now();
+        const w = await send({ type: 'uploadWait', kind, id, unsure });
+        if (w?.status !== 'pending') return w;
+        onWait(now() - start);
+        if (now() >= deadline) {
+          const mins = WAIT_TOTAL_MS[kind] / 60e3;
+          if (w.unsure) return { status: 'error', message: `File chưa lên được kho lưu trữ (đã chờ ${mins} phút; trình duyệt có thể đã chặn) — thử lại` };
+          return { status: 'error', message: kind === 'video' ? `Beincom xử lý video quá lâu (đã chờ ${mins} phút) — thử lại sau` : `Beincom xử lý ảnh quá lâu (đã chờ ${mins} phút) — thử lại sau, hoặc dùng ảnh nhỏ hơn` };
+        }
+        if (now() - t0 < WAIT_GAP_MS) await sleep(WAIT_GAP_MS);
+      }
+    }
+
     async function uploadFile(id, file, onProgress) {
       const form = new FormData();
       form.append('file', file, file.name);
@@ -45,8 +70,8 @@
     }
 
     // kind: 'image' | 'video' | 'file'. Trả về đối tượng để đưa vào media của bài.
-    // resource (ảnh): 'post:content' (mặc định) | 'article:cover' | 'series:cover'
-    async function upload(kind, file, onProgress = () => {}, { resource } = {}) {
+    // resource (ảnh): 'post:content' (mặc định) | 'article:cover' | 'series:cover' · onWait: xem waitProcessed
+    async function upload(kind, file, onProgress = () => {}, { resource, onWait } = {}) {
       const init = await send({ type: 'uploadInit', kind, mimeType: file.type, ...(resource ? { resource } : {}) });
       if (init?.status === 'need_login') throw new Error('Phiên đăng nhập Beincom đã hết hạn');
       if (init?.status !== 'ok') throw new Error(init?.message || 'Không xin được chỗ tải lên');
@@ -62,7 +87,7 @@
       // status 0: kho lưu trữ không cho trang addon đọc phản hồi (CORS); file có thể đã lên, bước chờ sẽ kiểm tra
       if (r.status && (r.status < 200 || r.status >= 300)) throw new Error('Tải lên kho lưu trữ lỗi: ' + (s3Error(r.text) || 'HTTP ' + r.status));
       onProgress(1);
-      const w = await send({ type: 'uploadWait', kind, id: init.id, unsure: r.status === 0 });
+      const w = await waitProcessed(kind, init.id, r.status === 0, onWait);
       if (w?.status === 'need_login') throw new Error('Phiên đăng nhập Beincom đã hết hạn');
       if (w?.status !== 'ok') throw new Error(w?.message || 'Beincom chưa xử lý xong file');
       return w.item;
@@ -71,5 +96,5 @@
     return { upload };
   }
 
-  return { xhrPost, s3Error, createUploader };
+  return { xhrPost, s3Error, createUploader, WAIT_TOTAL_MS };
 });

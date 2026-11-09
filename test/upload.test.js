@@ -7,7 +7,8 @@ const Upload = require('../upload.js');
 const png = () => new File([new Uint8Array([137, 80, 78, 71])], 'anh.png', { type: 'image/png' });
 
 // sendReplies: trả lời cho từng loại tin nhắn; postReply: phản hồi khi gửi multipart
-function fake({ sendReplies = {}, postReply = { status: 204, text: '' } } = {}) {
+// clock: đồng hồ giả (now / sleep cộng giờ ngay, không chờ thật)
+function fake({ sendReplies = {}, postReply = { status: 204, text: '' }, clock = null } = {}) {
   const sent = [];
   const posts = [];
   const send = async (m) => {
@@ -20,7 +21,7 @@ function fake({ sendReplies = {}, postReply = { status: 204, text: '' } } = {}) 
     opts.onProgress?.(0.5);
     return typeof postReply === 'function' ? postReply(url) : postReply;
   };
-  return { sent, posts, uploader: Upload.createUploader({ send, post }) };
+  return { sent, posts, uploader: Upload.createUploader({ send, post, ...(clock ? { now: clock.now, sleep: clock.sleep } : {}) }) };
 }
 
 const S3 = { status: 'ok', id: 'up1', url: 'https://bucket.s3.amazonaws.com/', fields: { key: 'post/up1', bucket: 'b', Policy: 'p', 'X-Amz-Signature': 's' } };
@@ -50,6 +51,45 @@ test('tải ảnh: không đọc được phản hồi (CORS) thì nhờ bước
   const f = fake({ sendReplies: { uploadInit: S3, uploadWait: (m) => (m.unsure ? { status: 'error', message: 'File chưa lên được kho lưu trữ' } : { status: 'ok' }) }, postReply: { status: 0, text: '' } });
   await assert.rejects(f.uploader.upload('video', new File(['x'], 'v.mp4', { type: 'video/mp4' })), /chưa lên được/);
   assert.equal(f.sent.at(-1).unsure, true);
+});
+
+// Đồng hồ giả: mỗi lượt uploadWait "tốn" waitMs, sleep cộng thẳng vào giờ
+function clockOf(waitMs) {
+  const c = { t: 0, sleeps: [] };
+  c.now = () => c.t;
+  c.sleep = async (ms) => {
+    c.sleeps.push(ms);
+    c.t += ms;
+  };
+  c.tick = () => (c.t += waitMs);
+  return c;
+}
+
+test('tải ảnh: Beincom xử lý lâu (PNG lớn) — chờ nhiều lượt tới khi xong, không báo lỗi ở lượt đầu', async () => {
+  const clock = clockOf(20e3);
+  let n = 0;
+  const f = fake({ clock, sendReplies: { uploadInit: S3, uploadWait: () => (clock.tick(), ++n < 4 ? { status: 'pending' } : { status: 'ok', item: { url: 'https://media.beincom.com/big', id: 'up1' } }) } });
+  const item = await f.uploader.upload('image', png());
+  assert.equal(item.url, 'https://media.beincom.com/big');
+  assert.equal(f.sent.filter((m) => m.type === 'uploadWait').length, 4);
+  assert.deepEqual(clock.sleeps, []); // mỗi lượt đã chờ đủ lâu: hỏi lại ngay
+});
+
+test('tải ảnh: lượt chờ trả lời ngay mà chưa xong thì nghỉ 2 giây rồi hỏi lại; quá 3 phút thì báo rõ', async () => {
+  const clock = clockOf(100);
+  const f = fake({ clock, sendReplies: { uploadInit: S3, uploadWait: () => (clock.tick(), { status: 'pending' }) } });
+  await assert.rejects(f.uploader.upload('image', png()), /Beincom xử lý ảnh quá lâu \(đã chờ 3 phút\) — thử lại sau, hoặc dùng ảnh nhỏ hơn/);
+  assert.ok(clock.sleeps.length > 10 && clock.sleeps.every((ms) => ms === 2000));
+  assert.ok(clock.t >= Upload.WAIT_TOTAL_MS.image && clock.t < Upload.WAIT_TOTAL_MS.image + 3000);
+  // Không đọc được phản hồi kho lưu trữ, mãi chưa có link: báo có thể chưa lên kho
+  const c2 = clockOf(20e3);
+  const g = fake({ clock: c2, sendReplies: { uploadInit: S3, uploadWait: () => (c2.tick(), { status: 'pending', unsure: true }) }, postReply: { status: 0, text: '' } });
+  await assert.rejects(g.uploader.upload('image', png()), /File chưa lên được kho lưu trữ \(đã chờ 3 phút/);
+  // Video: chờ tới 10 phút
+  const c3 = clockOf(20e3);
+  const v = fake({ clock: c3, sendReplies: { uploadInit: S3, uploadWait: () => (c3.tick(), { status: 'pending' }) } });
+  await assert.rejects(v.uploader.upload('video', new File(['x'], 'v.mp4', { type: 'video/mp4' })), /video quá lâu \(đã chờ 10 phút\)/);
+  assert.ok(c3.t >= 600e3);
 });
 
 test('tải tệp: gửi tới API Beincom kèm cookie, đổi khoá sang camelCase', async () => {

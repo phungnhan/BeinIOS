@@ -1345,7 +1345,7 @@ test('xin chỗ tải lên: ảnh / video / tệp gọi đúng API, đúng body,
   assert.match((await env.send({ type: 'uploadInit', kind: 'exe' })).message, /không hợp lệ/);
 });
 
-test('chờ xử lý file: trả đối tượng media; báo lỗi khi Beincom báo ERROR, chưa có ảnh hoặc quá lâu', async () => {
+test('chờ xử lý file: trả đối tượng media; báo lỗi khi Beincom báo ERROR; chưa có ảnh / lượt chờ hết giờ thì báo đang chờ (Dashboard hỏi lại)', async () => {
   const env = makeEnv();
   await scan(env);
   const w = await env.send({ type: 'uploadWait', kind: 'image', id: 'up-images' });
@@ -1354,12 +1354,13 @@ test('chờ xử lý file: trả đối tượng media; báo lỗi khi Beincom b
   env.data.uploadResult = { status: 'ERROR', error_message: 'Unsupported image' };
   assert.match((await env.send({ type: 'uploadWait', kind: 'image', id: 'x' })).message, /Unsupported image/);
   env.data.uploadResult = { status: 'PENDING' };
-  assert.match((await env.send({ type: 'uploadWait', kind: 'image', id: 'x' })).message, /chưa xử lý xong/);
-  assert.match((await env.send({ type: 'uploadWait', kind: 'video', id: 'x', unsure: true })).message, /chưa lên được kho/);
+  const pick = (r) => ({ status: r.status, unsure: r.unsure });
+  assert.deepEqual(pick(await env.send({ type: 'uploadWait', kind: 'image', id: 'x' })), { status: 'pending', unsure: false });
+  assert.deepEqual(pick(await env.send({ type: 'uploadWait', kind: 'video', id: 'x', unsure: true })), { status: 'pending', unsure: true });
   env.data.uploadResult = { status: 'PROCESSING', properties: { size: 5 } };
   assert.deepEqual((await env.send({ type: 'uploadWait', kind: 'video', id: 'v1' })).item, { id: 'v1', url: undefined, size: 5, status: 'waiting_process', thumbnails: undefined });
   env.data.uploadWaitHang = true;
-  assert.match((await env.send({ type: 'uploadWait', kind: 'image', id: 'x' })).message, /quá lâu/);
+  assert.equal((await env.send({ type: 'uploadWait', kind: 'image', id: 'x' })).status, 'pending');
 });
 
 test('đăng bài kèm ảnh: gửi media trong body; chạy thử chỉ ghi số ảnh vào nhật ký', async () => {

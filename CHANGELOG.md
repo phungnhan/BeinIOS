@@ -2,6 +2,10 @@
 
 Mỗi bản một mục, bản mới nhất ở trên. Dashboard tự hiện các mục mới sau khi cập nhật (bấm "Có gì mới" ở cuối trang để xem lại).
 
+## v0.69.2 — 09/11/2026
+- **Sửa lỗi đăng ảnh "Beincom xử lý ảnh quá lâu"**: từ v0.61.1 mỗi lần gọi mạng chỉ chờ tối đa 25 giây (để trình duyệt không tắt nền addon), nên bước chờ Beincom xử lý ảnh vốn được 2 phút cũng bị cắt còn 25 giây — ảnh PNG lớn (như ảnh AI tạo) cần lâu hơn thì báo lỗi. Giờ addon chờ nhiều lượt ngắn liên tiếp: tới 3 phút với ảnh, 10 phút với video; nút Đăng ghi "Beincom đang xử lý ảnh 1/2… 35 giây" để biết không bị treo. Áp dụng cả ảnh trong Article và ảnh bìa.
+- **Dán ảnh vào ô soạn bài**: Ctrl + V ảnh chụp màn hình hay ảnh chép từ trang web / ứng dụng là thành ảnh đính kèm (ảnh dán đặt tên theo giờ, vd anh-dan-153012.png). Kéo thả ảnh, video hoặc tệp vào ô soạn cũng được. Ô nội dung Article: dán / kéo thả ảnh là chèn vào đúng chỗ con trỏ. Bộ nhớ tạm có chữ đi kèm (vd chép ô Excel) thì vẫn dán chữ như thường.
+
 ## v0.69.1 — 09/11/2026
 - **Trợ lý AI: bấm Tab để điền gợi ý** — các ô có chữ mờ "vd: …" (ý chính của bài / Article, ghi chú cho AI, các ô của Hồ sơ cho AI, Hướng dẫn thêm ở Cài đặt): khi ô còn trống, bấm **Tab** là gợi ý thành chữ thật để sửa tiếp (đổi loại bài thì gợi ý đổi theo). Lúc đang ở ô, chữ mờ ghi thêm "· Tab để điền". Ô đã có chữ, hoặc Shift + Tab: Tab chuyển ô như thường.
 

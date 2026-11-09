@@ -7,7 +7,7 @@ compose.media = [];
 let mediaSeq = 0;
 const uploader = Upload.createUploader({ send: (m) => chrome.runtime.sendMessage(m) });
 const MEDIA_TITLES = {
-  image: `Tối đa ${BG.MEDIA.image.max} ảnh, mỗi ảnh ≤ ${BG.sizeText(BG.MEDIA.image.size)}`,
+  image: `Tối đa ${BG.MEDIA.image.max} ảnh, mỗi ảnh ≤ ${BG.sizeText(BG.MEDIA.image.size)} — hoặc dán (Ctrl + V), kéo thả ảnh vào ô soạn`,
   video: `${BG.MEDIA.video.max} video ≤ ${BG.sizeText(BG.MEDIA.video.size)}`,
   file: `Tối đa ${BG.MEDIA.file.max} tệp, mỗi tệp ≤ ${BG.sizeText(BG.MEDIA.file.size)}: ${BG.MEDIA.file.exts.join(', ')}`,
 };
@@ -129,10 +129,16 @@ async function uploadMedia() {
       m.error = '';
       renderMedia();
       try {
-        m.item = await uploader.upload(m.kind, m.file, (p) => {
-          m.progress = p;
-          if (m.bar) m.bar.style.width = Math.round(p * 100) + '%';
-        });
+        m.item = await uploader.upload(
+          m.kind,
+          m.file,
+          (p) => {
+            m.progress = p;
+            if (m.bar) m.bar.style.width = Math.round(p * 100) + '%';
+          },
+          // Ảnh PNG lớn / video: Beincom xử lý lâu — ghi rõ đang chờ, khỏi tưởng treo
+          { onWait: (ms) => ($('btn-compose').textContent = `Beincom đang xử lý ${m.kind === 'video' ? 'video' : 'ảnh'} ${i + 1}/${compose.media.length}… ${Math.round(ms / 1000)} giây`) },
+        );
         m.status = 'done';
       } catch (e) {
         m.status = 'error';
@@ -479,6 +485,47 @@ $('compose-text').addEventListener('click', () => checkMention());
 $('compose-text').addEventListener('keyup', (e) => ['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key) && checkMention());
 $('compose-text').addEventListener('blur', () => mention.open && closeMention());
 $('compose-text').addEventListener('scroll', () => mention.open && renderMention());
+
+// ---------- Dán ảnh (Ctrl + V) và kéo thả file vào ô soạn ----------
+// Ảnh trong bộ nhớ tạm: ảnh chụp màn hình, ảnh chép từ trang web / ứng dụng. Có chữ đi kèm (vd chép ô Excel: chữ + ảnh chụp
+// vùng ô) thì để trình duyệt dán chữ như thường. Ảnh dán không có tên thật ("image.png"): đặt tên theo giờ dán.
+function clipFiles(dt, { paste = false } = {}) {
+  if (!dt) return [];
+  let files = [...(dt.files || [])];
+  if (!files.length) files = [...(dt.items || [])].filter((i) => i.kind === 'file').map((i) => i.getAsFile()).filter(Boolean);
+  if (paste) {
+    files = files.filter((f) => f.type.startsWith('image/'));
+    if (files.length && (dt.getData('text/plain') || '').trim()) return [];
+  }
+  const t = new Date();
+  const stamp = [t.getHours(), t.getMinutes(), t.getSeconds()].map((x) => String(x).padStart(2, '0')).join('');
+  return files.map((f, i) => (f.name && !/^image\.\w+$/i.test(f.name) ? f : new File([f], `anh-dan-${stamp}${files.length > 1 ? '-' + (i + 1) : ''}.${(f.type.split('/')[1] || 'png').replace('jpeg', 'jpg')}`, { type: f.type, lastModified: f.lastModified || Date.now() })));
+}
+const fileKind = (f) => (f.type.startsWith('image/') ? 'image' : f.type.startsWith('video/') ? 'video' : 'file');
+function attachDropped(files) {
+  if (!files.length) return;
+  if (busy || compose.media.some((m) => m.status === 'uploading')) return toast('Đang tải file lên — thêm file sau khi xong', 'warn');
+  const kinds = [...new Set(files.map(fileKind))];
+  if (kinds.length > 1) toast('Mỗi bài chỉ đính kèm một loại (ảnh, video hoặc tệp) — chỉ thêm ' + BG.MEDIA[kinds[0]].label, 'warn');
+  addMedia(kinds[0], files.filter((f) => fileKind(f) === kinds[0]));
+}
+$('compose-text').addEventListener('paste', (e) => {
+  const imgs = clipFiles(e.clipboardData, { paste: true });
+  if (!imgs.length) return;
+  e.preventDefault();
+  attachDropped(imgs);
+});
+$('editor-body').addEventListener('dragover', (e) => {
+  if (![...(e.dataTransfer?.types || [])].includes('Files')) return;
+  e.preventDefault(); // không thì trình duyệt mở file thay cho trang
+  e.dataTransfer.dropEffect = 'copy';
+});
+$('editor-body').addEventListener('drop', (e) => {
+  const files = clipFiles(e.dataTransfer);
+  if (!files.length) return;
+  e.preventDefault();
+  attachDropped(files);
+});
 
 for (const k of Object.keys(BG.MEDIA)) {
   const input = $('media-input-' + k);
