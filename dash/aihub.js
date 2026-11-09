@@ -22,23 +22,91 @@ const aiSummaryPosts = () =>
     .sort((a, b) => b.commentsCount - a.commentsCount)
     .slice(0, 15);
 
-// AI viết bài đăng: theo ý trong ô Ghi chú, hoặc viết lại chữ đang có trong ô soạn; kết quả đưa vào ô soạn ở tab Đăng bài
+// Loại bài / độ dài khi AI viết bài đăng, Article (BG.AI_WRITE_KINDS / AI_WRITE_LENGTHS) — nhớ lựa chọn lần trước ở trình duyệt này
+const AI_WRITE_PREF = 'beinfusion-ai-write';
+function writePrefs() {
+  try {
+    return JSON.parse(localStorage.getItem(AI_WRITE_PREF) || '{}') || {};
+  } catch {
+    return {};
+  }
+}
+function writeControls(format) {
+  const pref = writePrefs()[format] || {};
+  const kind = el('select', { id: 'ad-kind', 'aria-label': 'Loại bài' }, ...Object.entries(BG.AI_WRITE_KINDS).map(([k, v]) => el('option', { value: k, text: v.label })));
+  kind.value = BG.AI_WRITE_KINDS[pref.kind] ? pref.kind : 'free';
+  const len = el('select', { id: 'ad-len', 'aria-label': 'Độ dài' }, el('option', { value: '', text: 'Theo loại bài' }), ...Object.entries(BG.AI_WRITE_LENGTHS).map(([k, v]) => el('option', { value: k, text: `${v.label} · ${format === 'article' ? v.article : v.post}` })));
+  len.value = BG.AI_WRITE_LENGTHS[pref.length] ? pref.length : '';
+  const sync = () => {
+    $('ad-note').placeholder = BG.AI_WRITE_KINDS[kind.value].hint;
+    try {
+      localStorage.setItem(AI_WRITE_PREF, JSON.stringify({ ...writePrefs(), [format]: { kind: kind.value, length: len.value } }));
+    } catch {}
+    adShowPrompt();
+  };
+  kind.addEventListener('change', sync);
+  len.addEventListener('change', sync);
+  const field = (text, sel) => el('label', { class: 'ad-pick' }, el('span', { class: 'muted small' }, text), sel);
+  return { controls: [field('Loại bài', kind), field('Độ dài', len)], kind, len, hint: BG.AI_WRITE_KINDS[kind.value].hint };
+}
+
+// Chỗ trống AI để lại cho bạn điền ([giờ bắt đầu], [link đăng ký]…) — nhắc ngay khi đưa vào ô soạn
+function blanksNote(text) {
+  const b = BG.aiBlanks(text);
+  return b.length ? ` Còn ${b.length} chỗ cần điền: ${b.slice(0, 4).join(', ')}${b.length > 4 ? '…' : ''}.` : '';
+}
+
+// AI viết bài đăng: theo loại bài, độ dài và ý chính (hoặc viết lại chữ đang có trong ô soạn); kết quả vào ô soạn ở tab Đăng bài
 function aiPostDraft() {
   const current = $('compose-text').value;
+  const w = writeControls('post');
   openAiDraft({
     kind: 'post',
     title: '✨ AI viết bài đăng',
-    desc: current.trim() ? 'Ô soạn ở tab Đăng bài đang có chữ: AI viết lại cho rõ, giữ ý — hoặc ghi ý mới vào ô Ghi chú.' : 'Ghi ý chính của bài vào ô Ghi chú cho AI rồi nhờ AI viết; bài đưa vào ô soạn ở tab Đăng bài để bạn xem lại trước khi đăng.',
-    notePlaceholder: 'Ý chính của bài — vd: thông báo AMA tối thứ Sáu 20h về ví lạnh',
-    prompt: () => BG.aiPostPrompt({ idea: $('ad-note').value.trim(), current, note: AD.cfg?.note || '', persona: data.aiPersona }),
+    desc: current.trim() ? 'Ô soạn ở tab Đăng bài đang có chữ: AI viết lại cho rõ, giữ ý — hoặc ghi ý mới vào ô Ý chính.' : 'Chọn loại bài (mỗi loại một dàn ý), ghi ý chính rồi nhờ AI viết; bài đưa vào ô soạn ở tab Đăng bài để bạn xem lại trước khi đăng.',
+    noteLabel: 'Ý chính của bài',
+    notePlaceholder: w.hint,
+    controls: w.controls,
+    prompt: () => BG.aiPostPrompt({ kind: w.kind.value, length: w.len.value, idea: $('ad-note').value.trim(), current, note: AD.cfg?.note || '', persona: data.aiPersona }),
     useLabel: 'Đưa vào ô soạn',
     onUse: (text) => {
       showTab('compose');
-      document.querySelector('#compose-kind button[data-f="post"]:not(.active)')?.click();
+      setComposeKind('post');
       $('compose').scrollIntoView({ block: 'start' });
       $('compose-text').value = text;
       $('compose-text').dispatchEvent(new Event('input', { bubbles: true }));
-      toast('Đã đưa bài vào ô soạn — xem lại, chọn group rồi bấm Đăng.');
+      toast('Đã đưa bài vào ô soạn — xem lại, chọn group rồi bấm Đăng.' + blanksNote(text), BG.aiBlanks(text).length ? 'warn' : '');
+    },
+  });
+}
+
+// AI viết Article: tiêu đề, tóm tắt, nội dung có các mục (Markdown) -> các ô soạn Article; đang có chữ thì viết lại
+function aiArticleDraft() {
+  const title = $('art-title').value.trim();
+  const summary = $('art-summary').value.trim();
+  const body = $('art-content').value.trim();
+  const current = [title && '# ' + title, summary && 'Tóm tắt: ' + summary, body].filter(Boolean).join('\n\n');
+  const g = artGroups()[0];
+  const w = writeControls('article');
+  openAiDraft({
+    kind: 'article',
+    title: '✨ AI viết Article',
+    desc: current ? 'Ô soạn Article đang có chữ: AI viết lại cho hay hơn, giữ ý — hoặc ghi ý mới vào ô Ý chính.' : 'Chọn loại bài, ghi ý chính; AI viết tiêu đề, tóm tắt và nội dung có các mục. Bạn vẫn tự thêm ảnh bìa, chọn chuyên mục rồi đăng.',
+    noteLabel: 'Ý chính của Article',
+    notePlaceholder: w.hint,
+    controls: w.controls,
+    prompt: () => BG.aiWritePrompt({ format: 'article', kind: w.kind.value, length: w.len.value, idea: $('ad-note').value.trim(), current, groupName: g?.name || '', note: AD.cfg?.note || '', persona: data.aiPersona }),
+    useLabel: 'Đưa vào Article',
+    onUse: (text) => {
+      const a = BG.aiParseArticle(text);
+      showTab('compose');
+      setComposeKind('article');
+      if (a.title) $('art-title').value = a.title;
+      if (a.summary) $('art-summary').value = a.summary;
+      $('art-content').value = a.content || text;
+      for (const id of ['art-title', 'art-summary', 'art-content']) $(id).dispatchEvent(new Event('input', { bubbles: true }));
+      $('article').scrollIntoView({ block: 'start' });
+      toast('Đã đưa vào ô soạn Article — thêm ảnh bìa, chọn chuyên mục rồi đăng.' + blanksNote(text), BG.aiBlanks(text).length ? 'warn' : '');
     },
   });
 }
@@ -97,7 +165,8 @@ async function renderAiHub() {
       $('shoutout').scrollIntoView({ block: 'start' });
       aiTemplateDraft('shoutout');
     }),
-    task('post', 'pencil', 'Viết bài đăng', 'AI viết bài theo ý bạn ghi (hoặc viết lại chữ đang có trong ô soạn), rồi đưa vào ô soạn ở tab Đăng bài — không tự đăng.', $('compose-text').value.trim() ? 'Ô soạn đang có chữ: viết lại cho rõ, giữ ý' : 'Theo ý chính bạn ghi', 'Viết bài', aiPostDraft),
+    task('post', 'pencil', 'Viết bài đăng', 'Chọn loại bài — thông báo, hướng dẫn, chia sẻ kiến thức, mở thảo luận, sự kiện / AMA, tổng kết, cảnh báo lừa đảo, câu chuyện — mỗi loại một dàn ý; AI viết theo ý bạn ghi rồi đưa vào ô soạn, không tự đăng.', $('compose-text').value.trim() ? 'Ô soạn đang có chữ: viết lại cho rõ, giữ ý' : '8 loại bài, mỗi loại một dàn ý', 'Viết bài', aiPostDraft),
+    task('article', 'file', 'Viết Article', 'Bài dài: AI viết tiêu đề (≤ 64 ký tự), tóm tắt và nội dung có các mục theo loại bài bạn chọn, rồi đưa vào ô soạn Article — bạn tự thêm ảnh bìa, chuyên mục rồi đăng.', $('art-content').value.trim() ? 'Ô soạn Article đang có chữ: viết lại cho hay hơn' : 'Tiêu đề, tóm tắt, các mục — vào ô soạn Article', 'Viết Article', aiArticleDraft),
   );
 }
 
@@ -137,3 +206,4 @@ $('btn-ai-log-clear').addEventListener('click', async () => {
   await chrome.storage.local.remove('aiLog');
 });
 $('btn-compose-ai').addEventListener('click', aiPostDraft);
+$('btn-art-ai').addEventListener('click', aiArticleDraft);

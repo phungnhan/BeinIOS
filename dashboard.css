@@ -812,6 +812,14 @@ dialog.postview[open] { display: flex; }
 .ar-step-row select { width: auto; }
 dialog.ai-draft { max-width: 720px; height: auto; max-height: min(92vh, 900px); }
 .ad-note { display: flex; margin: 12px 0 0; }
+.ad-note textarea { width: 100%; resize: vertical; }
+/* Loại bài / độ dài (AI viết bài đăng, Article) */
+.ad-extra { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
+.ad-extra:empty, .ad-extra[hidden] { display: none; }
+.ad-pick { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.ad-pick select { max-width: 100%; }
+.ad-prompt-box { margin-top: 10px; }
+.art-ai { display: flex; align-items: center; gap: 6px; }
 #ad-status { margin: 10px 0 6px; }
 #ad-status:empty { display: none; }
 .ad-result-label { display: block; margin: 12px 0 4px; }

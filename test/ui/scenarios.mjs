@@ -2895,10 +2895,10 @@ export const scenarios = [
     },
   },
   {
-    name: 'Tab Trợ lý AI: tình trạng, 5 tác vụ mở đúng hộp, lịch sử; Huỷ khi AI đang viết (ghi lịch sử); AI viết bài đưa vào ô soạn',
+    name: 'Tab Trợ lý AI: tình trạng, 6 tác vụ mở đúng hộp, lịch sử; Huỷ khi AI đang viết (ghi lịch sử); AI viết bài đưa vào ô soạn',
     async run({ page, url, assert }) {
       await page.open(url('dashboard', 'tab=ai'));
-      await page.until(() => document.querySelectorAll('#ai-hub-tasks .ai-task').length === 5 && document.querySelectorAll('#ai-log-body tr').length === 4);
+      await page.until(() => document.querySelectorAll('#ai-hub-tasks .ai-task').length === 6 && document.querySelectorAll('#ai-log-body tr').length === 4);
       const info = await page.ev(`({
         tasks: [...document.querySelectorAll('#ai-hub-tasks .ai-task')].map((t) => t.dataset.task),
         status: [...document.querySelectorAll('#ai-hub-status .me-stat')].map((x) => x.querySelector('small').textContent + ': ' + x.querySelector('b').textContent),
@@ -2907,7 +2907,7 @@ export const scenarios = [
         reply: document.querySelector('[data-task=reply] .muted').textContent,
         sum: document.querySelectorAll('#ai-sum-post option').length,
       })`);
-      assert.deepEqual(info.tasks, ['reply', 'summary', 'welcome', 'shoutout', 'post']);
+      assert.deepEqual(info.tasks, ['reply', 'summary', 'welcome', 'shoutout', 'post', 'article']);
       assert.match(info.status[0], /^qua Claude trên web: Chép – dán$/);
       assert.match(info.status[1], /^lần nhờ AI tháng này: \d+$/);
       assert.match(info.status[3], /^chi phí ước tính tháng này: /);
@@ -3072,6 +3072,73 @@ export const scenarios = [
       const off = await gen(2);
       assert.deepEqual(Object.keys(off.posts[0]), ['id', 'text']);
       assert.ok(off.comments.every((c) => !('replying_to' in c) && !('thread_before' in c)), JSON.stringify(off.comments));
+    },
+  },
+  {
+    name: 'Mẫu đề bài: bài đăng chọn loại / độ dài (nhớ lần sau, xem đề bài), AI viết Article vào ô soạn Article (tiêu đề, tóm tắt, nội dung), nhắc chỗ [ ] cần điền',
+    async run({ page, url, assert }) {
+      await page.open(url('dashboard', 'tab=ai'));
+      await page.until(() => document.querySelectorAll('#ai-hub-tasks .ai-task').length === 6);
+      await page.ev(`(async () => {
+        localStorage.removeItem('beinfusion-ai-write');
+        await chrome.storage.local.set({ aiConfig: { key: 'sk-ant-' + 'd'.repeat(30), model: 'claude-opus-5-5', mode: 'api' } });
+        window.__realFetch = window.__realFetch || window.fetch;
+        window.__aiN = 0;
+        window.__aiOut = 'Tối thứ Sáu [giờ bắt đầu] mình có AMA về ví lạnh nhé anh em.';
+        window.fetch = async (u, o) => {
+          if (!String(u).startsWith('https://api.anthropic.com/')) return window.__realFetch(u, o);
+          window.__aiN++;
+          window.__aiReq = JSON.parse(o.body);
+          return new Response(JSON.stringify({ model: 'claude-opus-5-5', stop_reason: 'end_turn', content: [{ type: 'text', text: window.__aiOut }], usage: { input_tokens: 800, output_tokens: 200 } }), { status: 200, headers: { 'content-type': 'application/json' } });
+        };
+        return true;
+      })()`);
+      // Bài đăng: loại Sự kiện / AMA, độ dài Dài; ô Ý chính đổi gợi ý theo loại; Xem đề bài khớp đề bài gửi đi
+      await page.ev(`document.querySelector('[data-task=post] button.primary').click(); true`);
+      await page.until(() => document.getElementById('ai-draft').open && !!document.getElementById('ad-kind') && !document.getElementById('ad-extra').hidden);
+      assert.equal(await page.ev(`document.getElementById('ad-note-label').textContent`), 'Ý chính của bài');
+      assert.equal(await page.ev(`document.querySelectorAll('#ad-kind option').length`), 9);
+      await page.ev(`(() => { const k = document.getElementById('ad-kind'); k.value = 'event'; k.dispatchEvent(new Event('change')); const l = document.getElementById('ad-len'); l.value = 'long'; l.dispatchEvent(new Event('change')); return true; })()`);
+      assert.match(await page.ev(`document.getElementById('ad-note').placeholder`), /^vd: AMA ví lạnh tối thứ Sáu/);
+      await page.ev(`document.getElementById('ad-note').value = 'AMA ví lạnh tối thứ Sáu'; document.getElementById('ad-prompt-box').open = true; true`);
+      await page.until(() => /dạng "Sự kiện \/ AMA"/.test(document.getElementById('ad-prompt').textContent));
+      const shown = await page.ev(`document.getElementById('ad-prompt').textContent`);
+      assert.match(shown, /Độ dài khoảng 250–400 từ/);
+      await page.ev(`document.getElementById('ad-gen').click(); true`);
+      await page.until(() => window.__aiN === 1 && !!document.getElementById('ad-result').value.trim());
+      assert.equal(await page.ev(`window.__aiReq.messages[0].content`), shown);
+      await page.ev(`document.getElementById('ad-use').click(); true`);
+      await page.until(() => currentTab === 'compose' && document.getElementById('compose-text').value.startsWith('Tối thứ Sáu [giờ bắt đầu]') && /Còn 1 chỗ cần điền: \[giờ bắt đầu\]/.test(document.querySelector('.toast')?.textContent || ''));
+      // Mở lại: nhớ loại bài và độ dài lần trước
+      await page.ev(`document.getElementById('btn-compose-ai').click(); true`);
+      await page.until(() => document.getElementById('ai-draft').open && document.getElementById('ad-kind')?.value === 'event' && document.getElementById('ad-len').value === 'long');
+      await page.ev(`document.getElementById('ai-draft').close(); true`);
+      // Article: AI trả về theo khuôn -> các ô soạn Article
+      await page.ev(`window.__aiOut = 'TIÊU ĐỀ: Ví lạnh cho người mới: 4 bước giữ tài sản an toàn\\nTÓM TẮT: Từ chọn ví tới sao lưu seed phrase — làm một lần, yên tâm lâu dài.\\nNỘI DUNG:\\nMở bài ngắn.\\n\\n## Bước 1: Chọn ví\\nMua tại [cửa hàng chính hãng].'; true`);
+      await page.ev(`showTab('ai'); true`);
+      await page.until(() => !!document.querySelector('[data-task=article] button.primary'));
+      await page.ev(`document.querySelector('[data-task=article] button.primary').click(); true`);
+      await page.until(() => document.getElementById('ai-draft').open && document.getElementById('ad-title').textContent === '✨ AI viết Article' && document.getElementById('ad-kind')?.value === 'free');
+      assert.equal(await page.ev(`document.getElementById('ad-note-label').textContent`), 'Ý chính của Article');
+      await page.ev(`(() => { const k = document.getElementById('ad-kind'); k.value = 'guide'; k.dispatchEvent(new Event('change')); document.getElementById('ad-note').value = 'Cách tạo ví lạnh'; document.getElementById('ad-gen').click(); return true; })()`);
+      await page.until(() => window.__aiN === 2 && /^TIÊU ĐỀ:/.test(document.getElementById('ad-result').value));
+      const req = await page.ev(`window.__aiReq.messages[0].content`);
+      assert.match(req, /^Viết một Article \(bài dài có tiêu đề, tóm tắt và các mục\) dạng "Hướng dẫn từng bước"/);
+      assert.match(req, /\nNỘI DUNG:\n<toàn bộ nội dung bằng Markdown/);
+      await page.ev(`document.getElementById('ad-use').click(); true`);
+      await page.until(() => document.getElementById('art-title').value === 'Ví lạnh cho người mới: 4 bước giữ tài sản an toàn' && !document.getElementById('article').hidden);
+      const art = await page.ev(`({ summary: document.getElementById('art-summary').value, content: document.getElementById('art-content').value, kind: document.querySelector('#compose-kind button.active').dataset.f, toast: [...document.querySelectorAll('.toast')].map((t) => t.textContent).join(' | ') })`);
+      assert.equal(art.summary, 'Từ chọn ví tới sao lưu seed phrase — làm một lần, yên tâm lâu dài.');
+      assert.equal(art.content, 'Mở bài ngắn.\n\n## Bước 1: Chọn ví\nMua tại [cửa hàng chính hãng].');
+      assert.equal(art.kind, 'article');
+      assert.match(art.toast, /Còn 1 chỗ cần điền: \[cửa hàng chính hãng\]/);
+      // Nút ✨ AI viết Article ngay trong ô soạn Article: đang có chữ -> AI viết lại (bản nháp nằm trong đề bài)
+      await page.ev(`document.getElementById('btn-art-ai').click(); true`);
+      await page.until(() => document.getElementById('ai-draft').open && document.getElementById('ad-title').textContent === '✨ AI viết Article');
+      await page.ev(`document.getElementById('ad-prompt-box').open = true; true`);
+      await page.until(() => document.getElementById('ad-prompt').textContent.includes('Bản nháp đang có:'));
+      assert.match(await page.ev(`document.getElementById('ad-prompt').textContent`), /\n# Ví lạnh cho người mới: 4 bước giữ tài sản an toàn\n\nTóm tắt: Từ chọn ví/);
+      await page.ev(`document.getElementById('ai-draft').close(); true`);
     },
   },
   {

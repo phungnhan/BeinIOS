@@ -3,8 +3,8 @@
 // hoặc khoá API Claude. Kết quả hiện trong ô sửa được; bấm nút để dùng. Không đăng gì lên Beincom.
 // Nạp sau aireply.js (dùng aiConfig, aiCall, arCopy, aiReadClipboard, askAiPermission) và welcome.js / shoutout.js / postview.js.
 
-// opts: { kind (BG.AI_TASKS — ghi Lịch sử tác vụ AI), title, desc, notePlaceholder, prompt(note) -> đề bài, fix(text) -> text,
-//         useLabel, onUse(text) } · abort: AbortController của lần AI đang viết
+// opts: { kind (BG.AI_TASKS — ghi Lịch sử tác vụ AI), title, desc, noteLabel, notePlaceholder, controls (ô chọn thêm, vd loại bài),
+//         prompt(note) -> đề bài, fix(text) -> text, useLabel, onUse(text) } · abort: AbortController của lần AI đang viết
 const AD = { opts: null, mode: 'web', cfg: null, busy: false, abort: null };
 
 async function openAiDraft(opts) {
@@ -18,6 +18,10 @@ async function openAiDraft(opts) {
   $('ad-tip').hidden = !opts.desc;
   $('ad-note').value = '';
   $('ad-note').placeholder = opts.notePlaceholder || '';
+  $('ad-note-label').textContent = opts.noteLabel || 'Ghi chú cho AI';
+  $('ad-extra').replaceChildren(...(opts.controls || []));
+  $('ad-extra').hidden = !opts.controls?.length;
+  $('ad-prompt-box').open = false;
   $('ad-site').replaceChildren(...Object.entries(BG.AI_WEB_SITES).map(([k, w]) => el('option', { value: k, text: w.label })));
   $('ad-site').value = BG.AI_WEB_SITES[AD.cfg.site] ? AD.cfg.site : 'claude';
   $('ad-result').value = '';
@@ -56,6 +60,10 @@ const adSet = (text) => {
   renderAd();
 };
 const adPrompt = () => AD.opts.prompt([AD.cfg?.note, $('ad-note').value.trim()].filter(Boolean).join('\n'));
+// Xem đề bài gửi AI: đúng chữ sẽ gửi (khoá API) hoặc chép (chép – dán); cập nhật khi đổi ý chính / loại bài
+function adShowPrompt() {
+  if ($('ad-prompt-box').open && AD.opts) $('ad-prompt').textContent = adPrompt();
+}
 
 // Chép đề bài và mở trang chat (iPhone: ứng dụng) ngay trong lúc bấm (Safari chặn nếu làm sau khi chờ)
 function adWebCopy() {
@@ -120,6 +128,8 @@ $('ad-paste').addEventListener('click', adWebPaste);
 $('ad-gen').addEventListener('click', adGenerate);
 $('ad-use').addEventListener('click', adUse);
 $('ad-site').addEventListener('change', renderAd);
+$('ad-prompt-box').addEventListener('toggle', adShowPrompt);
+$('ad-note').addEventListener('input', adShowPrompt);
 $('ad-result').addEventListener('input', renderAd);
 // Dán tay vào ô Kết quả: bỏ khung ``` / bổ sung chỗ trống như khi bấm Dán
 $('ad-result').addEventListener('paste', () => setTimeout(() => adSet($('ad-result').value), 0));

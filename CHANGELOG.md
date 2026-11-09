@@ -2,6 +2,12 @@
 
 Mỗi bản một mục, bản mới nhất ở trên. Dashboard tự hiện các mục mới sau khi cập nhật (bấm "Có gì mới" ở cuối trang để xem lại).
 
+## v0.69.0 — 09/11/2026
+- **Mẫu đề bài viết bài đăng / Article chất lượng**: khi nhờ AI viết bài, chọn **loại bài** — Tự do, Thông báo, Hướng dẫn từng bước, Chia sẻ kiến thức, Mở thảo luận, Sự kiện / AMA, Tổng kết tuần / tháng, Cảnh báo lừa đảo, Câu chuyện / trải nghiệm — mỗi loại có dàn ý riêng (vd Sự kiện: tên sự kiện và lợi ích → thời gian giờ Việt Nam, hình thức, link, khách mời → cách tham gia → nhắc giờ); và **độ dài** (Ngắn / Vừa / Dài, hoặc theo loại bài). Ô Ý chính đổi gợi ý theo loại; lựa chọn được nhớ cho lần sau.
+- Bộ luật chất lượng gửi kèm mọi đề bài: 1–2 dòng đầu vào thẳng điều quan trọng (quyết định người ta có bấm "Xem thêm"); đoạn ngắn dễ đọc trên điện thoại, danh sách khi nhiều ý; cụ thể, bỏ câu sáo rỗng; **không bịa** — thiếu giờ, link… thì để chỗ **[ ]** cho bạn điền; không hứa hẹn; kết bằng đúng một lời kêu gọi; AI tự đọc lại một lượt trước khi trả. Kèm Hồ sơ của bạn cho AI để đúng giọng bạn.
+- **AI viết Article** (tab Trợ lý AI → Viết Article, hoặc nút ✨ AI viết Article ngay trên ô Tiêu đề): AI trả về tiêu đề (≤ 64 ký tự), tóm tắt (≤ 255 ký tự) và nội dung Markdown có các mục; addon điền thẳng vào các ô soạn Article — bạn chỉ thêm ảnh bìa, chọn chuyên mục rồi đăng. Ô soạn đang có chữ thì AI viết lại cho hay hơn.
+- Đưa bài vào ô soạn mà còn chỗ [ ] chưa điền thì addon nhắc ngay (vd "Còn 1 chỗ cần điền: [giờ bắt đầu]"). Ô **Xem đề bài gửi AI** cho thấy đúng đề bài sẽ gửi / chép.
+
 ## v0.68.0 — 09/11/2026
 - **Bối cảnh khi trả lời bình luận** (Cài đặt › Trợ lý AI, bật sẵn, tắt được từng phần): mỗi bình luận gửi AI kèm theo
   - **Nơi bình luận**: bài ở cộng đồng / group nào (kèm giới thiệu của group trên Beincom) và ai viết bài — bài của chính bạn thì AI biết đó là bài của admin.

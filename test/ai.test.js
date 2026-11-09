@@ -336,3 +336,52 @@ test('Lấy thông tin của tôi: điền đủ 6 ô — trang cá nhân, cộn
   assert.equal(empty.voice, 'Thân thiện, gần gũi');
   assert.equal(BG.personaCount(empty), 2);
 });
+
+test('Mẫu đề bài viết bài: loại bài có dàn ý đánh số, độ dài theo loại / theo chọn, luật chất lượng (dòng đầu, không bịa — để [chỗ trống], một lời kêu gọi, tự đọc lại)', () => {
+  assert.equal(Object.keys(BG.AI_WRITE_KINDS).length, 9);
+  for (const [k, v] of Object.entries(BG.AI_WRITE_KINDS)) {
+    assert.ok(v.label && v.hint, k);
+    if (k !== 'free') assert.ok(v.plan.length >= 4, k);
+  }
+  const ev = BG.aiWritePrompt({ kind: 'event', idea: 'AMA tối thứ Sáu', groupName: 'Crypto Life' });
+  assert.match(ev, /^Viết một bài đăng dạng "Sự kiện \/ AMA" cho cộng đồng "Crypto Life" trên Beincom/);
+  assert.match(ev, /\n\nDàn ý nên theo:\n1\. Dòng đầu: tên sự kiện và người tham gia được gì\.\n2\. Thời gian \(giờ Việt Nam\)/);
+  assert.match(ev, /\nYêu cầu:\n- Độ dài khoảng 60–120 từ\.\n- 1–2 dòng đầu quyết định người ta có bấm "Xem thêm"/); // Sự kiện mặc định Ngắn
+  assert.match(ev, /để chỗ trống trong ngoặc vuông cho admin điền, vd \[giờ bắt đầu\], \[link đăng ký\]/);
+  assert.match(ev, /- Kết bằng đúng một lời kêu gọi rõ ràng/);
+  assert.match(ev, /- Trước khi trả lời, tự đọc lại một lượt/);
+  assert.match(ev, /tối đa 3 emoji đặt đúng chỗ; không hashtag/);
+  assert.match(ev, /\n\nChỉ trả về nội dung bài, không viết gì thêm\.$/);
+  assert.match(BG.aiWritePrompt({ kind: 'event', length: 'long', idea: 'x' }), /Độ dài khoảng 250–400 từ/);
+  assert.match(BG.aiWritePrompt({ kind: 'nope', idea: 'x' }), /^Viết một bài đăng cho cộng đồng[^\n]*\nÝ chính[^\n]*\n\nYêu cầu:\n- Độ dài khoảng 120–250 từ\./); // loại lạ: Tự do
+  assert.equal(BG.aiPostPrompt({ kind: 'guide', idea: 'x' }), BG.aiWritePrompt({ format: 'post', kind: 'guide', idea: 'x' }));
+});
+
+test('Mẫu đề bài Article: tiêu đề / tóm tắt / nội dung theo khuôn, Markdown có mục, độ dài bài dài, viết lại bản nháp', () => {
+  const persona = { name: 'Kai — xưng mình' };
+  const a = BG.aiWritePrompt({ format: 'article', kind: 'guide', idea: 'Tạo ví lạnh', persona, current: '# Nháp cũ\n\nVài dòng' });
+  assert.match(a, /^Viết một Article \(bài dài có tiêu đề, tóm tắt và các mục\) dạng "Hướng dẫn từng bước"/);
+  assert.match(a, /\n\nHồ sơ của admin — [\s\S]*\n\nDàn ý nên theo:\n1\. /);
+  assert.match(a, /- Độ dài khoảng 800–1\.200 từ\./);
+  assert.match(a, /- Markdown: "## " cho tiêu đề mục \(3–6 mục, mỗi mục một ý\)[^\n]*Không dùng "# " trong nội dung\./);
+  assert.match(a, /rất ít hoặc không emoji; không hashtag/);
+  const q = '"'.repeat(3);
+  assert.ok(a.includes(`Bản nháp đang có:\n${q}\n# Nháp cũ\n\nVài dòng\n${q}`));
+  assert.match(a, /\n\nTrả về đúng khuôn dưới đây, không viết gì thêm:\nTIÊU ĐỀ: <tối đa 64 ký tự[^\n]*\nTÓM TẮT: <1–2 câu, tối đa 255 ký tự[^\n]*\nNỘI DUNG:\n<toàn bộ nội dung bằng Markdown[^\n]*>$/);
+  assert.match(BG.aiWritePrompt({ format: 'article' }), /\nChủ đề: điều thành viên cộng đồng cần biết nhất lúc này, theo hồ sơ của admin\.\n/);
+});
+
+test('Đọc Article AI trả về: theo khuôn (cả nhãn in đậm), cắt tiêu đề ≤ 64 / tóm tắt ≤ 255 ở ranh giới từ, bỏ tiêu đề lặp đầu nội dung; không theo khuôn thì lấy dòng "# "; chỗ trống cần điền', () => {
+  const longTitle = 'Tạo ví lạnh an toàn trong 15 phút: hướng dẫn cho người mới bắt đầu từ A tới Z';
+  const r = BG.aiParseArticle(`**TIÊU ĐỀ:** ${longTitle}\n**TÓM TẮT:** Ba bước để giữ tài sản an toàn.\nNỘI DUNG:\n# ${longTitle}\n\nMở bài.\n\n## Bước 1\nLàm [tên ví].`);
+  assert.equal(r.title, 'Tạo ví lạnh an toàn trong 15 phút: hướng dẫn cho người mới bắt');
+  assert.ok(r.title.length <= 64);
+  assert.equal(r.summary, 'Ba bước để giữ tài sản an toàn.');
+  assert.equal(r.content, 'Mở bài.\n\n## Bước 1\nLàm [tên ví].');
+  assert.equal(BG.aiParseArticle('TÓM TẮT: ' + 'chữ '.repeat(100)).summary.length <= 255, true);
+  const loose = BG.aiParseArticle('```markdown\n# Ví lạnh là gì\n\nĐoạn mở.\n\n## Vì sao cần\nVì…\n```');
+  assert.deepEqual(loose, { title: 'Ví lạnh là gì', summary: '', content: 'Đoạn mở.\n\n## Vì sao cần\nVì…' });
+  assert.deepEqual(BG.aiParseArticle('Chỉ một đoạn.'), { title: '', summary: '', content: 'Chỉ một đoạn.' });
+  assert.deepEqual(BG.aiBlanks('Vào [link đăng ký] lúc [giờ bắt đầu] — đọc [bài ghim](https://beincom.com/x), [x] xong, lại [link đăng ký]'), ['[link đăng ký]', '[giờ bắt đầu]']);
+  assert.deepEqual(BG.aiBlanks(''), []);
+});
