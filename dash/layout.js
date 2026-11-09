@@ -1,4 +1,5 @@
 // Dashboard — gọn giao diện: mục lục nhanh đầu mỗi tab (từ 4 thẻ trở lên, bấm là tới thẻ) và nút thu gọn từng thẻ.
+// Giao diện Hiện đại: mục lục thành hàng mục con — mỗi tab chỉ hiện một thẻ (xem subMode).
 // Thẻ đã thu gọn nhớ trong trình duyệt này (localStorage, chỉ là tiện ích hiển thị; đọc / ghi lỗi thì bỏ qua).
 
 const FOLD_KEY = 'beingroup-folded';
@@ -57,8 +58,76 @@ function syncSticky() {
 }
 window.addEventListener('resize', syncSticky);
 
+// ---------- Giao diện Hiện đại: mỗi tab một thẻ ----------
+// Mục lục thành hàng mục con (từ 2 thẻ), bấm là chọn thẻ; thẻ khác của tab mang .sub-off (chỉ dashboard-modern.css ẩn, nên
+// về Cổ điển là hiện lại đủ). Thẻ nhỏ đi kèm thẻ chính hiện cùng (Thống kê). Thẻ đã chọn nhớ theo tab. Tab Quy tắc & cài
+// đặt đã chia mục riêng (dash/setnav.js) nên không áp.
+const SUB_WITH = { 'stats-top-posts': 'stats', 'stats-top-authors': 'stats', 'stats-best': 'stats' };
+const SUB_FIRST = { overview: 'todo', members: 'review' }; // thẻ mở đầu khi chưa chọn (không có thì thẻ đầu tiên)
+const subMode = () => document.documentElement.dataset.ui === 'modern' && currentTab !== 'settings';
+
+function subChosen(tab, leads) {
+  let id = '';
+  try {
+    id = localStorage.getItem('beinfusion-sub-' + tab) || '';
+  } catch {}
+  return leads.find((c) => c.id === id) || leads.find((c) => c.id === SUB_FIRST[tab]) || leads[0] || null;
+}
+
+// lead = null: hiện đủ (tab ít thẻ)
+function applySub(tab, lead) {
+  for (const c of document.querySelectorAll('main section.card[id]')) {
+    if (c.closest('[data-tab]')?.dataset.tab !== tab) continue;
+    const on = !lead || c === lead || SUB_WITH[c.id] === lead.id;
+    c.classList.toggle('sub-off', !on);
+    if (on && lead && c.classList.contains('folded')) setFolded(c, false, { save: false }); // nút thu gọn ẩn ở giao diện này
+  }
+}
+
+function selectSub(card) {
+  const lead = $(SUB_WITH[card.id]) || card;
+  try {
+    localStorage.setItem('beinfusion-sub-' + currentTab, lead.id);
+  } catch {}
+  const was = lead.classList.contains('sub-off');
+  applySub(currentTab, lead);
+  renderToc();
+  if (!was) return;
+  window.scrollTo(0, 0);
+  if (currentTab === 'stats' && typeof renderStats === 'function') renderStats(); // biểu đồ cần chiều rộng thật
+}
+
+// Số trên tiêu đề thẻ (vd. Việc cần làm 8) hiện cạnh tên mục con
+const subCount = (c) => [...c.querySelectorAll(':scope > .card-head h2 :is(.badge, .tag)')].map((x) => x.textContent.trim()).find((t) => /^\d+$/.test(t) && t !== '0') || '';
+
+// Chỗ nào cuộn tới một thẻ (mở từ thông báo, Việc đầu tuần, Lịch, #thẻ…) thì chọn thẻ đó trước — không phải sửa từng chỗ
+const scrollIntoViewRaw = Element.prototype.scrollIntoView;
+Element.prototype.scrollIntoView = function (...args) {
+  const card = this.closest?.('main section.card[id]');
+  if (card?.classList.contains('sub-off') && subMode()) selectSub(card);
+  return scrollIntoViewRaw.apply(this, args);
+};
+
 function renderToc() {
   const nav = $('tab-toc');
+  if (subMode()) {
+    const leads = tabCards(currentTab).filter((c) => !c.hidden && !SUB_WITH[c.id]);
+    nav.hidden = leads.length < 2;
+    nav.classList.add('sub');
+    nav.setAttribute('role', 'tablist');
+    const on = nav.hidden ? null : subChosen(currentTab, leads);
+    applySub(currentTab, on);
+    if (on)
+      nav.replaceChildren(
+        ...leads.map((c) => {
+          const n = subCount(c);
+          return el('button', { type: 'button', role: 'tab', class: 'toc-chip' + (c === on ? ' on' : ''), 'aria-selected': String(c === on), onclick: () => selectSub(c) }, cardTitle(c), n ? el('span', { class: 'toc-n', text: n }) : null);
+        }),
+      );
+    return syncSticky();
+  }
+  nav.classList.remove('sub');
+  nav.removeAttribute('role');
   const cards = tabCards(currentTab);
   nav.hidden = cards.length < TOC_MIN;
   if (nav.hidden) return syncSticky();

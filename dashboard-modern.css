@@ -122,7 +122,7 @@ html[data-ui="modern"] .tabs button[data-tab="log"] { --ic: url("data:image/svg+
   }
   html[data-ui="modern"] .topbar { grid-area: top; }
   html[data-ui="modern"] #banner { grid-area: banner; margin: 18px 28px 0; }
-  html[data-ui="modern"] main { grid-area: main; width: 100%; max-width: 1280px; margin: 0; }
+  html[data-ui="modern"] main { grid-area: main; align-content: start; width: 100%; max-width: 1280px; margin: 0; } /* hàng theo nội dung, không giãn cho đầy màn hình */
   html[data-ui="modern"] body > footer { grid-area: foot; }
   html[data-ui="modern"] .tabs {
     grid-area: side;
@@ -157,6 +157,18 @@ html[data-ui="modern"] .tabs button[data-tab="log"] { --ic: url("data:image/svg+
   html[data-ui="modern"] .tabs .tab-refresh { align-self: stretch; margin: 6px 0 0; }
   html[data-ui="modern"] .tab-toc { top: var(--topbar-h, 57px); }
 }
+
+/* ---------- Mỗi tab một thẻ: hàng mục con (dash/layout.js subMode) ---------- */
+html[data-ui="modern"] main > .sub-off { display: none !important; }
+html[data-ui="modern"] main > .card > .card-head > .card-fold { display: none; }
+html[data-ui="modern"] main > .kpis { order: -1; } /* Tổng quan: ô số liệu trên cùng, rồi mới tới hàng mục con */
+html[data-ui="modern"] .tab-toc.sub { gap: 4px; margin: -6px 0 -4px; padding: 8px 0 10px; box-shadow: none; background: color-mix(in srgb, var(--bg) 88%, transparent); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
+html[data-ui="modern"] .tab-toc.sub .toc-chip { display: inline-flex; align-items: center; gap: 6px; padding: 6px 13px; border: 1px solid transparent; border-radius: 10px; background: transparent; box-shadow: none; color: var(--muted); font-size: 13px; font-weight: 500; }
+html[data-ui="modern"] .tab-toc.sub .toc-chip:hover { transform: none; border-color: transparent; background: var(--surface-2); color: var(--fg); }
+html[data-ui="modern"] .tab-toc.sub .toc-chip.on { border-color: var(--border); background: var(--surface); color: var(--fg); font-weight: 600; box-shadow: var(--shadow); }
+html[data-ui="modern"] .toc-n { min-width: 18px; padding: 0 6px; border-radius: 99px; background: var(--accent-soft); color: var(--accent); font-size: 11px; font-weight: 700; line-height: 18px; text-align: center; }
+html[data-ui="modern"] .tab-toc.sub::-webkit-scrollbar { display: none; }
+html[data-ui="modern"] .tab-toc.sub { scrollbar-width: none; }
 
 /* ---------- Hiệu ứng: nhẹ, ngắn ---------- */
 @keyframes bf-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }

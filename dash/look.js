@@ -11,6 +11,7 @@ function applyDashUi(ui) {
     // Bố cục đổi: đo lại thanh trên / thanh tab cho các phần dính khi cuộn
     requestAnimationFrame(() => {
       if (typeof syncTopbar === 'function') syncTopbar();
+      if (typeof renderToc === 'function') renderToc(); // Hiện đại: mục con, mỗi tab một thẻ
       if (typeof syncSticky === 'function') syncSticky();
     });
   }
