@@ -1143,6 +1143,7 @@ dialog.me-card { max-width: 620px; padding: 0; overflow: hidden; }
 .ai-persona-row { flex-direction: row; align-items: center; justify-content: space-between; flex-wrap: wrap; }
 dialog.ai-persona { max-width: 680px; height: auto; max-height: min(94vh, 960px); }
 .ap-warn { margin: 10px 0 0; padding: 8px 12px; border-radius: 10px; background: var(--warn-soft); }
+.ap-fill { display: flex; align-items: center; gap: 6px; margin-top: 12px; }
 .ap-fields { display: grid; gap: 12px; margin-top: 14px; }
 .ap-field { display: flex; flex-direction: column; gap: 5px; }
 .ap-field input, .ap-field textarea { width: 100%; }

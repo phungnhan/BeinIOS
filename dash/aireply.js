@@ -262,13 +262,14 @@ async function arGenerate() {
   AR.abort = new AbortController();
   const cost0 = AR.cost;
   let cancelled = false;
-  const community = [...new Set(todo.flatMap((c) => (c.groups || []).map((g) => g.communityName || g.name)).filter(Boolean))].slice(0, 3).join(', ');
+  const community = arCommunity(todo);
+  const ctx = arContext(todo);
   renderAr();
   let done = 0;
   try {
     for (const chunk of BG.aiChunks(todo)) {
       arStatus(`AI đang viết… ${done}/${todo.length}`);
-      const req = BG.aiRequest({ key: cfg.key, model: cfg.model, input: BG.aiReplyInput({ comments: chunk, posts: AR.posts, style, note, community, persona: data.aiPersona }) });
+      const req = BG.aiRequest({ key: cfg.key, model: cfg.model, input: BG.aiReplyInput({ comments: chunk, posts: AR.posts, style, note, community, persona: data.aiPersona, ctx }) });
       const body = await aiCall(req, { signal: AR.abort.signal });
       const out = BG.aiParseReplies(body, chunk.map((c) => c.id));
       AR.cost += BG.aiCost(body.usage, body.model || cfg.model);
@@ -363,6 +364,36 @@ async function arSendAll() {
 const arTodo = () => AR.list.filter((c) => !['sent', 'dry'].includes(AR.drafts[c.id]?.status));
 const arCommunity = (list) => [...new Set(list.flatMap((c) => (c.groups || []).map((g) => g.communityName || g.name)).filter(Boolean))].slice(0, 3).join(', ');
 
+// Bối cảnh gửi kèm (Cài đặt › Trợ lý AI → Bối cảnh khi trả lời bình luận): bài ở cộng đồng / group nào, ai viết bài; bình
+// luận được trả lời và các trả lời trước trong thread; người bình luận là ai (tác giả bài, thành viên mới, vi phạm). Tắt hết: null.
+function arContext(list) {
+  const s = data.settings;
+  if (!s.aiCtxPlace && !s.aiCtxThread && !s.aiCtxAuthor) return null;
+  const now = Date.now();
+  const byId = new Map(groups().map((g) => [g.id, g]));
+  const where = (gs) =>
+    [...new Set((gs || []).map((g) => {
+      const full = byId.get(g.id) || g;
+      return full.isCommunity || !full.communityName ? full.name : `${full.communityName} › ${full.name}`;
+    }).filter(Boolean))].join(', ');
+  const about = (gs) => (gs || []).map((g) => byId.get(g.id)?.description).find(Boolean) || '';
+  const posts = {};
+  for (const c of list) {
+    if (posts[c.postId]) continue;
+    const p = PV.post?.id === c.postId ? PV.post : postOf(c.postId, c);
+    const gs = p.groups?.length ? p.groups : c.groups;
+    posts[c.postId] = { where: where(gs), about: about(gs), author: p.actor || null };
+  }
+  const joins = {};
+  if (s.aiCtxAuthor) {
+    for (const e of data.log || []) if (e.kind === 'member' && e.action === 'approve' && e.status === 'ok' && e.userId && now - e.time <= BG.NEW_MEMBER_DAYS * 864e5) joins[e.userId] = Math.max(joins[e.userId] || 0, e.time);
+  }
+  const violations = {};
+  if (s.aiCtxAuthor) for (const c of list) if (c.actor?.id && !(c.actor.id in violations)) violations[c.actor.id] = profileOf(c.actor.id)?.events?.length || 0;
+  const pool = [...(data.state.recentComments || []), ...(PV.items || []), ...Object.values(PV.replies || {}).flat(), ...list];
+  return { place: s.aiCtxPlace, thread: s.aiCtxThread, author: s.aiCtxAuthor, posts, pool, me: data.state.me?.id || '', joins, violations, now };
+}
+
 // Chép vào bộ nhớ tạm (trình duyệt chặn Clipboard API thì dùng cách cũ)
 async function arCopy(text) {
   try {
@@ -415,7 +446,7 @@ function arWebCopy() {
   const site = BG.AI_WEB_SITES[$('ar-site').value] ? $('ar-site').value : 'claude';
   const style = $('ar-style').value;
   const note = [cfg.note, $('ar-note').value.trim()].filter(Boolean).join('\n');
-  const p = BG.aiWebPrompt({ comments: todo, posts: AR.posts, style, note, community: arCommunity(todo), persona: data.aiPersona });
+  const p = BG.aiWebPrompt({ comments: todo, posts: AR.posts, style, note, community: arCommunity(todo), persona: data.aiPersona, ctx: arContext(todo) });
   AR.webIds = p.ids;
   const copying = arCopy(p.text);
   const app = aiOpenSite(site);

@@ -27,6 +27,7 @@ async function readGroup(client, admin) {
     level: d.level ?? 0,
     privacy: d.privacy || '',
     userCount: d.userCount ?? null,
+    description: String(d.description || '').trim().slice(0, 300),
     settings: {
       isJoinApproval: !!d.settings?.isJoinApproval,
       contentApproval: !!d.settings?.contentApproval?.value,

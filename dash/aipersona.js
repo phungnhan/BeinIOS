@@ -20,12 +20,21 @@ function apForm() {
   return BG.cleanPersona({ on: $('ap-on').checked, ...Object.fromEntries(AP_FIELDS.map((k) => [k, $('ap-' + k).value])) });
 }
 
+// Ô chữ giãn theo nội dung (tới khoảng 12 dòng): điền sẵn xong không phải cuộn trong từng ô
+function fitApBoxes() {
+  for (const t of document.querySelectorAll('#ai-persona textarea')) {
+    t.style.height = '';
+    if (t.scrollHeight > t.clientHeight) t.style.height = Math.min(t.scrollHeight + 2, 280) + 'px';
+  }
+}
+
 function renderApPreview() {
   const p = apForm();
   const n = BG.personaCount(p);
   $('ap-count').textContent = n ? `Đã điền ${n}/${AP_FIELDS.length} mục` : 'Chưa điền mục nào';
   $('ap-samples-count').textContent = `${$('ap-samples').value.length}/${BG.PERSONA_MAX.samples} ký tự`;
   $('ap-preview').textContent = BG.aiPersonaBlock({ ...p, on: true }) || 'Chưa có gì để gửi — điền ít nhất một mục.';
+  fitApBoxes();
 }
 
 function openPersona() {
@@ -34,6 +43,7 @@ function openPersona() {
   for (const k of AP_FIELDS) $('ap-' + k).value = p[k];
   renderApPreview();
   $('ai-persona').showModal();
+  fitApBoxes(); // hộp vừa hiện mới đo được chiều cao chữ
 }
 
 // Đoạn chính bạn viết trong kết quả quét: bài đăng (dài trước, tối đa 3) và câu trả lời bình luận (mới trước, tối đa 5)
@@ -68,32 +78,57 @@ $('ap-fill-posts').addEventListener('click', () => {
   toast(`Đã thêm ${add.length} đoạn bạn từng viết — xem lại, bỏ đoạn không giống giọng bạn.`);
 });
 
-// Tên và phần giới thiệu trên trang cá nhân Beincom (chỉ điền ô đang trống)
-$('ap-fill-me').addEventListener('click', async () => {
-  const me = data.state.me || {};
-  const btn = $('ap-fill-me');
+// Cộng đồng bạn quản trị (kết quả quét): tên, vai trò, số thành viên, số group con, giới thiệu trên Beincom.
+// Chỉ quản trị group con (không có cộng đồng nào) thì lấy các group đó.
+function myCommunities() {
+  const gs = groups();
+  const tops = gs.filter((g) => g.isCommunity);
+  const list = (tops.length ? tops : gs.slice(0, 6)).slice().sort((a, b) => (b.userCount || 0) - (a.userCount || 0)); // lớn trước
+  return list.map((g) => ({
+    name: tops.length ? g.name : groupPath(g),
+    role: (g.roles || []).includes('role_OWNER') ? 'chủ cộng đồng' : g.isCommunity ? 'admin cộng đồng' : 'admin group',
+    members: g.userCount ?? null,
+    groups: tops.length ? gs.filter((x) => !x.isCommunity && x.communityId === g.communityId).length : 0,
+    about: g.description || '',
+  }));
+}
+
+const AP_LABELS = { name: 'Tên, cách xưng hô', about: 'Về bạn', community: 'Về cộng đồng', voice: 'Cách bạn viết', avoid: 'Điều AI không được viết', samples: 'Đoạn bạn từng viết' };
+
+// Lấy thông tin của tôi: điền tất cả ô — trang cá nhân Beincom (tên, giới thiệu), cộng đồng bạn quản trị, Quy tắc bài viết,
+// bài và câu trả lời bạn đã viết (cách xưng hô, cách viết, đoạn mẫu). Ô đã có chữ: hỏi thay hết hay chỉ điền ô trống.
+$('ap-fill-all').addEventListener('click', async () => {
+  const btn = $('ap-fill-all');
   btn.disabled = true;
-  let bio = '';
-  let name = me.fullname || '';
+  let info = null;
   try {
     const r = await chrome.runtime.sendMessage({ type: 'selfInfo' });
-    if (r?.status === 'ok') {
-      bio = r.info?.bio || '';
-      name = r.info?.fullname || name;
-    }
+    if (r?.status === 'ok') info = r.info;
   } catch {}
+  const auto = BG.personaAutofill({ info, me: data.state.me, communities: myCommunities(), writings: myWritings(), style: (await aiConfig()).style, postRules: data.postRules });
   btn.disabled = false;
-  const filled = [];
-  if (!$('ap-name').value.trim() && name) {
-    $('ap-name').value = name;
-    filled.push('tên');
-  }
-  if (!$('ap-about').value.trim() && bio) {
-    $('ap-about').value = bio;
-    filled.push('giới thiệu');
+  const keys = AP_FIELDS.filter((k) => auto[k]);
+  if (!keys.length) return toast('Chưa lấy được thông tin nào — quét một lần (đã đăng nhập Beincom) rồi thử lại.', 'warn');
+  const busy = keys.filter((k) => $('ap-' + k).value.trim() && $('ap-' + k).value.trim() !== auto[k]);
+  const replace =
+    !busy.length ||
+    (await confirmDialog({
+      title: 'Thay cả các ô đã có chữ?',
+      text: `${busy.length} ô đang có chữ: ${busy.map((k) => AP_LABELS[k]).join(', ')}. Thay tất cả bằng thông tin vừa lấy — hoặc Huỷ để chỉ điền các ô còn trống.`,
+      okText: 'Thay tất cả',
+      local: true,
+      sendNote: 'Chỉ đổi trong hộp này — bấm Lưu mới lưu hồ sơ.',
+    }));
+  let n = 0;
+  for (const k of keys) {
+    const box = $('ap-' + k);
+    if (!replace && box.value.trim()) continue;
+    if (box.value.trim() !== auto[k]) n++;
+    box.value = auto[k];
   }
   renderApPreview();
-  toast(filled.length ? `Đã điền ${filled.join(' và ')} từ trang cá nhân Beincom — thêm cách xưng hô (vd: xưng mình).` : 'Không có gì mới để điền (ô đã có chữ, hoặc trang cá nhân chưa có giới thiệu).', filled.length ? '' : 'warn');
+  const noInfo = info ? '' : ' Chưa đọc được trang cá nhân Beincom (cần đăng nhập) nên chưa có phần giới thiệu.';
+  toast((n ? `Đã điền ${n} ô — xem lại, sửa cho đúng giọng bạn rồi bấm Lưu.` : 'Không có gì mới để điền.') + noInfo, n && info ? '' : 'warn');
 });
 
 $('ap-save').addEventListener('click', async () => {

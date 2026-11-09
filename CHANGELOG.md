@@ -2,6 +2,14 @@
 
 Mỗi bản một mục, bản mới nhất ở trên. Dashboard tự hiện các mục mới sau khi cập nhật (bấm "Có gì mới" ở cuối trang để xem lại).
 
+## v0.68.0 — 09/11/2026
+- **Bối cảnh khi trả lời bình luận** (Cài đặt › Trợ lý AI, bật sẵn, tắt được từng phần): mỗi bình luận gửi AI kèm theo
+  - **Nơi bình luận**: bài ở cộng đồng / group nào (kèm giới thiệu của group trên Beincom) và ai viết bài — bài của chính bạn thì AI biết đó là bài của admin.
+  - **Bình luận được trả lời**: khi người ta trả lời một bình luận khác, AI thấy bình luận gốc và vài trả lời trước đó trong thread, nên trả lời đúng mạch cuộc trò chuyện; người ta đang trả lời bình luận của bạn thì AI nói tiếp câu chuyện của bạn.
+  - **Người bình luận**: là tác giả bài viết, thành viên mới (được duyệt trong 30 ngày qua — có thể chào mừng ngắn), từng vi phạm (chỉ để AI chọn giọng cẩn trọng, không bao giờ nhắc tới), bình luận lần thứ mấy ở bài.
+- **Hồ sơ của bạn cho AI: nút Lấy thông tin của tôi** điền tất cả ô một lần — tên và giới thiệu trên trang cá nhân Beincom; các cộng đồng bạn quản trị (vai trò, số thành viên, số group con, giới thiệu); cách xưng hô (mình / tôi…, gọi anh em / các bạn…) và cách viết (độ dài câu, emoji hay dùng, hay hỏi lại người đọc) đoán từ các bài và câu trả lời bạn đã viết; điều AI không được viết (kèm tên miền và từ bị cấm trong Quy tắc bài viết); đoạn mẫu. Ô đã có chữ thì hỏi trước: thay tất cả, hay chỉ điền ô còn trống. Các ô tự giãn theo nội dung.
+- Kết quả quét lưu thêm phần giới thiệu của từng group (nếu Beincom có).
+
 ## v0.67.0 — 09/11/2026
 - **Hồ sơ của bạn cho AI** (tab Trợ lý AI, hoặc Cài đặt › Trợ lý AI → Sửa hồ sơ): tên và cách xưng hô, về bạn, về cộng đồng, cách bạn viết, điều AI không được viết, và vài đoạn bạn từng viết. Addon gửi kèm hồ sơ mỗi lần nhờ AI — trả lời bình luận, viết bài đăng, mẫu bài chào / vinh danh — để câu chữ đúng giọng bạn, đúng bối cảnh cộng đồng thay vì giọng chung chung. Tóm tắt bình luận chỉ lấy tên và phần Về cộng đồng.
 - AI chỉ học giọng văn từ các đoạn mẫu (nhịp câu, từ hay dùng, cách xưng hô, cách dùng emoji), không chép nội dung; không nhắc lại hồ sơ, không bịa thêm trải nghiệm, con số hay sự việc mà hồ sơ không có; tránh văn mẫu, giọng quảng cáo.

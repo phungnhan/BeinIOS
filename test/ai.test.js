@@ -254,3 +254,85 @@ test('Hồ sơ cho AI có trong bản sao lưu: làm sạch khi đọc tệp, h�
   const lạ = BG.readBackup({ app: 'BeinFusion', format: 1, data: { rules: {}, aiPersona: { name: 123, about: ['x'], voice: 'Câu ngắn' } } });
   assert.deepEqual(lạ.data.aiPersona, { ...BG.DEFAULT_PERSONA, voice: 'Câu ngắn' });
 });
+
+test('Bối cảnh khi trả lời bình luận: nơi bình luận, người viết bài, bình luận được trả lời + các trả lời trước trong thread, người bình luận; tắt từng phần', () => {
+  const now = Date.parse('2026-11-09T05:00:00Z');
+  const at = (h) => new Date(now - h * 3600e3).toISOString();
+  const A = (id, name) => ({ id, username: id, fullname: name });
+  const root = { id: 'r1', postId: 'p1', parentId: '', text: 'Ví lạnh nào tốt cho người mới?', actor: A('u1', 'Lan'), createdAt: at(5) };
+  const mine = { id: 'm1', postId: 'p1', parentId: 'r1', text: 'Ledger hoặc Trezor đều ổn bạn nhé', actor: A('me', 'Kai'), createdAt: at(4) };
+  const other = { id: 'o1', postId: 'p1', parentId: 'r1', text: 'Mình dùng Ledger 2 năm', actor: A('u2', 'Minh'), createdAt: at(3) };
+  const reply = { id: 'c1', postId: 'p1', parentId: 'r1', text: 'Cảm ơn, giá Ledger bao nhiêu ạ?', actor: A('u1', 'Lan'), createdAt: at(1) };
+  const later = { id: 'c2', postId: 'p1', parentId: 'r1', text: 'Mình cũng hỏi giống bạn', actor: A('u3', 'Hà'), createdAt: at(0.5) };
+  const adminRoot = { id: 'r2', postId: 'p1', parentId: '', text: 'Tối nay AMA lúc 20h nhé', actor: A('me', 'Kai'), createdAt: at(6) };
+  const toAdmin = { id: 'c3', postId: 'p1', parentId: 'r2', text: 'Có xem lại được không ạ?', actor: A('u4', 'Tú'), createdAt: at(2) };
+  const ctx = {
+    place: true,
+    thread: true,
+    author: true,
+    me: 'me',
+    now,
+    posts: { p1: { where: 'Crypto Life › Hỏi đáp', about: 'Kiến thức crypto an toàn', author: A('u1', 'Lan') } },
+    pool: [root, mine, other, reply, later, adminRoot, toAdmin],
+    joins: { u1: now - 3 * 864e5, u4: now - 40 * 864e5 },
+    violations: { u1: 2 },
+  };
+  const parse = (s) => JSON.parse(s.split('\n').at(-1));
+  const d = parse(BG.aiReplyInput({ comments: [reply, toAdmin], posts: { p1: 'Bài hỏi ví' }, ctx }));
+  assert.deepEqual(d.posts, [{ id: 'p1', where: 'Crypto Life › Hỏi đáp', where_about: 'Kiến thức crypto an toàn', author: 'Lan @u1', text: 'Bài hỏi ví' }]);
+  const [c1, c3] = d.comments;
+  assert.deepEqual(c1.replying_to, { author: 'Lan @u1', text: 'Ví lạnh nào tốt cho người mới?' });
+  assert.deepEqual(c1.thread_before, [
+    { author: 'the admin (you)', text: 'Ledger hoặc Trezor đều ổn bạn nhé' },
+    { author: 'Minh @u2', text: 'Mình dùng Ledger 2 năm' },
+  ]);
+  assert.deepEqual(c1.about_author, ['wrote this post', 'new member — joined 3 days ago', '2 past violations on record — private, only for choosing a careful tone; never mention', 'comment #2 from this person on this post']);
+  assert.deepEqual(c3.replying_to, { author: 'the admin (you)', text: 'Tối nay AMA lúc 20h nhé' });
+  assert.ok(!('thread_before' in c3) && !('about_author' in c3), JSON.stringify(c3)); // vào 40 ngày trước: không còn là thành viên mới
+  // Tắt từng phần
+  const off = parse(BG.aiReplyInput({ comments: [reply], posts: { p1: 'Bài' }, ctx: { ...ctx, place: false, thread: false } }));
+  assert.deepEqual(off.posts[0], { id: 'p1', text: 'Bài' });
+  assert.deepEqual(Object.keys(off.comments[0]), ['id', 'post', 'author', 'is_reply', 'text', 'about_author']);
+  const none = parse(BG.aiReplyInput({ comments: [reply], posts: { p1: 'Bài' } }));
+  assert.deepEqual(Object.keys(none.comments[0]), ['id', 'post', 'author', 'is_reply', 'text']);
+  // Luật cho AI: dùng bối cảnh, không nhắc ghi chú riêng
+  assert.match(BG.AI_SYSTEM, /replying_to and thread_before/);
+  assert.match(BG.AI_SYSTEM, /Never mention them\./);
+  // Chép – dán: ghi chú tiếng Việt; mã rút gọn không làm bình luận tự lọt vào thread_before của chính nó
+  const web = BG.aiWebPrompt({ comments: [reply], posts: { p1: 'Bài' }, ctx });
+  const wd = JSON.parse(web.text.split('Dữ liệu (JSON):\n')[1].split('\n\nChỉ trả lời')[0]);
+  assert.equal(wd.comments[0].id, '1');
+  assert.deepEqual(wd.comments[0].thread_before.map((x) => x.author), ['admin (chính bạn)', 'Minh @u2']);
+  assert.deepEqual(wd.comments[0].about_author.slice(0, 2), ['là tác giả bài viết', 'thành viên mới — vào 3 ngày trước']);
+  assert.match(web.text, /replying_to và thread_before/);
+});
+
+test('Lấy thông tin của tôi: điền đủ 6 ô — trang cá nhân, cộng đồng quản trị, quy tắc bài viết, cách xưng hô và cách viết đoán từ đoạn đã viết', () => {
+  const writings = ['Chào anh em, mình mới cập nhật bài ghim về ví lạnh 🙏 Anh em đọc kỹ nhé.', 'Mình nghĩ nên DCA đều đặn. Anh em thấy sao?', 'Cảm ơn bạn 😄'];
+  const p = BG.personaAutofill({
+    info: { fullname: 'Kai Crypto', bio: 'Chia sẻ kiến thức crypto an toàn.' },
+    me: { fullname: 'Tên cũ' },
+    communities: [
+      { name: 'Crypto Life', role: 'chủ cộng đồng', members: 12361, groups: 2, about: 'Cho người mới.' },
+      { name: 'Food Research', role: 'admin cộng đồng', members: 3, groups: 0, about: '' },
+    ],
+    writings,
+    style: 'friendly',
+    postRules: { blockedDomains: ['t.me', 'bit.ly'], bannedKeywords: ['cam kết lợi nhuận'] },
+  });
+  assert.equal(p.name, 'Kai Crypto — xưng mình, gọi anh em');
+  assert.equal(p.about, 'Chia sẻ kiến thức crypto an toàn.\nQuản trị 2 cộng đồng trên Beincom: Crypto Life (chủ cộng đồng, 12.361 thành viên); Food Research (admin cộng đồng, 3 thành viên).');
+  assert.equal(p.community, 'Crypto Life (2 group con): Cho người mới.\nFood Research');
+  assert.equal(p.voice, 'Thân thiện, gần gũi; câu ngắn, gọn; ít emoji (🙏 😄) (theo các đoạn bạn đã viết)');
+  assert.equal(p.avoid, 'Không hứa hẹn điều đội admin chưa quyết; không chia sẻ thông tin riêng của thành viên; không công kích, chê bai cá nhân.\nKhông nhắc tới hay dẫn link tới: t.me, bit.ly.\nKhông dùng các từ bị cấm trong cộng đồng: cam kết lợi nhuận.');
+  assert.equal(p.samples, writings.join('\n\n---\n\n'));
+  assert.equal(BG.personaCount(p), 6);
+  // Câu dài, nhiều emoji, hay hỏi, hashtag; xưng tôi, gọi các bạn
+  assert.equal(BG.writingVoice(['Tôi muốn các bạn hiểu rằng việc giữ khoá riêng tư ở nơi an toàn là điều quan trọng nhất khi bắt đầu tham gia thị trường này ✅✅ #antoan?', 'Các bạn đã sao lưu seed phrase chưa? 🔐🔐'], 'formal'), 'Lịch sự, trang trọng; câu vừa phải; hay dùng emoji (✅ 🔐); hay hỏi lại người đọc; có dùng hashtag (theo các đoạn bạn đã viết)');
+  assert.equal(BG.personaAutofill({ writings: ['Tôi gửi các bạn bài này nhé, các bạn xem'] }).name, 'xưng tôi, gọi các bạn');
+  // Chưa có gì: vẫn có cách viết mặc định và điều không được viết
+  const empty = BG.personaAutofill({});
+  assert.deepEqual([empty.name, empty.about, empty.community, empty.samples], ['', '', '', '']);
+  assert.equal(empty.voice, 'Thân thiện, gần gũi');
+  assert.equal(BG.personaCount(empty), 2);
+});
