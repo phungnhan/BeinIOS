@@ -148,6 +148,7 @@ node test/pwa/pwa.e2e.mjs
 
 ## Lịch sử BeinIOS
 
+- **1.8.11 (09/11/2026).** Gộp addon BeinFusion 0.69.3 — sửa tận gốc lỗi không đăng được bài có ảnh / video: trước đây ứng dụng theo dõi tiến độ khi gửi file lên kho lưu trữ của Beincom, làm trình duyệt hỏi trước kho và bị từ chối nên file không được gửi đi. Giờ gửi như web Beincom; thanh tiến độ chạy dạng "đang tải".
 - **1.8.10 (09/11/2026).** Gộp addon BeinFusion 0.69.2 — sửa lỗi đăng ảnh "Beincom xử lý ảnh quá lâu" với ảnh lớn: ứng dụng chờ Beincom xử lý nhiều lượt (tới 3 phút với ảnh, 10 phút với video), nút Đăng ghi đang chờ bao lâu. Dán ảnh vào ô soạn bài / Article (giữ ô soạn rồi chọn Dán) thành ảnh đính kèm.
 - **1.8.9 (09/11/2026).** Gộp addon BeinFusion 0.69.1 — trong các ô của Trợ lý AI có chữ gợi ý "vd: …", khi ô còn trống bấm phím Tab (iPad có bàn phím rời, hoặc máy tính) để điền gợi ý thành chữ thật rồi sửa tiếp. Trên iPhone không có phím Tab nên không đổi gì.
 - **1.8.8 (09/11/2026).** Gộp addon BeinFusion 0.69.0 — **mẫu đề bài viết bài chất lượng**: khi nhờ AI viết bài đăng / Article, chọn loại bài (Thông báo, Hướng dẫn từng bước, Chia sẻ kiến thức, Mở thảo luận, Sự kiện / AMA, Tổng kết, Cảnh báo lừa đảo, Câu chuyện — mỗi loại một dàn ý) và độ dài; AI viết dòng đầu cuốn hút, đoạn ngắn, không bịa — thiếu giờ / link thì để chỗ [ ] và ứng dụng nhắc bạn điền. **AI viết Article** (Quản trị › Trợ lý AI) điền sẵn tiêu đề, tóm tắt và nội dung có các mục vào ô soạn Article.
