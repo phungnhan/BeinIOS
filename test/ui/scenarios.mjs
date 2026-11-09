@@ -2895,6 +2895,31 @@ export const scenarios = [
     },
   },
   {
+    name: 'Giao diện Dashboard: Cổ điển mặc định, chọn Hiện đại ở Cài đặt › Giao diện (thanh mục bên trái, nhớ khi mở lại), đổi lại được',
+    async run({ page, url, assert }) {
+      await page.open(url('dashboard', 'tab=settings&sec=look'));
+      await page.until(() => !document.getElementById('look-set').classList.contains('set-off'));
+      const st = () => page.call(() => ({ ui: document.documentElement.dataset.ui || '', checked: document.querySelector('input[name="dashUi"]:checked')?.value, dir: getComputedStyle(document.getElementById('tabs')).flexDirection, status: document.querySelector('#set-nav [data-sec="look"] em')?.textContent, saved: localStorage.getItem('beinfusion-ui') }));
+      const s0 = await st();
+      assert.deepEqual([s0.ui, s0.checked, s0.dir], ['', 'classic', 'row']);
+      assert.equal(await page.ev(`document.querySelectorAll('#look-set .look-opt').length`), 2);
+      await page.ev(`document.querySelector('input[name="dashUi"][value="modern"]').click(); true`);
+      await page.until(() => document.documentElement.dataset.ui === 'modern');
+      await page.until(() => chrome.storage.local.get('settings').then((o) => o.settings.dashUi === 'modern'));
+      await page.until(() => document.querySelector('#set-nav [data-sec="look"] em')?.textContent === 'Hiện đại');
+      const s1 = await st();
+      assert.deepEqual([s1.checked, s1.dir, s1.saved], ['modern', 'column', 'modern']);
+      // Mục có biểu tượng nét (mặt nạ SVG)
+      assert.equal(await page.ev(`getComputedStyle(document.querySelector('#tabs button[data-tab="overview"]'), '::before').content`), '""');
+      // Mở lại trang: dash/ui-early.js (trong <head>) đặt Hiện đại trước khi vẽ, theo bản nhớ ở localStorage
+      assert.equal(await page.ev(`(async () => { delete document.documentElement.dataset.ui; const s = document.createElement('script'); s.src = 'dash/ui-early.js?' + Date.now(); const done = new Promise((r) => (s.onload = r)); document.head.append(s); await done; return document.documentElement.dataset.ui; })()`), 'modern');
+      // Đổi lại Cổ điển
+      await page.ev(`document.querySelector('input[name="dashUi"][value="classic"]').click(); true`);
+      await page.until(() => !document.documentElement.dataset.ui && localStorage.getItem('beinfusion-ui') === 'classic');
+      assert.equal(await page.ev(`getComputedStyle(document.getElementById('tabs')).flexDirection`), 'row');
+    },
+  },
+  {
     name: 'Quy tắc & cài đặt chia mục: danh sách mục bên trái, chỉ hiện một mục, trạng thái nhanh, mở thẳng bằng #sec=',
     async run({ page, url, assert }) {
       await page.open(url('dashboard', 'tab=settings'));
@@ -2903,7 +2928,7 @@ export const scenarios = [
       const vis = (sel) => `!!document.querySelector(${JSON.stringify(sel)})?.offsetParent`;
       // Mọi phần của tab đều thuộc một mục (phần mới thêm mà quên gắn mục thì không bao giờ hiện)
       assert.deepEqual(await page.ev(`[...document.querySelectorAll('.rules-col > *, #settings > *, #settings-group > *')].filter((e) => !e.dataset.setSec).map((e) => e.id || e.className)`), []);
-      assert.equal(await page.ev(`document.querySelectorAll('#set-nav button[data-sec]').length`), 11);
+      assert.equal(await page.ev(`document.querySelectorAll('#set-nav button[data-sec]').length`), 12);
       // Mặc định: Hoạt động & quét; quy tắc, Telegram ẩn; mục lục nhanh không hiện ở tab này
       assert.equal(await page.ev(`document.querySelector('#set-nav .active').dataset.sec`), 'scan');
       assert.equal(await page.ev(`document.querySelector('#settings > .card-head h2').textContent`), 'Hoạt động & quét');

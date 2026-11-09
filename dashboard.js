@@ -132,6 +132,7 @@ function renderTab(t) {
 }
 
 function renderAll() {
+  applyDashUi(data.settings.dashUi); // dash/look.js
   renderTop();
   renderBadges();
   renderTabRefresh();
