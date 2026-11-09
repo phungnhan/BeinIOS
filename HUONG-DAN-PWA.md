@@ -148,6 +148,7 @@ node test/pwa/pwa.e2e.mjs
 
 ## Lịch sử BeinIOS
 
+- **1.9.0 (09/11/2026).** Gộp addon BeinFusion 0.70.0 — **bình luận kèm ảnh** trong cửa sổ Bài viết & bình luận (nút Ảnh hoặc dán ảnh; một ảnh mỗi bình luận, tải lên khi bấm Gửi). Phần "Ảnh từ Guar Studio" của addon chỉ dùng trên máy tính đang chạy Guar Studio nên không hiện trong BeinIOS.
 - **1.8.11 (09/11/2026).** Gộp addon BeinFusion 0.69.3 — sửa tận gốc lỗi không đăng được bài có ảnh / video: trước đây ứng dụng theo dõi tiến độ khi gửi file lên kho lưu trữ của Beincom, làm trình duyệt hỏi trước kho và bị từ chối nên file không được gửi đi. Giờ gửi như web Beincom; thanh tiến độ chạy dạng "đang tải".
 - **1.8.10 (09/11/2026).** Gộp addon BeinFusion 0.69.2 — sửa lỗi đăng ảnh "Beincom xử lý ảnh quá lâu" với ảnh lớn: ứng dụng chờ Beincom xử lý nhiều lượt (tới 3 phút với ảnh, 10 phút với video), nút Đăng ghi đang chờ bao lâu. Dán ảnh vào ô soạn bài / Article (giữ ô soạn rồi chọn Dán) thành ảnh đính kèm.
 - **1.8.9 (09/11/2026).** Gộp addon BeinFusion 0.69.1 — trong các ô của Trợ lý AI có chữ gợi ý "vd: …", khi ô còn trống bấm phím Tab (iPad có bàn phím rời, hoặc máy tính) để điền gợi ý thành chữ thật rồi sửa tiếp. Trên iPhone không có phím Tab nên không đổi gì.
