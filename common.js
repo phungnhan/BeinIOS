@@ -50,6 +50,10 @@
     autoApprovePosts: false, // tự duyệt bài chờ duyệt đạt mọi quy tắc của thành viên tin cậy
     trustedMembers: [], // username thành viên tin cậy
     trustAfterApproved: 0, // hoặc người đã được duyệt ít nhất N bài qua addon (0 = không dùng)
+    // Trả lời bình luận bằng AI: gửi kèm bối cảnh (lib/ai.js aiCommentContext)
+    aiCtxPlace: true, // cộng đồng / group của bài, tác giả bài
+    aiCtxThread: true, // bình luận được trả lời, các trả lời trước trong thread
+    aiCtxAuthor: true, // người bình luận: tác giả bài, thành viên mới, từng vi phạm, bình luận lần thứ mấy
   };
 
   // Quy tắc cho bài viết (bài chờ duyệt và bài mới đăng)

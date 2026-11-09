@@ -1458,6 +1458,12 @@
           <span class="tg-actions"><button type="button" class="ghost sm" id="btn-ai-test" data-tip="Gửi thử một yêu cầu rất ngắn để biết khoá dùng được">Kiểm tra</button><button type="button" class="primary sm" id="btn-ai-save">Lưu</button></span>
         </div>
       </div>
+      <div class="group ai-group ai-ctx-group">
+        <div class="group-title">Bối cảnh khi trả lời bình luận <button type="button" class="tip-i" data-tip="Gửi kèm từng bình luận để AI trả lời đúng chỗ, đúng người. Bài: cộng đồng / group nào, ai viết. Thread: bình luận đang được trả lời và các trả lời trước đó. Người bình luận: là tác giả bài, thành viên mới (được duyệt trong 30 ngày), từng vi phạm (chỉ để AI chọn giọng cẩn trọng, không nhắc tới), bình luận lần thứ mấy ở bài." aria-label="Gợi ý: Gửi kèm từng bình luận để AI trả lời đúng chỗ, đúng người. Bài: cộng đồng / group nào, ai viết. Thread: bình luận đang được trả lời và các trả lời trước đó. Người bình luận: là tác giả bài, thành viên mới (được duyệt trong 30 ngày), từng vi phạm (chỉ để AI chọn giọng cẩn trọng, không nhắc tới), bình luận lần thứ mấy ở bài.">i</button></div>
+        <label class="switch-row"><input type="checkbox" id="aiCtxPlace" /><span><b>Nơi bình luận</b> <span class="muted small">cộng đồng / group, người viết bài</span></span></label>
+        <label class="switch-row"><input type="checkbox" id="aiCtxThread" /><span><b>Bình luận được trả lời</b> <span class="muted small">và các trả lời trước trong thread</span></span></label>
+        <label class="switch-row"><input type="checkbox" id="aiCtxAuthor" /><span><b>Người bình luận</b> <span class="muted small">tác giả bài, thành viên mới, từng vi phạm</span></span></label>
+      </div>
       <div class="group sync-group">
         <div class="group-title">☁ Đồng bộ giữa các máy</div>
         <label class="switch-row"><input type="checkbox" id="syncSettings" /><span><b>Đồng bộ qua tài khoản Chrome / Edge</b> <button type="button" class="tip-i" data-tip="Cài đặt, quy tắc (chung và riêng từng group), mẫu bài chào / vinh danh đi theo tài khoản trình duyệt sang máy khác có cài BeinFusion. Không đồng bộ: công tắc bật addon, mẫu bài đăng, hồ sơ vi phạm (dùng Sao lưu)." aria-label="Gợi ý: Cài đặt, quy tắc (chung và riêng từng group), mẫu bài chào / vinh danh đi theo tài khoản trình duyệt sang máy khác có cài BeinFusion. Không đồng bộ: công tắc bật addon, mẫu bài đăng, hồ sơ vi phạm (dùng Sao lưu).">i</button></span></label>
@@ -1656,9 +1662,10 @@
     <div class="pv-body">
       <label class="switch-row"><input type="checkbox" id="ap-on" /><span><b>Dùng hồ sơ khi nhờ AI</b></span></label>
       <p class="ap-warn small">Hồ sơ được gửi kèm đề bài tới AI (Anthropic, hoặc trang chat bạn chọn) — đừng ghi số điện thoại, email, địa chỉ hay mật khẩu.</p>
+      <div class="ap-fill"><button type="button" class="primary sm" id="ap-fill-all">Lấy thông tin của tôi</button> <button type="button" class="tip-i" data-tip="Điền tất cả ô: tên và giới thiệu trên trang cá nhân Beincom, các cộng đồng bạn quản trị (vai trò, số thành viên, giới thiệu), Quy tắc bài viết, và các bài / câu trả lời bạn đã viết (cách xưng hô, cách viết, đoạn mẫu). Xem lại rồi sửa cho đúng." aria-label="Gợi ý: Điền tất cả ô: tên và giới thiệu trên trang cá nhân Beincom, các cộng đồng bạn quản trị (vai trò, số thành viên, giới thiệu), Quy tắc bài viết, và các bài / câu trả lời bạn đã viết (cách xưng hô, cách viết, đoạn mẫu). Xem lại rồi sửa cho đúng.">i</button></div>
       <div class="ap-fields">
         <div class="ap-field">
-          <div class="ap-field-head"><label for="ap-name"><b>Tên, cách xưng hô</b></label><button type="button" class="ghost sm" id="ap-fill-me" data-tip="Điền tên và phần giới thiệu trên trang cá nhân Beincom vào các ô đang trống">Lấy từ Beincom</button></div>
+          <div class="ap-field-head"><label for="ap-name"><b>Tên, cách xưng hô</b></label></div>
           <input type="text" id="ap-name" maxlength="200" placeholder="vd: Kai — xưng mình, gọi mọi người là anh em" />
         </div>
         <label class="ap-field"><b>Về bạn</b><textarea id="ap-about" rows="3" maxlength="1200" placeholder="vd: Admin Crypto Life, 6 năm đầu tư crypto, mảng chính là ví lạnh và an toàn tài sản; ban ngày làm IT."></textarea></label>
