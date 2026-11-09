@@ -2895,6 +2895,70 @@ export const scenarios = [
     },
   },
   {
+    name: 'Tab Trợ lý AI: tình trạng, 5 tác vụ mở đúng hộp, lịch sử; Huỷ khi AI đang viết (ghi lịch sử); AI viết bài đưa vào ô soạn',
+    async run({ page, url, assert }) {
+      await page.open(url('dashboard', 'tab=ai'));
+      await page.until(() => document.querySelectorAll('#ai-hub-tasks .ai-task').length === 5 && document.querySelectorAll('#ai-log-body tr').length === 4);
+      const info = await page.ev(`({
+        tasks: [...document.querySelectorAll('#ai-hub-tasks .ai-task')].map((t) => t.dataset.task),
+        status: [...document.querySelectorAll('#ai-hub-status .me-stat')].map((x) => x.querySelector('small').textContent + ': ' + x.querySelector('b').textContent),
+        log: [...document.querySelectorAll('#ai-log-body tr')].map((r) => r.children[1].textContent + ' | ' + r.children[3].textContent),
+        badge: document.getElementById('badge-ai').textContent,
+        reply: document.querySelector('[data-task=reply] .muted').textContent,
+        sum: document.querySelectorAll('#ai-sum-post option').length,
+      })`);
+      assert.deepEqual(info.tasks, ['reply', 'summary', 'welcome', 'shoutout', 'post']);
+      assert.match(info.status[0], /^qua Claude trên web: Chép – dán$/);
+      assert.match(info.status[1], /^lần nhờ AI tháng này: \d+$/);
+      assert.match(info.status[3], /^chi phí ước tính tháng này: /);
+      assert.deepEqual(info.log, ['Gửi câu trả lời | đã gửi 5', 'Trả lời bình luận | 5 bình luận', 'Bài chào thành viên mới | Xong', 'Tóm tắt bình luận | Lỗi: Máy chủ AI đang quá tải — thử lại sau ít phút']);
+      assert.ok(Number(info.badge) > 0 && info.reply === `${info.badge} bình luận mới chưa trả lời`, JSON.stringify(info));
+      assert.ok(info.sum > 0);
+      // Trả lời bình luận: mở hộp với đúng các bình luận đó
+      await page.ev(`document.querySelector('[data-task=reply] button.primary').click(); true`);
+      await page.until(() => document.getElementById('ai-reply').open);
+      assert.equal(await page.ev(`document.getElementById('ar-title').textContent`), `✨ Trả lời ${info.badge} bình luận bằng AI`);
+      await page.ev(`document.getElementById('ai-reply').close(); true`);
+      // Khoá API + AI treo: Huỷ thì dừng, ghi lịch sử "Đã huỷ"
+      await page.ev(`(async () => {
+        await chrome.storage.local.set({ aiConfig: { key: 'sk-ant-' + 'a'.repeat(30), model: 'claude-opus-5-5', mode: 'api' } });
+        window.__realFetch = window.__realFetch || window.fetch;
+        window.fetch = async (u, o) => {
+          if (!String(u).startsWith('https://api.anthropic.com/')) return window.__realFetch(u, o);
+          window.__aiHang = (window.__aiHang || 0) + 1;
+          return new Promise((_, rej) => o.signal.addEventListener('abort', () => rej(new DOMException('Aborted', 'AbortError'))));
+        };
+        return true;
+      })()`);
+      await page.ev(`document.querySelector('[data-task=reply] button.primary').click(); true`);
+      await page.until(() => document.getElementById('ai-reply').open && !document.getElementById('ar-gen').hidden && !document.getElementById('ar-gen').disabled);
+      await page.ev(`document.getElementById('ar-gen').click(); true`);
+      await page.until(() => window.__aiHang === 1 && !document.getElementById('ar-stop').hidden && document.getElementById('ar-stop').textContent === 'Huỷ');
+      await page.ev(`document.getElementById('ar-stop').click(); true`);
+      await page.until(() => /^Đã huỷ/.test(document.getElementById('ar-status').textContent) && document.getElementById('ar-stop').hidden && document.getElementById('ar-gen').textContent === 'Tạo câu trả lời');
+      await page.until(() => chrome.storage.local.get('aiLog').then((o) => o.aiLog[0].kind === 'reply' && o.aiLog[0].status === 'cancel' && o.aiLog[0].mode === 'api'));
+      await page.ev(`document.getElementById('ai-reply').close(); true`);
+      // Viết bài đăng: AI viết theo ý → Đưa vào ô soạn (tab Đăng bài)
+      await page.ev(`window.fetch = async (u, o) => {
+        if (!String(u).startsWith('https://api.anthropic.com/')) return window.__realFetch(u, o);
+        window.__aiReq = JSON.parse(o.body);
+        return new Response(JSON.stringify({ model: 'claude-opus-5-5', stop_reason: 'end_turn', content: [{ type: 'text', text: 'Tối thứ Sáu 20h mình có buổi AMA về ví lạnh, mọi người tham gia nhé!' }], usage: { input_tokens: 300, output_tokens: 60 } }), { status: 200, headers: { 'content-type': 'application/json' } });
+      }; true`);
+      await page.ev(`document.querySelector('[data-task=post] button.primary').click(); true`);
+      await page.until(() => document.getElementById('ai-draft').open && document.getElementById('ad-title').textContent === '✨ AI viết bài đăng');
+      await page.ev(`document.getElementById('ad-note').value = 'AMA tối thứ Sáu 20h về ví lạnh'; document.getElementById('ad-gen').click(); true`);
+      await page.until(() => !!document.getElementById('ad-result').value.trim() && !document.getElementById('ad-use').disabled);
+      assert.match(await page.ev(`window.__aiReq.messages[0].content`), /Ý chính của bài \(theo admin\): AMA tối thứ Sáu 20h về ví lạnh/);
+      await page.ev(`document.getElementById('ad-use').click(); true`);
+      await page.until(() => currentTab === 'compose' && document.getElementById('compose-text').value.startsWith('Tối thứ Sáu 20h'));
+      await page.until(() => chrome.storage.local.get('aiLog').then((o) => o.aiLog[0].kind === 'post' && o.aiLog[0].mode === 'api' && o.aiLog[0].cost > 0));
+      // Nút ✨ AI viết ngay ở thẻ Đăng bài mở cùng hộp
+      await page.ev(`document.getElementById('btn-compose-ai').click(); true`);
+      await page.until(() => document.getElementById('ai-draft').open && document.getElementById('ad-title').textContent === '✨ AI viết bài đăng');
+      await page.ev(`document.getElementById('ai-draft').close(); true`);
+    },
+  },
+  {
     name: 'Giao diện Dashboard: Cổ điển mặc định, chọn Hiện đại ở Cài đặt › Giao diện (thanh mục bên trái, nhớ khi mở lại), đổi lại được',
     async run({ page, url, assert }) {
       await page.open(url('dashboard', 'tab=settings&sec=look'));

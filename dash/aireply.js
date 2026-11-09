@@ -9,7 +9,8 @@
 
 // drafts[id] = { text, on, skip, reason, status: '' | 'sending' | 'sent' | 'dry' | 'error', error }
 // mode: 'web' | 'api' · webIds: mã rút gọn trong đề bài đã chép -> mã bình luận thật
-const AR = { list: [], posts: {}, drafts: {}, gen: false, sending: false, stop: false, cost: 0, cfg: null, fromPost: '', error: '', mode: 'web', webIds: null };
+// abort: AbortController của lần AI đang viết (Huỷ / đóng hộp thì huỷ)
+const AR = { list: [], posts: {}, drafts: {}, gen: false, sending: false, stop: false, cost: 0, cfg: null, fromPost: '', error: '', mode: 'web', webIds: null, abort: null };
 
 async function aiConfig() {
   const { aiConfig: c } = await chrome.storage.local.get('aiConfig');
@@ -25,17 +26,47 @@ async function askAiPermission() {
   }
 }
 
-// Gọi Claude: trả về { body } hoặc ném Error câu tiếng Việt
-async function aiCall(req) {
-  let res;
+// Ghi một dòng vào Lịch sử tác vụ AI (tab Trợ lý AI; khoá aiLog, chỉ trong máy này)
+async function noteAi(entry) {
   try {
-    res = await fetch(req.url, { method: 'POST', headers: req.headers, body: JSON.stringify(req.body) });
-  } catch {
-    throw new Error(BG.aiErrorText(0));
+    const { aiLog } = await chrome.storage.local.get('aiLog');
+    await chrome.storage.local.set({ aiLog: BG.aiLogPush(aiLog, entry) });
+  } catch {}
+}
+
+// Một lần gọi AI chờ tối đa ngần này (20 bình luận với Opus thường 30–60 giây); quá thì coi như treo
+const AI_TIMEOUT = 120000;
+
+// Gọi Claude: trả về { body } hoặc ném Error câu tiếng Việt. signal: nút Huỷ (lỗi mang cancelled: true)
+// Nút Huỷ và hạn chờ gộp vào một bộ huỷ (không dùng AbortSignal.any / .timeout: iPhone trước iOS 17.4 chưa có)
+async function aiCall(req, { signal = null } = {}) {
+  const ctl = new AbortController();
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    ctl.abort();
+  }, AI_TIMEOUT);
+  const onCancel = () => ctl.abort();
+  if (signal?.aborted) ctl.abort();
+  else signal?.addEventListener('abort', onCancel, { once: true });
+  const stopped = () =>
+    signal?.aborted ? Object.assign(new Error('Đã huỷ'), { cancelled: true }) : timedOut ? new Error(`AI chưa trả lời sau ${AI_TIMEOUT / 60000} phút — thử lại, chọn ít bình luận hơn, hoặc chọn mô hình nhanh hơn ở Cài đặt`) : null;
+  try {
+    let res;
+    try {
+      res = await fetch(req.url, { method: 'POST', headers: req.headers, body: JSON.stringify(req.body), signal: ctl.signal });
+    } catch {
+      throw stopped() || new Error(BG.aiErrorText(0));
+    }
+    const body = await res.json().catch(() => null);
+    const halt = stopped(); // huỷ / hết giờ lúc đang đọc câu trả lời
+    if (halt) throw halt;
+    if (!res.ok) throw new Error(BG.aiErrorText(res.status, body));
+    return body;
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener('abort', onCancel);
   }
-  const body = await res.json().catch(() => null);
-  if (!res.ok) throw new Error(BG.aiErrorText(res.status, body));
-  return body;
 }
 
 // ---------- Cài đặt ----------
@@ -131,8 +162,10 @@ function renderArFoot() {
   const send = $('ar-send');
   send.textContent = AR.sending ? 'Đang gửi…' : `Trả lời tất cả (${n})`;
   send.disabled = AR.gen || AR.sending || !n;
-  $('ar-stop').hidden = !AR.sending;
-  $('ar-stop').disabled = AR.stop;
+  // Đang gửi: Dừng (gửi xong câu đang gửi thì thôi); AI đang viết: Huỷ (giữ các đợt đã viết xong)
+  $('ar-stop').hidden = !AR.sending && !AR.gen;
+  $('ar-stop').textContent = AR.gen ? 'Huỷ' : 'Dừng';
+  $('ar-stop').disabled = AR.sending && AR.stop;
 }
 
 function arStatusTag(d) {
@@ -226,6 +259,9 @@ async function arGenerate() {
   if (!todo.length) return;
   AR.gen = true;
   AR.error = '';
+  AR.abort = new AbortController();
+  const cost0 = AR.cost;
+  let cancelled = false;
   const community = [...new Set(todo.flatMap((c) => (c.groups || []).map((g) => g.communityName || g.name)).filter(Boolean))].slice(0, 3).join(', ');
   renderAr();
   let done = 0;
@@ -233,7 +269,7 @@ async function arGenerate() {
     for (const chunk of BG.aiChunks(todo)) {
       arStatus(`AI đang viết… ${done}/${todo.length}`);
       const req = BG.aiRequest({ key: cfg.key, model: cfg.model, input: BG.aiReplyInput({ comments: chunk, posts: AR.posts, style, note, community }) });
-      const body = await aiCall(req);
+      const body = await aiCall(req, { signal: AR.abort.signal });
       const out = BG.aiParseReplies(body, chunk.map((c) => c.id));
       AR.cost += BG.aiCost(body.usage, body.model || cfg.model);
       arApply(chunk, out);
@@ -241,12 +277,16 @@ async function arGenerate() {
       renderAr();
     }
   } catch (e) {
-    AR.error = e.message || String(e);
+    cancelled = !!e.cancelled;
+    if (!cancelled) AR.error = e.message || String(e);
   } finally {
     AR.gen = false;
+    AR.abort = null;
   }
+  noteAi({ kind: 'reply', mode: 'api', model: cfg.model, count: done, total: todo.length, cost: AR.cost - cost0, status: cancelled ? 'cancel' : AR.error ? 'error' : 'ok', error: AR.error });
   const cost = AR.cost ? ` · chi phí ước tính ${AR.cost < 0.01 ? '< 0,01' : AR.cost.toFixed(2).replace('.', ',')} USD` : '';
-  if (AR.error) arStatus(`${AR.error}${done ? ` (đã viết xong ${done}/${todo.length})` : ''}${cost}`, 'err-text');
+  if (cancelled) arStatus(`Đã huỷ${done ? ` — giữ ${done}/${todo.length} câu đã viết xong` : ''}${cost}.`);
+  else if (AR.error) arStatus(`${AR.error}${done ? ` (đã viết xong ${done}/${todo.length})` : ''}${cost}`, 'err-text');
   else arStatus(`AI đã viết nháp cho ${done} bình luận${cost}.`);
   renderAr();
 }
@@ -309,6 +349,7 @@ async function arSendAll() {
   const left = picks.filter((c) => !AR.drafts[c.id].status).length;
   AR.sending = false;
   AR.stop = false;
+  if (n.ok || n.dry || n.failed) noteAi({ kind: 'replySend', mode: AR.mode, count: picks.length, sent: n.ok, dry: n.dry, failed: n.failed, status: n.failed || loginLost ? 'error' : 'ok' });
   const parts = [n.ok && `đã trả lời ${n.ok}`, n.dry && `Chạy thử: đã ghi ${n.dry} vào nhật ký`, n.failed && `lỗi ${n.failed}`, left && `còn ${left} chưa gửi`].filter(Boolean).join(', ');
   if (loginLost) toast('Phiên đăng nhập Beincom đã hết hạn — đăng nhập lại rồi bấm Trả lời tất cả để gửi tiếp.', 'err');
   else toast(parts ? parts[0].toUpperCase() + parts.slice(1) + '.' : 'Không có gì được gửi.', n.failed ? 'err' : n.dry ? 'warn' : 'ok');
@@ -402,6 +443,7 @@ function arWebFill() {
   const list = AR.list.filter((c) => want.has(String(c.id)));
   arApply(list, out);
   const got = list.filter((c) => out[c.id]).length;
+  noteAi({ kind: 'reply', mode: 'web', site: $('ar-site').value, count: got, total: list.length });
   arStatus(got === list.length ? `Đã điền nháp cho ${got} bình luận.` : `Đã điền ${got}/${list.length} bình luận — AI bỏ sót ${list.length - got} (gõ tay, hoặc nhờ AI viết thêm).`, got === list.length ? '' : 'warn-text');
   renderAr();
 }
@@ -456,12 +498,14 @@ for (const b of document.querySelectorAll('#ar-mode button')) {
 $('ar-gen').addEventListener('click', arGenerate);
 $('ar-send').addEventListener('click', arSendAll);
 $('ar-stop').addEventListener('click', () => {
+  if (AR.gen) return AR.abort?.abort();
   AR.stop = true;
   renderArFoot();
 });
 $('ar-close').addEventListener('click', () => $('ai-reply').close());
 $('ai-reply').addEventListener('cancel', (e) => AR.sending && e.preventDefault()); // đang gửi: Esc không đóng
 $('ai-reply').addEventListener('close', () => {
+  AR.abort?.abort(); // đóng hộp khi AI đang viết: huỷ luôn
   // Mở từ cửa sổ bài viết và đã trả lời: đọc lại bình luận của bài
   if (AR.fromPost && PV.post?.id === AR.fromPost && AR.list.some((c) => AR.drafts[c.id]?.status === 'sent')) {
     PV.replies = {};

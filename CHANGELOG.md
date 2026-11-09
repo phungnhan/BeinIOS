@@ -2,6 +2,12 @@
 
 Mỗi bản một mục, bản mới nhất ở trên. Dashboard tự hiện các mục mới sau khi cập nhật (bấm "Có gì mới" ở cuối trang để xem lại).
 
+## v0.66.0 — 09/11/2026
+- **Tab mới ✨ Trợ lý AI** — mọi việc AI làm được ở một chỗ: trả lời bình luận mới (bao nhiêu bình luận đang chờ trả lời hiện ngay trên tab), tóm tắt bình luận một bài (chọn bài nhiều bình luận), viết mẫu bài chào thành viên mới, viết mẫu bài vinh danh, và **viết bài đăng** theo ý bạn ghi (hoặc viết lại chữ đang có trong ô soạn) rồi đưa vào ô soạn ở tab Đăng bài để xem lại trước khi đăng. Thẻ Đăng bài cũng có nút **✨ AI viết**.
+- Đầu tab cho biết đang dùng cách nào (khoá API hay chép – dán), số lần nhờ AI, số câu trả lời đã gửi và chi phí ước tính của tháng này; nút **Cài đặt AI** mở thẳng phần cài đặt.
+- **Lịch sử tác vụ AI**: mỗi lần nhờ AI một dòng — lúc nào, việc gì, cách nào (mô hình / trang chat), kết quả (xong, đã huỷ, lỗi kèm lý do), chi phí. Chỉ lưu trong máy này (tối đa 200 dòng), xoá được.
+- **Huỷ khi AI đang viết**: nút **Huỷ** dừng ngay lượt đang chờ (trả lời bình luận giữ lại các câu đã viết xong). AI không trả lời sau 2 phút thì tự dừng và báo — trước đây có thể chờ mãi.
+
 ## v0.65.0 — 09/11/2026
 - **Giao diện Hiện đại: mỗi tab một thẻ** — đầu mỗi tab có hàng mục con (vd. Bài viết: Duyệt bài, Bài mới đăng, Bình luận mới, Tin nhắn chat…), bấm mục nào chỉ hiện thẻ đó thay vì một chuỗi thẻ dài phải cuộn. Mục con hiện cả số việc (vd. Việc cần làm 8), nhớ mục đã chọn của từng tab; mở sẵn Việc cần làm (Tổng quan) và Duyệt thành viên (Thành viên). Mở từ thông báo, Việc đầu tuần, Lịch… tự chọn đúng mục. Thống kê: các biểu đồ, bài nổi bật, người đăng tích cực, giờ tốt nhất ở chung một mục. Tổng quan: ô số liệu ở trên cùng. Giao diện Cổ điển giữ như cũ.
 - **Mã Beincom bớt nổi**: Hồ sơ cá nhân chuyển xuống cuối thẻ Addon ("Mã tài khoản — khi gửi hỗ trợ"); Hồ sơ thành viên bỏ hẳn.

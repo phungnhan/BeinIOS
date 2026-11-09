@@ -101,7 +101,7 @@ function sample(now) {
   };
 }
 
-const TABS = ['overview', 'members', 'content', 'reports', 'compose', 'stats', 'settings', 'log'];
+const TABS = ['overview', 'members', 'content', 'reports', 'compose', 'ai', 'stats', 'settings', 'log'];
 const result = { tabs: {} };
 let failed = false;
 const fail = (msg) => {
@@ -188,7 +188,7 @@ try {
 result.problems = problems;
 if (problems.length) fail(`${problems.length} lỗi JavaScript`);
 console.log(JSON.stringify(result, null, 2));
-console.log(failed ? '✖ Có lỗi' : '✔ Addon thật chạy được: service worker, Dashboard (8 tab), popup, trang Chat (cả BeinFusion Silk, font gói sẵn)');
+console.log(failed ? '✖ Có lỗi' : '✔ Addon thật chạy được: service worker, Dashboard (9 tab), popup, trang Chat (cả BeinFusion Silk, font gói sẵn)');
 chrome.kill();
 await sleep(300);
 try {

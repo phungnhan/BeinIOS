@@ -24,7 +24,7 @@ const LOG_PAGE = 50;
 const RECENT_PAGE = 30;
 
 let data = { settings: { ...BG.DEFAULT_SETTINGS }, rules: { ...BG.DEFAULT_RULES }, postRules: { ...BG.DEFAULT_POST_RULES }, groupRules: {}, state: {}, log: [] };
-const TABS = ['overview', 'members', 'content', 'reports', 'compose', 'stats', 'settings', 'log'];
+const TABS = ['overview', 'members', 'content', 'reports', 'compose', 'ai', 'stats', 'settings', 'log'];
 const hashParams = () => new URLSearchParams(location.hash.slice(1));
 let selectedGroupId = hashParams().get('group');
 // Tab mở lúc đầu: theo địa chỉ (#tab=…), link cũ #group=… mở tab Thành viên, #recent mở tab Bài viết
@@ -424,6 +424,7 @@ function renderBadges() {
   set('badge-members', t.requests);
   set('badge-content', t.posts + flaggedRecent().length + flaggedComments().length);
   set('badge-compose', sched.loaded ? sched.items.length : 0);
+  if (typeof aiBadgeCount === 'function') set('badge-ai', aiBadgeCount()); // dash/aihub.js: bình luận mới chưa trả lời
   // Báo cáo chờ xử lý + bài bị gắn cờ, theo lần quét gần nhất (mở tab Báo cáo cũng cập nhật số này)
   set('badge-reports', t.reports + t.autoFlagged + (data.settings.chatEnabled && data.settings.scanReports ? BG.chatReportsCount(data.state.chatReports) : 0));
 }

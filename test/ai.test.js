@@ -161,3 +161,40 @@ test('AI nháp chữ: yêu cầu Claude không khuôn JSON; đọc chữ trả v
   assert.throws(() => BG.aiParseText({ stop_reason: 'max_tokens', content: [{ type: 'text', text: 'dở' }] }), /bị cắt/);
   assert.throws(() => BG.aiParseText({ stop_reason: 'end_turn', content: [] }), /không trả lời gì/);
 });
+
+test('AI viết bài đăng: theo ý của admin, hoặc viết lại bản nháp; ghi chú, không bịa', () => {
+  const p = BG.aiPostPrompt({ idea: 'AMA tối thứ Sáu', groupName: 'Crypto Life', note: 'xưng mình' });
+  assert.match(p, /cộng đồng "Crypto Life"/);
+  assert.match(p, /Ý chính của bài \(theo admin\): AMA tối thứ Sáu/);
+  assert.match(p, /Ghi chú của admin \(làm theo\): xưng mình/);
+  assert.match(p, /Không bịa/);
+  assert.ok(!/Bản nháp đang có/.test(p));
+  const r = BG.aiPostPrompt({ current: 'nháp cũ' });
+  assert.match(r, /Viết lại bản nháp/);
+  const q = '"'.repeat(3);
+  assert.ok(r.includes(`Bản nháp đang có:\n${q}\nnháp cũ\n${q}`));
+});
+
+test('Lịch sử tác vụ AI: mới nhất trước, giữ tối đa 200 dòng; số liệu tháng này (không tính lần gửi / đã huỷ)', () => {
+  const now = Date.parse('2026-11-09T05:00:00Z');
+  let list = [];
+  for (let i = 0; i < 205; i++) list = BG.aiLogPush(list, { kind: 'reply', mode: 'web', count: i }, now - i);
+  assert.equal(list.length, BG.AI_LOG_MAX);
+  assert.equal(list[0].count, 204);
+  assert.equal(list[0].status, 'ok');
+  const day = 864e5;
+  const st = BG.aiLogStats(
+    [
+      { at: now, kind: 'reply', mode: 'api', cost: 0.03, status: 'ok' },
+      { at: now - day, kind: 'replySend', sent: 4, status: 'ok' },
+      { at: now - 2 * day, kind: 'post', mode: 'api', cost: 0.01, status: 'cancel' },
+      { at: now - 3 * day, kind: 'summary', mode: 'api', status: 'error' },
+      { at: Date.parse('2026-10-20T05:00:00Z'), kind: 'reply', cost: 9, status: 'ok' },
+    ],
+    now,
+  );
+  assert.deepEqual([st.tasks, st.sent, st.errors], [2, 4, 1]);
+  assert.ok(Math.abs(st.cost - 0.04) < 1e-9);
+  assert.deepEqual(BG.aiLogStats(null, now), { tasks: 0, sent: 0, cost: 0, errors: 0 });
+});
+
