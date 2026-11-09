@@ -364,7 +364,7 @@ function makeEnv({ data = fixture(), settings = {}, rules = {}, postRules = {}, 
     }
     if (path === 'user/me/profile') {
       data.meHeaders = opts.headers;
-      return reply(200, ok({ id: 'me1', username: 'kai', fullname: 'Kai Crypto' }));
+      return reply(200, ok({ id: 'me1', username: 'kai', fullname: 'Kai Crypto', ...(data.meProfile || {}) }));
     }
     if ((m = path.match(/^group\/manage\/communities\/(\w+)\/stats\/member-count$/))) {
       return data.officialMembers[m[1]] ? reply(200, ok(data.officialMembers[m[1]])) : reply(403, { code: 'forbidden', meta: { message: "You don't have permission" } });
@@ -4587,4 +4587,23 @@ test('kết quả quét lưu thành nhiều khoá: phần lớn nằm ngoài kho
   assert.ok(old.storage.stateGroups.snapshot && !('snapshot' in old.storage.state) && !('recentPosts' in old.storage.state));
   assert.deepEqual(old.storage.statePosts.recentPosts.map((p) => p.id), full.recentPosts.map((p) => p.id));
   assert.equal(stateOf(old).snapshot.groups.find((g) => g.id === 'gFood').requests.length, full.snapshot.groups.find((g) => g.id === 'gFood').requests.length - 1);
+});
+
+test('Hồ sơ cá nhân: lệnh selfInfo đọc trang cá nhân Beincom (không header phiên bản), chỉ trả cho trang — không lưu email / số điện thoại', async () => {
+  const data = fixture();
+  data.meProfile = { avatar: { url: 'https://media.beincom.com/a.png' }, gender: 'MALE', birthday: '1995-04-20T00:00:00.000Z', language: ['vi', 'en', 7], relationship_status: 'SINGLE', email: 'kai@example.com', country_code: '+84', phone: '912345678', city: 'Hồ Chí Minh', is_verified: true, secret: 'x' };
+  const env = makeEnv({ data });
+  await scan(env);
+  const before = JSON.stringify(env.storage);
+  const r = await env.send({ type: 'selfInfo' });
+  assert.equal(r.status, 'ok');
+  assert.deepEqual([r.info.fullname, r.info.avatar, r.info.gender, r.info.language, r.info.relationship, r.info.email, r.info.phone, r.info.countryCode, r.info.verified], ['Kai Crypto', 'https://media.beincom.com/a.png', 'MALE', ['vi', 'en'], 'SINGLE', 'kai@example.com', '912345678', '+84', true]);
+  assert.ok(!('secret' in r.info));
+  assert.equal(data.meHeaders['x-version-id'], undefined);
+  assert.equal(JSON.stringify(env.storage), before);
+  assert.ok(!JSON.stringify(env.storage).includes('kai@example.com'));
+  assert.ok(BG.SAFE_RESEND.has('selfInfo'));
+  // Hết phiên
+  const out = makeEnv({ loggedIn: false });
+  assert.equal((await out.send({ type: 'selfInfo' })).status, 'need_login');
 });

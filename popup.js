@@ -80,7 +80,7 @@ function renderTodo(groups, flagged, reports, comments = 0) {
 
 // Phần còn lại của BG (lib/*.js theo BG.PARTS): chỉ cần khi chưa có gói số đếm
 async function loadLib() {
-  if (BG.totals) return;
+  if (BG.evaluatePostIn) return; // lib/content.js đã nạp (BG.totals nay ở common.js)
   for (const p of BG.PARTS)
     await new Promise((resolve, reject) => {
       const s = document.createElement('script');

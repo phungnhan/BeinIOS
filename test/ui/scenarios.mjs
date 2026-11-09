@@ -882,22 +882,52 @@ export const scenarios = [
       await page.until(() => !document.getElementById('me-btn').hidden && !!document.querySelector('#me-btn .me-av'));
       assert.equal(await page.ev(`document.querySelector('#me-btn .me-av').textContent`), 'KC');
       await page.ev(`document.getElementById('me-btn').click(); true`);
-      await page.until(() => document.getElementById('me-card').open && document.querySelectorAll('#me-body .me-sec').length === 3);
+      // Mở: đầu thẻ, ô số liệu, thẻ Thông tin (đọc trang cá nhân Beincom qua lệnh selfInfo)
+      await page.until(() => document.getElementById('me-card').open && !!document.querySelector('#me-body .me-sec[data-key=info] .me-rows'));
       const info = await page.ev(`({
         head: document.getElementById('me-head').innerText,
-        titles: [...document.querySelectorAll('#me-body .me-sec h4')].map((h) => h.textContent),
-        admin: [...document.querySelectorAll('#me-body .me-sec')[1].querySelectorAll('.me-row')].map((r) => r.querySelector('.me-k').textContent + ' ' + r.querySelector('.me-v').textContent),
-        note: document.querySelectorAll('#me-body .me-sec')[1].querySelector('p')?.textContent,
+        stats: [...document.querySelectorAll('#me-stats .me-stat')].map((x) => x.querySelector('small').textContent + ': ' + x.querySelector('b').textContent),
+        tabs: [...document.querySelectorAll('#me-tabs .me-tab')].map((t) => t.textContent + (t.classList.contains('on') ? '*' : '')),
+        secs: [...document.querySelectorAll('#me-body .me-sec h4')].map((h) => h.textContent),
+        rows: [...document.querySelectorAll('#me-body .me-sec[data-key=info] .me-row')].map((r) => r.querySelector('.me-k').textContent + ': ' + r.querySelector('.me-v').textContent),
+        copies: document.querySelectorAll('#me-body .me-copy').length,
         id: [...document.querySelectorAll('#me-body .me-row')].find((r) => /Mã Beincom/.test(r.textContent))?.innerText,
-        link: document.querySelector('#me-body .me-links a')?.href,
+        link: document.querySelector('#me-head .me-link')?.href,
+        bio: document.querySelector('#me-head .me-bio')?.textContent,
+        calls: window.__selfInfo,
       })`);
       assert.match(info.head, /Kai Crypto/);
-      assert.match(info.head, /@kaicrypto · Quản trị 2 cộng đồng/);
-      assert.deepEqual(info.titles, ['Tài khoản', 'Quyền quản trị', 'Addon']);
-      assert.deepEqual(info.admin, ['Food Research Chủ sở hữu', 'Crypto Life Admin group · 1 group con']);
-      assert.match(info.note, /2 cộng đồng · 3 group đang quản trị · chủ 1 cộng đồng/);
+      assert.match(info.head, /@kaicrypto/);
+      assert.match(info.head, /Quản trị 2 cộng đồng/);
+      assert.equal(info.bio, 'Admin Crypto Life — chia sẻ kiến thức crypto an toàn.');
+      assert.deepEqual(info.stats.map((x) => x.split(':')[0]), ['Cộng đồng', 'Group quản trị', 'Thành viên', 'Việc đang chờ', 'Thao tác 30 ngày']);
+      assert.equal(info.stats[0], 'Cộng đồng: 2');
+      assert.deepEqual(info.tabs, ['Thông tin*', 'Quản trị', 'Hoạt động', 'Addon']);
+      assert.deepEqual(info.secs, ['Thông tin cá nhân', 'Tài khoản']);
+      assert.ok(info.rows.includes('Giới tính: Nam') && info.rows.includes('Ngày sinh: 20/04/1995') && info.rows.includes('Điện thoại: +84 912345678') && info.rows.includes('Tình trạng quan hệ: Chưa có'));
+      assert.ok(info.copies >= 3, 'chép email, số điện thoại, mã Beincom');
       assert.match(info.id, /me1/);
       assert.match(info.link, /\/users\/kaicrypto$/);
+      assert.equal(info.calls, 1);
+      // Thẻ Quản trị: cộng đồng có link, vai trò; thẻ Hoạt động / Addon
+      await page.ev(`[...document.querySelectorAll('#me-tabs .me-tab')].find((t) => t.textContent === 'Quản trị').click(); true`);
+      await page.until(() => !!document.querySelector('#me-body .me-sec[data-key=admin]'));
+      const admin = await page.ev(`({
+        rows: [...document.querySelectorAll('#me-body .me-sec[data-key=admin] .me-row')].map((r) => r.querySelector('.me-k').textContent + ' — ' + r.querySelector('.me-v').textContent),
+        note: document.querySelector('#me-body .me-sec[data-key=admin] p')?.textContent,
+        href: document.querySelector('#me-body .me-sec[data-key=admin] .me-k a')?.href,
+      })`);
+      assert.match(admin.rows[0], /^Food Research — Chủ sở hữu/);
+      assert.match(admin.rows[1], /^Crypto Life — Admin group · 1 group con/);
+      assert.match(admin.note, /2 cộng đồng · 3 group đang quản trị · chủ 1 cộng đồng/);
+      assert.match(admin.href, /community-detail/);
+      await page.ev(`[...document.querySelectorAll('#me-tabs .me-tab')].find((t) => t.textContent === 'Hoạt động').click(); true`);
+      await page.until(() => !!document.querySelector('#me-body .me-sec[data-key=activity]'));
+      await page.ev(`[...document.querySelectorAll('#me-tabs .me-tab')].find((t) => t.textContent === 'Addon').click(); true`);
+      await page.until(() => /Phiên bản/.test(document.querySelector('#me-body .me-sec[data-key=addon]')?.textContent || ''));
+      // Tải lại: đọc lại từ Beincom
+      await page.ev(`[...document.querySelectorAll('#me-head button')].find((b) => b.textContent === 'Tải lại').click(); true`);
+      await page.until(() => window.__selfInfo === 2);
       await page.ev(`document.querySelector('#me-card button[value=ok]').click(); true`);
       await page.until(() => !document.getElementById('me-card').open);
       // Mở thẳng bằng địa chỉ

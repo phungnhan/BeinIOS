@@ -184,7 +184,7 @@
     'chatQuotes', 'beinLinkNames', 'postFull', 'postComments', 'members', 'activity', 'scheduled', 'stats', 'reports', 'reportDetail',
     'mentionable', 'postDetail', 'pinned', 'groupSettings', 'banned', 'tagsSeries', 'tags', 'newMembers', 'syncStatus', 'storageUsage',
     'chatOverview', 'chatPosts', 'chatThread', 'chatThreads', 'chatPinned', 'chatMentions', 'chatReactions', 'chatSearch', 'userPosts',
-    'sweepSearch', 'monthly', 'linkPreview', 'retention', 'categories', 'refreshBadge', 'selfCheck', 'nudgeEffect', 'postStatsRefresh',
+    'sweepSearch', 'monthly', 'linkPreview', 'retention', 'categories', 'refreshBadge', 'selfCheck', 'nudgeEffect', 'postStatsRefresh', 'selfInfo',
   ]);
   const LOST_RE = /message channel closed|message port closed|Receiving end does not exist|Could not establish connection/i;
   const STALE_RE = /Extension context invalidated/i;
@@ -329,6 +329,61 @@
     return `${base}?comment_id=${c.id}` + (c.parentId ? `&parent_id=${c.parentId}` : '');
   }
 
+  // ---------- Số liệu dùng chung (Tổng quan, báo cáo, Hồ sơ cá nhân — mọi trang đều có common.js) ----------
+  // Bài bị Beincom gắn cờ tự động: một bài có thể nằm ở nhiều group, chỉ đếm một lần
+  function autoFlaggedIds(groups) {
+    return [...new Set((groups || []).flatMap((g) => g.flaggedIds || []))];
+  }
+
+  function totals(groups) {
+    let requests = 0;
+    let posts = 0;
+    let reports = 0;
+    const seenCommunity = new Set();
+    for (const g of groups || []) {
+      requests += g.pendingTotal || 0;
+      // Bài chờ duyệt tính theo community: chỉ cộng một lần
+      if (g.approvalCount != null && !seenCommunity.has(g.communityId)) {
+        seenCommunity.add(g.communityId);
+        posts += g.approvalCount;
+      }
+      // Báo cáo chờ xử lý chỉ đọc ở group gốc của community
+      reports += (g.reportIds || []).length;
+    }
+    return { requests, posts, reports, autoFlagged: autoFlaggedIds(groups).length };
+  }
+
+  // Đếm thao tác trong nhật ký addon theo loại (trong khoảng inRange; scope = Set id group cần tính, null = mọi group)
+  function countLogActions(log, inRange, scope = null) {
+    const a = { approved: 0, autoApproved: 0, declined: 0, autoDeclined: 0, removed: 0, banned: 0, unbanned: 0, postsApproved: 0, postsRejected: 0, postsHidden: 0, postsDeleted: 0, commentsHidden: 0, reportsHandled: 0, published: 0, scheduled: 0, groupSettings: 0, errors: 0 };
+    for (const e of log || []) {
+      if (!inRange(e.time)) continue;
+      if (scope && !scope.has(e.groupId)) continue;
+      if (e.status === 'error') {
+        a.errors++;
+        continue;
+      }
+      if (e.status !== 'ok') continue;
+      const auto = e.source === 'auto';
+      const k = e.kind || 'member';
+      if (k === 'member' && e.action === 'approve') auto ? a.autoApproved++ : a.approved++;
+      else if (k === 'member' && e.action === 'decline') auto ? a.autoDeclined++ : a.declined++;
+      else if (k === 'manage' && e.action === 'remove') a.removed++;
+      else if (k === 'manage' && e.action === 'ban') a.banned++;
+      else if (k === 'manage' && e.action === 'unban') a.unbanned++;
+      else if (k === 'post' && e.action === 'approve') a.postsApproved++;
+      else if (k === 'post' && e.action === 'reject') a.postsRejected++;
+      else if (k === 'post' && e.action === 'hide') a.postsHidden++;
+      else if (k === 'post' && e.action === 'delete') a.postsDeleted++;
+      else if (k === 'comment' && e.action === 'hide') a.commentsHidden++;
+      else if (k === 'report') a.reportsHandled++;
+      else if (k === 'compose' && e.action === 'publish') a.published++;
+      else if (k === 'compose' && e.action === 'schedule') a.scheduled++;
+      else if (k === 'groupSetting') a.groupSettings++;
+    }
+    return a;
+  }
+
   // ---------- Kết quả quét: nhiều khoá ----------
   // Khoá `state` từng chứa mọi thứ (~1 MB ở tài khoản thật): mỗi lần ghi (quét, mỗi thao tác) là cả khối, trang nào đang mở
   // cũng nhận cả khối cũ lẫn mới. Giờ phần lớn nằm ở khoá riêng — nền ghi đủ các khoá trong một lần, Chrome (và kho của
@@ -367,6 +422,9 @@
     parseList,
     vnDay,
     isOk,
+    totals,
+    autoFlaggedIds,
+    countLogActions,
     STATE_KEYS,
     joinState,
     splitState,

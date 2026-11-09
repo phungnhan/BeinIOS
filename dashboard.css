@@ -1058,24 +1058,64 @@ table.requests td.act-wrap button + button { margin-left: 0; }
 .me-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .me-av { position: relative; display: inline-grid; place-items: center; width: var(--s, 32px); height: var(--s, 32px); border-radius: 50%; overflow: hidden; flex: none; color: #fff; font-weight: 700; font-size: calc(var(--s, 32px) * 0.38); background: linear-gradient(135deg, hsl(var(--h, 260) 70% 62%), hsl(calc(var(--h, 260) + 25) 65% 45%)); }
 .me-av img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
-.me-card { max-width: 520px; }
-.me-head { display: flex; gap: 14px; align-items: center; margin-bottom: 6px; }
-.me-who { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.me-who b { font-size: 18px; }
+/* Hộp hồ sơ: ảnh bìa, avatar đè lên, ô số liệu, thẻ, các dòng nhãn trên / giá trị dưới hai cột */
+dialog.me-card { max-width: 620px; padding: 0; overflow: hidden; }
+.me-card form { display: flex; flex-direction: column; max-height: min(88vh, 820px); }
+.me-head, .me-stats, .me-tabs, .me-card .dialog-actions { flex: none; }
+.me-cover { height: 92px; overflow: hidden; background: linear-gradient(120deg, hsl(var(--h, 260) 58% 60%), hsl(calc(var(--h, 260) + 28) 52% 44%)); }
+.me-cover img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.me-id { display: flex; align-items: flex-start; gap: 14px; padding: 0 20px; margin-top: -34px; }
+.me-id > .me-av { box-shadow: 0 0 0 4px var(--surface); }
+.me-who { display: flex; flex-direction: column; gap: 3px; min-width: 0; padding-top: 42px; }
+.me-who b { font-size: 18px; line-height: 1.25; overflow-wrap: anywhere; }
 .me-vb { display: inline-grid; place-items: center; width: 18px; height: 18px; margin-left: 6px; border-radius: 50%; background: var(--accent); color: #fff; font-size: 11px; vertical-align: 2px; }
-.me-body { max-height: 62vh; overflow: auto; }
+.me-sub { display: flex; align-items: center; flex-wrap: wrap; gap: 2px 6px; font-size: 13px; }
+.me-acts { display: flex; align-items: center; gap: 6px; margin-left: auto; padding-top: 44px; flex: none; }
+.me-link { padding: 3px 10px; border: 1px solid var(--border); border-radius: 8px; font-size: 12.5px; font-weight: 500; color: var(--fg); text-decoration: none; white-space: nowrap; }
+.me-link:hover { border-color: var(--accent); color: var(--accent); }
+.me-bio { margin: 10px 20px 0; color: var(--muted); font-size: 13px; white-space: pre-line; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.me-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(88px, 1fr)); gap: 8px; padding: 14px 20px 2px; }
+.me-stat { min-width: 0; padding: 9px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg); }
+.me-stat b { display: block; font-size: 19px; line-height: 1.2; font-variant-numeric: tabular-nums; }
+.me-stat small { display: block; color: var(--muted); font-size: 12px; line-height: 1.3; }
+.me-stat.warn b { color: var(--warn); }
+.me-tabs { display: flex; flex-wrap: wrap; gap: 2px; padding: 12px 20px 0; border-bottom: 1px solid var(--border); }
+.me-tab { margin-bottom: -1px; padding: 7px 12px; border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: none; color: var(--muted); font: inherit; font-size: 13.5px; font-weight: 500; white-space: nowrap; cursor: pointer; }
+.me-tab:hover { color: var(--fg); }
+.me-tab.on { border-bottom-color: var(--accent); color: var(--accent); }
+.me-body { flex: 1; min-height: min(380px, 44vh); overflow: auto; padding: 2px 20px 6px; } /* đổi thẻ không làm hộp nhảy cao thấp */
 .me-sec { margin-top: 14px; }
-.me-sec h4 { margin: 0 0 4px; font-size: 13px; text-transform: uppercase; letter-spacing: 0.3px; color: var(--muted); }
-.me-sec p { margin: 0 0 6px; }
-.me-rows { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
-.me-row { display: flex; align-items: center; gap: 10px; padding: 8px 12px; }
-.me-row + .me-row { border-top: 1px solid var(--border); }
-.me-k { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.me-v { color: var(--muted); text-align: right; }
+.me-sec h4 { margin: 0 0 6px; font-size: 12px; text-transform: uppercase; letter-spacing: .4px; color: var(--muted); }
+.me-sec p { margin: 0 0 8px; }
+.me-rows { display: grid; grid-template-columns: 1fr 1fr; border: 1px solid var(--border); border-radius: var(--radius-sm); overflow: hidden; }
+.me-row { display: flex; flex-direction: column; gap: 1px; min-width: 0; margin-bottom: -1px; padding: 8px 12px; border-bottom: 1px solid var(--border); }
+.me-row.wide { grid-column: 1 / -1; }
+.me-k { overflow: hidden; color: var(--muted); font-size: 12px; white-space: nowrap; text-overflow: ellipsis; }
+.me-k a { color: var(--fg); font-size: 13.5px; font-weight: 600; text-decoration: none; }
+.me-k a:hover { color: var(--accent); }
+.me-vl { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.me-v { font-size: 13.5px; overflow-wrap: anywhere; }
+.me-v.none { color: var(--muted); }
 .me-v.ok { color: var(--ok); }
 .me-v.warn { color: var(--warn); }
 .me-v.bad { color: var(--err); }
-.me-links { margin-top: 14px; }
+.me-copy { flex: none; padding: 3px; border: 0; border-radius: 6px; background: none; color: var(--muted); line-height: 0; cursor: pointer; }
+.me-copy:hover { background: var(--accent-soft); color: var(--accent); }
+.me-card .dialog-actions { margin-top: 0; padding: 10px 20px 16px; border-top: 1px solid var(--border); }
+/* Điện thoại: cả hộp cuộn một thanh (đầu thẻ + ô số liệu cao, phần dưới riêng một thanh thì quá chật) */
+@media (max-width: 560px) {
+  dialog.me-card { overflow: auto; }
+  .me-card form { max-height: none; }
+  .me-body { overflow: visible; }
+  .me-rows { grid-template-columns: 1fr; }
+  .me-id { flex-wrap: wrap; }
+  .me-who { padding-top: 0; width: 100%; }
+  .me-acts { width: 100%; margin-left: 0; padding-top: 0; }
+  .me-stat { padding: 7px 10px; }
+  .me-stat b { font-size: 17px; }
+  .me-tabs { flex-wrap: nowrap; padding: 10px 12px 0; }
+  .me-tab { padding: 7px 9px; font-size: 13px; }
+}
 
 
 /* ---------- Gợi ý ngắn (tooltip) và hộp Hướng dẫn (dash/ui.js) ---------- */
