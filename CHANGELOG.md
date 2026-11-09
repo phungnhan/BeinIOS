@@ -2,6 +2,10 @@
 
 Mỗi bản một mục, bản mới nhất ở trên. Dashboard tự hiện các mục mới sau khi cập nhật (bấm "Có gì mới" ở cuối trang để xem lại).
 
+## v0.65.0 — 09/11/2026
+- **Giao diện Hiện đại: mỗi tab một thẻ** — đầu mỗi tab có hàng mục con (vd. Bài viết: Duyệt bài, Bài mới đăng, Bình luận mới, Tin nhắn chat…), bấm mục nào chỉ hiện thẻ đó thay vì một chuỗi thẻ dài phải cuộn. Mục con hiện cả số việc (vd. Việc cần làm 8), nhớ mục đã chọn của từng tab; mở sẵn Việc cần làm (Tổng quan) và Duyệt thành viên (Thành viên). Mở từ thông báo, Việc đầu tuần, Lịch… tự chọn đúng mục. Thống kê: các biểu đồ, bài nổi bật, người đăng tích cực, giờ tốt nhất ở chung một mục. Tổng quan: ô số liệu ở trên cùng. Giao diện Cổ điển giữ như cũ.
+- **Mã Beincom bớt nổi**: Hồ sơ cá nhân chuyển xuống cuối thẻ Addon ("Mã tài khoản — khi gửi hỗ trợ"); Hồ sơ thành viên bỏ hẳn.
+
 ## v0.64.0 — 09/11/2026
 - **Giao diện Hiện đại cho Dashboard** (Quy tắc & cài đặt › Giao diện, chọn bằng hình xem trước; Cổ điển vẫn là mặc định): màn hình rộng có thanh mục bên trái với biểu tượng nét, thanh trên trong mờ, ô số liệu rời, thẻ thoáng, bảng gọn với tên cột chữ nhỏ, ô nhập có viền sáng khi gõ; cả chế độ sáng và tối. Màn hình hẹp: hàng tab dạng viên thuốc.
 - Hiệu ứng nhẹ, ngắn: thẻ hiện mờ dần khi đổi tab, ô số liệu nổi nhẹ khi rê chuột, vạch chọn mọc ra ở thanh mục, hộp thoại mở mềm với nền mờ, thông báo trượt lên. Máy bật "Giảm chuyển động" thì tắt hết.

@@ -139,7 +139,7 @@ function renderPersonCard() {
   const list = (items, row, empty, max = 8) => (items.length ? [el('ul', { class: 'pcd-list' }, items.slice(0, max).map(row)), items.length > max ? el('p', { class: 'muted small', text: `… và ${items.length - max} mục nữa` }) : null] : [el('p', { class: 'muted small', text: empty })]);
   let body = [];
   if (PC.tab === 'overview') {
-    const account = { key: 'account', title: 'Tài khoản', rows: [u.username ? { label: 'Tên đăng nhập', value: '@' + u.username, copy: true } : null, { label: 'Mã Beincom', value: u.id, copy: true }, person?.totalJoinedGroup != null ? { label: 'Tham gia trên Beincom', value: `${person.totalJoinedGroup} group` } : null].filter(Boolean) };
+    const account = { key: 'account', title: 'Tài khoản', rows: [u.username ? { label: 'Tên đăng nhập', value: '@' + u.username, copy: true } : null, person?.totalJoinedGroup != null ? { label: 'Tham gia trên Beincom', value: `${person.totalJoinedGroup} group` } : null].filter(Boolean) };
     const where = info
       ? {
           key: 'where',

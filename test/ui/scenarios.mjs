@@ -891,7 +891,6 @@ export const scenarios = [
         secs: [...document.querySelectorAll('#me-body .me-sec h4')].map((h) => h.textContent),
         rows: [...document.querySelectorAll('#me-body .me-sec[data-key=info] .me-row')].map((r) => r.querySelector('.me-k').textContent + ': ' + r.querySelector('.me-v').textContent),
         copies: document.querySelectorAll('#me-body .me-copy').length,
-        id: [...document.querySelectorAll('#me-body .me-row')].find((r) => /Mã Beincom/.test(r.textContent))?.innerText,
         link: document.querySelector('#me-head .me-link')?.href,
         bio: document.querySelector('#me-head .me-bio')?.textContent,
         calls: window.__selfInfo,
@@ -905,8 +904,8 @@ export const scenarios = [
       assert.deepEqual(info.tabs, ['Thông tin*', 'Quản trị', 'Hoạt động', 'Addon']);
       assert.deepEqual(info.secs, ['Thông tin cá nhân', 'Tài khoản']);
       assert.ok(info.rows.includes('Giới tính: Nam') && info.rows.includes('Ngày sinh: 20/04/1995') && info.rows.includes('Điện thoại: +84 912345678') && info.rows.includes('Tình trạng quan hệ: Chưa có'));
-      assert.ok(info.copies >= 3, 'chép email, số điện thoại, mã Beincom');
-      assert.match(info.id, /me1/);
+      assert.ok(info.copies >= 3, 'chép tên đăng nhập, email, số điện thoại');
+      assert.ok(!/Mã/.test(info.rows.join('|')), 'mã tài khoản không nằm ở thẻ Thông tin');
       assert.match(info.link, /\/users\/kaicrypto$/);
       assert.equal(info.calls, 1);
       // Thẻ Quản trị: cộng đồng có link, vai trò; thẻ Hoạt động / Addon
@@ -925,6 +924,7 @@ export const scenarios = [
       await page.until(() => !!document.querySelector('#me-body .me-sec[data-key=activity]'));
       await page.ev(`[...document.querySelectorAll('#me-tabs .me-tab')].find((t) => t.textContent === 'Addon').click(); true`);
       await page.until(() => /Phiên bản/.test(document.querySelector('#me-body .me-sec[data-key=addon]')?.textContent || ''));
+      assert.match(await page.ev(`document.querySelector('#me-body .me-sec[data-key=addon]').textContent`), /Mã tài khoản \(khi gửi hỗ trợ\)me1/);
       // Tải lại: đọc lại từ Beincom
       await page.ev(`[...document.querySelectorAll('#me-head button')].find((b) => b.textContent === 'Tải lại').click(); true`);
       await page.until(() => window.__selfInfo === 2);
@@ -2917,6 +2917,44 @@ export const scenarios = [
       await page.ev(`document.querySelector('input[name="dashUi"][value="classic"]').click(); true`);
       await page.until(() => !document.documentElement.dataset.ui && localStorage.getItem('beinfusion-ui') === 'classic');
       assert.equal(await page.ev(`getComputedStyle(document.getElementById('tabs')).flexDirection`), 'row');
+    },
+  },
+  {
+    name: 'Giao diện Hiện đại: mỗi tab một thẻ — hàng mục con, nhớ thẻ đã chọn, nhảy tới thẻ thì tự chọn, về Cổ điển hiện đủ',
+    async run({ page, url, assert }) {
+      await page.open(url('dashboard', 'tab=settings&sec=look'));
+      await page.ev(`document.querySelector('input[name="dashUi"][value="modern"]').click(); true`);
+      await page.until(() => document.documentElement.dataset.ui === 'modern');
+      const vis = (id) => `getComputedStyle(document.getElementById(${JSON.stringify(id)})).display !== 'none'`;
+      // Bài viết: hàng mục con, chỉ một thẻ hiện
+      await page.ev(`showTab('content'); true`);
+      await page.until(() => document.getElementById('tab-toc').classList.contains('sub') && !document.getElementById('tab-toc').hidden);
+      const chips = await page.ev(`[...document.querySelectorAll('#tab-toc .toc-chip')].map((b) => b.textContent)`);
+      assert.ok(chips.includes('Duyệt bài') && chips.some((c) => c.startsWith('Bài mới đăng')) && chips.includes('Quản lý tag'), JSON.stringify(chips));
+      assert.equal(await page.ev(`[...document.querySelectorAll('main > section.card[data-tab="content"]')].filter((c) => getComputedStyle(c).display !== 'none').length`), 1);
+      assert.equal(await page.ev(`document.querySelectorAll('#tab-toc .toc-chip.on').length`), 1);
+      await page.ev(`[...document.querySelectorAll('#tab-toc .toc-chip')].find((b) => b.textContent.startsWith('Bài mới đăng')).click(); true`);
+      await page.until(new Function(`return ${vis('recent')} && !(${vis('approval')})`));
+      assert.equal(await page.ev(`localStorage.getItem('beinfusion-sub-content')`), 'recent');
+      // Thành viên: mở sẵn Duyệt thành viên; nhảy tới thẻ khác (vd. từ thông báo) thì tự chọn thẻ đó
+      await page.ev(`localStorage.removeItem('beinfusion-sub-members'); showTab('members'); true`);
+      await page.until(new Function(`return ${vis('review')} && !(${vis('guard')})`));
+      await page.ev(`document.getElementById('guard').scrollIntoView(); true`);
+      await page.until(new Function(`return ${vis('guard')} && !(${vis('review')}) && document.querySelector('#tab-toc .toc-chip.on').textContent.includes('Bảo vệ')`));
+      // Thống kê: thẻ nhỏ đi kèm thẻ chính
+      await page.ev(`localStorage.removeItem('beinfusion-sub-stats'); showTab('stats'); true`);
+      await page.until(new Function(`return ${vis('stats')} && ${vis('stats-top-posts')} && ${vis('stats-best')} && !(${vis('monthly')})`));
+      assert.ok(!(await page.ev(`[...document.querySelectorAll('#tab-toc .toc-chip')].some((b) => b.textContent.startsWith('Bài nổi bật'))`)));
+      // Tổng quan: ô số liệu trên cùng; Quy tắc & cài đặt: không có hàng mục con (đã chia mục riêng)
+      await page.ev(`showTab('overview'); true`);
+      assert.ok(await page.ev(`document.querySelector('main > .kpis').getBoundingClientRect().top < document.getElementById('tab-toc').getBoundingClientRect().top`));
+      await page.ev(`showTab('settings'); true`);
+      assert.equal(await page.ev(`getComputedStyle(document.getElementById('tab-toc')).display`), 'none');
+      // Về Cổ điển: hiện đủ các thẻ, mục lục kiểu cũ
+      await page.ev(`showSettingsSec('look'); document.querySelector('input[name="dashUi"][value="classic"]').click(); true`);
+      await page.until(() => !document.documentElement.dataset.ui);
+      await page.ev(`showTab('content'); true`);
+      await page.until(new Function(`return ${vis('recent')} && ${vis('approval')} && !document.getElementById('tab-toc').classList.contains('sub')`));
     },
   },
   {
