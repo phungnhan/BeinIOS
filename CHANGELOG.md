@@ -2,6 +2,9 @@
 
 Mỗi bản một mục, bản mới nhất ở trên. Dashboard tự hiện các mục mới sau khi cập nhật (bấm "Có gì mới" ở cuối trang để xem lại).
 
+## v0.69.1 — 09/11/2026
+- **Trợ lý AI: bấm Tab để điền gợi ý** — các ô có chữ mờ "vd: …" (ý chính của bài / Article, ghi chú cho AI, các ô của Hồ sơ cho AI, Hướng dẫn thêm ở Cài đặt): khi ô còn trống, bấm **Tab** là gợi ý thành chữ thật để sửa tiếp (đổi loại bài thì gợi ý đổi theo). Lúc đang ở ô, chữ mờ ghi thêm "· Tab để điền". Ô đã có chữ, hoặc Shift + Tab: Tab chuyển ô như thường.
+
 ## v0.69.0 — 09/11/2026
 - **Mẫu đề bài viết bài đăng / Article chất lượng**: khi nhờ AI viết bài, chọn **loại bài** — Tự do, Thông báo, Hướng dẫn từng bước, Chia sẻ kiến thức, Mở thảo luận, Sự kiện / AMA, Tổng kết tuần / tháng, Cảnh báo lừa đảo, Câu chuyện / trải nghiệm — mỗi loại có dàn ý riêng (vd Sự kiện: tên sự kiện và lợi ích → thời gian giờ Việt Nam, hình thức, link, khách mời → cách tham gia → nhắc giờ); và **độ dài** (Ngắn / Vừa / Dài, hoặc theo loại bài). Ô Ý chính đổi gợi ý theo loại; lựa chọn được nhớ cho lần sau.
 - Bộ luật chất lượng gửi kèm mọi đề bài: 1–2 dòng đầu vào thẳng điều quan trọng (quyết định người ta có bấm "Xem thêm"); đoạn ngắn dễ đọc trên điện thoại, danh sách khi nhiều ý; cụ thể, bỏ câu sáo rỗng; **không bịa** — thiếu giờ, link… thì để chỗ **[ ]** cho bạn điền; không hứa hẹn; kết bằng đúng một lời kêu gọi; AI tự đọc lại một lượt trước khi trả. Kèm Hồ sơ của bạn cho AI để đúng giọng bạn.
