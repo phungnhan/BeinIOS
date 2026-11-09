@@ -922,7 +922,8 @@
       };
       const copyText = (label, text) => navigator.clipboard?.writeText(text).then(() => PWA.toast('Đã chép', label + ': ' + text));
       async function renderProfile() {
-        const { state, settings, chatOverviewCache } = await page.store.get('local', ['state', 'settings', 'chatOverviewCache']);
+        const { settings, chatOverviewCache, ...parts } = await page.store.get('local', ['settings', 'chatOverviewCache', ...BG.STATE_KEYS]);
+        const state = BG.joinState(parts);
         const p = BG.selfProfile({ me: state?.me, chatMe: chatOverviewCache?.me, groups: state?.snapshot?.groups || [], settings: { ...BG.DEFAULT_SETTINGS, ...settings }, lastScan: state?.lastScan, lastResult: state?.lastResult });
         // Vừa sửa ở Trang cá nhân: dùng tên mới đọc từ Beincom (lần quét sau mới cập nhật state.me)
         const fullname = (bp?.username === p.username && bp?.fullname) || p.name;
@@ -1419,7 +1420,7 @@
       page.store.onChanged.addListener((changes, area) => {
         if ((area === 'pwa' && changes.config) || (area === 'local' && changes.chatOverviewCache)) renderAccount();
         if (area === 'local' && (changes.settings || changes.telegram || changes.aiConfig)) renderAdminStates();
-        if (area === 'local' && (changes.state || changes.chatOverviewCache) && !$('view-account').hidden) renderProfile();
+        if (area === 'local' && (changes.state || changes.stateGroups || changes.chatOverviewCache) && !$('view-account').hidden) renderProfile();
       });
 
       // ---------- Khởi động ----------

@@ -13,7 +13,7 @@
   'use strict';
   if (G.BeinPWA) return;
   const PWA = (G.BeinPWA = {});
-  const VERSION = '1.7.8';
+  const VERSION = '1.8.0';
   PWA.VERSION = VERSION;
 
   // ---------- 1. Kho lưu trữ ----------
@@ -71,7 +71,8 @@
           };
           return out;
         }),
-      // puts: khoá -> chuỗi JSON | null (xoá). Đọc giá trị cũ và ghi trong cùng một giao dịch; trả về giá trị cũ
+      // puts: khoá -> chuỗi JSON | null (xoá). Đọc giá trị cũ và ghi trong cùng một giao dịch (không đổi thì khỏi ghi — nền ghi
+      // đủ các khoá kết quả quét mỗi lần, như Chrome chỉ ghi khoá đổi); trả về giá trị cũ
       write: (puts) =>
         run('readwrite', (s) => {
           const old = new Map();
@@ -79,7 +80,7 @@
             s.get(k).onsuccess = (e) => {
               if (e.target.result !== undefined) old.set(k, e.target.result);
               if (v === null) s.delete(k);
-              else s.put(v, k);
+              else if (e.target.result !== v) s.put(v, k);
             };
           }
           return old;
@@ -98,7 +99,7 @@
         for (const [k, v] of puts) {
           if (map.has(k)) old.set(k, map.get(k));
           if (v === null) map.delete(k);
-          else map.set(k, v);
+          else if (map.get(k) !== v) map.set(k, v);
         }
         return old;
       },
