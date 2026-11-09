@@ -185,16 +185,18 @@ async function doBanEverywhere({ user, reason = 'VIOLATE_RULE', source = 'manual
   return { ...summary(r, settings), done: r.entries.filter((e) => e.status === 'ok').map((e) => e.groupId) };
 }
 
-// Viết bình luận vào bài (commentId rỗng) hoặc trả lời một bình luận gốc (như web)
-async function doCommentWrite({ postId, commentId = '', content, mentions = {}, source = 'manual' }) {
-  const err = BG.validateComment(content);
+// Viết bình luận vào bài (commentId rỗng) hoặc trả lời một bình luận gốc (như web). media.images: ảnh đã tải lên
+// (Dashboard tải với loại comment:content), mỗi ảnh { id, url, … } như kết quả uploadWait
+async function doCommentWrite({ postId, commentId = '', content, mentions = {}, media = null, source = 'manual' }) {
+  const images = (Array.isArray(media?.images) ? media.images : []).filter((x) => x && typeof x.id === 'string' && typeof x.url === 'string');
+  const err = BG.validateComment(content, { images: images.length });
   if (err) return { status: 'error', message: err };
   if (!postId) return { status: 'error', message: 'Thiếu bài cần bình luận' };
   const { settings, state, log } = await load();
   const post = (state.recentPosts || []).find((p) => p.id === postId) || (state.recentComments || []).find((c) => c.postId === postId && c.groups?.length) || {};
   const groups = state.snapshot?.groups || [];
   const g = groups.find((x) => post.seenIn?.includes(x.id)) || post.groups?.[0];
-  const body = { postId, content: String(content).trim(), media: { images: [] }, mentions: mentions || {} };
+  const body = { postId, content: String(content || '').trim(), media: { images }, mentions: mentions || {} };
   const item = {
     log: {
       kind: 'comment',
@@ -206,7 +208,7 @@ async function doCommentWrite({ postId, commentId = '', content, mentions = {}, 
       contentId: commentId || '',
       postId,
       contentType: 'COMMENT',
-      snippet: body.content.replace(/\s+/g, ' ').slice(0, 120),
+      snippet: ((images.length ? `[${images.length} ảnh] ` : '') + body.content.replace(/\s+/g, ' ')).slice(0, 120),
     },
     call: (c) => c.call('POST', commentId ? `content/comments/${commentId}/reply` : 'content/comments', body),
   };

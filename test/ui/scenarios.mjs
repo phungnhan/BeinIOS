@@ -3251,6 +3251,97 @@ export const scenarios = [
     },
   },
   {
+    name: 'Guar Studio: Cài đặt › Tích hợp (mã addon, Kiểm tra kết nối, báo chưa cho phép), nút hiện sau khi nối; chọn ảnh theo dự án cho bài đăng, Article, bình luận (kèm ảnh khi gửi)',
+    async run({ page, url, assert }) {
+      await page.open(url('dashboard', 'tab=settings&sec=guar'));
+      await page.until(() => !!document.getElementById('btn-guar-test') && document.getElementById('btn-guar-test').getClientRects().length > 0);
+      const s0 = await page.ev(`({ url: document.getElementById('guar-url').value, id: document.getElementById('guar-id').textContent, hidden: [...document.querySelectorAll('.guar-only')].map((b) => b.hidden), nav: document.querySelector('[data-sec="guar"] em')?.textContent })`);
+      assert.equal(s0.url, 'http://127.0.0.1:9191');
+      assert.equal(s0.id, await page.ev(`location.origin`));
+      assert.deepEqual(s0.hidden, [true, true, true]); // chưa nối: không hiện nút chọn ảnh
+      // Guar Studio giả: lần đầu chưa cho phép (403), sau đó cho phép
+      await page.ev(`(() => {
+        window.__realFetch = window.__realFetch || window.fetch;
+        window.__guarAllow = false;
+        window.__guarHits = [];
+        const PNG = Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='), (c) => c.charCodeAt(0));
+        const J = (o, st = 200) => new Response(JSON.stringify(o), { status: st, headers: { 'content-type': 'application/json' } });
+        const img = (id, name) => ({ id, name, url: '/assets/' + id, width: 1536, height: 1024, size: 2400000, modified: '2026-11-09T20:00:00+07:00', mime: 'image/png' });
+        window.fetch = async (u, o) => {
+          const s = String(u);
+          if (!s.startsWith('http://127.0.0.1:9191/')) return window.__realFetch(u, o);
+          window.__guarHits.push(s.slice(21));
+          if (!window.__guarAllow) return J({ error: 'origin_not_allowed' }, 403);
+          if (s.endsWith('/api/integrations/beinfusion/ping')) return J({ app: 'Guar Studio', version: '0.8.0', ok: true });
+          if (s.includes('/api/integrations/beinfusion/images')) return J({ app: 'Guar Studio', version: '0.8.0', groups: [
+            { id: 'project:wf_1', kind: 'project', name: 'DCA Crypto Investment Misconceptions', updated: '2026-11-09T20:00:00+07:00', images: [img('illustrations/wf_1/scene_1.png', 'scene_1.png'), img('illustrations/wf_1/scene_2.png', 'Cảnh 2')] },
+            { id: 'generated', kind: 'generated', name: 'Ảnh tạo bằng AI', updated: null, images: [img('generated/ai_1.png', 'ai_1.png')] },
+          ] });
+          if (s.includes('/assets/')) return new Response(new Blob([PNG], { type: 'image/png' }), { status: 200, headers: { 'content-type': 'image/png' } });
+          return J({ detail: 'Not Found' }, 404);
+        };
+        return true;
+      })()`);
+      await page.ev(`document.getElementById('btn-guar-test').click(); true`);
+      await page.until(() => /chưa cho phép BeinFusion/.test(document.getElementById('guar-status').textContent));
+      assert.match(await page.ev(`document.getElementById('guar-status').textContent`), new RegExp('dán mã ' + (await page.ev(`location.origin`)).replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')));
+      assert.ok(await page.ev(`window.__permRequests >= 1`)); // xin quyền truy cập địa chỉ Guar Studio lúc bấm
+      await page.ev(`window.__guarAllow = true; document.getElementById('btn-guar-test').click(); true`);
+      await page.until(() => /Đã kết nối Guar Studio 0\.8\.0 ✓/.test(document.getElementById('guar-status').textContent));
+      await page.until(() => [...document.querySelectorAll('.guar-only')].every((b) => !b.hidden));
+      assert.deepEqual(await page.ev(`chrome.storage.local.get('guarStudio').then((o) => o.guarStudio)`), { url: 'http://127.0.0.1:9191', ok: true, version: '0.8.0' });
+      await page.until(() => document.querySelector('[data-sec="guar"] em')?.textContent === 'Đã nối');
+      // Bài đăng: chọn 2 ảnh của dự án -> ảnh đính kèm (tên giữ / thêm đuôi)
+      await page.ev(`showTab('compose'); setComposeKind('post'); document.getElementById('media-btn-guar').click(); true`);
+      await page.until(() => document.getElementById('guar-pick').open && document.querySelectorAll('#gp-grid .gp-item').length === 2);
+      const g = await page.ev(`({ groups: [...document.querySelectorAll('#gp-group option')].map((o) => o.textContent), src: document.querySelector('#gp-grid img').getAttribute('src'), count: document.getElementById('gp-count').textContent })`);
+      assert.deepEqual(g.groups, ['DCA Crypto Investment Misconceptions (2)', 'Ảnh tạo bằng AI (1)']);
+      assert.equal(g.src, 'http://127.0.0.1:9191/assets/illustrations/wf_1/scene_1.png');
+      assert.equal(g.count, 'Chọn tối đa 10 ảnh');
+      await page.ev(`document.querySelectorAll('#gp-grid .gp-item')[0].click(); document.querySelectorAll('#gp-grid .gp-item')[1].click(); true`);
+      assert.equal(await page.ev(`document.getElementById('gp-count').textContent`), 'Đã chọn 2/10 ảnh');
+      await page.ev(`document.getElementById('gp-use').click(); true`);
+      await page.until(() => !document.getElementById('guar-pick').open && compose.media.length === 2);
+      assert.deepEqual(await page.ev(`compose.media.map((m) => [m.kind, m.name, m.file.type, m.file.size > 0])`), [['image', 'scene_1.png', 'image/png', true], ['image', 'Cảnh 2.png', 'image/png', true]]);
+      // Article: chèn vào chỗ con trỏ
+      await page.ev(`setComposeKind('article'); document.getElementById('art-content').value = ''; document.getElementById('art-btn-guar').click(); true`);
+      await page.until(() => document.getElementById('guar-pick').open && document.querySelectorAll('#gp-grid .gp-item').length === 2);
+      await page.ev(`(() => { const s = document.getElementById('gp-group'); s.value = 'generated'; s.dispatchEvent(new Event('change')); document.querySelector('#gp-grid .gp-item').click(); document.getElementById('gp-use').click(); return true; })()`);
+      await page.until(() => /^!\[ai_1\.png\]\(local:\d+\)\n$/.test(document.getElementById('art-content').value));
+      // Bình luận: một ảnh; gửi kèm khi bấm Gửi (Chạy thử: không tải lên, nhật ký ghi [1 ảnh])
+      await page.ev(`openPost(data.state.recentPosts.find((p) => p.id === 't1')); true`);
+      await page.until(() => document.getElementById('postview').open && !document.getElementById('pv-guar-btn').hidden);
+      await page.ev(`document.getElementById('pv-guar-btn').click(); true`);
+      // Hộp nhớ nhóm ảnh lần trước (Ảnh tạo bằng AI) — đổi về dự án
+      await page.until(() => document.getElementById('guar-pick').open && document.getElementById('gp-group').value === 'generated');
+      await page.ev(`(() => { const s = document.getElementById('gp-group'); s.value = 'project:wf_1'; s.dispatchEvent(new Event('change')); return true; })()`);
+      await page.until(() => document.querySelectorAll('#gp-grid .gp-item').length === 2);
+      assert.equal(await page.ev(`document.getElementById('gp-count').textContent`), 'Chọn tối đa 1 ảnh');
+      await page.ev(`document.querySelectorAll('#gp-grid .gp-item')[0].click(); true`);
+      assert.equal(await page.ev(`document.querySelectorAll('#gp-grid .gp-item')[1].disabled`), true); // đủ 1 ảnh
+      await page.ev(`document.getElementById('gp-use').click(); true`);
+      await page.until(() => !document.getElementById('pv-attach').hidden && !!document.querySelector('#pv-attach img'));
+      await page.ev(`(() => { window.__sentMsgs = []; const real = chrome.runtime.sendMessage.bind(chrome.runtime); chrome.runtime.sendMessage = async (m, ...r) => { window.__sentMsgs.push(m); return real(m, ...r); }; document.getElementById('pv-text').value = 'Ảnh minh hoạ cho bạn'; document.getElementById('pv-send').click(); return true; })()`);
+      await page.until(() => window.__sentMsgs.some((m) => m.type === 'commentWrite'));
+      const cm = await page.ev(`window.__sentMsgs.find((m) => m.type === 'commentWrite')`);
+      assert.equal(cm.content, 'Ảnh minh hoạ cho bạn');
+      assert.equal(cm.media.images.length, 1);
+      // Dán ảnh vào ô bình luận cũng được
+      await page.until(() => document.getElementById('pv-attach').hidden);
+      const pasted = await page.call((b64) => {
+        const bin = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+        const dt = new DataTransfer();
+        dt.items.add(new File([bin], 'image.png', { type: 'image/png' }));
+        const ev = new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true });
+        document.getElementById('pv-text').dispatchEvent(ev);
+        return { prevented: ev.defaultPrevented, shown: !document.getElementById('pv-attach').hidden, name: PV.image?.file.name };
+      }, B64_PNG);
+      assert.equal(pasted.prevented, true);
+      assert.equal(pasted.shown, true);
+      assert.match(pasted.name, /^anh-dan-\d{6}\.png$/);
+    },
+  },
+  {
     name: 'Giao diện Dashboard: Cổ điển mặc định, chọn Hiện đại ở Cài đặt › Giao diện (thanh mục bên trái, nhớ khi mở lại), đổi lại được',
     async run({ page, url, assert }) {
       await page.open(url('dashboard', 'tab=settings&sec=look'));
@@ -3322,7 +3413,7 @@ export const scenarios = [
       const vis = (sel) => `!!document.querySelector(${JSON.stringify(sel)})?.offsetParent`;
       // Mọi phần của tab đều thuộc một mục (phần mới thêm mà quên gắn mục thì không bao giờ hiện)
       assert.deepEqual(await page.ev(`[...document.querySelectorAll('.rules-col > *, #settings > *, #settings-group > *')].filter((e) => !e.dataset.setSec).map((e) => e.id || e.className)`), []);
-      assert.equal(await page.ev(`document.querySelectorAll('#set-nav button[data-sec]').length`), 12);
+      assert.equal(await page.ev(`document.querySelectorAll('#set-nav button[data-sec]').length`), 13);
       // Mặc định: Hoạt động & quét; quy tắc, Telegram ẩn; mục lục nhanh không hiện ở tab này
       assert.equal(await page.ev(`document.querySelector('#set-nav .active').dataset.sec`), 'scan');
       assert.equal(await page.ev(`document.querySelector('#settings > .card-head h2').textContent`), 'Hoạt động & quét');

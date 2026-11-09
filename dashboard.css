@@ -876,6 +876,26 @@ footer { text-align: center; padding: 8px 24px 28px; }
 .media-tray { display: flex; flex-direction: column; gap: 6px; margin-bottom: 6px; }
 .media-grid { display: flex; flex-wrap: wrap; gap: 8px; }
 .media-thumb { position: relative; width: 88px; height: 88px; border-radius: 8px; overflow: hidden; border: 1px solid var(--border); background: var(--none); }
+/* Ảnh trong bình luận (cửa sổ Bài viết & bình luận) */
+.pv-attach { display: flex; gap: 8px; margin-bottom: 8px; }
+.pv-attach[hidden] { display: none; }
+.pv-thumb { width: 72px; height: 72px; }
+.pv-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.pv-tools { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-width: 0; }
+/* Ảnh từ Guar Studio (dash/guar.js) */
+.guar-only[hidden] { display: none !important; }
+.guar-id { font-size: 12.5px; word-break: break-all; padding: 4px 8px; border-radius: 6px; background: var(--bg); border: 1px solid var(--border); }
+dialog.guar-pick { max-width: 880px; height: min(88vh, 820px); }
+.gp-bar { display: flex; gap: 8px; align-items: center; }
+.gp-bar select { max-width: 100%; }
+.gp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); gap: 10px; margin-top: 12px; }
+.gp-item { position: relative; padding: 0; aspect-ratio: 1; border: 2px solid transparent; border-radius: var(--radius-sm); overflow: hidden; background: var(--bg); cursor: pointer; }
+.gp-item img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.gp-item:hover:not(:disabled) { border-color: var(--border); }
+.gp-item.on { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+.gp-item:disabled { opacity: 0.45; cursor: not-allowed; }
+.gp-check { position: absolute; top: 6px; right: 6px; display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--accent); color: #fff; font-size: 13px; font-weight: 700; }
+@media (max-width: 560px) { .gp-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; } }
 .media-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .media-thumb.failed { border-color: var(--err); }
 .media-thumb .media-progress { position: absolute; left: 6px; right: 6px; bottom: 6px; }

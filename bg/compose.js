@@ -107,7 +107,7 @@ async function finishCompose(r, { base, contentType, state, log }) {
 const UPLOAD_PATH = { image: 'upload/images/', video: 'upload/videos/', file: 'upload/files/' };
 const UPLOAD_WAIT_MS = { image: 20e3, video: 20e3 };
 
-const IMAGE_RESOURCES = ['post:content', 'article:cover', 'article:content', 'series:cover'];
+const IMAGE_RESOURCES = ['post:content', 'article:cover', 'article:content', 'series:cover', 'comment:content'];
 
 async function doUploadInit({ kind, mimeType = '', resource = 'post:content' }) {
   if (!UPLOAD_PATH[kind]) return { status: 'error', message: 'Loại file không hợp lệ' };

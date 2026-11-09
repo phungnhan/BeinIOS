@@ -13,6 +13,7 @@ function postOf(postId, c = null) {
 
 async function openPost(p, { reply = null } = {}) {
   if (!p?.id) return;
+  if (PV.image) pvClearImage(); // ảnh bình luận của bài trước
   Object.assign(PV, { post: p, items: [], after: '', hasNext: false, loading: false, error: '', replies: {}, replyLoading: {}, reply: null, full: null, expanded: false });
   $('pv-text').value = '';
   setPvReply(reply);
@@ -279,14 +280,17 @@ async function pvSubmit(e) {
   e.preventDefault();
   const p = PV.post;
   const content = $('pv-text').value;
-  const err = BG.validateComment(content);
+  const err = BG.validateComment(content, { images: PV.image ? 1 : 0 });
   if (!p || err) return toast(err || 'Thiếu bài', 'err');
+  const media = await pvImageMedia();
+  if (!media) return;
   // Nhắc tên: người đăng, người đã bình luận trong bài (cả trong cửa sổ)
   const people = [...new Map([...peopleOfPost(p.id), ...PV.items.map((c) => c.actor), ...Object.values(PV.replies).flat().map((c) => c.actor)].filter((u) => u?.id && u.username).map((u) => [u.id, u])).values()];
   const commentId = PV.reply?.commentId || '';
-  const r = await send({ type: 'commentWrite', postId: p.id, commentId, content, mentions: BG.commentMentions(content, people) }, () => (commentId ? 'Đã gửi trả lời.' : 'Đã gửi bình luận.'));
+  const r = await send({ type: 'commentWrite', postId: p.id, commentId, content, mentions: BG.commentMentions(content, people), media }, () => (commentId ? 'Đã gửi trả lời.' : 'Đã gửi bình luận.'));
   if (r?.status !== 'ok' || r.failed) return;
   $('pv-text').value = '';
+  pvClearImage();
   const parent = PV.reply?.commentId;
   setPvReply(null);
   if (r.dryRun) return;
@@ -316,3 +320,61 @@ $('pv-text').addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) $('pv-form').requestSubmit();
 });
 $('postview').addEventListener('close', () => (PV.post = null));
+
+// ---------- Ảnh trong bình luận (như web: một ảnh, tải lên loại comment:content lúc bấm Gửi) ----------
+// Chọn tệp, dán ảnh (Ctrl + V) vào ô bình luận, hoặc chọn trong Guar Studio (dash/guar.js). PV.image: { file, preview, item }
+function pvAddImages(files) {
+  const imgs = [...files].filter((f) => BG.MEDIA.image.types.includes(f.type));
+  if (!imgs.length) return toast('Chỉ gửi kèm được ảnh JPG, PNG, WEBP, GIF', 'warn');
+  const f = imgs[0];
+  if (f.size > BG.MEDIA.image.size) return toast(`${f.name}: ${BG.sizeText(f.size)}, tối đa ${BG.sizeText(BG.MEDIA.image.size)}`, 'err');
+  if (imgs.length > BG.COMMENT_IMAGES_MAX || PV.image) toast(`Mỗi bình luận ${BG.COMMENT_IMAGES_MAX} ảnh — dùng ảnh ${PV.image ? 'vừa chọn' : 'đầu tiên'}`, 'warn');
+  pvClearImage();
+  PV.image = { file: f, preview: URL.createObjectURL(f), item: null };
+  renderPvImage();
+}
+function pvClearImage() {
+  if (PV.image?.preview) URL.revokeObjectURL(PV.image.preview);
+  PV.image = null;
+  renderPvImage();
+}
+function renderPvImage() {
+  const box = $('pv-attach');
+  box.hidden = !PV.image;
+  box.replaceChildren(
+    ...(PV.image
+      ? [el('div', { class: 'media-thumb pv-thumb', title: PV.image.file.name }, el('img', { src: PV.image.preview, alt: PV.image.file.name }), el('button', { type: 'button', class: 'media-remove', title: 'Bỏ ảnh', 'aria-label': 'Bỏ ảnh', text: '×', onclick: pvClearImage }))]
+      : []),
+  );
+}
+// Ảnh của bình luận -> media gửi đi (tải lên trước nếu chưa); Chạy thử: không tải, chỉ ghi nhật ký "[1 ảnh]"; lỗi: null
+async function pvImageMedia() {
+  if (!PV.image) return { images: [] };
+  if (data.settings.dryRun) return { images: [{ id: 'chay-thu', url: 'chay-thu' }] };
+  if (!PV.image.item) {
+    const btn = $('pv-send');
+    const label = btn.textContent;
+    btn.disabled = true;
+    try {
+      PV.image.item = await uploader.upload('image', PV.image.file, () => (btn.textContent = 'Đang tải ảnh…'), { resource: 'comment:content', onWait: (ms) => (btn.textContent = `Beincom đang xử lý ảnh… ${Math.round(ms / 1000)} giây`) });
+    } catch (e) {
+      toast(`${PV.image.file.name}: ${e.message || e}`, 'err');
+      return null;
+    } finally {
+      btn.disabled = false;
+      btn.textContent = label;
+    }
+  }
+  return { images: [PV.image.item] };
+}
+$('pv-img-btn').addEventListener('click', () => $('pv-img-input').click());
+$('pv-img-input').addEventListener('change', (e) => {
+  pvAddImages(e.target.files);
+  e.target.value = '';
+});
+$('pv-text').addEventListener('paste', (e) => {
+  const imgs = clipFiles(e.clipboardData, { paste: true }); // dash/attach.js
+  if (!imgs.length) return;
+  e.preventDefault();
+  pvAddImages(imgs);
+});

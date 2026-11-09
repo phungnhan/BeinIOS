@@ -2,6 +2,12 @@
 
 Mỗi bản một mục, bản mới nhất ở trên. Dashboard tự hiện các mục mới sau khi cập nhật (bấm "Có gì mới" ở cuối trang để xem lại).
 
+## v0.70.0 — 09/11/2026
+- **Ảnh từ Guar Studio**: chọn ảnh tạo bằng AI, ảnh phân cảnh của từng dự án (đúng tên dự án) và ảnh Thiết kế ảnh trong Guar Studio — ứng dụng sản xuất nội dung của bạn chạy trên chính máy này — để đính kèm khi đăng bài, chèn vào Article, hoặc gửi kèm bình luận. Hộp chọn ảnh dạng lưới, chia theo nhóm, chọn nhiều ảnh (tối đa theo chỗ còn trống).
+  - Nối một lần: Cài đặt › Tích hợp › **Guar Studio** → Chép **Mã của BeinFusion**; trong Guar Studio vào Cài đặt › Kết nối › BeinFusion, bật "Cho phép BeinFusion đọc ảnh", dán mã, Lưu kết nối; quay lại bấm **Kiểm tra kết nối** (cho phép khi trình duyệt hỏi quyền truy cập 127.0.0.1). Sau đó nút **Guar Studio** hiện ở ô đăng bài, thanh công cụ Article và ô bình luận.
+  - Chỉ đọc ảnh công khai, không sửa gì trong Guar Studio; Guar Studio mặc định chặn, chỉ mở cho đúng mã addon bạn dán. Cần bản Guar Studio có cổng cho BeinFusion.
+- **Bình luận kèm ảnh** (cửa sổ Bài viết & bình luận): nút **Ảnh**, dán ảnh (Ctrl + V) vào ô bình luận, hoặc chọn trong Guar Studio — một ảnh mỗi bình luận, tải lên Beincom khi bấm Gửi (như web: loại comment:content). Có ảnh thì không bắt buộc viết chữ.
+
 ## v0.69.3 — 09/11/2026
 - **Sửa tận gốc lỗi không đăng được bài có ảnh / video**: addon gắn "theo dõi tiến độ" khi gửi file lên kho lưu trữ của Beincom, việc này buộc trình duyệt hỏi trước kho (CORS) — mà kho chỉ chấp nhận trang group.beincom.com nên từ chối, **file không hề được gửi đi**; addon không đọc được phản hồi nên cứ chờ Beincom xử lý rồi báo "xử lý ảnh quá lâu". Giờ gửi như web Beincom nhưng không theo dõi tiến độ: file lên kho bình thường (đã kiểm chứng: có theo dõi tiến độ máy chủ chỉ nhận lời hỏi trước, 0 byte; không theo dõi thì nhận đủ file). Thanh tiến độ của ảnh / video chạy dạng "đang tải" thay cho phần trăm. Gửi đúng các trường như web (key, bucket, chữ ký…). Áp dụng cho bài thường, ảnh trong Article, ảnh bìa Article / Series.
 - Sau khi cập nhật: vào trang quản lý tiện ích (chrome://extensions hoặc edge://extensions) bấm **Tải lại** BeinFusion rồi mở lại Dashboard — phần chạy nền đổi, chỉ tải lại trang Dashboard là chưa đủ.
