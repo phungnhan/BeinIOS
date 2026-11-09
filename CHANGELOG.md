@@ -2,6 +2,11 @@
 
 Mỗi bản một mục, bản mới nhất ở trên. Dashboard tự hiện các mục mới sau khi cập nhật (bấm "Có gì mới" ở cuối trang để xem lại).
 
+## v0.63.0 — 09/11/2026
+- **Hồ sơ cá nhân mới** (bấm avatar góc trên Dashboard): đầu thẻ có ảnh bìa, avatar, tên, dấu xác minh, @tên đăng nhập (bấm để chép) và giới thiệu; năm ô số liệu — cộng đồng, group quản trị, thành viên, việc đang chờ, thao tác 30 ngày.
+- Bốn thẻ gọn: **Thông tin** (thông tin trên trang cá nhân Beincom — họ tên, giới tính, ngày sinh, ngôn ngữ, tình trạng quan hệ, email, điện thoại, thành phố — kèm tên đăng nhập, mã Beincom, kết nối Chat; email / điện thoại / mã chép được), **Quản trị** (từng cộng đồng: vai trò, số group con, số thành viên, việc đang chờ), **Hoạt động** (30 ngày qua theo Nhật ký: duyệt / từ chối thành viên — bao nhiêu tự động, duyệt bài, ẩn bài / bình luận, xử lý báo cáo, cấm, đăng bài…), **Addon** (phiên bản, lần quét, tự quét, Chạy thử).
+- Thông tin trang cá nhân đọc từ Beincom mỗi lần mở hồ sơ (nút Tải lại để đọc lại), không lưu trong máy vì có email và số điện thoại.
+
 ## v0.62.0 — 09/11/2026
 - **Quét nhanh hơn với group chưa có bài**: addon nhớ group mà Beincom không trả lời phần "Bài mới đăng" (group chưa có bài, như Healthy Living); lần quét sau chỉ chờ 5 giây thay vì 15 giây. Group có bài trở lại thì tự thôi nhớ.
 - **Kết quả quét lưu gọn hơn**: trước đây toàn bộ kết quả quét (khoảng 1 MB ở tài khoản nhiều group) nằm chung một chỗ — mỗi lần quét hay mỗi thao tác (duyệt, ẩn…) đều ghi lại cả khối, rồi Dashboard đọc lại toàn bộ. Giờ chia thành 5 phần (chung, group, bài mới, bình luận, Chat): chỉ phần có thay đổi được ghi và báo cho trang đang mở, Dashboard cập nhật thẳng từ phần thay đổi. Càng nhiều group càng thấy nhẹ, nhất là trên iPhone (BeinIOS). Dữ liệu cũ tự chuyển ở lần ghi đầu tiên, không mất gì; mục Bộ nhớ của Tự kiểm tra hiện dung lượng từng phần.

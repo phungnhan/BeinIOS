@@ -84,6 +84,18 @@ async function doRestore({ data, keepDry = false }) {
   return { status: 'ok', restored };
 }
 
+// ---------- Hồ sơ cá nhân ----------
+// Thông tin trang cá nhân Beincom (user/me/profile — API này không nhận header phiên bản): chỉ trả cho trang, không lưu
+// (có email, số điện thoại)
+async function doSelfInfo() {
+  return withClient(async (client) => {
+    const r = await client.call('GET', 'user/me/profile', null, '');
+    if (r.status === 401) return { ...NEED_LOGIN };
+    if (!BG.isOk(r) || !r.body?.data?.id) return { status: 'error', message: 'Đọc trang cá nhân lỗi: ' + BG.errMsg(r) };
+    return { status: 'ok', info: BG.slimSelfInfo(r.body.data) };
+  });
+}
+
 // ---------- Thống kê ----------
 // Chủ / admin community: số liệu chính thức (thành viên & bài theo ngày).
 // Admin group: tự tính từ nhật ký hoạt động + timeline + số thành viên addon ghi sau mỗi lần quét.

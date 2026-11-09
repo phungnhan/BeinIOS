@@ -782,6 +782,11 @@
           };
         }
         // Tự kiểm tra: phần lớn dùng được, vài mục bỏ qua vì quyền, một mục lỗi
+        // Hồ sơ cá nhân: thông tin trang cá nhân Beincom (như nền trả: BG.slimSelfInfo)
+        if (m.type === 'selfInfo') {
+          window.__selfInfo = (window.__selfInfo || 0) + 1;
+          return { status: 'ok', info: { id: 'me1', username: 'kaicrypto', fullname: 'Kai Crypto', avatar: '', cover: '', bio: 'Admin Crypto Life — chia sẻ kiến thức crypto an toàn.', gender: 'MALE', birthday: '1995-04-20', language: ['vi', 'en'], relationship: '', email: 'kai@example.com', phone: '912345678', countryCode: '+84', city: 'Hồ Chí Minh', createdAt: '', verified: true } };
+        }
         if (m.type === 'selfCheck') {
           window.__selfCheck = m;
           const it = (id, label, uses, status, detail, extra = {}) => ({ id, label, uses, status, detail, ms: 120, ...extra });
