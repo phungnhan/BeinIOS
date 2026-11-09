@@ -1124,6 +1124,22 @@ dialog.me-card { max-width: 620px; padding: 0; overflow: hidden; }
 }
 
 
+/* Trợ lý AI (dash/aihub.js): ô tình trạng (.me-stat) và các thẻ tác vụ */
+.ai-hub-status { grid-template-columns: repeat(4, minmax(0, 1fr)); padding: 0 0 4px; }
+@media (max-width: 720px) { .ai-hub-status { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.ai-tasks { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 10px; margin-top: 12px; }
+.ai-task { display: flex; align-items: flex-start; gap: 12px; min-width: 0; padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); }
+.ai-task-ic { display: grid; place-items: center; flex: none; width: 34px; height: 34px; border-radius: 10px; background: var(--accent-soft); color: var(--accent); }
+.ai-task-ic svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+.ai-task-main { display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 0; }
+.ai-task-main select { margin-top: 4px; font-size: 12.5px; }
+.ai-task > button { flex: none; align-self: center; }
+/* Điện thoại: nút xuống dòng dưới chữ, để tên việc không bị bẻ vụn */
+@media (max-width: 560px) {
+  .ai-task { display: grid; grid-template-columns: 34px minmax(0, 1fr); column-gap: 12px; row-gap: 8px; }
+  .ai-task > button { grid-column: 2; justify-self: start; align-self: start; }
+}
+
 /* ---------- Gợi ý ngắn (tooltip) và hộp Hướng dẫn (dash/ui.js) ---------- */
 /* Bong bóng: popover (nổi trên hộp thoại), nền tối mờ, chữ nhỏ, bo tròn */
 .tipbox {

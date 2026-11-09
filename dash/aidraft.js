@@ -3,8 +3,9 @@
 // hoặc khoá API Claude. Kết quả hiện trong ô sửa được; bấm nút để dùng. Không đăng gì lên Beincom.
 // Nạp sau aireply.js (dùng aiConfig, aiCall, arCopy, aiReadClipboard, askAiPermission) và welcome.js / shoutout.js / postview.js.
 
-// opts: { title, desc, notePlaceholder, prompt(note) -> đề bài, fix(text) -> text, useLabel, onUse(text) }
-const AD = { opts: null, mode: 'web', cfg: null, busy: false };
+// opts: { kind (BG.AI_TASKS — ghi Lịch sử tác vụ AI), title, desc, notePlaceholder, prompt(note) -> đề bài, fix(text) -> text,
+//         useLabel, onUse(text) } · abort: AbortController của lần AI đang viết
+const AD = { opts: null, mode: 'web', cfg: null, busy: false, abort: null };
 
 async function openAiDraft(opts) {
   AD.opts = opts;
@@ -39,8 +40,9 @@ function renderAd() {
   $('ad-api').hidden = web;
   $('ad-setup').hidden = web || hasKey;
   $('ad-copy').textContent = `Chép đề bài & mở ${BG.AI_WEB_SITES[$('ad-site').value]?.label || 'trang chat AI'}`;
-  $('ad-gen').disabled = AD.busy || !hasKey;
-  $('ad-gen').textContent = AD.busy ? 'AI đang viết…' : has ? 'Viết lại' : 'Nhờ AI viết';
+  // Đang viết: nút thành Huỷ
+  $('ad-gen').disabled = !AD.busy && !hasKey;
+  $('ad-gen').textContent = AD.busy ? 'Huỷ' : has ? 'Viết lại' : 'Nhờ AI viết';
   $('ad-result').placeholder = web ? 'Câu trả lời của AI hiện ở đây (bấm 📋 Dán, hoặc dán tay)…' : 'Bấm Nhờ AI viết — kết quả hiện ở đây.';
   $('ad-use').disabled = AD.busy || !has;
 }
@@ -76,27 +78,34 @@ async function adWebPaste() {
   }
   adSet(text);
   adStatus('Đã dán câu trả lời của AI.');
+  noteAi({ kind: AD.opts.kind, mode: 'web', site: $('ad-site').value });
 }
 
 async function adGenerate() {
-  if (AD.busy) return;
+  if (AD.busy) return AD.abort?.abort(); // nút đang là Huỷ
   await askAiPermission();
   AD.cfg = await aiConfig();
   if (!BG.validAiKey(AD.cfg.key)) return renderAd();
   AD.busy = true;
+  AD.abort = new AbortController();
   adStatus('AI đang viết…');
   renderAd();
+  const log = { kind: AD.opts.kind, mode: 'api', model: AD.cfg.model };
   try {
-    const body = await aiCall(BG.aiTextRequest({ key: AD.cfg.key, model: AD.cfg.model, input: adPrompt() }));
+    const body = await aiCall(BG.aiTextRequest({ key: AD.cfg.key, model: AD.cfg.model, input: adPrompt() }), { signal: AD.abort.signal });
     adSet(BG.aiParseText(body));
     const cost = BG.aiCost(body.usage, body.model || AD.cfg.model);
+    Object.assign(log, { cost });
     adStatus(`AI đã viết xong · chi phí ước tính ${cost < 0.01 ? '< 0,01' : cost.toFixed(2).replace('.', ',')} USD.`);
   } catch (e) {
-    adStatus(e.message || String(e), 'err-text');
+    Object.assign(log, e.cancelled ? { status: 'cancel' } : { status: 'error', error: e.message || String(e) });
+    adStatus(e.cancelled ? 'Đã huỷ.' : e.message || String(e), e.cancelled ? '' : 'err-text');
   } finally {
     AD.busy = false;
+    AD.abort = null;
     renderAd();
   }
+  noteAi(log);
 }
 
 function adUse() {
@@ -115,7 +124,7 @@ $('ad-result').addEventListener('input', renderAd);
 // Dán tay vào ô Kết quả: bỏ khung ``` / bổ sung chỗ trống như khi bấm Dán
 $('ad-result').addEventListener('paste', () => setTimeout(() => adSet($('ad-result').value), 0));
 for (const id of ['ad-cancel', 'ad-close']) $(id).addEventListener('click', () => $('ai-draft').close());
-$('ai-draft').addEventListener('cancel', (e) => AD.busy && e.preventDefault());
+$('ai-draft').addEventListener('close', () => AD.abort?.abort()); // đóng hộp khi AI đang viết: huỷ luôn
 for (const b of document.querySelectorAll('#ad-mode button')) {
   b.addEventListener('click', async () => {
     if (AD.mode === b.dataset.m || AD.busy) return;
@@ -134,6 +143,7 @@ function aiTemplateDraft(kind) {
   const count = (isWelcome ? welcome : shout).picked.size;
   const tpl = $(isWelcome ? 'welcome-template' : 'shout-template');
   openAiDraft({
+    kind,
     title: isWelcome ? '✨ AI viết bài chào thành viên mới' : '✨ AI viết bài vinh danh',
     desc: `AI viết mẫu bài mới${g ? ' cho ' + g.name : ''} có chỗ trống {danh_sach}; addon tự điền @tên những người bạn đã chọn.`,
     notePlaceholder: isWelcome ? 'vd: nhắc buổi AMA tối thứ Sáu' : 'vd: người đứng đầu được tặng huy hiệu',
@@ -158,6 +168,7 @@ $('pv-sum').addEventListener('click', () => {
   if (!p) return;
   const all = [...new Map([...PV.items, ...Object.values(PV.replies).flat()].filter((c) => !c.isHidden).map((c) => [c.id, c])).values()].sort((a, b) => Date.parse(a.createdAt || 0) - Date.parse(b.createdAt || 0));
   openAiDraft({
+    kind: 'summary',
     title: `✨ Tóm tắt ${all.length} bình luận`,
     desc: 'AI đọc bài và các bình luận đang hiện trong cửa sổ — muốn tóm tắt nhiều hơn thì tải thêm bình luận trước.',
     notePlaceholder: 'vd: chú ý các câu hỏi về rút tiền',

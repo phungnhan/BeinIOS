@@ -93,6 +93,10 @@ const TAB_RENDER = {
     renderTagAdmin();
   },
   reports: () => renderReports(),
+  ai: () => {
+    renderAiHub();
+    renderAiLog();
+  },
   compose: () => {
     renderComposeGroups();
     renderTemplates();
@@ -142,7 +146,7 @@ function renderAll() {
 
 // Khoá kho Dashboard dùng. dataRaw: giá trị gần nhất của từng khoá — thông báo thay đổi mang sẵn giá trị mới nên cập nhật thẳng
 // vào đây, khỏi đọc lại cả kho (kết quả quét ~1 MB) sau mỗi lần nền ghi
-const DATA_KEYS = ['settings', 'rules', 'postRules', 'groupRules', 'recurring', 'log', 'templates', 'profiles', 'syncStatus', 'telegramStatus', 'telegramPoll', 'postStats', 'nudges', 'nudgeDraft', 'nudgeEffect', 'promptBank', 'promptDraft', 'periodicDigest', ...BG.STATE_KEYS];
+const DATA_KEYS = ['settings', 'rules', 'postRules', 'groupRules', 'recurring', 'log', 'templates', 'profiles', 'syncStatus', 'telegramStatus', 'telegramPoll', 'postStats', 'nudges', 'nudgeDraft', 'nudgeEffect', 'promptBank', 'promptDraft', 'periodicDigest', 'aiLog', ...BG.STATE_KEYS];
 let dataRaw = {};
 let loading = 0; // số lần đọc cả kho đang chạy
 
@@ -168,6 +172,7 @@ function fillData() {
     promptBank: promptBank || null,
     promptDraft: promptDraft || null,
     periodicDigest: periodicDigest || null,
+    aiLog: dataRaw.aiLog || [],
   };
 }
 

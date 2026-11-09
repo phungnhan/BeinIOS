@@ -153,6 +153,13 @@
     { kind: 'prompt', line: 'Bài thảo luận cho Crypto Life (gợi ý Thứ Tư 20:00)' },
   ] };
   // Tự kiểm tra mỗi ngày: lần tự chạy sáng nay thấy một mục ngừng chạy
+  // Lịch sử Trợ lý AI (tab Trợ lý AI)
+  store.aiLog = [
+    { at: now - 2 * 3600e3, kind: 'replySend', mode: 'api', count: 5, sent: 5, dry: 0, failed: 0, status: 'ok' },
+    { at: now - 2.1 * 3600e3, kind: 'reply', mode: 'api', model: 'claude-opus-5-5', count: 5, total: 5, cost: 0.034, status: 'ok' },
+    { at: now - 26 * 3600e3, kind: 'welcome', mode: 'web', site: 'claude', status: 'ok' },
+    { at: now - 30 * 3600e3, kind: 'summary', mode: 'api', model: 'claude-sonnet-5-5', status: 'error', error: 'Máy chủ AI đang quá tải — thử lại sau ít phút' },
+  ];
   store.selfCheckAuto = { at: now - 5 * 3600e3, groups: { gFood: { name: 'Food Research' }, gCL: { name: 'Crypto Life' } }, regressions: [{ groupId: 'gFood', group: 'Food Research', items: ['Bài ghim'] }] };
   store.nudges = [
     { id: 'pn2', groupId: 'gCL', groupName: 'Crypto Life', at: new Date(now - 2 * 864e5).toISOString(), userIds: ['nx1', 'nx2'] },

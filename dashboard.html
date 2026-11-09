@@ -34,6 +34,7 @@
     <button role="tab" data-tab="content">Bài viết <span class="badge" id="badge-content"></span></button>
     <button role="tab" data-tab="reports">Báo cáo <span class="badge" id="badge-reports"></span></button>
     <button role="tab" data-tab="compose">Đăng bài <span class="badge info" id="badge-compose"></span></button>
+    <button role="tab" data-tab="ai">Trợ lý AI <span class="badge info" id="badge-ai"></span></button>
     <button role="tab" data-tab="stats">Thống kê</button>
     <button role="tab" data-tab="settings">Quy tắc &amp; cài đặt</button>
     <button role="tab" data-tab="log">Nhật ký</button>
@@ -581,6 +582,7 @@
           <button data-f="series">Series</button>
         </div>
         <div class="review-tools post-only">
+          <button type="button" class="ghost sm" id="btn-compose-ai" title="AI viết bài theo ý bạn, hoặc viết lại chữ đang có">✨ AI viết</button>
           <select id="tpl-select" aria-label="Mẫu bài"></select>
           <button id="btn-tpl-use" class="ghost sm">Dùng mẫu</button>
           <button id="btn-tpl-save" class="ghost sm">Lưu làm mẫu</button>
@@ -957,6 +959,31 @@
             <tbody id="csv-body"></tbody>
           </table>
         </div>
+      </div>
+    </section>
+
+    <!-- Trợ lý AI (dash/aihub.js): bắt đầu mọi tác vụ AI, tình trạng, lịch sử -->
+    <section class="card span-3 ai-hub" id="ai-hub" data-tab="ai">
+      <div class="card-head">
+        <h2>Tác vụ AI <button type="button" class="tip-i" data-tip="Mọi việc AI làm được ở một chỗ. AI chỉ viết nháp — bạn xem, sửa rồi tự gửi / đăng. Khoá API, mô hình, giọng văn: nút Cài đặt AI." aria-label="Gợi ý: Mọi việc AI làm được ở một chỗ. AI chỉ viết nháp — bạn xem, sửa rồi tự gửi / đăng. Khoá API, mô hình, giọng văn: nút Cài đặt AI.">i</button></h2>
+        <div class="review-tools">
+          <button type="button" class="ghost sm" id="btn-ai-hub-settings">Cài đặt AI</button>
+          <button type="button" class="ghost sm help-btn" data-help="ai" data-tip="Hướng dẫn" aria-label="Hướng dẫn">?</button>
+        </div>
+      </div>
+      <div class="me-stats ai-hub-status" id="ai-hub-status"></div>
+      <div class="ai-tasks" id="ai-hub-tasks"></div>
+    </section>
+    <section class="card span-3" id="ai-log-card" data-tab="ai">
+      <div class="card-head">
+        <h2>Lịch sử tác vụ AI <button type="button" class="tip-i" data-tip="Mỗi lần nhờ AI một dòng (cả cách chép – dán), lưu trong máy này. Chi phí là ước tính theo số token Anthropic báo về." aria-label="Gợi ý: Mỗi lần nhờ AI một dòng (cả cách chép – dán), lưu trong máy này. Chi phí là ước tính theo số token Anthropic báo về.">i</button></h2>
+        <div class="review-tools"><button type="button" class="ghost sm danger" id="btn-ai-log-clear">Xoá lịch sử</button></div>
+      </div>
+      <div class="table-wrap">
+        <table class="stack">
+          <thead><tr><th>Lúc</th><th>Tác vụ</th><th>Cách</th><th>Kết quả</th><th class="num">Chi phí</th></tr></thead>
+          <tbody id="ai-log-body"></tbody>
+        </table>
       </div>
     </section>
 
@@ -1805,6 +1832,7 @@
   <script src="dash/postview.js"></script>
   <script src="dash/aireply.js"></script>
   <script src="dash/aidraft.js"></script>
+  <script src="dash/aihub.js"></script>
   <script src="dash/person.js"></script>
   <script src="dash/sweep.js"></script>
   <script src="dash/tags.js"></script>
