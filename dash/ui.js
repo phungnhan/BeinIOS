@@ -240,6 +240,35 @@ document.addEventListener('keydown', (e) => e.key === 'Escape' && hideTip());
 window.addEventListener('scroll', hideTip, true);
 window.addEventListener('resize', hideTip);
 
+// ---------- Gợi ý trong ô nhập của Trợ lý AI (chữ mờ "vd: …"): ô còn trống, bấm Tab thì điền gợi ý thành chữ thật để sửa tiếp ----------
+// Ô đã có chữ, hoặc Shift + Tab: Tab chuyển ô như thường. Đang ở ô trống: chữ mờ thêm "· Tab để điền" (máy không có bàn phím: không thêm).
+const SUGGEST_SCOPE = '#ai-draft, #ai-reply, #ai-persona, #settings .ai-group';
+const SUGGEST_MARK = ' · Tab để điền';
+function suggestOf(t) {
+  if (!t?.matches?.('input[type=text], input:not([type]), textarea') || !t.closest(SUGGEST_SCOPE)) return '';
+  const p = String(t.placeholder || '');
+  const m = (p.endsWith(SUGGEST_MARK) ? p.slice(0, -SUGGEST_MARK.length) : p).match(/(?:^|\s)vd[:.]\s*([\s\S]+)$/i);
+  return m ? m[1].trim() : '';
+}
+document.addEventListener('focusin', (e) => {
+  const t = e.target;
+  if (!t.value && suggestOf(t) && !t.placeholder.endsWith(SUGGEST_MARK) && !matchMedia('(hover: none)').matches) t.placeholder += SUGGEST_MARK;
+});
+document.addEventListener('focusout', (e) => {
+  const t = e.target;
+  if (typeof t.placeholder === 'string' && t.placeholder.endsWith(SUGGEST_MARK)) t.placeholder = t.placeholder.slice(0, -SUGGEST_MARK.length);
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Tab' || e.shiftKey || e.altKey || e.ctrlKey || e.metaKey || e.isComposing) return;
+  const t = e.target;
+  const s = suggestOf(t);
+  if (!s || t.value.trim()) return;
+  e.preventDefault();
+  t.value = t.maxLength > 0 ? s.slice(0, t.maxLength) : s;
+  t.setSelectionRange(t.value.length, t.value.length);
+  t.dispatchEvent(new Event('input', { bubbles: true }));
+});
+
 // Hộp Hướng dẫn: nội dung ở lib/help.js (BG.HELP_TOPICS, mục lục BG.HELP_INDEX). openHelp('') mở mục lục mọi chủ đề;
 // mỗi chủ đề có nút quay về mục lục
 const HELP_TOPICS = BG.HELP_TOPICS;

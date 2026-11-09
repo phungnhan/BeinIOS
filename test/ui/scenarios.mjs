@@ -3142,6 +3142,46 @@ export const scenarios = [
     },
   },
   {
+    name: 'Trợ lý AI: ô có gợi ý "vd: …" còn trống — bấm Tab điền gợi ý (chữ mờ báo "Tab để điền"); ô đã có chữ / Shift + Tab / ô ngoài Trợ lý AI: Tab như thường',
+    async run({ page, url, assert }) {
+      await page.open(url('dashboard', 'tab=ai'));
+      await page.until(() => document.querySelectorAll('#ai-hub-tasks .ai-task').length === 6);
+      await page.send('Emulation.setFocusEmulationEnabled', { enabled: true }); // trình duyệt thử chạy nền: cho sự kiện focus chạy như thật
+      await page.ev(`window.tabKey = (id, shift = false) => { const t = document.getElementById(id); t.focus(); const ev = new KeyboardEvent('keydown', { key: 'Tab', shiftKey: shift, bubbles: true, cancelable: true }); t.dispatchEvent(ev); return ev.defaultPrevented; }; true`);
+      // Hộp AI viết bài đăng: ô Ý chính
+      await page.ev(`document.querySelector('[data-task=post] button.primary').click(); true`);
+      await page.until(() => document.getElementById('ai-draft').open && !!document.getElementById('ad-kind'));
+      await page.ev(`(() => { const k = document.getElementById('ad-kind'); k.value = 'event'; k.dispatchEvent(new Event('change')); document.getElementById('ad-prompt-box').open = true; return true; })()`);
+      await page.ev(`document.getElementById('ad-note').focus(); true`);
+      assert.equal(await page.ev(`document.getElementById('ad-note').placeholder`), 'vd: AMA ví lạnh tối thứ Sáu 20h, khách mời anh Minh, gửi câu hỏi trước ở bình luận · Tab để điền');
+      assert.equal(await page.ev(`tabKey('ad-note', true)`), false); // Shift + Tab: như thường
+      assert.equal(await page.ev(`tabKey('ad-note')`), true);
+      const v = await page.ev(`({ value: document.getElementById('ad-note').value, prompt: document.getElementById('ad-prompt').textContent })`);
+      assert.equal(v.value, 'AMA ví lạnh tối thứ Sáu 20h, khách mời anh Minh, gửi câu hỏi trước ở bình luận');
+      assert.match(v.prompt, /Ý chính của bài \(theo admin\): AMA ví lạnh tối thứ Sáu 20h/); // sự kiện input chạy: đề bài cập nhật
+      assert.equal(await page.ev(`tabKey('ad-note')`), false); // đã có chữ: Tab chuyển ô
+      await page.ev(`document.getElementById('ad-note').blur(); true`);
+      assert.ok(!(await page.ev(`document.getElementById('ad-note').placeholder`)).includes('Tab để điền'));
+      await page.ev(`document.getElementById('ai-draft').close(); true`);
+      // Hồ sơ cho AI: ô Tên — gợi ý sau "vd:", xem trước cập nhật; ô không có "vd:" thì không làm gì
+      await page.ev(`document.querySelector('#ai-persona-bar button').click(); true`);
+      await page.until(() => document.getElementById('ai-persona').open);
+      assert.equal(await page.ev(`tabKey('ap-name')`), true);
+      assert.equal(await page.ev(`document.getElementById('ap-name').value`), 'Kai — xưng mình, gọi mọi người là anh em');
+      assert.match(await page.ev(`document.getElementById('ap-preview').textContent`), /- Tên, cách xưng hô: Kai — xưng mình, gọi mọi người là anh em/);
+      assert.equal(await page.ev(`tabKey('ap-samples')`), false);
+      assert.equal(await page.ev(`document.getElementById('ap-samples').value`), '');
+      await page.ev(`document.getElementById('ai-persona').close(); true`);
+      // Cài đặt › Trợ lý AI: ô Hướng dẫn thêm; ô ngoài Trợ lý AI (Quy tắc bài viết) không đổi
+      await page.ev(`showTab('settings'); showSettingsSec('ai'); true`);
+      await page.until(() => document.getElementById('ai-note').getClientRects().length > 0);
+      assert.equal(await page.ev(`tabKey('ai-note')`), true);
+      assert.equal(await page.ev(`document.getElementById('ai-note').value`), 'Xưng mình – bạn');
+      const outside = await page.ev(`(() => { const t = document.querySelector('#settings textarea[placeholder^="vd: lừa đảo"], #settings input[placeholder^="vd: t.me"]'); if (!t) return 'none'; t.id = t.id || 'tab-outside'; t.value = ''; return tabKey(t.id) + '|' + t.value; })()`);
+      assert.ok(outside === 'none' || outside === 'false|', outside);
+    },
+  },
+  {
     name: 'Giao diện Dashboard: Cổ điển mặc định, chọn Hiện đại ở Cài đặt › Giao diện (thanh mục bên trái, nhớ khi mở lại), đổi lại được',
     async run({ page, url, assert }) {
       await page.open(url('dashboard', 'tab=settings&sec=look'));
