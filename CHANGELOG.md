@@ -2,6 +2,12 @@
 
 Mỗi bản một mục, bản mới nhất ở trên. Dashboard tự hiện các mục mới sau khi cập nhật (bấm "Có gì mới" ở cuối trang để xem lại).
 
+## v0.67.0 — 09/11/2026
+- **Hồ sơ của bạn cho AI** (tab Trợ lý AI, hoặc Cài đặt › Trợ lý AI → Sửa hồ sơ): tên và cách xưng hô, về bạn, về cộng đồng, cách bạn viết, điều AI không được viết, và vài đoạn bạn từng viết. Addon gửi kèm hồ sơ mỗi lần nhờ AI — trả lời bình luận, viết bài đăng, mẫu bài chào / vinh danh — để câu chữ đúng giọng bạn, đúng bối cảnh cộng đồng thay vì giọng chung chung. Tóm tắt bình luận chỉ lấy tên và phần Về cộng đồng.
+- AI chỉ học giọng văn từ các đoạn mẫu (nhịp câu, từ hay dùng, cách xưng hô, cách dùng emoji), không chép nội dung; không nhắc lại hồ sơ, không bịa thêm trải nghiệm, con số hay sự việc mà hồ sơ không có; tránh văn mẫu, giọng quảng cáo.
+- Nút **Lấy từ Beincom** điền tên và phần giới thiệu trên trang cá nhân; **Lấy từ bài của tôi** lấy bài đăng và câu trả lời bình luận của chính bạn trong kết quả quét làm đoạn mẫu. **Xem đoạn gửi kèm cho AI** cho thấy đúng phần addon gửi đi. Tắt được bất cứ lúc nào.
+- Hồ sơ lưu trong máy này và có trong **bản sao lưu** (khôi phục sang máy khác hoặc BeinIOS được). Đừng ghi số điện thoại, email, mật khẩu — hồ sơ được gửi tới AI.
+
 ## v0.66.0 — 09/11/2026
 - **Tab mới ✨ Trợ lý AI** — mọi việc AI làm được ở một chỗ: trả lời bình luận mới (bao nhiêu bình luận đang chờ trả lời hiện ngay trên tab), tóm tắt bình luận một bài (chọn bài nhiều bình luận), viết mẫu bài chào thành viên mới, viết mẫu bài vinh danh, và **viết bài đăng** theo ý bạn ghi (hoặc viết lại chữ đang có trong ô soạn) rồi đưa vào ô soạn ở tab Đăng bài để xem lại trước khi đăng. Thẻ Đăng bài cũng có nút **✨ AI viết**.
 - Đầu tab cho biết đang dùng cách nào (khoá API hay chép – dán), số lần nhờ AI, số câu trả lời đã gửi và chi phí ước tính của tháng này; nút **Cài đặt AI** mở thẳng phần cài đặt.

@@ -2959,6 +2959,69 @@ export const scenarios = [
     },
   },
   {
+    name: 'Hồ sơ của bạn cho AI: điền (lấy từ Beincom, từ bài của tôi), lưu; gửi kèm đề bài AI, tắt thì không gửi; dòng tình trạng ở Cài đặt',
+    async run({ page, url, assert }) {
+      await page.open(url('dashboard', 'tab=ai'));
+      await page.until(() => /Chưa điền/.test(document.getElementById('ai-persona-bar').textContent));
+      assert.equal(await page.ev(`document.querySelector('#ai-persona-bar button').textContent`), 'Điền hồ sơ');
+      await page.ev(`document.querySelector('#ai-persona-bar button').click(); true`);
+      await page.until(() => document.getElementById('ai-persona').open && document.getElementById('ap-on').checked);
+      assert.equal(await page.ev(`document.getElementById('ap-preview').textContent`), 'Chưa có gì để gửi — điền ít nhất một mục.');
+      await page.ev(`document.getElementById('ap-fill-me').click(); true`);
+      await page.until(() => document.getElementById('ap-name').value === 'Kai Crypto' && document.getElementById('ap-about').value.startsWith('Admin Crypto Life'));
+      await page.ev(`document.getElementById('ap-fill-posts').click(); true`);
+      await page.until(() => document.getElementById('ap-samples').value.includes('Bài của mình, link t.me/kai'));
+      await page.ev(`(() => { const v = document.getElementById('ap-voice'); v.value = 'Câu ngắn, xưng mình'; v.dispatchEvent(new Event('input', { bubbles: true })); return true; })()`);
+      const pv = await page.ev(`({ count: document.getElementById('ap-count').textContent, pre: document.getElementById('ap-preview').textContent, len: document.getElementById('ap-samples-count').textContent })`);
+      assert.equal(pv.count, 'Đã điền 4/6 mục');
+      assert.match(pv.pre, /^Hồ sơ của admin — /);
+      assert.match(pv.pre, /\n- Cách admin viết: Câu ngắn, xưng mình\n/);
+      assert.match(pv.len, /^\d+\/5000 ký tự$/);
+      await page.ev(`document.getElementById('ap-save').click(); true`);
+      await page.until(() => !document.getElementById('ai-persona').open && /Đã điền 4\/6 mục — AI viết theo giọng/.test(document.getElementById('ai-persona-bar').textContent) && document.querySelector('#ai-persona-bar button').textContent === 'Sửa hồ sơ');
+      const saved = await page.ev(`chrome.storage.local.get('aiPersona').then((o) => o.aiPersona)`);
+      assert.equal(saved.name, 'Kai Crypto');
+      assert.equal(saved.on, true);
+      // Viết bài đăng bằng khoá API: đề bài gửi đi có hồ sơ (tên, cách viết, đoạn mẫu)
+      await page.ev(`(async () => {
+        await chrome.storage.local.set({ aiConfig: { key: 'sk-ant-' + 'b'.repeat(30), model: 'claude-sonnet-5-5', mode: 'api' } });
+        window.__realFetch = window.__realFetch || window.fetch;
+        window.__aiN = 0;
+        window.fetch = async (u, o) => {
+          if (!String(u).startsWith('https://api.anthropic.com/')) return window.__realFetch(u, o);
+          window.__aiN++;
+          window.__aiReq = JSON.parse(o.body);
+          return new Response(JSON.stringify({ model: 'claude-sonnet-5-5', stop_reason: 'end_turn', content: [{ type: 'text', text: 'Tối thứ Sáu mình có AMA nhé anh em.' }], usage: { input_tokens: 500, output_tokens: 40 } }), { status: 200, headers: { 'content-type': 'application/json' } });
+        };
+        return true;
+      })()`);
+      const writePost = async (n) => {
+        await page.ev(`document.querySelector('[data-task=post] button.primary').click(); true`);
+        await page.until(() => document.getElementById('ai-draft').open && !document.getElementById('ad-gen').disabled);
+        await page.ev(`document.getElementById('ad-note').value = 'AMA tối thứ Sáu'; document.getElementById('ad-gen').click(); true`);
+        await page.until((k) => window.__aiN === k && !!document.getElementById('ad-result').value.trim(), 4000, n);
+        const content = await page.ev(`window.__aiReq.messages[0].content`);
+        await page.ev(`document.getElementById('ai-draft').close(); true`);
+        return content;
+      };
+      const withP = await writePost(1);
+      assert.match(withP, /\n\nHồ sơ của admin — người sẽ đăng nội dung này\. Viết như chính họ tự viết:\n- Tên, cách xưng hô: Kai Crypto\n- Về admin: Admin Crypto Life/);
+      assert.match(withP, /- Cách admin viết: Câu ngắn, xưng mình\nVài đoạn admin từng tự viết[^\n]*\n.{3}\nBài của mình, link t\.me\/kai/);
+      // Tắt hồ sơ: không gửi kèm nữa
+      await page.ev(`chrome.storage.local.get('aiPersona').then((o) => chrome.storage.local.set({ aiPersona: { ...o.aiPersona, on: false } })).then(() => true)`);
+      await page.until(() => /Đang tắt/.test(document.getElementById('ai-persona-bar').textContent));
+      const withoutP = await writePost(2);
+      assert.ok(!withoutP.includes('Hồ sơ của admin'), withoutP);
+      // Cài đặt › Trợ lý AI: dòng tình trạng; Sửa hồ sơ mở hộp với dữ liệu đã lưu
+      await page.ev(`showTab('settings'); showSettingsSec('ai'); true`);
+      await page.until(() => document.getElementById('ai-persona-status').textContent === 'Đã điền 4/6 mục · đang tắt');
+      await page.ev(`document.getElementById('btn-ai-persona').click(); true`);
+      await page.until(() => document.getElementById('ai-persona').open && !document.getElementById('ap-on').checked && document.getElementById('ap-voice').value === 'Câu ngắn, xưng mình');
+      await page.ev(`document.getElementById('ap-close').click(); true`);
+      await page.until(() => !document.getElementById('ai-persona').open);
+    },
+  },
+  {
     name: 'Giao diện Dashboard: Cổ điển mặc định, chọn Hiện đại ở Cài đặt › Giao diện (thanh mục bên trái, nhớ khi mở lại), đổi lại được',
     async run({ page, url, assert }) {
       await page.open(url('dashboard', 'tab=settings&sec=look'));

@@ -972,6 +972,7 @@
         </div>
       </div>
       <div class="me-stats ai-hub-status" id="ai-hub-status"></div>
+      <div class="ai-persona-bar" id="ai-persona-bar"></div>
       <div class="ai-tasks" id="ai-hub-tasks"></div>
     </section>
     <section class="card span-3" id="ai-log-card" data-tab="ai">
@@ -1449,6 +1450,10 @@
           <span><b>Hướng dẫn thêm cho AI</b> <button type="button" class="tip-i" data-tip="Áp dụng cho mọi lần nhờ AI, vd: xưng mình – bạn; hỏi về phần thưởng thì nhắc đọc bài ghim." aria-label="Gợi ý: Áp dụng cho mọi lần nhờ AI, vd: xưng mình – bạn; hỏi về phần thưởng thì nhắc đọc bài ghim.">i</button></span>
           <textarea id="ai-note" rows="2" placeholder="vd: Xưng mình – bạn"></textarea>
         </label>
+        <div class="select-row ai-persona-row">
+          <span><b>Hồ sơ của bạn cho AI</b> <button type="button" class="tip-i" data-tip="Bạn là ai, cộng đồng nào, bạn viết thế nào, vài đoạn bạn từng viết — gửi kèm mọi lần nhờ AI để câu trả lời và bài viết đúng giọng bạn, không chung chung. Có trong bản sao lưu." aria-label="Gợi ý: Bạn là ai, cộng đồng nào, bạn viết thế nào, vài đoạn bạn từng viết — gửi kèm mọi lần nhờ AI để câu trả lời và bài viết đúng giọng bạn, không chung chung. Có trong bản sao lưu.">i</button></span>
+          <span class="tg-line"><span class="muted small" id="ai-persona-status"></span><button type="button" class="ghost sm" id="btn-ai-persona">Sửa hồ sơ</button></span>
+        </div>
         <div class="sync-row">
           <span class="muted small" id="ai-status"></span>
           <span class="tg-actions"><button type="button" class="ghost sm" id="btn-ai-test" data-tip="Gửi thử một yêu cầu rất ngắn để biết khoá dùng được">Kiểm tra</button><button type="button" class="primary sm" id="btn-ai-save">Lưu</button></span>
@@ -1641,6 +1646,39 @@
     </div>
   </dialog>
   <!-- Nhờ AI viết một đoạn chữ (dash/aidraft.js): mẫu bài chào / vinh danh, tóm tắt bình luận -->
+  <!-- Hồ sơ của bạn cho AI (dash/aipersona.js) -->
+  <dialog id="ai-persona" class="postview ai-persona" aria-labelledby="ap-title">
+    <div class="pv-head">
+      <h3 id="ap-title">Hồ sơ của bạn cho AI</h3>
+      <button type="button" class="tip-i" data-tip="Gửi kèm mỗi lần nhờ AI: trả lời bình luận, viết bài, mẫu bài chào / vinh danh (tóm tắt chỉ lấy tên và phần Về cộng đồng). Mục nào trống thì bỏ qua." aria-label="Gợi ý: Gửi kèm mỗi lần nhờ AI: trả lời bình luận, viết bài, mẫu bài chào / vinh danh (tóm tắt chỉ lấy tên và phần Về cộng đồng). Mục nào trống thì bỏ qua.">i</button>
+      <button type="button" class="ghost sm help-btn" data-help="ai" data-tip="Hướng dẫn" aria-label="Hướng dẫn">?</button>
+      <button type="button" class="ghost sm" id="ap-close" aria-label="Đóng">✕</button>
+    </div>
+    <div class="pv-body">
+      <label class="switch-row"><input type="checkbox" id="ap-on" /><span><b>Dùng hồ sơ khi nhờ AI</b></span></label>
+      <p class="ap-warn small">Hồ sơ được gửi kèm đề bài tới AI (Anthropic, hoặc trang chat bạn chọn) — đừng ghi số điện thoại, email, địa chỉ hay mật khẩu.</p>
+      <div class="ap-fields">
+        <div class="ap-field">
+          <div class="ap-field-head"><label for="ap-name"><b>Tên, cách xưng hô</b></label><button type="button" class="ghost sm" id="ap-fill-me" data-tip="Điền tên và phần giới thiệu trên trang cá nhân Beincom vào các ô đang trống">Lấy từ Beincom</button></div>
+          <input type="text" id="ap-name" maxlength="200" placeholder="vd: Kai — xưng mình, gọi mọi người là anh em" />
+        </div>
+        <label class="ap-field"><b>Về bạn</b><textarea id="ap-about" rows="3" maxlength="1200" placeholder="vd: Admin Crypto Life, 6 năm đầu tư crypto, mảng chính là ví lạnh và an toàn tài sản; ban ngày làm IT."></textarea></label>
+        <label class="ap-field"><b>Về cộng đồng</b><textarea id="ap-community" rows="3" maxlength="1200" placeholder="vd: Cộng đồng cho người mới học crypto: an toàn ví, DCA, nhận diện lừa đảo. Không bàn kèo, không gọi vốn. AMA tối thứ Sáu."></textarea></label>
+        <label class="ap-field"><b>Cách bạn viết</b><textarea id="ap-voice" rows="2" maxlength="800" placeholder="vd: Câu ngắn, thẳng, hay hỏi lại người đọc; ít emoji (🙏 😄); không dùng từ lóng tiếng Anh."></textarea></label>
+        <label class="ap-field"><b>Điều AI không được viết</b><textarea id="ap-avoid" rows="2" maxlength="800" placeholder="vd: Không khuyên mua / bán coin cụ thể, không hứa lợi nhuận, không nhắc tên dự án khác."></textarea></label>
+        <div class="ap-field">
+          <div class="ap-field-head"><label for="ap-samples"><b>Đoạn bạn từng viết</b></label> <button type="button" class="tip-i" data-tip="Cách tốt nhất để AI viết giống bạn: 2–3 bài hoặc câu trả lời bạn từng viết. AI chỉ học giọng văn (nhịp câu, từ hay dùng, cách xưng hô), không chép nội dung." aria-label="Gợi ý: Cách tốt nhất để AI viết giống bạn: 2–3 bài hoặc câu trả lời bạn từng viết. AI chỉ học giọng văn (nhịp câu, từ hay dùng, cách xưng hô), không chép nội dung.">i</button><button type="button" class="ghost sm" id="ap-fill-posts" data-tip="Lấy bài đăng và câu trả lời bình luận của chính bạn trong kết quả quét">Lấy từ bài của tôi</button></div>
+          <textarea id="ap-samples" rows="7" maxlength="5000" placeholder="Dán vài đoạn bạn từng viết (bài đăng, câu trả lời bình luận), cách nhau một dòng ---"></textarea>
+          <span class="muted small ap-len" id="ap-samples-count"></span>
+        </div>
+      </div>
+      <details class="ap-preview"><summary>Xem đoạn gửi kèm cho AI</summary><pre id="ap-preview"></pre></details>
+    </div>
+    <div class="pv-form">
+      <div class="pv-actions"><span class="muted small" id="ap-count"></span><span class="ar-btns"><button type="button" class="ghost" id="ap-cancel">Đóng</button><button type="button" class="primary" id="ap-save">Lưu</button></span></div>
+    </div>
+  </dialog>
+
   <dialog id="ai-draft" class="postview ai-draft" aria-labelledby="ad-title">
     <div class="pv-head">
       <h3 id="ad-title">✨ Nhờ AI viết</h3>
@@ -1832,6 +1870,7 @@
   <script src="dash/postview.js"></script>
   <script src="dash/aireply.js"></script>
   <script src="dash/aidraft.js"></script>
+  <script src="dash/aipersona.js"></script>
   <script src="dash/aihub.js"></script>
   <script src="dash/person.js"></script>
   <script src="dash/sweep.js"></script>

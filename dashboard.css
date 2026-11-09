@@ -1134,6 +1134,28 @@ dialog.me-card { max-width: 620px; padding: 0; overflow: hidden; }
 .ai-task-main { display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 0; }
 .ai-task-main select { margin-top: 4px; font-size: 12.5px; }
 .ai-task > button { flex: none; align-self: center; }
+/* Thanh Hồ sơ của bạn cho AI (tab Trợ lý AI) và hộp sửa hồ sơ (dash/aipersona.js) */
+.ai-persona-bar { display: flex; align-items: center; gap: 12px; margin-top: 10px; padding: 10px 14px; border: 1px dashed var(--accent); border-radius: var(--radius-sm); background: var(--accent-soft); }
+.ai-persona-bar.on { border-style: solid; border-color: var(--border); background: var(--surface); }
+.ai-persona-bar:empty { display: none; }
+.ai-persona-text { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.ai-persona-bar > button { flex: none; }
+.ai-persona-row { flex-direction: row; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+dialog.ai-persona { max-width: 680px; height: auto; max-height: min(94vh, 960px); }
+.ap-warn { margin: 10px 0 0; padding: 8px 12px; border-radius: 10px; background: var(--warn-soft); }
+.ap-fields { display: grid; gap: 12px; margin-top: 14px; }
+.ap-field { display: flex; flex-direction: column; gap: 5px; }
+.ap-field input, .ap-field textarea { width: 100%; }
+.ap-field-head { display: flex; align-items: center; gap: 6px; }
+.ap-field-head > button.ghost { margin-left: auto; }
+.ap-len { align-self: flex-end; }
+.ap-preview { margin-top: 14px; }
+.ap-preview summary { cursor: pointer; color: var(--muted); font-size: 13px; }
+.ap-preview pre { margin: 8px 0 0; padding: 10px 12px; max-height: 260px; overflow: auto; white-space: pre-wrap; font: 12.5px/1.5 var(--mono, ui-monospace, monospace); border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg); }
+@media (max-width: 560px) {
+  .ai-persona-bar { display: grid; grid-template-columns: 34px minmax(0, 1fr); column-gap: 12px; row-gap: 8px; align-items: start; }
+  .ai-persona-bar > button { grid-column: 2; justify-self: start; }
+}
 /* Điện thoại: nút xuống dòng dưới chữ, để tên việc không bị bẻ vụn */
 @media (max-width: 560px) {
   .ai-task { display: grid; grid-template-columns: 34px minmax(0, 1fr); column-gap: 12px; row-gap: 8px; }

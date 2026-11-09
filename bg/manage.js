@@ -67,6 +67,7 @@ async function doRestore({ data, keepDry = false }) {
   if (d.groupRules) set.groupRules = d.groupRules;
   if (d.templates) set.templates = d.templates;
   if (d.chatReplies) set.chatReplies = d.chatReplies;
+  if (d.aiPersona) set.aiPersona = d.aiPersona;
   if (d.promptBank) set.promptBank = d.promptBank;
   // Lịch sử số liệu: gộp với dữ liệu đang có (trong máy được ưu tiên khi trùng)
   let merged = null;

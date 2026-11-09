@@ -198,3 +198,59 @@ test('Lịch sử tác vụ AI: mới nhất trước, giữ tối đa 200 dòng
   assert.deepEqual(BG.aiLogStats(null, now), { tasks: 0, sent: 0, cost: 0, errors: 0 });
 });
 
+test('Hồ sơ của bạn cho AI: làm sạch (cắt độ dài, mặc định bật), đoạn gửi kèm đầy đủ / chỉ bối cảnh / tiếng Anh, tắt hoặc trống thì không gửi', () => {
+  const p = BG.cleanPersona({ name: '  Kai — xưng mình ', about: 'Admin 6 năm', community: 'Người mới học crypto', voice: 'Câu ngắn', avoid: 'Không hứa lợi nhuận', samples: 'Đoạn A\r\n\r\n\r\n\r\nĐoạn B', extra: 'x', on: 'có' });
+  assert.equal(p.on, true);
+  assert.equal(p.name, 'Kai — xưng mình');
+  assert.equal(p.samples, 'Đoạn A\n\nĐoạn B');
+  assert.ok(!('extra' in p));
+  assert.equal(BG.personaCount(p), 6);
+  assert.equal(BG.cleanPersona({ about: 'x'.repeat(5000) }).about.length, BG.PERSONA_MAX.about);
+  assert.deepEqual(BG.cleanPersona(null), BG.DEFAULT_PERSONA);
+  const q = '"'.repeat(3);
+  const full = BG.aiPersonaBlock(p);
+  assert.ok(full.startsWith('Hồ sơ của admin — người sẽ đăng nội dung này. Viết như chính họ tự viết:\n- Tên, cách xưng hô: Kai — xưng mình\n- Về admin: Admin 6 năm\n- Về cộng đồng: Người mới học crypto\n- Cách admin viết: Câu ngắn\n- Không bao giờ viết: Không hứa lợi nhuận\n'), full);
+  assert.ok(full.includes(`không chép câu chữ hay thông tin trong đó:\n${q}\nĐoạn A\n\nĐoạn B\n${q}\nViết như người thật`));
+  assert.match(full, /không bịa thêm trải nghiệm, con số hay sự việc/);
+  assert.equal(BG.aiPersonaBlock(p, { part: 'context' }), 'Bối cảnh (theo admin):\n- Tên, cách xưng hô: Kai — xưng mình\n- Về cộng đồng: Người mới học crypto');
+  assert.match(BG.aiPersonaBlock(p, { en: true }), /^The admin's profile — .*\n- Name and how they address people: Kai/);
+  assert.equal(BG.aiPersonaBlock({ ...p, on: false }), '');
+  assert.equal(BG.aiPersonaBlock({ on: true }), '');
+  assert.equal(BG.aiPersonaBlock({ voice: 'Câu ngắn' }, { part: 'context' }), '');
+  // Chỉ điền mục bài mẫu: vẫn có đầu đoạn và luật
+  assert.match(BG.aiPersonaBlock({ samples: 'Chào anh em' }), /^Hồ sơ của admin[^\n]*\nVài đoạn admin từng tự viết/);
+});
+
+test('Hồ sơ cho AI được gửi kèm mọi đề bài: trả lời bình luận (khoá API, chép – dán), mẫu bài, bài đăng; tóm tắt chỉ có bối cảnh; không có hồ sơ thì đề bài như cũ', () => {
+  const persona = { name: 'Kai — xưng mình', community: 'Crypto cho người mới', voice: 'Câu ngắn, thẳng', samples: 'Anh em nhớ giữ seed phrase offline nhé.' };
+  const comments = [cm('1', 'Ví lạnh nào tốt?')];
+  const api = BG.aiReplyInput({ comments, posts: { p1: 'Bài về ví' }, style: 'short', note: 'Nhắc bài ghim', community: 'Crypto Life', persona });
+  assert.match(api, /^Community: Crypto Life\nThe admin's profile — [^\n]*\n- Name and how they address people: Kai — xưng mình\n/);
+  assert.match(api, /Anh em nhớ giữ seed phrase offline nhé\.\n.*\nSound like a real person[^\n]*\nTone: Thật ngắn gọn\nAdmin notes \(from the admin, follow them\): Nhắc bài ghim\n\nWrite exactly one entry/s);
+  assert.deepEqual(JSON.parse(api.split('\n').at(-1)).comments.map((c) => c.id), ['1']);
+  const plain = BG.aiReplyInput({ comments, posts: {}, style: 'short', note: 'Nhắc bài ghim', community: 'Crypto Life' });
+  assert.match(plain, /^Community: Crypto Life\nTone: Thật ngắn gọn\nAdmin notes \(from the admin, follow them\): Nhắc bài ghim\n\nWrite exactly one entry/);
+  const web = BG.aiWebPrompt({ comments, posts: {}, community: 'Crypto Life', persona }).text;
+  assert.match(web, /\nCộng đồng: Crypto Life\nHồ sơ của admin — [^\n]*\n- Tên, cách xưng hô: Kai — xưng mình\n[\s\S]*\nViết như người thật[^\n]*\nGiọng văn: /);
+  const tpl = BG.aiTemplatePrompt({ kind: 'welcome', groupName: 'Crypto Life', count: 3, current: 'Chào {danh_sach}', persona });
+  assert.match(tpl, /^Viết một bài đăng chào mừng 3 thành viên mới[^\n]*\n\nHồ sơ của admin — [\s\S]*\nViết như người thật[^\n]*\n\nYêu cầu:/);
+  assert.match(BG.aiTemplatePrompt({ kind: 'welcome', groupName: 'X', current: '' }), /^Viết một bài đăng chào mừng[^\n]*\n\nYêu cầu:/);
+  const post = BG.aiPostPrompt({ idea: 'AMA thứ Sáu', persona });
+  assert.match(post, /^Viết một bài đăng[^\n]*\nÝ chính của bài \(theo admin\): AMA thứ Sáu\n\nHồ sơ của admin — [\s\S]*\n\nYêu cầu:/);
+  assert.match(BG.aiPostPrompt({ idea: 'AMA' }), /AMA\n\nYêu cầu:/);
+  const sum = BG.aiSummaryPrompt({ post: 'Bài', comments, community: 'Crypto Life', persona });
+  assert.match(sum, /\nBối cảnh \(theo admin\):\n- Tên, cách xưng hô: Kai — xưng mình\n- Về cộng đồng: Crypto cho người mới\n\nDữ liệu/);
+  assert.ok(!sum.includes('seed phrase') && !sum.includes('Hồ sơ của admin'));
+  assert.ok(!BG.aiPostPrompt({ idea: 'AMA', persona: { ...persona, on: false } }).includes('Hồ sơ của admin'));
+});
+
+test('Hồ sơ cho AI có trong bản sao lưu: làm sạch khi đọc tệp, hồ sơ trống thì bỏ, có trong danh sách khôi phục', () => {
+  const b = BG.makeBackup({ aiPersona: { on: true, name: 'Kai', samples: 'Chào anh em' }, aiConfig: { key: 'sk-ant-bimat' } });
+  assert.deepEqual(Object.keys(b.data), ['aiPersona']);
+  const r = BG.readBackup(b);
+  assert.deepEqual(r.data.aiPersona, { ...BG.DEFAULT_PERSONA, name: 'Kai', samples: 'Chào anh em' });
+  assert.ok(BG.backupSummary(r.data).includes('Hồ sơ của bạn cho AI'));
+  assert.throws(() => BG.readBackup({ app: 'BeinFusion', format: 1, data: { aiPersona: { name: '  ' } } }), /không có dữ liệu/);
+  const lạ = BG.readBackup({ app: 'BeinFusion', format: 1, data: { rules: {}, aiPersona: { name: 123, about: ['x'], voice: 'Câu ngắn' } } });
+  assert.deepEqual(lạ.data.aiPersona, { ...BG.DEFAULT_PERSONA, voice: 'Câu ngắn' });
+});

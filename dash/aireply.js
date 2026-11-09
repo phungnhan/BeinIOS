@@ -268,7 +268,7 @@ async function arGenerate() {
   try {
     for (const chunk of BG.aiChunks(todo)) {
       arStatus(`AI đang viết… ${done}/${todo.length}`);
-      const req = BG.aiRequest({ key: cfg.key, model: cfg.model, input: BG.aiReplyInput({ comments: chunk, posts: AR.posts, style, note, community }) });
+      const req = BG.aiRequest({ key: cfg.key, model: cfg.model, input: BG.aiReplyInput({ comments: chunk, posts: AR.posts, style, note, community, persona: data.aiPersona }) });
       const body = await aiCall(req, { signal: AR.abort.signal });
       const out = BG.aiParseReplies(body, chunk.map((c) => c.id));
       AR.cost += BG.aiCost(body.usage, body.model || cfg.model);
@@ -415,7 +415,7 @@ function arWebCopy() {
   const site = BG.AI_WEB_SITES[$('ar-site').value] ? $('ar-site').value : 'claude';
   const style = $('ar-style').value;
   const note = [cfg.note, $('ar-note').value.trim()].filter(Boolean).join('\n');
-  const p = BG.aiWebPrompt({ comments: todo, posts: AR.posts, style, note, community: arCommunity(todo) });
+  const p = BG.aiWebPrompt({ comments: todo, posts: AR.posts, style, note, community: arCommunity(todo), persona: data.aiPersona });
   AR.webIds = p.ids;
   const copying = arCopy(p.text);
   const app = aiOpenSite(site);
