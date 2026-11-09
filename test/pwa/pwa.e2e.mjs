@@ -300,6 +300,10 @@ try {
   await page.until(new Function(`return ${isOpen('dset')} && ${embedSees('#settings .ai-group')}`), 5000);
   const aiView = await page.ev(`({ title: document.getElementById('dset-title').textContent, tg: ${embedSees('#settings .tg-group')}, key: ${embedSees('#ai-key')}, model: document.getElementById('f-set').contentDocument.getElementById('ai-model').options.length, state: document.getElementById('st-ai').textContent })`);
   ok(aiView.title === 'AI trả lời bình luận' && !aiView.tg && aiView.key && aiView.model === 3 && aiView.state === 'Chép – dán', 'Cài đặt › Tích hợp › AI trả lời bình luận: chỉ nhóm AI (khoá API, mô hình); dòng báo "Chép – dán" khi chưa có khoá');
+  await page.ev(`document.getElementById('f-set').contentDocument.getElementById('btn-ai-persona').click(); true`);
+  await page.until(new Function(`return document.getElementById('f-set').contentDocument.getElementById('ai-persona').open && ${embedSees('#ap-name')} && ${embedSees('#ap-save')}`), 4000);
+  ok(true, 'Cài đặt › AI: Sửa hồ sơ mở hộp Hồ sơ của bạn cho AI (thấy ô và nút Lưu)');
+  await page.ev(`document.getElementById('f-set').contentDocument.getElementById('ap-close').click(); true`);
   await page.ev(`document.querySelector('#view-dset [data-back]').click(); document.querySelector('[data-sec="scan"]').click(); true`);
   await page.until(new Function(`return ${isOpen('dset')} && ${embedSees('#scanComments')} && !${embedSees('#autoApprove')}`), 5000);
   const scanBefore = await page.ev(`BeinPWA.page.store.get('local', ['settings']).then((r) => !!r.settings?.scanComments)`);

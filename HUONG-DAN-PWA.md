@@ -148,6 +148,7 @@ node test/pwa/pwa.e2e.mjs
 
 ## Lịch sử BeinIOS
 
+- **1.8.6 (09/11/2026).** Gộp addon BeinFusion 0.67.0 — **Hồ sơ của bạn cho AI** (Quản trị › Trợ lý AI, hoặc Cài đặt › AI trả lời bình luận → Sửa hồ sơ): tên và cách xưng hô, về bạn, về cộng đồng, cách viết, điều AI không được viết, vài đoạn bạn từng viết; gửi kèm mỗi lần nhờ AI để câu chữ đúng giọng bạn. Hồ sơ có trong bản sao lưu — khôi phục bản sao lưu từ máy tính là có ngay trên iPhone.
 - **1.8.5 (09/11/2026).** Gộp addon BeinFusion 0.66.0 — tab mới **Trợ lý AI** trong Quản trị: trả lời bình luận mới, tóm tắt bình luận một bài, mẫu bài chào / vinh danh, viết bài đăng (đưa vào ô soạn), kèm tình trạng tháng này (số lần nhờ AI, câu đã gửi, chi phí ước tính) và lịch sử từng lần nhờ AI; nút **Huỷ** khi AI đang viết, quá 2 phút thì tự dừng. Nút Cài đặt AI mở thẳng Cài đặt › AI trả lời bình luận của ứng dụng.
 - **1.8.4 (09/11/2026).** Gộp addon BeinFusion 0.65.0 — giao diện Hiện đại của Dashboard trên máy tính: mỗi tab một thẻ với hàng mục con; hồ sơ không còn hiện Mã Beincom ở chỗ dễ thấy (Hồ sơ cá nhân: cuối thẻ Addon).
 - **1.8.3 (09/11/2026).** Gộp addon BeinFusion 0.64.0 — giao diện Dashboard Hiện đại cho máy tính (Cài đặt › Giao diện của addon). Trên iPhone, BeinIOS giữ giao diện riêng kiểu iPhone; mục Giao diện không hiện trong Cài đặt của BeinIOS.
