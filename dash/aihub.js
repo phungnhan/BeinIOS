@@ -30,7 +30,7 @@ function aiPostDraft() {
     title: '✨ AI viết bài đăng',
     desc: current.trim() ? 'Ô soạn ở tab Đăng bài đang có chữ: AI viết lại cho rõ, giữ ý — hoặc ghi ý mới vào ô Ghi chú.' : 'Ghi ý chính của bài vào ô Ghi chú cho AI rồi nhờ AI viết; bài đưa vào ô soạn ở tab Đăng bài để bạn xem lại trước khi đăng.',
     notePlaceholder: 'Ý chính của bài — vd: thông báo AMA tối thứ Sáu 20h về ví lạnh',
-    prompt: () => BG.aiPostPrompt({ idea: $('ad-note').value.trim(), current, note: AD.cfg?.note || '' }),
+    prompt: () => BG.aiPostPrompt({ idea: $('ad-note').value.trim(), current, note: AD.cfg?.note || '', persona: data.aiPersona }),
     useLabel: 'Đưa vào ô soạn',
     onUse: (text) => {
       showTab('compose');
@@ -61,6 +61,14 @@ async function renderAiHub() {
     tile(String(st.tasks), 'lần nhờ AI tháng này'),
     tile(String(st.sent), 'câu trả lời đã gửi tháng này'),
     tile(usd(st.cost), 'chi phí ước tính tháng này', '', 'Chỉ tính các lần dùng khoá API; chép – dán không mất phí'),
+  );
+
+  const pi = personaInfo();
+  $('ai-persona-bar').className = 'ai-persona-bar' + (pi.on ? ' on' : '');
+  $('ai-persona-bar').replaceChildren(
+    el('span', { class: 'ai-task-ic', 'aria-hidden': 'true' }, icSvg('user')),
+    el('span', { class: 'ai-persona-text' }, el('b', {}, 'Hồ sơ của bạn cho AI'), el('span', { class: 'muted small' }, pi.on ? `${pi.text} — AI viết theo giọng và bối cảnh của bạn` : pi.n ? 'Đang tắt — AI viết giọng chung chung' : 'Chưa điền — AI đang viết giọng chung chung. Vài dòng về bạn, cộng đồng và vài đoạn bạn từng viết là đủ.')),
+    el('button', { type: 'button', class: pi.n ? 'ghost sm' : 'primary sm', onclick: openPersona }, pi.n ? 'Sửa hồ sơ' : 'Điền hồ sơ'),
   );
 
   const replies = aiReplyCandidates();

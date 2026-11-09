@@ -147,7 +147,7 @@ function aiTemplateDraft(kind) {
     title: isWelcome ? '✨ AI viết bài chào thành viên mới' : '✨ AI viết bài vinh danh',
     desc: `AI viết mẫu bài mới${g ? ' cho ' + g.name : ''} có chỗ trống {danh_sach}; addon tự điền @tên những người bạn đã chọn.`,
     notePlaceholder: isWelcome ? 'vd: nhắc buổi AMA tối thứ Sáu' : 'vd: người đứng đầu được tặng huy hiệu',
-    prompt: (note) => BG.aiTemplatePrompt({ kind, groupName: g?.name || '', count, current: tpl.value, note }),
+    prompt: (note) => BG.aiTemplatePrompt({ kind, groupName: g?.name || '', count, current: tpl.value, note, persona: data.aiPersona }),
     fix: BG.aiTemplateFix,
     useLabel: count ? `Dùng mẫu & soạn bài (${count} người)` : 'Dùng làm mẫu',
     onUse: (text) => {
@@ -172,7 +172,7 @@ $('pv-sum').addEventListener('click', () => {
     title: `✨ Tóm tắt ${all.length} bình luận`,
     desc: 'AI đọc bài và các bình luận đang hiện trong cửa sổ — muốn tóm tắt nhiều hơn thì tải thêm bình luận trước.',
     notePlaceholder: 'vd: chú ý các câu hỏi về rút tiền',
-    prompt: (note) => BG.aiSummaryPrompt({ post: [p.title, PV.full?.text || p.text].filter(Boolean).join('\n'), comments: all, note, community: (p.groups || []).map((g) => g.name).filter(Boolean).join(', ') }),
+    prompt: (note) => BG.aiSummaryPrompt({ post: [p.title, PV.full?.text || p.text].filter(Boolean).join('\n'), comments: all, note, community: (p.groups || []).map((g) => g.name).filter(Boolean).join(', '), persona: data.aiPersona }),
     useLabel: 'Chép tóm tắt',
     onUse: (text) => arCopy(text).then((ok) => toast(ok ? 'Đã chép tóm tắt.' : 'Không chép được — bôi đen trong ô rồi chép tay.', ok ? 'ok' : 'err')),
   });
