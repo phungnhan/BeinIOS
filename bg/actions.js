@@ -350,6 +350,43 @@ async function doMembers({ groupId, key = '', offset = 0, limit = 50, sort = '' 
   });
 }
 
+// Hồ sơ một người: người này có trong danh sách thành viên các cộng đồng bạn quản trị không (ngày vào, admin), số group tham
+// gia trên Beincom, xác minh / cao cấp / NFT / đã khoá. Tìm theo tên đăng nhập (không có thì họ tên) như ô tìm ở tab Thành
+// viên, mỗi cộng đồng một chỗ: group gốc nếu bạn quản trị, không thì group con đầu tiên. Chỉ đọc.
+const MEMBER_INFO_MAX = 8;
+async function doMemberInfo({ userId, username = '', fullname = '' }) {
+  const key = String(username || fullname || '').trim();
+  if (!userId || !key) return { status: 'error', message: 'Thiếu người' };
+  const { state } = await load();
+  const scopes = new Map();
+  for (const g of [...(state.snapshot?.groups || [])].filter((x) => !x.error).sort((a, b) => !!b.isCommunity - !!a.isCommunity)) {
+    const k = g.communityId || g.id;
+    if (!scopes.has(k)) scopes.set(k, g);
+  }
+  const list = [...scopes.values()].slice(0, MEMBER_INFO_MAX);
+  if (!list.length) return { status: 'ok', memberships: [], person: null, checked: 0, errors: 0 };
+  return withClient(async (client) => {
+    const found = await mapLimit(list, PARALLEL, async (g) => {
+      const r = await client.call('GET', g.isCommunity ? `group/manage/communities/${g.communityId}/members?${qs({ limit: 10, offset: 0, key })}` : `group/groups/${g.id}/users?${qs({ limit: 10, offset: 0, key })}`);
+      if (r.status === 401) return { login: true };
+      if (!BG.isOk(r)) return { g, error: BG.errMsg(r) };
+      const d = r.body.data;
+      const all = g.isCommunity ? (Array.isArray(d) ? d.map((u) => BG.slimMember(u)) : []) : [...(d?.groupAdmin?.data || []).map((u) => BG.slimMember(u, { isAdmin: true })), ...(d?.groupMember?.data || []).map((u) => BG.slimMember(u, { isAdmin: false }))];
+      return { g, m: all.find((u) => u.id === userId) || null };
+    });
+    if (found.some((x) => x.login)) return { ...NEED_LOGIN };
+    const hits = found.filter((x) => x.m);
+    const m = hits[0]?.m || null;
+    return {
+      status: 'ok',
+      memberships: hits.map(({ g, m: x }) => ({ groupId: g.id, name: g.isCommunity ? g.name : g.communityName || g.name, url: BG.groupUrl({ ...g, isCommunity: true, communityId: g.communityId || g.id }), joinedAt: x.joinedAt, admin: !!(x.isCommunityAdmin || x.isAdmin) })),
+      person: m ? { isVerified: m.isVerified, isDeactivated: m.isDeactivated, premium: m.premium, nft: m.nft, totalJoinedGroup: hits.map((x) => x.m.totalJoinedGroup).find((n) => n != null) ?? null } : null,
+      checked: list.length,
+      errors: found.filter((x) => x.error).length,
+    };
+  });
+}
+
 async function doActivity({ groupId, page = 1, useCase = '' }) {
   const g = await findGroup(groupId);
   if (!g) return { status: 'error', message: 'Không tìm thấy group — hãy quét lại' };

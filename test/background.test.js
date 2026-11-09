@@ -4607,3 +4607,23 @@ test('Hồ sơ cá nhân: lệnh selfInfo đọc trang cá nhân Beincom (không
   const out = makeEnv({ loggedIn: false });
   assert.equal((await out.send({ type: 'selfInfo' })).status, 'need_login');
 });
+
+test('Hồ sơ một người: lệnh memberInfo tìm người trong danh sách thành viên các cộng đồng bạn quản trị (chỉ GET), ngày vào, số group trên Beincom', async () => {
+  const env = makeEnv();
+  await scan(env);
+  const before = env.calls.length;
+  const r = await env.send({ type: 'memberInfo', userId: 'u33', username: 'user33' });
+  assert.equal(r.status, 'ok');
+  assert.deepEqual(r.memberships.map((m) => [m.groupId, m.joinedAt, m.admin]), [['gFood', '2026-10-05T00:00:00Z', true]]);
+  assert.equal(r.person.totalJoinedGroup, 3);
+  assert.ok(r.checked >= 1);
+  const calls = env.calls.slice(before);
+  assert.ok(calls.every((c) => c.startsWith('GET ')));
+  assert.ok(calls.some((c) => c.startsWith('GET group/manage/communities/cFood/members?limit=10&offset=0&key=user33')));
+  // Không có ở đâu: danh sách rỗng, không lỗi
+  const none = await env.send({ type: 'memberInfo', userId: 'u999', username: 'nguoila' });
+  assert.deepEqual([none.status, none.memberships, none.person], ['ok', [], null]);
+  assert.match((await env.send({ type: 'memberInfo', userId: 'u1' })).message, /Thiếu người/);
+  assert.ok(BG.SAFE_RESEND.has('memberInfo'));
+});
+

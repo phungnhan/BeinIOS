@@ -1106,18 +1106,34 @@ export const scenarios = [
       // Người chưa từng vi phạm: vẫn có hồ sơ (bài addon đã thấy, thao tác admin, nút xử lý)
       await page.ev(`[...document.querySelectorAll('#recent-body .name-btn')].find((b) => b.textContent === 'Lan Anh').click(); true`);
       await page.until(() => document.getElementById('person-card').open);
+      const tab = (label) => page.ev(`[...document.querySelectorAll('#pcd-tabs .me-tab')].find((t) => t.textContent === ${JSON.stringify(label)}).click(); true`);
       const card = () =>
         page.call(() => ({
           name: document.querySelector('#pcd-head b').textContent,
-          flags: [...document.querySelectorAll('#pcd-body .pcd-flag')].map((x) => x.textContent),
-          secs: [...document.querySelectorAll('#pcd-body .pc-sec h4')].map((x) => x.textContent),
+          flags: [...document.querySelectorAll('#person-card .pcd-flag')].map((x) => x.textContent),
+          stats: [...document.querySelectorAll('#pcd-stats .me-stat')].map((x) => x.querySelector('small').textContent + ': ' + x.querySelector('b').textContent),
+          tabs: [...document.querySelectorAll('#pcd-tabs .me-tab')].map((t) => t.textContent + (t.classList.contains('on') ? '*' : '')),
+          secs: [...document.querySelectorAll('#pcd-body .pc-sec h4, #pcd-body .me-sec h4')].map((x) => x.textContent),
+          rows: [...document.querySelectorAll('#pcd-body .me-row')].map((r) => r.querySelector('.me-k').textContent + ': ' + r.querySelector('.me-v').textContent),
+          head: document.getElementById('pcd-head').innerText,
           acts: [...document.querySelectorAll('#pcd-actions button')].map((b) => b.textContent),
         }));
+      // Tổng quan: tài khoản, có trong cộng đồng nào của bạn (lệnh memberInfo), ô số liệu, nhãn Cao cấp
+      await page.until(() => [...document.querySelectorAll('#pcd-body .me-row')].some((r) => /Food Research/.test(r.textContent)));
       const c1 = await card();
       assert.equal(c1.name, 'Lan Anh');
       assert.deepEqual(c1.flags, ['✓ Chưa ghi nhận vi phạm nào']);
-      assert.ok(c1.secs.includes('Bài mới đăng addon đã thấy (1)') && c1.secs.includes('Thao tác của admin với người này (0)'));
+      assert.deepEqual(c1.tabs, ['Tổng quan*', 'Vi phạm', 'Bài viết', 'Thao tác']);
+      assert.deepEqual(c1.secs, ['Tài khoản', 'Trong cộng đồng của bạn']);
+      assert.ok(c1.rows.includes('Food Research: Vào 12/03/2026') && c1.rows.includes('Tham gia trên Beincom: 7 group'), JSON.stringify(c1.rows));
+      assert.ok(c1.stats.includes('Vi phạm: 0') && c1.stats.includes('Bài đã thấy: 1') && c1.stats.includes('Group trên Beincom: 7'), JSON.stringify(c1.stats));
+      assert.match(c1.head, /Cao cấp/);
+      assert.equal(await page.ev(`window.__memberInfo.type`), 'memberInfo');
       assert.ok(c1.acts.includes('🧹 Dọn tài khoản…') && !c1.acts.includes('Xoá hồ sơ vi phạm'));
+      await tab('Thao tác');
+      await page.until(() => [...document.querySelectorAll('#pcd-body .pc-sec h4')].some((x) => x.textContent === 'Thao tác của admin với người này (0)'));
+      await tab('Bài viết');
+      await page.until(() => [...document.querySelectorAll('#pcd-body .pc-sec h4')].some((x) => x.textContent === 'Bài mới đăng addon đã thấy (1)'));
       // Tìm bài còn hiện (chỉ đọc)
       await page.ev(`[...document.querySelectorAll('#pcd-body button')].find((b) => /^Tìm bài/.test(b.textContent)).click(); true`);
       await page.until(() => [...document.querySelectorAll('#pcd-body .pc-sec h4')].some((x) => x.textContent === 'Bài còn hiện trong các community bạn quản trị (3)'));
@@ -1129,9 +1145,12 @@ export const scenarios = [
       await page.until(() => !!document.querySelector('#recent-body .vio-badge'));
       await page.ev(`document.querySelector('#recent-body .vio-badge').click(); true`);
       await page.until(() => document.getElementById('person-card').open && document.querySelector('#pcd-head b').textContent === 'Airdrop Free');
+      await page.until(() => [...document.querySelectorAll('#pcd-body .me-row')].some((r) => /Food Research/.test(r.textContent)));
+      await tab('Vi phạm');
+      await page.until(() => [...document.querySelectorAll('#pcd-body .pc-sec h4')].some((x) => /^Hồ sơ vi phạm \(\d+\)$/.test(x.textContent)));
       const c2 = await card();
       assert.match(c2.flags[0], /^⚠ /);
-      assert.ok(c2.secs.includes('Hồ sơ vi phạm (1)') && c2.acts.includes('Xoá hồ sơ vi phạm'));
+      assert.ok(c2.stats.some((x) => /^Vi phạm: [1-9]/.test(x)) && c2.acts.includes('Xoá hồ sơ vi phạm'), JSON.stringify(c2));
       await page.ev(`[...document.querySelectorAll('#pcd-body button')].find((b) => /^Xem trong danh sách/.test(b.textContent)).click(); true`);
       await page.until(() => !document.getElementById('person-card').open && !document.getElementById('members-profiles-pane').hidden && document.getElementById('profiles-key').value === 'airdropfree');
       // Danh sách thành viên: tên bấm được, mở cửa sổ Hồ sơ
@@ -2431,9 +2450,9 @@ export const scenarios = [
       await page.ev(`document.querySelector('#confirm button[value=cancel]').click(); true`);
       // Hồ sơ trên Dashboard: mở cửa sổ Hồ sơ của người đó (có cả người chưa từng vi phạm)
       await page.open(url('dashboard', 'tab=members&profile=u1&u=trnminhanh1&n=Trần Minh Anh'));
-      await page.until(() => document.getElementById('person-card').open && document.querySelector('#pcd-head b').textContent === 'Trần Minh Anh' && /^⚠ /.test(document.querySelector('#pcd-body .pcd-flag').textContent));
+      await page.until(() => document.getElementById('person-card').open && document.querySelector('#pcd-head b').textContent === 'Trần Minh Anh' && /^⚠ /.test(document.querySelector('#person-card .pcd-flag').textContent));
       await page.open(url('dashboard', 'tab=members&profile=u999&u=nguoimoi&n=Người Mới'));
-      await page.until(() => document.getElementById('person-card').open && document.querySelector('#pcd-head b').textContent === 'Người Mới' && document.querySelector('#pcd-body .pcd-flag').textContent === '✓ Chưa ghi nhận vi phạm nào');
+      await page.until(() => document.getElementById('person-card').open && document.querySelector('#pcd-head b').textContent === 'Người Mới' && document.querySelector('#person-card .pcd-flag').textContent === '✓ Chưa ghi nhận vi phạm nào');
     },
   },
   {

@@ -1645,10 +1645,11 @@
     <div class="dialog-actions"><button type="button" class="primary" id="help-ok">Đã hiểu</button></div>
   </dialog>
   <!-- Hồ sơ một người (dash/person.js): bấm tên người, huy hiệu ⚠, hoặc mở từ trang Chat -->
-  <dialog id="person-card" class="person-card" aria-labelledby="pcd-title">
-    <h3 id="pcd-title" class="sr-only">Hồ sơ</h3>
-    <div class="pcd-head" id="pcd-head"></div>
-    <div class="pcd-body" id="pcd-body"></div>
+  <dialog id="person-card" class="person-card" aria-labelledby="pcd-name">
+    <div class="me-head" id="pcd-head"></div>
+    <div class="me-stats" id="pcd-stats"></div>
+    <div class="me-tabs" id="pcd-tabs" role="tablist" aria-label="Mục của hồ sơ"></div>
+    <div class="me-body" id="pcd-body"></div>
     <div class="dialog-actions pcd-actions" id="pcd-actions"></div>
   </dialog>
   <dialog id="confirm">

@@ -2,6 +2,11 @@
 
 Mỗi bản một mục, bản mới nhất ở trên. Dashboard tự hiện các mục mới sau khi cập nhật (bấm "Có gì mới" ở cuối trang để xem lại).
 
+## v0.63.1 — 09/11/2026
+- **Hồ sơ thành viên mới** (bấm tên một người ở các bảng, huy hiệu ⚠, hoặc từ trang Chat): cùng kiểu Hồ sơ cá nhân — ảnh bìa, avatar, @tên chép được, nhãn Cao cấp / NFT / Đã khoá, cảnh báo (vi phạm, giống admin, đang xin vào) ngay dưới tên; ô số liệu (vi phạm, bài, bình luận, tin chat, thao tác của admin, số group trên Beincom); bốn thẻ Tổng quan, Vi phạm, Bài viết, Thao tác.
+- Tổng quan cho biết người này có trong cộng đồng nào bạn quản trị và vào từ ngày nào (tìm trong danh sách thành viên, chỉ đọc), tham gia bao nhiêu group trên Beincom, đang xin vào group nào.
+- Hồ sơ cá nhân: hết chữ "null" khi tài khoản không có phần giới thiệu; tên đăng nhập có nút chép; dòng tóm tắt nằm riêng dưới tên; các dòng xếp kín hai cột.
+
 ## v0.63.0 — 09/11/2026
 - **Hồ sơ cá nhân mới** (bấm avatar góc trên Dashboard): đầu thẻ có ảnh bìa, avatar, tên, dấu xác minh, @tên đăng nhập (bấm để chép) và giới thiệu; năm ô số liệu — cộng đồng, group quản trị, thành viên, việc đang chờ, thao tác 30 ngày.
 - Bốn thẻ gọn: **Thông tin** (thông tin trên trang cá nhân Beincom — họ tên, giới tính, ngày sinh, ngôn ngữ, tình trạng quan hệ, email, điện thoại, thành phố — kèm tên đăng nhập, mã Beincom, kết nối Chat; email / điện thoại / mã chép được), **Quản trị** (từng cộng đồng: vai trò, số group con, số thành viên, việc đang chờ), **Hoạt động** (30 ngày qua theo Nhật ký: duyệt / từ chối thành viên — bao nhiêu tự động, duyệt bài, ẩn bài / bình luận, xử lý báo cáo, cấm, đăng bài…), **Addon** (phiên bản, lần quét, tự quét, Chạy thử).

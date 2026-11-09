@@ -85,14 +85,16 @@ async function renderSelf() {
     img.addEventListener('error', () => img.remove());
     cover.append(img);
   }
-  const sub = el('span', { class: 'me-sub' }, p.username ? el('span', {}, '@' + p.username) : null, p.username ? meCopy('Tên đăng nhập', '@' + p.username) : null, p.summary ? el('span', { class: 'muted' }, '· ' + p.summary) : null);
+  const sub = el('span', { class: 'me-sub' }, p.username ? el('span', {}, '@' + p.username) : null, p.username ? meCopy('Tên đăng nhập', '@' + p.username) : null);
+  // replaceChildren in null thành chữ "null": chỉ đưa phần có thật
   $('me-head').replaceChildren(
+    ...[
     cover,
     el(
       'div',
       { class: 'me-id' },
       selfAvatar(p, 76),
-      el('div', { class: 'me-who' }, el('b', {}, p.name || 'Tài khoản Beincom', p.verified ? el('span', { class: 'me-vb', title: 'Đã xác minh' }, '✓') : null), sub),
+      el('div', { class: 'me-who' }, el('b', {}, p.name || 'Tài khoản Beincom', p.verified ? el('span', { class: 'me-vb', title: 'Đã xác minh' }, '✓') : null), sub, p.summary ? el('span', { class: 'muted small' }, p.summary) : null),
       el(
         'div',
         { class: 'me-acts' },
@@ -101,6 +103,7 @@ async function renderSelf() {
       ),
     ),
     p.bio ? el('p', { class: 'me-bio' }, p.bio) : null,
+    ].filter(Boolean),
   );
   // Ô số liệu
   $('me-stats').replaceChildren(...p.stats.map((x) => el('div', { class: 'me-stat' + (x.tone ? ' ' + x.tone : ''), title: x.hint || '' }, el('b', {}, x.value), el('small', {}, x.label))));
