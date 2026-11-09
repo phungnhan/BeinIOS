@@ -139,15 +139,21 @@ function renderAll() {
   renderTab(currentTab);
 }
 
-async function loadAll() {
-  const { settings, rules, postRules, groupRules, recurring, state, log, templates, profiles, syncStatus, telegramStatus, telegramPoll, postStats, nudges, nudgeDraft, nudgeEffect, promptBank, promptDraft, periodicDigest } = await chrome.storage.local.get(['settings', 'rules', 'postRules', 'groupRules', 'recurring', 'state', 'log', 'templates', 'profiles', 'syncStatus', 'telegramStatus', 'telegramPoll', 'postStats', 'nudges', 'nudgeDraft', 'nudgeEffect', 'promptBank', 'promptDraft', 'periodicDigest']);
+// Khoá kho Dashboard dùng. dataRaw: giá trị gần nhất của từng khoá — thông báo thay đổi mang sẵn giá trị mới nên cập nhật thẳng
+// vào đây, khỏi đọc lại cả kho (kết quả quét ~1 MB) sau mỗi lần nền ghi
+const DATA_KEYS = ['settings', 'rules', 'postRules', 'groupRules', 'recurring', 'log', 'templates', 'profiles', 'syncStatus', 'telegramStatus', 'telegramPoll', 'postStats', 'nudges', 'nudgeDraft', 'nudgeEffect', 'promptBank', 'promptDraft', 'periodicDigest', ...BG.STATE_KEYS];
+let dataRaw = {};
+let loading = 0; // số lần đọc cả kho đang chạy
+
+function fillData() {
+  const { settings, rules, postRules, groupRules, recurring, log, templates, profiles, syncStatus, telegramStatus, telegramPoll, postStats, nudges, nudgeDraft, nudgeEffect, promptBank, promptDraft, periodicDigest } = dataRaw;
   data = {
     settings: { ...BG.DEFAULT_SETTINGS, ...settings },
     rules: { ...BG.DEFAULT_RULES, ...rules },
     postRules: { ...BG.DEFAULT_POST_RULES, ...postRules },
     groupRules: groupRules || {},
     recurring: recurring || [],
-    state: state || {},
+    state: BG.joinState(dataRaw),
     log: log || [],
     templates: templates || [],
     profiles: profiles || { users: {} },
@@ -162,6 +168,16 @@ async function loadAll() {
     promptDraft: promptDraft || null,
     periodicDigest: periodicDigest || null,
   };
+}
+
+async function loadAll() {
+  loading++;
+  try {
+    dataRaw = await chrome.storage.local.get(DATA_KEYS);
+  } finally {
+    loading--;
+  }
+  fillData();
   renderAll();
   await loadDraftOnce();
   if (!loadAll.started) {
@@ -196,7 +212,11 @@ chrome.storage.onChanged.addListener((changes, area) => {
   if (changes.actionJournal && run) renderRun(changes.actionJournal.newValue?.entries?.length || 0);
   if (changes.selfCheckProgress) checkProgress(changes.selfCheckProgress.newValue);
   if (Object.keys(changes).every((k) => ['activitySeen', 'composeDraft', 'articleDraft', 'telegramPoll', 'tgActions', 'diagLog', 'seenVersion', 'usage', 'usageNote', 'usageConsent', 'usageSent', 'actionJournal', 'selfCheckProgress', 'popupInfo', 'chatRoles', 'chatPeople', 'chatPins', 'chatNotify', 'chatReplies', 'chatGroups', 'chatOverviewCache', 'beiniosProxy'].includes(k))) return;
-  loadAll();
+  // Thông báo kèm giá trị mới: cập nhật thẳng rồi vẽ lại. Đang đọc cả kho, hoặc thông báo không kèm giá trị: đọc lại cả kho
+  if (loading || !Object.values(changes).every((c) => 'newValue' in c || 'oldValue' in c)) return loadAll();
+  for (const [k, c] of Object.entries(changes)) if (DATA_KEYS.includes(k)) dataRaw[k] = c.newValue;
+  fillData();
+  renderAll();
 });
 $('version').textContent = 'v' + chrome.runtime.getManifest().version;
 loadAll();

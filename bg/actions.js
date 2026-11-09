@@ -17,7 +17,7 @@ async function doAct({ action, groupId, requestIds, source = 'manual' }) {
   pushLog(log, r.entries);
   const next = { ...state, snapshot: { ...state.snapshot, groups: removeHandled(groups, r.entries) } };
   if (r.status === 'need_login') next.lastResult = { status: 'need_login', message: NEED_LOGIN.message, mode: r.mode || '' };
-  await chrome.storage.local.set({ state: next, log });
+  await saveState(next, { log });
   await updateBadge();
   return summary(r, settings);
 }
@@ -45,7 +45,7 @@ async function doApprovalAct({ action, groupId, contentIds, reason = '', source 
   // Đếm bài được duyệt / bị từ chối của từng người (để tự duyệt người đã được duyệt đủ N bài)
   const next = { ...state, snapshot: { ...state.snapshot, groups: removeHandledPosts(groups, r.entries) }, postTrust: BG.tallyPostTrust(state.postTrust, r.entries) };
   if (r.status === 'need_login') next.lastResult = { status: 'need_login', message: NEED_LOGIN.message, mode: r.mode || '' };
-  await chrome.storage.local.set({ state: next, log });
+  await saveState(next, { log });
   await updateBadge();
   return summary(r, settings);
 }
@@ -57,7 +57,7 @@ async function doPostAct({ action, contentIds, reasonType = 'OTHERS', source = '
   const ids = new Set(contentIds || []);
   if (action === 'dismiss' || action === 'undismiss') {
     const next = { ...state, recentPosts: recent.map((p) => (ids.has(p.id) ? { ...p, dismissed: action === 'dismiss' } : p)) };
-    await chrome.storage.local.set({ state: next });
+    await saveState(next);
     await updateBadge();
     return { status: 'ok', ok: ids.size, dry: 0, failed: 0, errors: [], dryRun: false };
   }
@@ -75,7 +75,7 @@ async function doPostAct({ action, contentIds, reasonType = 'OTHERS', source = '
     const gone = new Set(r.entries.filter((e) => e.status === 'ok').map((e) => e.contentId));
     const next = { ...state, recentPosts: recent.filter((p) => !gone.has(p.id)) };
     if (r.status === 'need_login') next.lastResult = { status: 'need_login', message: NEED_LOGIN.message, mode: r.mode || '' };
-    await chrome.storage.local.set({ state: next, log });
+    await saveState(next, { log });
     await updateBadge();
     return summary(r, settings);
   }
@@ -99,7 +99,7 @@ async function doPostAct({ action, contentIds, reasonType = 'OTHERS', source = '
     snapshot: dropFromSnapshot(state.snapshot, 'flaggedIds', hidden),
   };
   if (r.status === 'need_login') next.lastResult = { status: 'need_login', message: NEED_LOGIN.message, mode: r.mode || '' };
-  await chrome.storage.local.set({ state: next, log });
+  await saveState(next, { log });
   await updateBadge();
   return summary(r, settings);
 }
@@ -111,7 +111,7 @@ async function doCommentAct({ action, commentIds, reasonType = 'OTHERS', source 
   const ids = new Set(commentIds || []);
   if (action === 'dismiss' || action === 'undismiss') {
     const next = { ...state, recentComments: recent.map((c) => (ids.has(c.id) ? { ...c, dismissed: action === 'dismiss' } : c)) };
-    await chrome.storage.local.set({ state: next });
+    await saveState(next);
     await updateBadge();
     return { status: 'ok', ok: ids.size, dry: 0, failed: 0, errors: [], dryRun: false };
   }
@@ -126,7 +126,7 @@ async function doCommentAct({ action, commentIds, reasonType = 'OTHERS', source 
   const gone = new Set(r.entries.filter((e) => e.gone).map((e) => e.contentId));
   const next = { ...state, recentComments: recent.filter((c) => !gone.has(c.id)).map((c) => (hidden.has(c.id) ? { ...c, isHidden: true } : c)) };
   if (r.status === 'need_login') next.lastResult = { status: 'need_login', message: NEED_LOGIN.message, mode: r.mode || '' };
-  await chrome.storage.local.set({ state: next, log });
+  await saveState(next, { log });
   await updateBadge();
   return summary(r, settings);
 }
@@ -138,7 +138,7 @@ async function doSpamAct({ action, key = '', postIds = [], commentIds = [], reas
     if (!key) return { status: 'error', message: 'Thiếu đợt spam' };
     const list = (state.dismissedWaves || []).filter((k) => k !== key);
     const next = { ...state, dismissedWaves: action === 'dismiss' ? [key, ...list].slice(0, 200) : list };
-    await chrome.storage.local.set({ state: next });
+    await saveState(next);
     return { status: 'ok', ok: 1, dry: 0, failed: 0, errors: [], dryRun: false };
   }
   if (action !== 'hide') return { status: 'error', message: 'Thao tác không hợp lệ' };
@@ -156,7 +156,7 @@ async function doSpamAct({ action, key = '', postIds = [], commentIds = [], reas
   const next = { ...state };
   markHidden(next, r.entries);
   if (r.status === 'need_login') next.lastResult = { status: 'need_login', message: NEED_LOGIN.message, mode: r.mode || '' };
-  await chrome.storage.local.set({ state: next, log });
+  await saveState(next, { log });
   await updateBadge();
   return summary(r, settings);
 }
@@ -180,7 +180,7 @@ async function doBanEverywhere({ user, reason = 'VIOLATE_RULE', source = 'manual
   const r = await performActions(items, settings);
   pushLog(log, r.entries);
   const next = r.status === 'need_login' ? { ...state, lastResult: { status: 'need_login', message: NEED_LOGIN.message, mode: r.mode || '' } } : state;
-  await chrome.storage.local.set({ state: next, log });
+  await saveState(next, { log });
   if (r.status === 'need_login') await updateBadge();
   return { ...summary(r, settings), done: r.entries.filter((e) => e.status === 'ok').map((e) => e.groupId) };
 }
@@ -227,7 +227,7 @@ async function doCommentWrite({ postId, commentId = '', content, mentions = {}, 
     next.recentComments = BG.mergeComments(state.recentComments, [c]).list;
   }
   if (r.status === 'need_login') next.lastResult = { status: 'need_login', message: NEED_LOGIN.message, mode: r.mode || '' };
-  await chrome.storage.local.set({ state: next, log });
+  await saveState(next, { log });
   return { ...summary(r, settings), commentId: created?.id || null };
 }
 
@@ -274,7 +274,7 @@ async function doNewMembers({ groupId, days = 7 }) {
 async function doPostComments({ postId, after = '', parentId = '' }) {
   const idOk = (x) => /^[\w-]{1,64}$/.test(String(x || ''));
   if (!idOk(postId) || (parentId && !idOk(parentId)) || (after && !/^[\w=+/-]{1,512}$/.test(after))) return { status: 'error', message: 'Thiếu bài' };
-  const { state } = await chrome.storage.local.get('state');
+  const state = await loadState();
   const post = (state?.recentPosts || []).find((p) => p.id === postId) || { id: postId };
   return withClient(async (client) => {
     const r = await client.call('GET', `content/comments?${qs({ postId, parentId, limit: COMMENT_PAGE, after })}`);
@@ -426,7 +426,7 @@ async function doMemberAct({ action, groupId, users, reason = 'VIOLATE_RULE', so
   const r = await performActions(items, settings);
   pushLog(log, r.entries);
   const next = r.status === 'need_login' ? { ...state, lastResult: { status: 'need_login', message: NEED_LOGIN.message, mode: r.mode || '' } } : state;
-  await chrome.storage.local.set({ state: next, log });
+  await saveState(next, { log });
   if (r.status === 'need_login') await updateBadge();
   return { ...summary(r, settings), done: r.entries.filter((e) => e.status === 'ok').map((e) => e.userId) };
 }
@@ -460,7 +460,7 @@ async function doCleanupUser({ user, reasonType = 'SPAM', ban = false, banReason
   const next = { ...state };
   markHidden(next, r.entries);
   if (r.status === 'need_login') next.lastResult = { status: 'need_login', message: NEED_LOGIN.message, mode: r.mode || '' };
-  await chrome.storage.local.set({ state: next, log });
+  await saveState(next, { log });
   await updateBadge();
   const ok = r.entries.filter((e) => e.status === 'ok');
   return { ...summary(r, settings), hidden: ok.filter((e) => e.action === 'hide').length, banned: ok.filter((e) => e.action === 'ban').length };
@@ -547,7 +547,7 @@ async function doHidePosts({ posts = [], reasonType = 'SPAM', source = 'manual' 
   const next = { ...state };
   markHidden(next, r.entries);
   if (r.status === 'need_login') next.lastResult = { status: 'need_login', message: NEED_LOGIN.message, mode: r.mode || '' };
-  await chrome.storage.local.set({ state: next, log });
+  await saveState(next, { log });
   await updateBadge();
   return { ...summary(r, settings), hidden: r.entries.filter((e) => e.status === 'ok').map((e) => e.contentId), skipped: (posts || []).length - items.length };
 }

@@ -2110,3 +2110,17 @@ test('Tự kiểm tra — bản chữ: dòng thời gian chạy và các mục c
   assert.equal(BG.selfCheckText({ ...r, ms: undefined }).split('\n')[2], '✓ Tag');
   assert.deepEqual([BG.checkSecs(999), BG.checkSecs(6400), BG.checkSecs(4249, true)], ['dưới 1 giây', '6 giây', '4,2 giây']);
 });
+
+test('kết quả quét nhiều khoá: tách theo phần (chat* vào stateChat), gộp lại như cũ, kho cũ một khoá vẫn đọc được', () => {
+  const st = { lastScan: 5, me: { id: 'u1' }, snapshot: { at: 5, groups: [] }, memberHistory: { g: [] }, recentPosts: [{ id: 'p' }], recentComments: [], commentSeen: { p: 1 }, chatMap: { channels: [] }, chatSince: { c: 1 }, impostors: [], gone: undefined };
+  const parts = BG.splitState(st);
+  assert.deepEqual(Object.keys(parts), BG.STATE_KEYS);
+  assert.deepEqual(parts.state, { lastScan: 5, me: { id: 'u1' }, impostors: [] });
+  assert.deepEqual(Object.keys(parts.stateGroups), ['snapshot', 'memberHistory']);
+  assert.deepEqual(Object.keys(parts.stateChat), ['chatMap', 'chatSince']);
+  assert.deepEqual(BG.joinState(parts), Object.fromEntries(Object.entries(st).filter(([, v]) => v !== undefined)));
+  assert.deepEqual(BG.joinState({ state: st }).recentPosts, [{ id: 'p' }]);
+  assert.deepEqual(BG.joinState({ state: { snapshot: 'cũ', lastScan: 1 }, stateGroups: { snapshot: 'mới' } }), { snapshot: 'mới', lastScan: 1 });
+  assert.deepEqual(BG.joinState(undefined), {});
+  assert.equal(BG.storageSizes(parts).find((x) => x.key === 'stateGroups').label, 'Kết quả quét: group');
+});

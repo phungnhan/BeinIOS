@@ -2,6 +2,10 @@
 
 Mỗi bản một mục, bản mới nhất ở trên. Dashboard tự hiện các mục mới sau khi cập nhật (bấm "Có gì mới" ở cuối trang để xem lại).
 
+## v0.62.0 — 09/11/2026
+- **Quét nhanh hơn với group chưa có bài**: addon nhớ group mà Beincom không trả lời phần "Bài mới đăng" (group chưa có bài, như Healthy Living); lần quét sau chỉ chờ 5 giây thay vì 15 giây. Group có bài trở lại thì tự thôi nhớ.
+- **Kết quả quét lưu gọn hơn**: trước đây toàn bộ kết quả quét (khoảng 1 MB ở tài khoản nhiều group) nằm chung một chỗ — mỗi lần quét hay mỗi thao tác (duyệt, ẩn…) đều ghi lại cả khối, rồi Dashboard đọc lại toàn bộ. Giờ chia thành 5 phần (chung, group, bài mới, bình luận, Chat): chỉ phần có thay đổi được ghi và báo cho trang đang mở, Dashboard cập nhật thẳng từ phần thay đổi. Càng nhiều group càng thấy nhẹ, nhất là trên iPhone (BeinIOS). Dữ liệu cũ tự chuyển ở lần ghi đầu tiên, không mất gì; mục Bộ nhớ của Tự kiểm tra hiện dung lượng từng phần.
+
 ## v0.61.3 — 03/11/2026
 - **Tự kiểm tra nhanh hơn nhiều**: trước đây các mục chạy theo ba lượt — lượt sau chờ lượt trước xong hết (một mục chậm như "Bài mới đăng" giữ chân cả nhóm Chat), lượt cuối gọi lần lượt từng mục, mỗi lúc chỉ 4 mục. Giờ mỗi mục chạy ngay khi mục nó cần đã xong, 8 mục cùng lúc; "Bài mới đăng" của group không có bài trong 30 ngày chỉ chờ 5 giây (trước đây 15 giây).
 - Trong lúc chạy, dòng trạng thái hiện số mục đã xong (vd. "12/41 mục"); xong thì ghi thời gian chạy. Bản Sao chép kết quả có thêm dòng thời gian chạy và các mục chậm (từ 2 giây) để biết chậm ở đâu.

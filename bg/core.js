@@ -22,6 +22,7 @@ const REPORT_SCAN_TIMEOUT = 15000; // quét định kỳ chờ API báo cáo ng�
 // theo thời gian" 0 bài trong 30 ngày), như API báo cáo khi không có báo cáo. Chờ tối đa ngần này rồi coi như không có bài,
 // không thử lại, không ghi Lỗi kỹ thuật (lỗi khác vẫn báo như cũ)
 const TIMELINE_TIMEOUT = 15000;
+const TIMELINE_QUIET_TIMEOUT = 5000; // group lần quét trước không trả lời (nhớ ở g.timelineQuiet): chỉ chờ ngắn
 
 // Phải tự chứa (không dùng biến ngoài) vì còn được inject vào tab group.beincom.com.
 // version: header x-version-id; '' = không gửi (user/me/profile báo lỗi phiên bản nếu có header này)
@@ -78,15 +79,27 @@ async function mapLimit(list, limit, fn) {
 }
 
 async function load() {
-  const { settings, rules, postRules, groupRules, state, log } = await chrome.storage.local.get(['settings', 'rules', 'postRules', 'groupRules', 'state', 'log']);
+  const { settings, rules, postRules, groupRules, log, ...parts } = await chrome.storage.local.get(['settings', 'rules', 'postRules', 'groupRules', 'log', ...BG.STATE_KEYS]);
   return {
     settings: { ...BG.DEFAULT_SETTINGS, ...settings },
     rules: { ...BG.DEFAULT_RULES, ...rules },
     postRules: { ...BG.DEFAULT_POST_RULES, ...postRules },
     groupRules: groupRules || {},
-    state: state || {},
+    state: BG.joinState(parts),
     log: log || [],
   };
+}
+
+// Kết quả quét (nhiều khoá, BG.STATE_KEYS): đọc gộp lại; chưa có gì thì null
+async function loadState() {
+  const store = await chrome.storage.local.get(BG.STATE_KEYS);
+  return BG.STATE_KEYS.some((k) => store[k]) ? BG.joinState(store) : null;
+}
+
+// Ghi kết quả quét: đủ các khoá trong một lần (BG.splitState) — Chrome chỉ ghi và báo khoá có nội dung đổi, nên trang đang mở
+// chỉ nhận phần đổi. extra: khoá khác ghi cùng lúc (vd. log)
+function saveState(state, extra = {}) {
+  return chrome.storage.local.set({ ...BG.splitState(state), ...extra });
 }
 
 // Ngữ cảnh chấm theo quy tắc (chung + riêng từng group)
@@ -334,7 +347,7 @@ async function recoverJournal() {
     pushLog(log, done);
     const next = { ...state };
     markHidden(next, done);
-    await chrome.storage.local.set({ state: next, log });
+    await saveState(next, { log });
     recordDiag({ where: 'sw', kind: 'js', message: `Thao tác hàng loạt lúc ${new Date(j.at).toLocaleString('vi-VN')} bị dừng giữa chừng (trình duyệt tắt phần chạy nền): đã làm ${done.length}/${j.total} mục, đã ghi bù vào Nhật ký` });
   }
   await chrome.storage.local.remove(JOURNAL_KEY);
@@ -463,8 +476,8 @@ function notify(id, title, message, url = '') {
 
 // Như load() nhưng không đọc nhật ký: huy hiệu tính lại sau mỗi lần ghi kết quả quét, không cần nhật ký (có thể vài MB)
 async function loadForBadge() {
-  const { settings, rules, postRules, groupRules, state } = await chrome.storage.local.get(['settings', 'rules', 'postRules', 'groupRules', 'state']);
-  return { settings: { ...BG.DEFAULT_SETTINGS, ...settings }, rules: { ...BG.DEFAULT_RULES, ...rules }, postRules: { ...BG.DEFAULT_POST_RULES, ...postRules }, groupRules: groupRules || {}, state: state || {} };
+  const { settings, rules, postRules, groupRules, ...parts } = await chrome.storage.local.get(['settings', 'rules', 'postRules', 'groupRules', ...BG.STATE_KEYS]);
+  return { settings: { ...BG.DEFAULT_SETTINGS, ...settings }, rules: { ...BG.DEFAULT_RULES, ...rules }, postRules: { ...BG.DEFAULT_POST_RULES, ...postRules }, groupRules: groupRules || {}, state: BG.joinState(parts) };
 }
 
 async function updateBadge() {

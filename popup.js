@@ -95,7 +95,8 @@ async function loadLib() {
 // rồi chấm lại từng bài. Chưa có gói (vừa nâng cấp addon): tính tại chỗ một lần và nhờ nền ghi gói cho lần sau.
 async function countsFromState() {
   await loadLib();
-  const { rules, postRules, groupRules, state } = await chrome.storage.local.get(['rules', 'postRules', 'groupRules', 'state']);
+  const { rules, postRules, groupRules, ...parts } = await chrome.storage.local.get(['rules', 'postRules', 'groupRules', ...BG.STATE_KEYS]);
+  const state = BG.joinState(parts);
   const st = state || {};
   const groups = st.snapshot?.groups || [];
   const ctx = { rules, postRules, groupRules: groupRules || {}, groups };

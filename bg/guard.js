@@ -145,7 +145,7 @@ async function doGuardSearch({ groupId = '' } = {}) {
   const impostors = [...(cur.state.impostors || [])];
   const known = new Set(impostors.map((x) => x.key));
   const added = res.found.filter((x) => !known.has(x.key) && !okIds.has(x.user.id));
-  await chrome.storage.local.set({ state: { ...cur.state, admins: res.admins, impostors: [...added, ...impostors].slice(0, IMPOSTOR_MAX) } });
+  await saveState({ ...cur.state, admins: res.admins, impostors: [...added, ...impostors].slice(0, IMPOSTOR_MAX) });
   return { status: 'ok', checked: res.checked, found: res.found.filter((x) => !okIds.has(x.user.id)).length, added: added.length, admins: Object.values(res.admins.byGroup).reduce((s, l) => s + l.length, 0) };
 }
 
@@ -162,6 +162,6 @@ async function doGuardAct({ action, userIds = [], groupId = '' }) {
     if (!state.bursts?.[groupId]) return { status: 'error', message: 'Không còn đợt này' };
     next.bursts = { ...state.bursts, [groupId]: { ...state.bursts[groupId], dismissed: true } };
   } else return { status: 'error', message: 'Thao tác không hợp lệ' };
-  await chrome.storage.local.set({ state: next });
+  await saveState(next);
   return { status: 'ok' };
 }

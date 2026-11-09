@@ -328,7 +328,8 @@ async function usageEndpoint() {
 async function doUsageSend({ force = false, now = Date.now() } = {}) {
   const url = await usageEndpoint();
   if (!url) return { status: 'error', message: 'Bản addon này chưa có nơi nhận báo cáo' };
-  const o = await chrome.storage.local.get(['usageConsent', 'usageSent', 'usage', 'settings', 'telegram', 'state', 'log', 'diagLog', 'selfCheck', 'usageNote']);
+  const o = await chrome.storage.local.get(['usageConsent', 'usageSent', 'usage', 'settings', 'telegram', 'log', 'diagLog', 'selfCheck', 'usageNote', ...BG.STATE_KEYS]);
+  o.state = BG.joinState(o);
   if (o.usageConsent?.choice !== 'yes' || !o.usageConsent.installId) return { status: 'error', message: 'Chưa đồng ý gửi báo cáo sử dụng' };
   if (!force && !BG.usageSendDue(o.usageSent, now)) return { status: 'ok', skipped: true };
   let res;

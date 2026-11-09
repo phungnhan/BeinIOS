@@ -87,10 +87,11 @@ async function readApprovals(client, g, prevById) {
   });
 }
 
-// Không trả lời kịp (group không có bài, xem TIMELINE_TIMEOUT): coi như không có bài mới ở lần quét này
-async function readTimeline(client, g) {
-  const r = await client.call('GET', `content/timeline/${g.id}?limit=${TIMELINE_LIMIT}`, null, '2.0.0', TIMELINE_TIMEOUT, { quietTimeout: true });
-  if (r.timeout) return { posts: [] };
+// Không trả lời kịp (group không có bài, xem TIMELINE_TIMEOUT): coi như không có bài mới ở lần quét này, nhớ lại (quiet) để
+// lần sau chỉ chờ TIMELINE_QUIET_TIMEOUT; trả lời được thì thôi nhớ
+async function readTimeline(client, g, wasQuiet = false) {
+  const r = await client.call('GET', `content/timeline/${g.id}?limit=${TIMELINE_LIMIT}`, null, '2.0.0', wasQuiet ? TIMELINE_QUIET_TIMEOUT : TIMELINE_TIMEOUT, { quietTimeout: true });
+  if (r.timeout) return { posts: [], quiet: true };
   if (!BG.isOk(r)) return { error: 'Đọc bài mới lỗi: ' + BG.errMsg(r), posts: [] };
   return { posts: (r.body.data?.list || []).map(BG.slimPost) };
 }
@@ -136,10 +137,12 @@ async function scanContentPart(client, groups, prevGroups, scanPosts) {
   const posts = new Map();
   if (scanPosts) {
     const ok = groups.filter((g) => !g.error);
-    const results = await mapLimit(ok, PARALLEL, (g) => readTimeline(client, g));
+    const quiet = new Set((prevGroups || []).filter((g) => g.timelineQuiet).map((g) => g.id));
+    const results = await mapLimit(ok, PARALLEL, (g) => readTimeline(client, g, quiet.has(g.id)));
     for (const [i, g] of ok.entries()) {
       const t = results[i];
       if (t.error) g.timelineError = t.error;
+      if (t.quiet) g.timelineQuiet = true;
       for (const post of t.posts) {
         const old = posts.get(post.id);
         posts.set(post.id, { ...post, seenIn: [...new Set([...(old?.seenIn || []), g.id])] });
@@ -548,7 +551,7 @@ async function doRefresh({ part }) {
       notifyWaves(state, next, settings, loaded.postRules, false, now);
     }
   }
-  await chrome.storage.local.set({ state: next, log });
+  await saveState(next, { log });
   await updateBadge();
   return { status: result.status, message: result.message || '', part, at: now };
 }
@@ -721,7 +724,7 @@ async function doScan({ source = 'alarm' } = {}) {
   if (dailyCheck) next.selfCheckDay = BG.vnDay(now);
 
   await flushTelegramItems().catch(() => {});
-  await chrome.storage.local.set({ state: next, log });
+  await saveState(next, { log });
   await updateBadge();
   // Hiệu quả bài đã đăng: đọc số liệu các bài tới mốc 24 giờ / 7 ngày (chỉ khi quét tự động thành công)
   if (auto && result.status === 'ok') await measurePostStats({ now }).catch(() => {});
