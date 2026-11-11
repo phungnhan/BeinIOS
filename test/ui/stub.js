@@ -56,6 +56,9 @@
     { ...P('s4', 'Kai Crypto', 'Bài hẹn giờ bị lỗi', 0), status: 'SCHEDULE_FAILED', scheduledAt: new Date(now - 2 * 3600e3).toISOString(), ...SX() },
     ...[3, 5, 5, 5, 5, 9, 16].map((d, i) => ({ ...P('x' + i, 'Kai Crypto', ['Điểm tin thị trường sáng', 'Kèo phân tích **BTC** tuần này', 'Hỏi đáp ví lạnh', 'Giveaway cuối tuần', 'Recap AMA', 'Bản tin tuần', 'Bản tin tuần'][i], 0), status: 'WAITING_SCHEDULE', scheduledAt: new Date(Math.floor((now + 7 * 3600e3) / 864e5) * 864e5 - 7 * 3600e3 + d * 86400e3 + (9 * 60 + i * 30) * 60e3).toISOString(), ...SX() })),
   ];
+  // Danh sách hẹn giờ đã cũ (#…&stale=1): lần đọc đầu còn bài "old1" đã quá giờ hẹn 3 phút (Dashboard mở từ trước lúc bài được đăng);
+  // các lần đọc sau không còn bài này
+  const staleSched = new URLSearchParams(location.hash.slice(1)).get('stale') ? [{ ...P('old1', 'Kai Crypto', 'Bản tin sáng nay', 0), status: 'WAITING_SCHEDULE', scheduledAt: new Date(now - 3 * 60e3).toISOString(), ...SX() }] : [];
   const vnAt = (d, h) => new Date(Math.floor((now + 7 * 3600e3) / 864e5) * 864e5 - 7 * 3600e3 - d * 864e5 + h * 3600e3).toISOString();
   const M = (views, reactions, comments, ageH) => ({ views, reactions, comments, at: now - 3600e3, ageH });
   const store = {
@@ -141,6 +144,8 @@
   }
   // Trang Chat (#…&chat=1): đã bật chat Beincom
   if (new URLSearchParams(location.hash.slice(1)).get('chat')) store.settings = { ...store.settings, chatEnabled: true };
+  // Cuộc trò chuyện chưa có tin nào (#…&empty=dm2). Đọc một lần lúc nạp trang: mở cuộc trò chuyện khác thì địa chỉ đổi
+  const chatEmpty = new URLSearchParams(location.hash.slice(1)).get('empty') || '';
   // Nơi nhận báo cáo sử dụng (#…&usage=1): addon hỏi ý gửi
   if (new URLSearchParams(location.hash.slice(1)).get('usage')) store.usageEndpoint = 'https://script.google.com/macros/s/AKfycbx_mau_thu_nghiem_123456/exec';
   // Báo cáo sử dụng: số đếm 2 ngày
@@ -264,7 +269,19 @@
           fire();
           return { status: 'ok', dryRun: false, ok: m.items.length, dry: 0, failed: 0, errors: [], done: [...ids] };
         }
-        if (m.type === 'scheduled') return { status: 'ok', items: scheduled, errors: [] };
+        if (m.type === 'scheduled') {
+          // Kịch bản đặt: window.__schedDelay — Beincom trả lời chậm (ms); window.__schedThrow — lần đọc kế ném lỗi (một lần);
+          // window.__schedGone = ['x5'] — các bài này không còn trong danh sách; window.__schedErrors = ['…'] — một community đọc lỗi
+          // (danh sách trả về bị thiếu)
+          if (window.__schedDelay) await new Promise((res) => setTimeout(res, window.__schedDelay));
+          if (window.__schedThrow) {
+            const text = window.__schedThrow;
+            window.__schedThrow = '';
+            throw new Error(text);
+          }
+          const items = staleSched.length ? [...staleSched.splice(0), ...scheduled] : scheduled;
+          return { status: 'ok', items: items.filter((p) => !(window.__schedGone || []).includes(p.id)), errors: window.__schedErrors || [] };
+        }
         if (m.type === 'refresh') {
           await new Promise((res) => setTimeout(res, 300));
           if (m.part === 'groups') groups[0].pendingTotal = 2;
@@ -466,6 +483,11 @@
           // Ghi lại lệnh đọc tin (kiểm tra nhớ tin / tải trước); window.__postsDelay: máy chủ chậm (ms)
           (window.__postsCalls = window.__postsCalls || []).push({ channelId: m.channelId, since: m.since || 0, before: m.before || '' });
           if (window.__postsDelay) await new Promise((res) => setTimeout(res, window.__postsDelay));
+          // window.__postsFail = { dm2: 1 }: số lần đọc trang tin mới nhất kế tiếp của kênh đó báo lỗi (mạng chập chờn)
+          if (!m.since && !m.before && window.__postsFail?.[m.channelId] > 0) {
+            window.__postsFail[m.channelId]--;
+            return { status: 'error', message: 'Đọc tin nhắn lỗi: mất kết nối' };
+          }
           // Lan Anh (cu62): đã xác minh, Premium trọn đời
           const cp = (id, n, name, un, text, min, extra = {}) => ({ id, channelId: m.channelId, user: { id: 'u' + n, chatId: 'cu' + n, username: un, fullname: name, pictureAt: 0, ...(n === 62 ? { verified: true, premium: 'lifetime' } : {}) }, createAt: now - min * 60e3, updateAt: now - min * 60e3, editAt: 0, deleted: false, system: false, message: text, rootId: '', replyCount: 0, pinned: false, files: [], participants: [], following: false, ...extra });
           const base = [
@@ -511,11 +533,21 @@
           }
           // Tin có định dạng (#…&md=1): trích dẫn, danh sách, mã, gạch, nghiêng, link có chữ; độ ưu tiên Khẩn cấp
           if (new URLSearchParams(location.hash.slice(1)).get('md')) base.push(cp('mk1', 66, 'Quốc Bảo', 'quocbao', '> Lịch AMA tuần này\n\n- Thứ Hai: ~~20h~~ *21h*\n- Thứ Sáu: [đăng ký](https://group.beincom.com/ama)\n\n```\nnpm i\n```', 1, { priority: 'urgent' }));
-          if (m.since) return { status: 'ok', posts: window.__chatIncoming || [], hasMore: false };
-          if (m.before) return { status: 'ok', posts: [cp('x1', 64, 'Bảo Ngọc', 'baongoc', 'Tin cũ hơn nữa', 50 * 60), cp('x2', 64, 'Bảo Ngọc', 'baongoc', 'Tin cũ thứ hai', 49 * 60)], hasMore: false };
-          if (m.channelId !== 'chMain') return { status: 'ok', posts: [cp('d1', 50, 'Lan Anh', 'lananh', 'Chào anh!', 3)], hasMore: false };
-          // Như nền (gộp thread): chỉ tin gốc; tin n2 có 1 bình luận của Kai
-          return { status: 'ok', posts: base.filter((p) => !p.rootId).map((p) => (p.id === 'n2' ? { ...p, replyCount: 1, participants: [{ id: 'u1', chatId: 'cu1', username: 'kaicrypto', fullname: 'Kai Crypto', pictureAt: 0 }] } : p)), hasMore: true };
+          // Tin có từ đầu của kênh (cuộc trò chuyện chatEmpty chưa có tin nào); tin cũ hơn (window.__chatOlder: kịch bản đặt riêng)
+          const initial = m.channelId === 'chMain' ? base : m.channelId === chatEmpty ? [] : [cp('d1', 50, 'Lan Anh', 'lananh', 'Chào anh!', 3)];
+          const here = (p) => p.channelId === m.channelId;
+          const custom = window.__chatOlder?.filter(here);
+          const older = custom || [cp('x1', 64, 'Bảo Ngọc', 'baongoc', 'Tin cũ hơn nữa', 50 * 60), cp('x2', 64, 'Bảo Ngọc', 'baongoc', 'Tin cũ thứ hai', 49 * 60)];
+          // Tin tới trong lúc trang mở: của người khác (kịch bản đặt window.__chatIncoming) và tin mình vừa gửi (chatSend)
+          const live = [...(window.__chatIncoming || []), ...(window.__chatSent || [])].filter(here);
+          // Đọc phần mới: như máy chủ thật (Mattermost), chỉ trả tin của kênh có thời điểm sửa đổi lớn hơn since — kể cả tin đã xoá
+          if (m.since) return { status: 'ok', posts: [...initial, ...(custom || []), ...live].filter((p) => (p.updateAt || p.createAt || 0) > m.since).sort((a, b) => a.createAt - b.createAt), hasMore: false };
+          if (m.before) return { status: 'ok', posts: older, hasMore: false };
+          // Trang tin mới nhất: như nền (gộp thread) chỉ có tin gốc, và như máy chủ thật không có tin đã xoá
+          const head = live.filter((p) => !p.rootId && !p.deleted);
+          if (m.channelId !== 'chMain') return { status: 'ok', posts: [...initial, ...head], hasMore: false };
+          // Tin n2 có 1 bình luận của Kai
+          return { status: 'ok', posts: [...base.filter((p) => !p.rootId), ...head].map((p) => (p.id === 'n2' ? { ...p, replyCount: 1, participants: [{ id: 'u1', chatId: 'cu1', username: 'kaicrypto', fullname: 'Kai Crypto', pictureAt: 0 }] } : p)), hasMore: true };
         }
         // Tin được trích không có trong phần đang hiện; tên link Beincom
         if (m.type === 'chatQuotes') {
@@ -539,7 +571,12 @@
           if (window.__sendDelay) await new Promise((res) => setTimeout(res, window.__sendDelay));
           if (window.__sendFail) return { status: 'error', message: 'Gửi tin lỗi: mất kết nối' };
           if (m.acceptContactId) (window.__accepted = window.__accepted || []).push(m.acceptContactId);
-          return { status: 'ok', accepted: !!m.acceptContactId, post: { id: 'new' + window.__chatSends.length, channelId: m.channelId, user: { id: 'me1', chatId: 'cu1', username: 'kaicrypto', fullname: 'Kai Crypto', pictureAt: 0 }, createAt: Date.now(), updateAt: Date.now(), editAt: 0, deleted: false, system: false, message: m.message, rootId: m.rootId || '', replyCount: 0, pinned: false, files: [] } };
+          // Tin đã gửi nằm lại ở "máy chủ" (window.__chatSent): các lần đọc sau trả lại nó như máy chủ thật.
+          // window.__chatSkew: đồng hồ máy chủ lệch đồng hồ máy bấy nhiêu ms (âm = máy chạy nhanh hơn máy chủ)
+          const at = Date.now() + (window.__chatSkew || 0);
+          const post = { id: 'new' + window.__chatSends.length, channelId: m.channelId, user: { id: 'me1', chatId: 'cu1', username: 'kaicrypto', fullname: 'Kai Crypto', pictureAt: 0 }, createAt: at, updateAt: at, editAt: 0, deleted: false, system: false, message: m.message, rootId: m.rootId || '', replyCount: 0, pinned: false, files: [] };
+          (window.__chatSent = window.__chatSent || []).push(post);
+          return { status: 'ok', accepted: !!m.acceptContactId, post };
         }
         if (m.type === 'chatView') {
           window.__chatRead = (window.__chatRead || 0) + 1;
@@ -646,10 +683,20 @@
         }
         if (m.type === 'scheduleAct') {
           window.__lastSchedAct = m;
+          // window.__schedPublished = ['x5', …]: các bài này Beincom đã đăng mất rồi — nền đọc trạng thái thấy vậy nên không ghi,
+          // trả số bài bị bỏ qua (published) như nền thật; bài đã đăng cũng không còn trong danh sách hẹn giờ
+          const pub = (m.contentIds || [m.contentId]).filter((id) => (window.__schedPublished || []).includes(id));
+          for (const id of pub) scheduled.splice(scheduled.findIndex((x) => x.id === id), 1);
+          const skipped = pub.length ? { failed: pub.length, published: pub.length, errors: [m.action === 'cancel' ? 'Bài đã đăng — không huỷ được ở đây; muốn gỡ thì dùng Xoá bài' : 'Bài đã đăng — không đổi giờ được nữa'] } : { failed: 0, published: 0, errors: [] };
           if (m.contentIds) {
-            for (const id of m.contentIds) scheduled.splice(scheduled.findIndex((x) => x.id === id), 1);
+            const live = m.contentIds.filter((id) => !pub.includes(id));
+            for (const id of live) scheduled.splice(scheduled.findIndex((x) => x.id === id), 1);
             fire();
-            return { status: 'ok', dryRun: false, ok: m.contentIds.length, dry: 0, failed: 0, errors: [] };
+            return { status: 'ok', dryRun: false, ok: live.length, dry: 0, ...skipped };
+          }
+          if (pub.length) {
+            fire();
+            return { status: 'ok', dryRun: false, ok: 0, dry: 0, ...skipped };
           }
           const i = scheduled.findIndex((x) => x.id === m.contentId);
           if (m.action === 'cancel') scheduled.splice(i, 1);

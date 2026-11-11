@@ -56,6 +56,21 @@
     aiCtxAuthor: true, // người bình luận: tác giả bài, thành viên mới, từng vi phạm, bình luận lần thứ mấy
   };
 
+  // Bốn công tắc tự xử lý sau mỗi lần quét. Còn Chạy thử thì chúng chỉ ghi nhật ký; tắt Chạy thử lúc một trong số này đang bật
+  // là lần quét tới gửi thật lên Beincom (ẩn / từ chối không hoàn tác) — popup hỏi lại và kể tên các công tắc đang bật.
+  const AUTO_SWITCHES = {
+    autoApprove: 'Tự duyệt yêu cầu tham gia',
+    autoDecline: 'Tự từ chối yêu cầu tham gia',
+    autoHideSpam: 'Tự ẩn spam có link cấm',
+    autoApprovePosts: 'Tự duyệt bài của thành viên tin cậy',
+  };
+  // Nhãn các công tắc tự xử lý đang bật (rỗng = không bật cái nào)
+  function autoSwitchesOn(settings) {
+    return Object.keys(AUTO_SWITCHES)
+      .filter((k) => settings?.[k])
+      .map((k) => AUTO_SWITCHES[k]);
+  }
+
   // Quy tắc cho bài viết (bài chờ duyệt và bài mới đăng)
   const DEFAULT_POST_RULES = {
     bannedKeywords: [], // có trong bài -> vi phạm
@@ -417,6 +432,7 @@
     API,
     SITE,
     DEFAULT_SETTINGS,
+    autoSwitchesOn,
     DEFAULT_RULES,
     DEFAULT_POST_RULES,
     HIDE_REASONS,

@@ -305,6 +305,7 @@ async function sendMsg(e) {
     addPosts([r.post]);
     renderMsgs({ scroll: 'bottom' });
   }
+  syncAfterSend(c, r.post); // chat/conv.js: mốc đọc lại sau khi gửi được tin
   const it = findChat(c.id);
   if (it) bumpChat(c.id, { lastPostAt: r.post?.createAt || Date.now() });
   renderList();
@@ -342,6 +343,7 @@ function sendNow(c, text, send, quoted) {
     }
     if (r.post) here ? addPosts([r.post]) : map.set(r.post.id, r.post);
     if (here) renderMsgs({ scroll: 'keep' });
+    syncAfterSend(c, r.post); // chat/conv.js: mốc đọc lại sau khi gửi được tin
     bumpChat(c.id, { lastPostAt: r.post?.createAt || Date.now() });
     renderList();
   });

@@ -5,6 +5,7 @@
 
 const compose = { groupIds: new Set(), draftLoaded: false };
 const sched = { items: [], errors: [], loading: false, loaded: false, error: '' };
+let schedChecking = false; // đang tải lại danh sách trước khi hỏi huỷ / đổi giờ (freshScheduled): các nút của bảng tạm khoá
 let draftTimer = 0;
 
 const pad = (n) => String(n).padStart(2, '0');
@@ -751,6 +752,7 @@ function renderScheduled() {
   const body = $('scheduled-body');
   body.replaceChildren();
   if (!sched.items.length) body.append(el('tr', { class: 'empty-row' }, el('td', { colspan: 6, text: sched.loading ? 'Đang tải…' : sched.loaded ? 'Không có bài nào đang hẹn giờ' : 'Bấm "Tải lại" để xem' })));
+  const off = busy || schedChecking;
   for (const p of sched.items) {
     const failed = p.status === 'SCHEDULE_FAILED';
     body.append(
@@ -778,10 +780,10 @@ function renderScheduled() {
           el(
             'div',
             { class: 'act-stack' },
-            p.type !== 'ARTICLE' && p.actor?.id && p.actor.id === data.state.me?.id ? el('button', { class: 'ghost sm', disabled: busy, title: 'Mở bài trong khung soạn để sửa nội dung, file, cài đặt, giờ đăng', text: 'Sửa', onclick: () => editPost(p, { scheduled: true }) }) : null,
-            el('button', { class: 'ghost sm', disabled: busy, text: 'Đổi giờ', onclick: () => reschedulePost(p) }),
-            el('button', { class: 'danger sm', disabled: busy, text: 'Huỷ', onclick: () => cancelPost(p) }),
-            recurIdx.has(p.id) ? el('button', { class: 'danger sm', disabled: busy, text: 'Huỷ cả chuỗi', onclick: () => cancelSeries(recurIdx.get(p.id).id) }) : null,
+            p.type !== 'ARTICLE' && p.actor?.id && p.actor.id === data.state.me?.id ? el('button', { class: 'ghost sm', disabled: off, title: 'Mở bài trong khung soạn để sửa nội dung, file, cài đặt, giờ đăng', text: 'Sửa', onclick: () => editPost(p, { scheduled: true }) }) : null,
+            el('button', { class: 'ghost sm', disabled: off, text: 'Đổi giờ', onclick: () => reschedulePost(p) }),
+            el('button', { class: 'danger sm', disabled: off, text: 'Huỷ', onclick: () => cancelPost(p) }),
+            recurIdx.has(p.id) ? el('button', { class: 'danger sm', disabled: off, text: 'Huỷ cả chuỗi', onclick: () => cancelSeries(recurIdx.get(p.id).id) }) : null,
             el('a', { href: BG.postUrl(p), target: '_blank', text: 'Mở ↗' }),
           ),
         ),
@@ -791,7 +793,59 @@ function renderScheduled() {
   renderCalendar(); // dash/calendar.js
 }
 
+// Dashboard mở lâu thì danh sách này cũ dần: bài còn ghi "chờ tới giờ đăng" mà đã quá giờ hẹn thì rất có thể đã đăng rồi.
+// Trước khi hỏi huỷ / đổi giờ những bài như vậy thì tải lại danh sách; trả về các bài còn trong danh sách (bản mới),
+// null = thôi, không hỏi nữa (đã báo lý do). Bài hẹn giờ lỗi lúc nào cũng quá giờ mà vẫn cần huỷ: không coi là cũ.
+// Trong lúc chờ tải lại, trang vẫn bấm được: các nút của bảng tạm khoá (schedChecking), và nếu một hộp hỏi khác đã kịp mở
+// (hoặc đã trả lời xong, đang gửi) thì thôi — hộp hỏi dùng chung, mở đè lên là một lần bấm đồng ý thành đồng ý cả hai việc.
+async function freshScheduled(posts) {
+  const overdue = (p) => (p.status === 'WAITING_SCHEDULE' || !p.status) && new Date(p.scheduledAt).getTime() <= Date.now();
+  if (!posts.some(overdue)) return posts;
+  if (schedChecking) return null; // một lần bấm khác đang tải lại
+  schedChecking = true;
+  try {
+    if (sched.loading) renderScheduled(); // lượt tải khác đang chạy dở (loadScheduled không vẽ lại): khoá nút ngay
+    const failed = await loadScheduled().then(() => '', (e) => String(e?.message || e)); // lệnh tải lại ném lỗi: cũng là chưa tải lại được
+    while (sched.loading) await new Promise((ok) => setTimeout(ok, 100)); // lượt tải khác đang chạy dở: chờ xong
+    if (failed || sched.error) {
+      toast('Chưa tải lại được danh sách bài hẹn giờ: ' + (failed || sched.error), 'err');
+      return null;
+    }
+    if ($('confirm').open || busy) {
+      toast('Đang dở một việc khác nên chưa hỏi việc này — đã tải lại danh sách bài hẹn giờ, xong thì bấm lại.', 'warn');
+      return null;
+    }
+    const ids = new Set(posts.map((p) => p.id));
+    const left = sched.items.filter((p) => ids.has(p.id));
+    // Danh sách tải về bị thiếu (một community đọc lỗi): bài vắng mặt chưa chắc đã đăng — không kết luận, cũng không hỏi tiếp
+    if (left.length < posts.length && sched.errors.length) {
+      toast(`Chưa tải lại được đủ danh sách bài hẹn giờ (${sched.errors.join('; ')}) — bấm "Tải lại" rồi thử lại.`, 'err');
+      return null;
+    }
+    return left;
+  } finally {
+    schedChecking = false;
+    renderScheduled(); // mở khoá các nút
+  }
+}
+
+// Một bài: không còn trong danh sách mới thì báo rồi thôi
+async function freshScheduledPost(p) {
+  const list = await freshScheduled([p]);
+  if (list && !list.length) toast('Bài này không còn trong danh sách hẹn giờ (có thể đã đăng) — đã tải lại danh sách.', 'warn');
+  return list?.[0] || null;
+}
+
+// Nền không ghi vào bài đã đăng (đọc trạng thái thật trước khi huỷ / đổi giờ): báo riêng số bài đó thay cho câu "Xong X, lỗi Y" chung
+const schedFailText = (action, done = () => '') => (r) => {
+  if (!r.published) return '';
+  const other = r.failed - r.published;
+  return [r.ok ? done(r.ok) : '', BG.publishedSkipNote(action, r.published), other > 0 ? `${other} bài khác bị lỗi — xem tab Nhật ký.` : ''].filter(Boolean).join(' ');
+};
+
 async function reschedulePost(p) {
+  p = await freshScheduledPost(p);
+  if (!p) return;
   const input = el('input', { type: 'datetime-local', 'aria-label': 'Giờ đăng mới' });
   input.value = toLocalInput(p.scheduledAt && new Date(p.scheduledAt) > new Date() ? new Date(p.scheduledAt) : nextQuarter());
   const ok = await confirmDialog({
@@ -804,11 +858,13 @@ async function reschedulePost(p) {
   });
   if (!ok || !input.value) return;
   const at = new Date(input.value).toISOString();
-  const r = await send({ type: 'scheduleAct', action: 'reschedule', contentId: p.id, scheduledAt: at, snippet: snippet(p), groupName: p.groups.map((g) => g.name).join(', ') }, () => `Đã đổi giờ đăng sang ${fmtTime(at)}.`);
+  const r = await send({ type: 'scheduleAct', action: 'reschedule', contentId: p.id, scheduledAt: at, snippet: snippet(p), groupName: p.groups.map((g) => g.name).join(', ') }, () => `Đã đổi giờ đăng sang ${fmtTime(at)}.`, { failText: schedFailText('reschedule') });
   if (r?.status === 'ok' && !r.dryRun) loadScheduled();
 }
 
 async function cancelPost(p) {
+  p = await freshScheduledPost(p);
+  if (!p) return;
   const ok = await confirmDialog({
     title: 'Huỷ bài hẹn giờ?',
     text: 'Bài sẽ bị xoá và không được đăng. Chỉ huỷ được bài của chính bạn.',
@@ -817,7 +873,7 @@ async function cancelPost(p) {
     danger: true,
   });
   if (!ok) return;
-  const r = await send({ type: 'scheduleAct', action: 'cancel', contentId: p.id, contentType: p.type, snippet: snippet(p), groupName: p.groups.map((g) => g.name).join(', ') }, () => 'Đã huỷ bài hẹn giờ.');
+  const r = await send({ type: 'scheduleAct', action: 'cancel', contentId: p.id, contentType: p.type, snippet: snippet(p), groupName: p.groups.map((g) => g.name).join(', ') }, () => 'Đã huỷ bài hẹn giờ.', { failText: schedFailText('cancel') });
   if (r?.status === 'ok' && !r.dryRun) loadScheduled();
 }
 
@@ -826,7 +882,8 @@ async function cancelSeries(seriesId) {
   const rec = (data.recurring || []).find((r) => r.id === seriesId);
   if (!rec) return;
   const ids = new Set(rec.items.map((it) => it.contentId));
-  const left = sched.items.filter((p) => ids.has(p.id));
+  const left = await freshScheduled(sched.items.filter((p) => ids.has(p.id)));
+  if (!left) return;
   if (!left.length) return toast('Chuỗi này không còn bài nào đang hẹn giờ', 'warn');
   const ok = await confirmDialog({
     title: `Huỷ ${left.length} bài còn lại của chuỗi định kỳ?`,
@@ -837,9 +894,11 @@ async function cancelSeries(seriesId) {
     sendNote: `Các bài sẽ bị xoá và không được đăng${left.length > 1 ? ` (nghỉ ${data.settings.actionDelaySec} giây giữa mỗi bài)` : ''}. Bài đã đăng rồi không bị ảnh hưởng.`,
   });
   if (!ok) return;
-  const r = await send({ type: 'scheduleAct', action: 'cancel', contentIds: left.map((p) => p.id), snippet: '🔁 ' + rec.snippet, groupName: left[0].groups.map((g) => g.name).join(', ') }, (n) => `Đã huỷ ${n} bài của chuỗi định kỳ.`, { chunk: ['contentIds'] });
+  const done = (n) => `Đã huỷ ${n} bài của chuỗi định kỳ.`;
+  const r = await send({ type: 'scheduleAct', action: 'cancel', contentIds: left.map((p) => p.id), snippet: '🔁 ' + rec.snippet, groupName: left[0].groups.map((g) => g.name).join(', ') }, done, { chunk: ['contentIds'], failText: schedFailText('cancel', done) });
   if (r?.status === 'ok' && !r.dryRun) {
-    if (!r.failed) {
+    // Bài đã đăng (nền để yên) không tính là lỗi ở đây: chuỗi vẫn hết bài hẹn giờ
+    if (r.failed === (r.published || 0)) {
       const { recurring = [] } = await chrome.storage.local.get('recurring');
       await chrome.storage.local.set({ recurring: recurring.filter((x) => x.id !== seriesId) });
     }

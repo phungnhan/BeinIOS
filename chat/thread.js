@@ -258,15 +258,16 @@ async function sendThreadFiles(t, c, text, quoted, fileIds) {
   }, 1500);
 }
 
-// Bình luận đã gửi xong: thay bình luận tạm, cập nhật số bình luận của tin gốc
+// Bình luận đã gửi xong: thay bình luận tạm, cập nhật số bình luận của tin gốc. Mốc đọc lại giữ nguyên (xem addPosts): lần
+// đọc lại kế trả lại chính bình luận này, đã tính rồi nên không cộng lần nữa
 function sentReply(t, post) {
   if (!post) return;
   if (S.thread !== t) return void t.posts.set(post.id, post);
-  S.lastSync = Math.max(S.lastSync, post.updateAt || 0, post.createAt || 0);
   addReply({ ...post, createAt: Math.max(post.createAt || 0, S.loadedAt) });
   t.posts.set(post.id, post);
   renderThread({ scroll: 'bottom' });
   renderMsgs({ scroll: 'keep' });
+  syncAfterSend(S.sel, post); // chat/conv.js: mốc đọc lại sau khi gửi được tin
 }
 
 // ---------- Thread đang theo dõi (như nút "Thread" trên web) ----------

@@ -596,6 +596,14 @@ test('bài định kỳ: lịch đăng, hạn Quan trọng theo từng bài, nh�
   assert.equal(BG.pruneRecurring(recurring, new Date(t[1]).getTime() + 8 * 864e5).length, 0);
 });
 
+test('bài hẹn giờ đã đăng mất rồi: câu báo số bài không bị xoá / không đổi giờ', () => {
+  assert.equal(BG.publishedSkipNote('cancel', 0), '');
+  assert.equal(BG.publishedSkipNote('cancel', 1), '1 bài đã đăng rồi nên không bị xoá — muốn gỡ thì dùng Xoá bài ở tab Bài viết.');
+  assert.match(BG.publishedSkipNote('cancel', 3), /^3 bài đã đăng rồi nên không bị xoá/);
+  assert.equal(BG.publishedSkipNote('reschedule', 1), 'Bài đã đăng rồi nên không đổi giờ được nữa.');
+  assert.equal(BG.publishedSkipNote('reschedule', undefined), '');
+});
+
 test('sao lưu: tạo bản sao lưu, đọc lại có làm sạch, tóm tắt, gộp hồ sơ vi phạm', () => {
   const u = { id: 'u1', username: 'an', fullname: 'An', avatar: '' };
   const profiles = BG.addViolations(null, [{ user: u, type: 'banned', key: 'ban:1', time: '2026-10-01T00:00:00Z', group: 'G' }]).store;
@@ -1978,6 +1986,32 @@ test('chat Beincom: người dùng chat -> người Beincom, quyền kênh, thu 
   assert.deepEqual([BG.telegramKind('bg-chat'), BG.telegramKind('bg-chat-dm'), BG.telegramKind('bg-chat-mention'), BG.DEFAULT_TELEGRAM.kinds.chat], ['violations', 'chat', 'chat', true]);
 });
 
+test('chatSyncMark: mốc đọc lại của trang Chat = thời điểm sửa đổi lớn nhất trong các tin vừa đọc, không lùi', () => {
+  const p = (createAt, updateAt = createAt, editAt = 0) => ({ id: 'p' + createAt, createAt, updateAt, editAt });
+  // Trang tin mới nhất: tin vừa được sửa (updateAt lớn hơn createAt) quyết định mốc
+  assert.equal(BG.chatSyncMark(0, [p(1000), p(2000, 5000, 5000), p(3000)], 9e6), 5000);
+  // Đọc phần mới: mốc chỉ tăng — kết quả rỗng hoặc chỉ có tin cũ hơn mốc thì giữ nguyên
+  assert.equal(BG.chatSyncMark(5000, [], 9e6), 5000);
+  assert.equal(BG.chatSyncMark(5000, [p(4000)], 9e6), 5000);
+  assert.equal(BG.chatSyncMark(5000, [p(4000), p(6000)], 9e6), 6000);
+  // Thiếu trường nào cũng không hỏng
+  assert.equal(BG.chatSyncMark(0, [{ id: 'a', createAt: 700 }, null, {}], 9e6), 700);
+});
+
+test('chatSyncMark: cuộc trò chuyện chưa có tin nào — mốc là lúc bắt đầu đọc lùi 5 phút, để tin đầu tiên của người kia vẫn được đọc', () => {
+  const at = 1_800_000_000_000;
+  assert.equal(BG.chatSyncMark(0, [], at), at - 5 * 60e3);
+  assert.equal(BG.chatSyncMark(0, undefined, at), at - 5 * 60e3);
+  // Mốc luôn lớn hơn 0 (trang coi 0 là "chưa đọc xong trang đầu")
+  assert.ok(BG.chatSyncMark(0, [], 1000) > 0);
+  assert.ok(BG.chatSyncMark(0, []) > Date.now() - 6 * 60e3);
+  // Tin của người kia tới sau lúc mở (kể cả khi đồng hồ máy nhanh hơn máy chủ vài phút) nằm sau mốc; đọc được rồi thì mốc theo tin đó
+  const seeded = BG.chatSyncMark(0, [], at);
+  const reply = { id: 'r', createAt: at - 4 * 60e3, updateAt: at - 4 * 60e3, editAt: 0 };
+  assert.ok(reply.updateAt > seeded);
+  assert.equal(BG.chatSyncMark(seeded, [reply], at + 4000), reply.updateAt);
+});
+
 test('chatTreeOrder: kênh chính trước, group con ngay dưới group cha, thụt theo cấp', () => {
   const ch = (id, groupId, x = {}) => ({ id, groupId, name: id.toUpperCase(), ...x });
   const list = [
@@ -2123,4 +2157,16 @@ test('kết quả quét nhiều khoá: tách theo phần (chat* vào stateChat),
   assert.deepEqual(BG.joinState({ state: { snapshot: 'cũ', lastScan: 1 }, stateGroups: { snapshot: 'mới' } }), { snapshot: 'mới', lastScan: 1 });
   assert.deepEqual(BG.joinState(undefined), {});
   assert.equal(BG.storageSizes(parts).find((x) => x.key === 'stateGroups').label, 'Kết quả quét: group');
+});
+
+test('công tắc tự xử lý đang bật: kể tên từng công tắc trong bốn công tắc, đúng thứ tự; không bật cái nào (hoặc chưa có cài đặt) thì rỗng', () => {
+  assert.deepEqual(BG.autoSwitchesOn(BG.DEFAULT_SETTINGS), []);
+  assert.deepEqual(BG.autoSwitchesOn(undefined), []);
+  assert.deepEqual(BG.autoSwitchesOn({ active: true, dryRun: true, notify: true, scanPosts: true, spamWaves: true }), []); // công tắc khác không tính
+  const labels = { autoApprove: 'Tự duyệt yêu cầu tham gia', autoDecline: 'Tự từ chối yêu cầu tham gia', autoHideSpam: 'Tự ẩn spam có link cấm', autoApprovePosts: 'Tự duyệt bài của thành viên tin cậy' };
+  for (const [k, label] of Object.entries(labels)) {
+    assert.equal(BG.DEFAULT_SETTINGS[k], false, k); // mặc định tắt
+    assert.deepEqual(BG.autoSwitchesOn({ ...BG.DEFAULT_SETTINGS, [k]: true }), [label], k);
+  }
+  assert.deepEqual(BG.autoSwitchesOn({ autoApprovePosts: true, autoHideSpam: true, autoApprove: true, autoDecline: true }), Object.values(labels));
 });

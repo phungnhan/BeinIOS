@@ -7,6 +7,8 @@ function sortedPosts() {
   return [...S.posts.values()].sort((a, b) => a.createAt - b.createAt);
 }
 
+// Thêm / cập nhật tin đang hiện. Không đụng mốc đọc lại (S.lastSync): mốc chỉ đi theo kết quả đọc đầu kênh — trang tin mới
+// nhất lúc mở và các lần đọc phần mới (pollChat), xem BG.chatSyncMark — không theo tin mình vừa gửi hay tin cũ tải thêm
 function addPosts(list) {
   for (const p of list || []) {
     if (p.rootId) addReply(p);
@@ -15,7 +17,6 @@ function addPosts(list) {
       const o = S.posts.get(p.id);
       S.posts.set(p.id, o ? { ...p, replyCount: Math.max(o.replyCount || 0, p.replyCount || 0), following: o.following || p.following, participants: p.participants?.length ? p.participants : o.participants } : p);
     }
-    S.lastSync = Math.max(S.lastSync, p.updateAt || 0, p.createAt || 0, p.editAt || 0);
   }
 }
 
@@ -79,7 +80,7 @@ async function openChat(id, { fromHash = false } = {}) {
       // Bản nhớ đã cũ: đọc lại trang mới nhất (giữa hai lần có thể quá nhiều tin, chỉ đọc phần mới sẽ hở)
       const r = await fetchConv(c.id);
       if (S.sel?.id !== c.id || r.status !== 'ok') return;
-      Object.assign(S, { posts: new Map(), seenReplies: new Set(), lastSync: 0, loadedAt: r.at, syncedAt: r.at });
+      Object.assign(S, { posts: new Map(), seenReplies: new Set(), lastSync: BG.chatSyncMark(0, r.posts, r.at), loadedAt: r.at, syncedAt: r.at });
       addPosts(r.posts);
       S.hasMore = r.hasMore;
       renderMsgs({ scroll: 'bottom' });
@@ -98,6 +99,7 @@ async function openChat(id, { fromHash = false } = {}) {
   }
   S.loadedAt = r.at;
   S.syncedAt = r.at;
+  S.lastSync = BG.chatSyncMark(0, r.posts, r.at); // trang chưa có tin nào vẫn có mốc, để tin đầu tiên của người kia được đọc
   addPosts(r.posts);
   S.hasMore = r.hasMore;
   markDivider(unread);
@@ -458,6 +460,26 @@ async function loadOlder() {
   renderMsgs({ scroll: 'keep' });
 }
 
+// Gọi sau khi mình gửi được một tin (post) ở cuộc trò chuyện c: lúc đó mạng đã thông và tin vừa gửi mang giờ máy chủ.
+// - Chưa có mốc đọc lại (trang tin đầu lỗi lúc mở) thì các lần đọc lại không chạy: đọc lại trang đầu, không thì câu trả lời của
+//   người kia không bao giờ hiện. Trang đầu còn đang đọc dở thì chờ xem nó được hay lỗi rồi mới quyết định.
+// - Mốc vượt cả giờ máy chủ của tin vừa gửi: đó là mốc gieo theo đồng hồ máy (cuộc trò chuyện chưa có tin, BG.chatSyncMark) mà
+//   đồng hồ máy chạy nhanh hơn máy chủ — gieo lại theo giờ máy chủ, không thì mọi tin mới đều nằm trước mốc. Chỉ hạ, không nâng.
+async function syncAfterSend(c, post) {
+  if (!c || S.sel?.id !== c.id) return;
+  if (!S.lastSync && convLoading.has(c.id)) await convLoading.get(c.id);
+  if (S.sel?.id !== c.id) return;
+  if (S.lastSync) {
+    if (post?.createAt && S.lastSync > post.createAt) S.lastSync = BG.chatSyncMark(0, [], post.createAt);
+    return;
+  }
+  const r = await fetchConv(c.id);
+  if (S.sel?.id !== c.id || S.lastSync || r.status !== 'ok') return;
+  Object.assign(S, { lastSync: BG.chatSyncMark(0, r.posts, r.at), loadedAt: r.at, syncedAt: r.at, hasMore: r.hasMore });
+  addPosts(r.posts);
+  renderMsgs({ scroll: 'bottom' });
+}
+
 async function pollChat(force = false) {
   const c = S.sel;
   if (!c || S.polling === c.id || (document.hidden && !force) || !S.lastSync) return;
@@ -465,26 +487,32 @@ async function pollChat(force = false) {
   const at = Date.now();
   const r = await call('chatPosts', { channelId: c.id, since: S.lastSync });
   if (S.polling === c.id) S.polling = false;
-  if (S.sel?.id !== c.id || r.status !== 'ok') return;
+  // Mốc đã về 0: cuộc trò chuyện vừa được mở lại trong lúc chờ — kết quả này thuộc lượt cũ, trang đầu đang đọc lại sẽ lo
+  if (S.sel?.id !== c.id || r.status !== 'ok' || !S.lastSync) return;
   S.syncedAt = at;
+  S.lastSync = BG.chatSyncMark(S.lastSync, r.posts, at); // lần sau chỉ hỏi phần mới hơn những gì vừa đọc được
   freshThreads(c.id, r.posts, at); // chat/cache.js: bản nhớ các thread của kênh này được coi là mới
-  // Tin gốc mới / sửa / xoá hiện ở cuộc trò chuyện; bình luận cập nhật số bình luận và thread đang mở
-  const changed = r.posts.filter((p) => {
-    if (p.rootId) return !S.seenReplies.has(p.id) || !!S.thread?.posts.has(p.id);
+  // Tin gốc đã xoá mà trang chưa từng có (xoá trước khi mình kịp thấy; máy chủ vẫn trả ở phần mới): không có gì để hiện
+  const posts = r.posts.filter((p) => p.rootId || !p.deleted || S.posts.has(p.id));
+  // Tin gốc mới / sửa / xoá hiện ở cuộc trò chuyện; bình luận cập nhật số bình luận và thread đang mở (bình luận đang hiện mà
+  // máy chủ trả lại đúng bản đang có — vd. bình luận mình vừa gửi — thì không tính là đổi)
+  const changed = posts.filter((p) => {
+    if (p.rootId) return !S.seenReplies.has(p.id) || (S.thread?.posts.has(p.id) && S.thread.posts.get(p.id).updateAt !== p.updateAt);
     const o = S.posts.get(p.id);
     return !o || o.message !== p.message || o.deleted !== p.deleted || o.editAt !== p.editAt;
   });
-  if (!changed.length) return;
+  // Không có gì mới để hiện (vd. máy chủ trả lại chính tin mình vừa gửi): ghi nhận, khỏi vẽ lại
+  if (!changed.length) return addPosts(posts);
   const incoming = changed.filter((p) => !p.rootId && !S.posts.has(p.id) && !p.system && p.user.chatId !== S.me?.chatId).length;
   const inThread = S.thread && changed.some((p) => p.rootId === S.thread.root.id);
   const stick = nearBottom();
-  addPosts(r.posts);
+  addPosts(posts);
   renderMsgs({ scroll: stick ? 'bottom' : 'keep' });
   if (inThread) renderThread();
   if (incoming) {
     if (!stick) S.newBelow += incoming;
     updateJump();
-    bumpChat(c.id, { lastPostAt: Math.max(...r.posts.map((p) => p.createAt)) });
+    bumpChat(c.id, { lastPostAt: Math.max(...posts.map((p) => p.createAt)) });
     if (document.hasFocus()) markRead();
   }
 }

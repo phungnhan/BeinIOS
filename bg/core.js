@@ -303,6 +303,7 @@ function postLog(source, action, post, g) {
 
 // items: [{ log, call(client), gone? }]. Chạy thử thì không gọi API.
 // gone: thao tác trên một bài; Beincom báo bài không còn thì tính là xong (entry có gone: true) để bỏ bài khỏi danh sách.
+// call có thể tự xét rồi trả { skip: 'lý do', flags? } thay cho phản hồi API: mục đó không được làm, nhật ký ghi lỗi kèm lý do.
 // ---------- Thao tác thật: bền khi service worker bị tắt giữa chừng ----------
 // Trình duyệt tắt service worker khi 30 giây không có hoạt động, hoặc một lệnh chạy quá 5 phút. Vì vậy:
 //  - mỗi mục xong là ghi ngay vào khoá `actionJournal` (Dashboard đọc để hiện tiến độ); bị tắt giữa chừng thì lần
@@ -384,7 +385,9 @@ async function performActions(items, settings) {
         await keepAlive();
         const r = await items[i].call(client);
         // ok / goneIf: thao tác chat (trả JSON thường, 404 = tin đã bị xoá)
+        // r.skip: call đã xét trước và không gửi lệnh ghi (vd bài hẹn giờ đã đăng) — ghi lỗi với lý do đó, kèm cờ r.flags
         if (r.status === 401) entry(items[i], 'error', NEED_LOGIN.message);
+        else if (r.skip) entry(items[i], 'error', r.skip, r.flags);
         else if (items[i].ok ? items[i].ok(r) : BG.isOk(r)) entry(items[i], 'ok');
         else if (items[i].gone && (items[i].goneIf ? items[i].goneIf(r) : BG.isContentGone(r))) entry(items[i], 'ok', GONE_MSG, { gone: true });
         else entry(items[i], 'error', BG.errMsg(r));

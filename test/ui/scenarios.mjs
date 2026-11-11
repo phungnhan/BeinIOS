@@ -21,6 +21,10 @@ const setValue = (page, id, value) =>
     id,
     value,
   );
+// Bài đã hẹn giờ: bấm một nút ở hàng của bài; số lần Dashboard đọc danh sách; chờ một câu báo
+const schedClick = (page, id, label) => page.call((i, l) => ([...document.querySelectorAll(`#scheduled-body tr[data-id="${i}"] td.act button`)].find((b) => b.textContent === l).click(), true), id, label);
+const schedReads = (page) => page.ev(`window.__msgs.filter((m) => m.type === 'scheduled').length`);
+const waitToast = (page, text) => page.until((t) => [...document.querySelectorAll('.toast')].some((x) => x.textContent === t), 4000, text);
 // Chọn file ảnh giả cho một <input type=file>
 const pickImage = (page, id, name = 'anh.png') =>
   page.call(
@@ -37,6 +41,53 @@ const pickImage = (page, id, name = 'anh.png') =>
     name,
     B64_PNG,
   );
+// Trang Chat — kịch bản "không mất tin". Lần đọc lại tự động (4 giây một lần) bỏ qua khi trang ẩn: cho trang "ẩn" rồi kịch bản tự
+// gọi đọc lại (chatPoll) đúng lúc, để thứ tự "tin tới → mình gửi → đọc lại" không phụ thuộc đồng hồ. Cài thêm trong trang:
+// __in — một tin của người khác vừa tới máy chủ (máy chủ giả trả ở các lần đọc sau, lọc theo since), trả về thời điểm của tin;
+// __enter — gõ rồi Enter ở ô gõ chính hoặc ô bình luận ('t-text')
+const chatHold = async (page) => {
+  await page.ev(`Object.defineProperty(document, 'hidden', { configurable: true, get: () => true });
+    window.__in = (id, text, extra = {}) => {
+      const at = Date.now();
+      (window.__chatIncoming = window.__chatIncoming || []).push({ id, channelId: S.sel.id, user: { id: 'u70', chatId: 'cu70', username: 'moi', fullname: 'Người mới', pictureAt: 0 }, createAt: at, updateAt: at, editAt: 0, deleted: false, system: false, message: text, rootId: '', replyCount: 0, pinned: false, files: [], participants: [], following: false, ...extra });
+      return at;
+    };
+    window.__enter = (text, id = 'text') => {
+      const t = document.getElementById(id);
+      t.focus();
+      t.value = text;
+      t.dispatchEvent(new Event('input'));
+      t.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    };
+    true`);
+  await page.until(() => !S.polling);
+};
+const chatPoll = (page) => page.ev(`pollChat(true).then(() => true)`);
+const chatItem = (name) => `[...document.querySelectorAll('#list .item')].find((x) => x.textContent.includes('${name}'))`;
+const chatMsgIds = (page, list = 'msg-list') => page.ev(`[...document.querySelectorAll('#${list} .msg')].map((x) => x.id)`);
+const chatSent = (page, id = 'm-new1') => page.until((i) => !!document.getElementById(i) && !document.querySelector('.msg.pending'), 4000, id);
+// Các lệnh đọc phần mới (since) của kênh chMain mà trang đã gửi: mốc của từng lệnh
+const chatSinces = (page) => page.ev(`(window.__postsCalls || []).filter((x) => x.channelId === 'chMain' && x.since).map((x) => x.since)`);
+// Popup — ô Chạy thử. popSet: ghi cài đặt vào kho rồi chờ popup vẽ lại; popStore: cài đặt đang nằm trong kho;
+// popDry: bấm ô Chạy thử rồi chờ tới khi hộp hỏi mở hoặc kho đổi, trả về { asked: có hỏi lại không, dry: dryRun trong kho };
+// popKey: bấm một phím thật (qua DevTools) để thử hộp hỏi bằng bàn phím
+const AUTO_LABELS = { autoApprove: 'Tự duyệt yêu cầu tham gia', autoDecline: 'Tự từ chối yêu cầu tham gia', autoHideSpam: 'Tự ẩn spam có link cấm', autoApprovePosts: 'Tự duyệt bài của thành viên tin cậy' };
+const AUTO_OFF = { autoApprove: false, autoDecline: false, autoHideSpam: false, autoApprovePosts: false };
+const popSet = (page, patch) => page.ev(`chrome.storage.local.get('settings').then(({ settings }) => chrome.storage.local.set({ settings: { ...settings, ...${JSON.stringify(patch)} } })).then(refresh).then(() => true)`);
+const popStore = (page) => page.ev(`chrome.storage.local.get('settings').then(({ settings }) => settings)`);
+const popDry = async (page) => {
+  const was = (await popStore(page)).dryRun;
+  await page.ev(`document.getElementById('dryRun').click(); true`);
+  await page.until((w) => !!document.getElementById('dry-ask')?.open || chrome.storage.local.get('settings').then(({ settings }) => settings.dryRun !== w), 4000, was);
+  return page.ev(`chrome.storage.local.get('settings').then(({ settings }) => ({ asked: !!document.getElementById('dry-ask')?.open, dry: settings.dryRun }))`);
+};
+const popAnswer = (page, id) => page.ev(`document.getElementById('${id}').click(); true`);
+const popKept = (page) => page.until(() => !document.getElementById('dry-ask').open && document.getElementById('dryRun').checked);
+const popKey = async (page, key, vk, text) => {
+  const k = { key, code: key, windowsVirtualKeyCode: vk, nativeVirtualKeyCode: vk };
+  await page.send('Input.dispatchKeyEvent', { type: text ? 'keyDown' : 'rawKeyDown', ...k, ...(text ? { text } : {}) });
+  await page.send('Input.dispatchKeyEvent', { type: 'keyUp', ...k });
+};
 
 export const scenarios = [
   {
@@ -69,6 +120,123 @@ export const scenarios = [
       // Nền ghi gói mới -> popup vẽ lại
       await page.ev(`chrome.storage.local.get('popupInfo').then(({ popupInfo }) => chrome.storage.local.set({ popupInfo: { ...popupInfo, totals: { ...popupInfo.totals, requests: 0 } } })).then(() => true)`);
       await page.until(() => document.getElementById('requests').textContent === '0');
+    },
+  },
+  {
+    name: 'Popup: bỏ tick Chạy thử khi đang bật tự xử lý — hỏi lại, chưa ghi; Giữ thì tick lại, Tắt mới ghi; dùng được bằng bàn phím',
+    async run({ page, url, assert }) {
+      await page.open(url('popup', 'pinfo=1'), { width: 340, height: 600 }); // rộng đúng bằng popup thật
+      await page.until(() => document.getElementById('requests').textContent === '17');
+      await popSet(page, { ...AUTO_OFF, dryRun: true, autoHideSpam: true });
+      const before = JSON.stringify(await popStore(page));
+      const size = () => page.ev(`[document.documentElement.scrollWidth, document.documentElement.scrollHeight]`);
+      const sizeBefore = await size();
+      // Bỏ tick: hỏi lại ngay trong popup (kể tên công tắc đang bật, nêu hậu quả), kho chưa đổi, popup không đổi kích thước
+      assert.deepEqual(await popDry(page), { asked: true, dry: true });
+      const v = await page.call(() => {
+        const d = document.getElementById('dry-ask');
+        const r = d.getBoundingClientRect();
+        return { list: [...d.querySelectorAll('#dry-ask-list li')].map((x) => x.textContent), text: d.innerText, focus: document.activeElement.id, box: document.getElementById('dryRun').checked, inside: r.left >= 0 && r.right <= innerWidth && r.top >= 0 && r.bottom <= innerHeight, note: !document.getElementById('dry-note').hidden };
+      });
+      assert.deepEqual(v.list, ['Tự ẩn spam có link cấm']);
+      assert.match(v.text, /Tắt Chạy thử\?/);
+      assert.match(v.text, /gửi thật lên Beincom/);
+      assert.match(v.text, /không hoàn tác/);
+      assert.deepEqual([v.focus, v.box, v.inside, v.note], ['dry-ask-keep', false, true, true]); // nút an toàn được chọn sẵn
+      assert.deepEqual(await size(), sizeBefore);
+      assert.equal(JSON.stringify(await popStore(page)), before);
+      // Nền ghi gói số đếm trong lúc đang hỏi -> popup vẽ lại: hộp hỏi còn đó, ô vừa bấm giữ nguyên
+      await page.ev(`chrome.storage.local.get('popupInfo').then(({ popupInfo }) => chrome.storage.local.set({ popupInfo: { ...popupInfo, totals: { ...popupInfo.totals, requests: 0 } } })).then(() => true)`);
+      await page.until(() => document.getElementById('requests').textContent === '0');
+      assert.deepEqual(await page.ev(`[document.getElementById('dry-ask').open, document.getElementById('dryRun').checked]`), [true, false]);
+      // Giữ Chạy thử: ô được tick lại, kho không đổi
+      await popAnswer(page, 'dry-ask-keep');
+      await popKept(page);
+      assert.equal(JSON.stringify(await popStore(page)), before);
+      // Tắt Chạy thử: lúc này mới ghi, chỉ đổi dryRun
+      assert.deepEqual(await popDry(page), { asked: true, dry: true });
+      await popAnswer(page, 'dry-ask-off');
+      await page.until(() => !document.getElementById('dry-ask').open && !document.getElementById('dryRun').checked && document.getElementById('dry-note').hidden);
+      const after = await popStore(page);
+      assert.deepEqual([after.dryRun, after.autoHideSpam, after.active, after.notify], [false, true, true, true]);
+      // Bật lại Chạy thử: không hỏi
+      assert.deepEqual(await popDry(page), { asked: false, dry: true });
+      await page.until(() => !document.getElementById('dry-note').hidden);
+      // Hộp hỏi đóng mà chưa bấm nút nào: vẫn là giữ Chạy thử, dù lần hỏi trước đã chọn Tắt (hộp còn nhớ lựa chọn cũ)
+      assert.deepEqual(await popDry(page), { asked: true, dry: true });
+      await page.ev(`document.getElementById('dry-ask').close(); true`);
+      await popKept(page);
+      assert.equal((await popStore(page)).dryRun, true);
+      // Bàn phím — Esc: giữ Chạy thử
+      assert.deepEqual(await popDry(page), { asked: true, dry: true });
+      await popKey(page, 'Escape', 27);
+      await popKept(page);
+      assert.equal((await popStore(page)).dryRun, true);
+      // Bàn phím — Tab sang nút Tắt Chạy thử rồi Enter
+      assert.deepEqual(await popDry(page), { asked: true, dry: true });
+      await popKey(page, 'Tab', 9);
+      assert.equal(await page.ev(`document.activeElement.id`), 'dry-ask-off');
+      await popKey(page, 'Enter', 13, '\r');
+      await page.until(() => !document.getElementById('dry-ask').open && !document.getElementById('dryRun').checked && document.getElementById('dry-note').hidden);
+      assert.equal((await popStore(page)).dryRun, false);
+      // Đang hỏi mà nơi khác (đồng bộ từ máy khác, Dashboard) đã tắt Chạy thử: bấm Giữ thì ô theo đúng kho, không tự tick lại
+      await popSet(page, { dryRun: true });
+      assert.deepEqual(await popDry(page), { asked: true, dry: true });
+      await page.ev(`chrome.storage.local.get('settings').then(({ settings }) => chrome.storage.local.set({ settings: { ...settings, dryRun: false } })).then(() => true)`);
+      // Sự kiện đóng hộp tới sau cú bấm: chờ nó (và lần vẽ lại theo sau) rồi mới xem ô
+      await page.ev(`new Promise((ok) => { document.getElementById('dry-ask').addEventListener('close', () => setTimeout(() => ok(true), 100), { once: true }); document.getElementById('dry-ask-keep').click(); })`);
+      assert.deepEqual(await page.ev(`[document.getElementById('dry-ask').open, document.getElementById('dryRun').checked, document.getElementById('dry-note').hidden]`), [false, false, true]);
+      assert.equal((await popStore(page)).dryRun, false);
+    },
+  },
+  {
+    name: 'Popup: Chạy thử — không bật tự xử lý thì bỏ tick áp dụng ngay, bật lại không hỏi; công tắc tự xử lý nào đang bật cũng hỏi',
+    async run({ page, url, assert }) {
+      await page.open(url('popup', 'pinfo=1'), { width: 340, height: 600 });
+      await page.until(() => document.getElementById('requests').textContent === '17');
+      // Không bật công tắc tự xử lý nào: bỏ tick là ghi ngay, không hỏi; tick lại cũng không hỏi
+      await popSet(page, { ...AUTO_OFF, dryRun: true });
+      assert.deepEqual(await popDry(page), { asked: false, dry: false });
+      await page.until(() => document.getElementById('dry-note').hidden && !document.getElementById('dryRun').checked);
+      assert.deepEqual(await popDry(page), { asked: false, dry: true });
+      // Đang bật tự xử lý, Chạy thử đang tắt: bật Chạy thử không hỏi
+      await popSet(page, { dryRun: false, autoDecline: true });
+      assert.deepEqual(await popDry(page), { asked: false, dry: true });
+      // Từng công tắc trong bốn công tắc đều làm popup hỏi lại, kể đúng tên; Giữ thì kho không đổi.
+      // Dòng đỏ "không hoàn tác" chỉ hiện khi có công tắc ẩn / từ chối đang bật (chỉ tự duyệt thì không có gì bị ẩn hay từ chối)
+      const warned = () => page.ev(`/không hoàn tác/.test(document.getElementById('dry-ask').innerText)`);
+      for (const [k, label] of Object.entries(AUTO_LABELS)) {
+        await popSet(page, { ...AUTO_OFF, dryRun: true, [k]: true });
+        assert.deepEqual(await popDry(page), { asked: true, dry: true }, k);
+        assert.deepEqual(await page.ev(`[...document.querySelectorAll('#dry-ask-list li')].map((x) => x.textContent)`), [label]);
+        assert.match(await page.ev(`document.getElementById('dry-ask').innerText`), /gửi thật lên Beincom/);
+        assert.equal(await warned(), k === 'autoDecline' || k === 'autoHideSpam', k);
+        await popAnswer(page, 'dry-ask-keep');
+        await popKept(page);
+        assert.equal((await popStore(page)).dryRun, true, k);
+      }
+      // Bật cả bốn: kể đủ, hộp hỏi vẫn nằm gọn trong popup
+      await popSet(page, { dryRun: true, autoApprove: true, autoDecline: true, autoHideSpam: true, autoApprovePosts: true });
+      assert.deepEqual(await popDry(page), { asked: true, dry: true });
+      const v = await page.call(() => {
+        const r = document.getElementById('dry-ask').getBoundingClientRect();
+        return { list: [...document.querySelectorAll('#dry-ask-list li')].map((x) => x.textContent), inside: r.left >= 0 && r.right <= innerWidth && r.top >= 0 && r.bottom <= innerHeight, wide: document.documentElement.scrollWidth };
+      });
+      assert.deepEqual([v, await warned()], [{ list: Object.values(AUTO_LABELS), inside: true, wide: 340 }, true]);
+      await popAnswer(page, 'dry-ask-keep');
+      await popKept(page);
+      // Công tắc vừa được bật ở nơi khác mà popup chưa kịp vẽ lại (kịch bản chặn lần vẽ lại để dựng đúng lúc đó): vẫn hỏi —
+      // điều kiện tính trên kho ngay lúc bấm, không theo bản popup đã vẽ
+      await popSet(page, { ...AUTO_OFF, dryRun: true });
+      await page.ev(`(() => { window.__refresh = refresh; window.refresh = async () => {}; return chrome.storage.local.get('settings').then(({ settings }) => chrome.storage.local.set({ settings: { ...settings, autoHideSpam: true } })).then(() => (document.getElementById('dryRun').click(), true)); })()`);
+      await page.until(() => document.getElementById('dry-ask').open || chrome.storage.local.get('settings').then(({ settings }) => !settings.dryRun));
+      assert.deepEqual(await page.ev(`chrome.storage.local.get('settings').then(({ settings }) => ({ asked: document.getElementById('dry-ask').open, dry: settings.dryRun }))`), { asked: true, dry: true });
+      await page.ev(`window.refresh = window.__refresh; true`);
+      await popAnswer(page, 'dry-ask-keep');
+      await popKept(page);
+      // Ô Thông báo vẫn ghi ngay như trước
+      await page.ev(`document.getElementById('notify').click(); true`);
+      await page.until(() => chrome.storage.local.get('settings').then(({ settings }) => settings.notify === false && settings.dryRun === true));
     },
   },
   {
@@ -242,6 +410,145 @@ export const scenarios = [
       const m = await page.ev(`window.__lastEditSched`);
       assert.deepEqual([m.type, m.content], ['editScheduled', 'Nội dung đã sửa']);
       assert.equal(await page.ev(`!!compose.edit`), false);
+    },
+  },
+  {
+    name: 'Bài hẹn giờ đã quá giờ: tải lại danh sách trước khi hỏi huỷ / đổi giờ',
+    async run({ page, url, assert }) {
+      for (const label of ['Huỷ', 'Đổi giờ']) {
+        // Danh sách cũ (stale=1): bài old1 còn ghi đang chờ dù đã quá giờ hẹn; nút Huỷ không bị ẩn theo giờ
+        await page.open(url('dashboard', 'tab=compose&stale=1'));
+        await page.until(() => sched.loaded && !sched.loading);
+        const row = await page.call(() => {
+          const tr = document.querySelector('#scheduled-body tr[data-id="old1"]');
+          return { when: tr.querySelector('td').innerText, buttons: [...tr.querySelectorAll('td.act button')].map((b) => b.textContent) };
+        });
+        assert.match(row.when, /đã quá giờ/);
+        assert.deepEqual(row.buttons, ['Đổi giờ', 'Huỷ']);
+        const reads = await schedReads(page);
+        await schedClick(page, 'old1', label);
+        // Tải lại trước khi hỏi: bài đã đăng nên không còn trong danh sách -> báo, không mở hộp hỏi, không gửi lệnh nào
+        await page.until(() => [...document.querySelectorAll('.toast.warn')].some((t) => /không còn trong danh sách hẹn giờ/.test(t.textContent)));
+        const v = await page.call(() => ({ reads: window.__msgs.filter((m) => m.type === 'scheduled').length, open: document.getElementById('confirm').open, row: !!document.querySelector('#scheduled-body tr[data-id="old1"]'), act: window.__lastSchedAct || null }));
+        assert.deepEqual(v, { reads: reads + 1, open: false, row: false, act: null });
+      }
+      // Bài hẹn giờ lỗi lúc nào cũng quá giờ mà vẫn cần huỷ: hỏi ngay, không tải lại
+      const reads = await schedReads(page);
+      await schedClick(page, 's4', 'Huỷ');
+      await page.until(() => document.getElementById('confirm').open);
+      assert.equal(await schedReads(page), reads);
+      await confirmOk(page);
+      await waitToast(page, 'Đã huỷ bài hẹn giờ.');
+      assert.deepEqual(await page.ev(`[window.__lastSchedAct.action, window.__lastSchedAct.contentId]`), ['cancel', 's4']);
+      // Bài quá giờ nhưng tải lại vẫn thấy còn chờ (Beincom chưa kịp đăng): tải lại xong vẫn hỏi như thường
+      await page.until(() => !busy && !sched.loading);
+      await page.ev(`sched.items.find((p) => p.id === 's3').scheduledAt = new Date(Date.now() - 60e3).toISOString(); true`);
+      const before = await schedReads(page);
+      await schedClick(page, 's3', 'Huỷ');
+      await page.until(() => document.getElementById('confirm').open);
+      assert.equal(await schedReads(page), before + 1);
+      assert.equal(await page.ev(`document.getElementById('confirm-title').textContent`), 'Huỷ bài hẹn giờ?');
+      await page.ev(`document.getElementById('confirm').close(''); true`);
+      assert.equal(await page.ev(`window.__lastSchedAct.contentId`), 's4'); // chưa đồng ý thì chưa gửi gì
+    },
+  },
+  {
+    name: 'Huỷ / đổi giờ bài hẹn giờ mà bài đã đăng: hiện câu báo của nền thay vì báo đã xong',
+    async run({ page, url, assert }) {
+      await page.open(url('dashboard', 'tab=compose'));
+      await page.until(() => sched.loaded && !sched.loading);
+      // Chuỗi định kỳ x5, x6 mà x5 đã đăng mất rồi: nền chỉ huỷ x6, báo riêng số bài đã đăng không bị xoá
+      await page.ev(`window.__schedPublished = ['x5', 's3', 's1']; true`);
+      await schedClick(page, 'x6', 'Huỷ cả chuỗi');
+      await confirmOk(page);
+      await waitToast(page, 'Đã huỷ 1 bài của chuỗi định kỳ. 1 bài đã đăng rồi nên không bị xoá — muốn gỡ thì dùng Xoá bài ở tab Bài viết.');
+      assert.deepEqual(await page.ev(`window.__lastSchedAct.contentIds`), ['x5', 'x6']);
+      await page.until(() => !busy && !sched.loading && !document.querySelector('#scheduled-body tr[data-id="x6"]'));
+      assert.deepEqual(await page.ev(`chrome.storage.local.get('recurring').then((o) => o.recurring)`), []); // chuỗi hết bài hẹn giờ: bỏ bản ghi chuỗi
+      // Huỷ một bài đã đăng
+      await schedClick(page, 's3', 'Huỷ');
+      await confirmOk(page);
+      await waitToast(page, '1 bài đã đăng rồi nên không bị xoá — muốn gỡ thì dùng Xoá bài ở tab Bài viết.');
+      await page.until(() => !busy && !sched.loading && !document.querySelector('#scheduled-body tr[data-id="s3"]'));
+      // Đổi giờ một bài đã đăng
+      await schedClick(page, 's1', 'Đổi giờ');
+      await confirmOk(page);
+      await waitToast(page, 'Bài đã đăng rồi nên không đổi giờ được nữa.');
+      assert.equal(await page.ev(`window.__lastSchedAct.action`), 'reschedule');
+      assert.equal(await page.ev(`[...document.querySelectorAll('.toast')].every((t) => t.classList.contains('err'))`), true);
+      // Chuỗi dài gửi thành nhiều đợt: số bài đã đăng cộng dồn qua các đợt, kèm số bài lỗi khác
+      const merged = await page.ev(`schedFailText('cancel', (n) => 'Đã huỷ ' + n + ' bài.')(mergeResults({ status: 'ok', ok: 1, failed: 1, published: 1, errors: ['a'] }, { status: 'ok', ok: 2, failed: 2, published: 1, errors: ['a', 'b'] }))`);
+      assert.equal(merged, 'Đã huỷ 3 bài. 2 bài đã đăng rồi nên không bị xoá — muốn gỡ thì dùng Xoá bài ở tab Bài viết. 1 bài khác bị lỗi — xem tab Nhật ký.');
+    },
+  },
+  {
+    name: 'Bài hẹn giờ đã quá giờ: đang tải lại thì không đè lên hộp hỏi khác, các nút tạm khoá; tải lại thiếu / lỗi thì báo đúng; Huỷ cả chuỗi chỉ còn bài còn chờ',
+    async run({ page, url, assert }) {
+      await page.open(url('dashboard', 'tab=compose'));
+      await page.until(() => sched.loaded && !sched.loading);
+      const acts = () => page.ev(`window.__msgs.filter((m) => m.type === 'scheduleAct').map((m) => [m.action, m.contentIds || m.contentId])`);
+      const overdue = (id) => page.ev(`sched.items.find((p) => p.id === '${id}').scheduledAt = new Date(Date.now() - 60e3).toISOString(); true`);
+      const title = () => page.ev(`document.getElementById('confirm-title').textContent`);
+      const locked = () => page.ev(`[...document.querySelectorAll('#scheduled-body td.act button')].map((b) => b.disabled)`);
+      // 1. Bài s3 đã quá giờ, Beincom trả lời chậm. Bấm Huỷ ở s3; trong lúc chờ tải lại thì một hộp hỏi khác mở ra (huỷ chuỗi x5, x6
+      //    — hộp hỏi của Dashboard dùng chung, vd. hộp "Đăng bài" ở cùng tab)
+      await overdue('s3');
+      await page.ev(`window.__schedDelay = 700; true`);
+      const reads = await schedReads(page);
+      await schedClick(page, 's3', 'Huỷ');
+      await page.ev(`cancelSeries('r1'); true`);
+      await page.until(() => document.getElementById('confirm').open);
+      await page.until((n) => window.__msgs.filter((m) => m.type === 'scheduled').length > n && !sched.loading, 4000, reads);
+      await page.ev(`new Promise((ok) => setTimeout(() => ok(true), 150))`);
+      // Tải lại xong: hộp đang mở vẫn là hộp của chuỗi, không bị thay nội dung; một lần bấm đồng ý chỉ làm đúng việc đang hiện
+      const shown = [await title(), await page.ev(`document.querySelectorAll('#confirm-list li').length`)];
+      const dropped = () => page.ev(`[...document.querySelectorAll('.toast.warn')].filter((t) => /Đang dở một việc khác nên chưa hỏi việc này/.test(t.textContent)).length`);
+      const told = await dropped();
+      await page.ev(`document.getElementById('confirm-ok').click(); true`);
+      await waitToast(page, 'Đã huỷ 2 bài của chuỗi định kỳ.');
+      await page.ev(`new Promise((ok) => setTimeout(() => ok(true), 400))`);
+      await page.until(() => !busy && !sched.loading && !document.getElementById('confirm').open, 6000);
+      assert.deepEqual([shown, await acts(), await page.ev(`!!document.querySelector('#scheduled-body tr[data-id="s3"]')`)], [['Huỷ 2 bài còn lại của chuỗi định kỳ?', 2], [['cancel', ['x5', 'x6']]], true]);
+      assert.equal(told, 1); // việc huỷ s3 bị bỏ dở có báo, không lặng lẽ biến mất
+      // 2. Đang tải lại thì các nút của bảng tạm khoá (thấy là đang kiểm tra, không bấm chồng được); xong thì mở khoá và hỏi như thường
+      await schedClick(page, 's3', 'Huỷ');
+      await page.until(() => sched.loading);
+      assert.equal((await locked()).every(Boolean), true);
+      await page.until(() => document.getElementById('confirm').open);
+      assert.deepEqual([await title(), (await locked()).some(Boolean)], ['Huỷ bài hẹn giờ?', false]);
+      await page.ev(`document.getElementById('confirm').close(''); true`);
+      // Tải lại xong mà Dashboard đang gửi dở một việc khác (hộp hỏi kia đã được trả lời trong lúc chờ): cũng thôi, không hỏi chồng lên
+      await page.ev(`document.querySelectorAll('.toast').forEach((t) => t.remove()); true`);
+      await schedClick(page, 's3', 'Huỷ');
+      await page.until(() => sched.loading);
+      await page.ev(`busy = true; true`);
+      await page.until(() => !sched.loading && !schedChecking);
+      assert.deepEqual([await page.ev(`document.getElementById('confirm').open`), await dropped()], [false, 1]);
+      await page.ev(`busy = false; renderScheduled(); true`);
+      // 3. Tải lại thiếu (một community đọc lỗi) và bài vắng mặt: chưa chắc bài đã đăng — báo chưa tải đủ, không hỏi, không gửi lệnh
+      await page.ev(`Object.assign(window, { __schedDelay: 0, __schedGone: ['s3'], __schedErrors: ['Crypto Life: Internal Server Error'] }); true`);
+      await schedClick(page, 's3', 'Huỷ');
+      await page.until(() => [...document.querySelectorAll('.toast.err')].some((t) => /Chưa tải lại được đủ danh sách bài hẹn giờ.*Crypto Life: Internal Server Error/.test(t.textContent)));
+      assert.deepEqual(await page.ev(`[document.getElementById('confirm').open, [...document.querySelectorAll('.toast')].some((t) => /không còn trong danh sách hẹn giờ/.test(t.textContent))]`), [false, false]);
+      // 4. Lệnh tải lại ném lỗi: báo rõ, không hỏi (lỗi không rơi mất)
+      await page.ev(`Object.assign(window, { __schedGone: [], __schedErrors: [] }); loadScheduled().then(() => true)`);
+      await page.until(() => !sched.loading && !!document.querySelector('#scheduled-body tr[data-id="s3"]'));
+      await page.ev(`window.__schedThrow = 'Nền không trả lời'; true`);
+      await schedClick(page, 's3', 'Huỷ');
+      await waitToast(page, 'Chưa tải lại được danh sách bài hẹn giờ: Nền không trả lời');
+      assert.deepEqual([await page.ev(`document.getElementById('confirm').open`), (await locked()).some(Boolean), await acts()], [false, false, [['cancel', ['x5', 'x6']]]]);
+      // 5. Huỷ cả chuỗi khi một bài của chuỗi đã quá giờ và không còn sau khi tải lại (đã đăng): chỉ hỏi và chỉ gửi bài còn chờ
+      await page.open(url('dashboard', 'tab=compose'));
+      await page.until(() => sched.loaded && !sched.loading);
+      await overdue('x5');
+      await page.ev(`window.__schedGone = ['x5']; true`);
+      const before = await schedReads(page);
+      await schedClick(page, 'x6', 'Huỷ cả chuỗi');
+      await page.until(() => document.getElementById('confirm').open);
+      assert.deepEqual([await schedReads(page), await title(), await page.ev(`document.querySelectorAll('#confirm-list li').length`)], [before + 1, 'Huỷ 1 bài còn lại của chuỗi định kỳ?', 1]);
+      await page.ev(`document.getElementById('confirm-ok').click(); true`);
+      await waitToast(page, 'Đã huỷ 1 bài của chuỗi định kỳ.');
+      assert.deepEqual(await acts(), [['cancel', ['x6']]]);
     },
   },
   {
@@ -2028,6 +2335,251 @@ export const scenarios = [
     },
   },
   {
+    name: 'Trang Chat không mất tin: tin người khác tới ngay trước khi mình gửi vẫn hiện ở lần đọc lại kế',
+    async run({ page, url, assert }) {
+      await page.open(url('chat', 'chat=1&c=chMain'), { width: 1280, height: 820 });
+      await page.until(() => !!document.getElementById('m-n2'));
+      await chatHold(page);
+      // Người kia nhắn (máy chủ đã nhận), mình bấm Enter ngay sau đó — chưa tới lần đọc lại kế
+      const at = await page.ev(`(() => { const at = window.__in('b1', 'Có ai online không?'); window.__enter('Tối nay 20h nhé'); return at; })()`);
+      await chatSent(page);
+      assert.equal(await page.ev(`!!document.getElementById('m-b1')`), false); // chưa đọc lại thì chưa thấy
+      await chatPoll(page);
+      // Tin của người kia hiện, đứng trước tin mình; lần đọc lại hỏi từ mốc trước tin đó, không phải từ tin mình vừa gửi
+      assert.deepEqual((await chatMsgIds(page)).slice(-2), ['m-b1', 'm-new1']);
+      assert.match(await page.ev(`document.getElementById('m-b1').textContent`), /Có ai online không\?/);
+      assert.ok((await chatSinces(page)).at(-1) < at);
+      // Mốc đi theo kết quả đọc lại: lần sau chỉ hỏi phần mới hơn tin mới nhất đã đọc, không tải lại tin vừa có
+      await chatPoll(page);
+      assert.deepEqual([(await chatSinces(page)).at(-1), (await chatMsgIds(page)).slice(-2)], [await page.ev(`window.__chatSent[0].updateAt`), ['m-b1', 'm-new1']]);
+    },
+  },
+  {
+    name: 'Trang Chat không mất tin: rời rồi mở lại (bản nhớ) vẫn đọc được tin tới ngay trước tin mình gửi',
+    async run({ page, url, assert }) {
+      await page.open(url('chat', 'chat=1&c=chMain'), { width: 1280, height: 820 });
+      await page.until(() => !!document.getElementById('m-n2'));
+      await chatHold(page);
+      await page.ev(`window.__in('b1', 'Có ai online không?'); window.__enter('Tối nay 20h nhé'); true`);
+      await chatSent(page);
+      // Chưa kịp đọc lại thì sang cuộc trò chuyện khác rồi quay về: hiện ngay từ bản nhớ, đọc phần mới từ mốc đã nhớ
+      await page.ev(`${chatItem('Lan Anh')}.click(); true`);
+      await page.until(() => !!document.getElementById('m-d1'));
+      const back = await page.ev(`(() => { ${chatItem('Crypto Life')}.click(); return !!document.getElementById('m-new1'); })()`);
+      assert.equal(back, true);
+      await page.until(() => !!document.getElementById('m-b1'));
+      assert.deepEqual((await chatMsgIds(page)).slice(-2), ['m-b1', 'm-new1']);
+      assert.equal(await page.ev(`window.__postsCalls.filter((x) => x.channelId === 'chMain' && !x.since && !x.before).length`), 1); // không đọc lại cả trang
+    },
+  },
+  {
+    name: 'Trang Chat không mất tin: hội thoại trống — mình gửi tin đầu, người kia trả lời; tin của họ tới trước tin đầu của mình; mở từ bản tải trước, bản nhớ cũ',
+    async run({ page, url, assert }) {
+      const quan = `{ id: 'u51', chatId: 'cu51', username: 'minhquan', fullname: 'Minh Quân', pictureAt: 0 }`;
+      const emptyShown = () => /Chưa có tin nhắn nào/.test(document.getElementById('msg-list').textContent);
+      const full = (ch) => page.ev(`(window.__postsCalls || []).filter((x) => x.channelId === '${ch}' && !x.since && !x.before).length`);
+      // 1. Bấm mở (chưa tải trước): mình gửi tin đầu tiên, người kia trả lời sau đó — câu trả lời hiện ở lần đọc lại kế
+      await page.open(url('chat', 'chat=1&c=chMain&empty=dm2'), { width: 1280, height: 820 });
+      await page.until(() => !!document.getElementById('m-n2'));
+      await chatHold(page);
+      assert.equal(await page.ev(`(() => { const had = convCache.has('dm2') || convLoading.has('dm2'); ${chatItem('Minh Quân')}.click(); return had; })()`), false);
+      await page.until(emptyShown);
+      await page.ev(`window.__enter('Chào Quân'); true`);
+      await chatSent(page);
+      await page.ev(`window.__in('r1', 'Dạ em chào anh', { user: ${quan} }); true`);
+      await chatPoll(page);
+      assert.deepEqual(await chatMsgIds(page), ['m-new1', 'm-r1']);
+      // 2. Mở thẳng từ địa chỉ; người kia nhắn ngay trước tin đầu của mình: tin của họ không mất
+      await page.open(url('chat', 'chat=1&c=dm2&empty=dm2'), { width: 1280, height: 820 });
+      await page.until(emptyShown);
+      await chatHold(page);
+      await page.ev(`window.__in('q1', 'Anh ơi cho em hỏi', { user: ${quan} }); window.__enter('Chào Quân'); true`);
+      await chatSent(page);
+      await chatPoll(page);
+      assert.deepEqual(await chatMsgIds(page), ['m-q1', 'm-new1']);
+      // 3. Mở từ bản tải trước (rê chuột), mình chưa gửi gì: tin đầu tiên của người kia vẫn tới
+      await page.open(url('chat', 'chat=1&c=chMain&empty=dm2'), { width: 1280, height: 820 });
+      await page.until(() => !!document.getElementById('m-n2'));
+      await page.ev(`${chatItem('Minh Quân')}.dispatchEvent(new MouseEvent('mouseenter')); true`);
+      await page.until(() => convCache.has('dm2'));
+      await chatHold(page);
+      await page.ev(`${chatItem('Minh Quân')}.click(); true`);
+      await page.until(emptyShown);
+      assert.equal(await full('dm2'), 1);
+      // Tin đã bị xoá từ trước khi mình mở (mốc lùi vài phút nên máy chủ vẫn trả nó ở phần mới): trang chưa từng có tin này thì
+      // không hiện bong bóng "đã bị xoá", không tính là tin mới
+      await page.ev(`(() => { const at = Date.now() - 2 * 60e3; window.__in('z1', 'Tin gửi nhầm', { user: ${quan}, createAt: at - 30e3, updateAt: at, deleted: true }); return true; })()`);
+      await page.until(() => !S.polling);
+      await chatPoll(page);
+      assert.deepEqual([await chatMsgIds(page), await page.ev(`[S.posts.size, S.newBelow]`)], [[], [0, 0]]);
+      await page.ev(`window.__in('h1', 'Anh rảnh không ạ?', { user: ${quan} }); true`);
+      await page.until(() => !S.polling);
+      await chatPoll(page);
+      assert.deepEqual(await chatMsgIds(page), ['m-h1']);
+      // Rời đi (trang nhớ lại cả mốc), người kia nhắn tiếp, quay về: hiện từ bản nhớ rồi đọc phần mới
+      await page.ev(`${chatItem('Crypto Life')}.click(); true`);
+      await page.until(() => !!document.getElementById('m-n2'));
+      await page.ev(`window.__in('h2', 'Em gửi anh tài liệu nhé', { user: ${quan}, channelId: 'dm2' }); ${chatItem('Minh Quân')}.click(); true`);
+      await page.until(() => !!document.getElementById('m-h2'));
+      assert.equal(await full('dm2'), 1);
+      // 4. Bản nhớ đã cũ (quá 30 phút): đọc lại trang đầu, rồi vẫn đọc tiếp được phần mới
+      await page.ev(`${chatItem('Crypto Life')}.click(); true`);
+      await page.until(() => !!document.getElementById('m-n2'));
+      await page.ev(`convCache.get('dm2').at -= 31 * 60e3; ${chatItem('Minh Quân')}.click(); true`);
+      await page.until(() => window.__postsCalls.filter((x) => x.channelId === 'dm2' && !x.since && !x.before).length === 2 && !!document.getElementById('m-h2'));
+      await page.ev(`window.__in('h3', 'Anh xem giúp em với', { user: ${quan} }); true`);
+      await chatPoll(page);
+      assert.deepEqual(await chatMsgIds(page), ['m-h1', 'm-h2', 'm-h3']);
+    },
+  },
+  {
+    name: 'Trang Chat không mất tin: trang tin đọc lỗi lúc mở, gửi được tin thì đọc lại — tin cũ và câu trả lời đều hiện',
+    async run({ page, url, assert }) {
+      await page.open(url('chat', 'chat=1&c=chMain'), { width: 1280, height: 820 });
+      await page.until(() => !!document.getElementById('m-n2'));
+      await chatHold(page);
+      // Mở một cuộc trò chuyện đúng lúc mạng chập chờn: trang báo không tải được tin
+      await page.ev(`window.__postsFail = { dm2: 1 }; ${chatItem('Minh Quân')}.click(); true`);
+      await page.until(() => /Không tải được tin nhắn/.test(document.getElementById('msg-list').textContent));
+      // Vẫn gõ và gửi được: trang đọc lại trang tin (có tin cũ), các lần đọc lại sau đó có mốc nên câu trả lời hiện
+      await page.ev(`window.__enter('Anh nghe đây'); true`);
+      await chatSent(page);
+      await page.until(() => !!document.getElementById('m-d1'));
+      assert.deepEqual(await chatMsgIds(page), ['m-d1', 'm-new1']);
+      await page.ev(`window.__in('r1', 'Em cảm ơn anh', { user: { id: 'u51', chatId: 'cu51', username: 'minhquan', fullname: 'Minh Quân', pictureAt: 0 } }); true`);
+      await chatPoll(page);
+      assert.deepEqual(await chatMsgIds(page), ['m-d1', 'm-new1', 'm-r1']);
+      assert.equal(await page.ev(`window.__postsCalls.filter((x) => x.channelId === 'dm2' && !x.since && !x.before).length`), 2); // lần lỗi + một lần đọc lại
+    },
+  },
+  {
+    name: 'Trang Chat không mất tin: gửi kèm tệp rồi có tin tới — tin tới ngay trước và ngay sau lúc gửi đều hiện',
+    async run({ page, url, assert }) {
+      await page.open(url('chat', 'chat=1&c=chMain'), { width: 1280, height: 820 });
+      await page.until(() => !!document.getElementById('m-n2'));
+      await chatHold(page);
+      const reads = (await chatSinces(page)).length;
+      await page.ev(`(() => { const dt = new DataTransfer(); dt.items.add(new File(['abc'], 'ghi-chu.txt', { type: 'text/plain' })); const i = document.getElementById('file-input'); i.files = dt.files; i.dispatchEvent(new Event('change')); return true; })()`);
+      await page.until(() => document.querySelectorAll('#attach-list .att.ok').length === 1);
+      // Một tin tới ngay trước lúc bấm Gửi, một tin tới ngay sau khi tin kèm tệp đã gửi xong
+      await page.ev(`window.__in('b1', 'Tin tới trước lúc gửi tệp'); document.getElementById('send').click(); true`);
+      await chatSent(page);
+      assert.deepEqual(await page.ev(`window.__chatSends[0].fileIds`), ['fu1']);
+      await page.ev(`window.__in('b2', 'Tin tới sau lúc gửi tệp'); true`);
+      // Trang tự đọc lại tin vừa gửi sau giây lát (lấy ảnh / link tệp): chờ lần đọc đó xong rồi mới tới lần đọc lại thường
+      await page.until((n) => (window.__postsCalls || []).filter((x) => x.channelId === 'chMain' && x.since).length > n, 4000, reads);
+      await chatPoll(page);
+      assert.deepEqual((await chatMsgIds(page)).slice(-3), ['m-b1', 'm-new1', 'm-b2']);
+    },
+  },
+  {
+    name: 'Trang Chat không mất tin: bình luận mình gửi — tin và bình luận người khác vừa tới vẫn hiện, số bình luận không tính lại',
+    async run({ page, url, assert }) {
+      await page.open(url('chat', 'chat=1&c=chMain'), { width: 1280, height: 820 });
+      await page.until(() => !!document.querySelector('#m-n2 .tbar-n'));
+      await page.ev(`document.querySelector('#m-n2 .tbar-n').click(); true`);
+      await page.until(() => !document.getElementById('thread').hidden && !!document.getElementById('t-n3'));
+      await chatHold(page);
+      const count = () => page.ev(`document.querySelector('#m-n2 .tbar-n').textContent`);
+      // Ngay trước khi mình gửi bình luận: người khác nhắn một tin vào kênh và bình luận vào chính thread này
+      await page.ev(`window.__in('b1', 'Mọi người ơi'); window.__in('c1', 'Trezor dễ dùng hơn', { rootId: 'n2' }); window.__enter('Cảm ơn anh', 't-text'); true`);
+      await chatSent(page, 't-new1');
+      assert.equal(await count(), '2 bình luận');
+      await chatPoll(page);
+      assert.deepEqual([await page.ev(`!!document.getElementById('m-b1')`), await chatMsgIds(page, 't-list'), await count()], [true, ['t-n2', 't-n3', 't-c1', 't-new1'], '3 bình luận']);
+      // Lần đọc lại sau: không hỏi lại phần đã đọc, số bình luận giữ nguyên
+      await chatPoll(page);
+      assert.deepEqual([(await chatSinces(page)).at(-1), await count(), await page.ev(`!!document.getElementById('m-new1') || !!document.getElementById('m-c1')`)], [await page.ev(`window.__chatSent[0].updateAt`), '3 bình luận', false]);
+      // Lần đọc lại chỉ trả lại chính bình luận mình vừa gửi: không có gì đổi nên không vẽ lại cuộc trò chuyện hay thread
+      await page.ev(`window.__enter('Em hiểu rồi', 't-text'); true`);
+      await chatSent(page, 't-new2');
+      await page.ev(`document.getElementById('t-new2').dataset.kept = '1'; document.getElementById('m-n2').dataset.kept = '1'; true`);
+      await chatPoll(page);
+      assert.deepEqual(await page.ev(`[document.getElementById('t-new2').dataset.kept, document.getElementById('m-n2').dataset.kept, S.lastSync === window.__chatSent[1].updateAt]`), ['1', '1', true]);
+      assert.equal(await count(), '4 bình luận');
+    },
+  },
+  {
+    name: 'Trang Chat không mất tin: tải tin cũ hơn (có tin cũ vừa được sửa) rồi có tin tới',
+    async run({ page, url, assert }) {
+      // Cuộc trò chuyện dài (nhiều ảnh): khung tin không ở sát đầu nên trang không tự tải tin cũ, còn nút "Tải tin cũ hơn"
+      await page.open(url('chat', 'chat=1&c=chMain&imgs=6&me=1'), { width: 1280, height: 820 });
+      await page.until(() => !!document.getElementById('m-n2') && !!document.querySelector('.unread-line'));
+      await chatHold(page);
+      // Một tin mới tới; ngay sau đó người khác sửa một tin cũ (nằm ở trang cũ hơn) và mình bấm "Tải tin cũ hơn"
+      const pre = await page.ev(`(() => {
+        const pre = [S.hasMore, S.loadingOlder, document.getElementById('older').hidden, window.__postsCalls.some((x) => x.before)];
+        const at = window.__in('b1', 'Tin mới lúc đang xem tin cũ');
+        window.__chatOlder = [{ id: 'x1', channelId: 'chMain', user: { id: 'u64', chatId: 'cu64', username: 'baongoc', fullname: 'Bảo Ngọc', pictureAt: 0 }, createAt: at - 50 * 3600e3, updateAt: at + 1, editAt: at + 1, deleted: false, system: false, message: 'Tin cũ vừa được sửa', rootId: '', replyCount: 0, pinned: false, files: [], participants: [], following: false }];
+        document.getElementById('older').click();
+        return pre;
+      })()`);
+      assert.deepEqual(pre, [true, false, false, false]); // tới lúc bấm, trang chưa tự tải tin cũ
+      await page.until(() => !!document.getElementById('m-x1') && !S.loadingOlder);
+      assert.match(await page.ev(`document.getElementById('m-x1').textContent`), /Tin cũ vừa được sửa/);
+      await chatPoll(page);
+      const ids = await chatMsgIds(page);
+      assert.deepEqual([ids[0], ids.at(-1)], ['m-x1', 'm-b1']);
+    },
+  },
+  {
+    name: 'Trang Chat không mất tin: gửi xong khi trang tin đầu còn đang tải rồi mới lỗi — vẫn đọc lại; bấm lại cuộc trò chuyện giữa một lần đọc lại không để lại mốc dở',
+    async run({ page, url, assert }) {
+      const full = (ch) => page.ev(`(window.__postsCalls || []).filter((x) => x.channelId === '${ch}' && !x.since && !x.before).length`);
+      await page.open(url('chat', 'chat=1&c=chMain'), { width: 1280, height: 820 });
+      await page.until(() => !!document.getElementById('m-n2'));
+      await chatHold(page);
+      // 1. Mạng chậm: bấm mở, trang tin đầu còn "Đang tải tin nhắn…" thì mình đã gõ và gửi xong một tin; sau đó trang đầu mới báo lỗi
+      await page.ev(`window.__postsDelay = 1200; window.__postsFail = { dm2: 1 }; ${chatItem('Minh Quân')}.click(); window.__enter('Anh nghe đây'); true`);
+      await page.until(() => S.posts.has('new1') && convLoading.has('dm2')); // lệnh gửi xong trước, trang đầu vẫn đang đọc
+      // Trang đầu lỗi: trang tự đọc lại (tin cũ hiện), từ đó các lần đọc lại có mốc nên câu trả lời của người kia hiện
+      await page.until(() => !!document.getElementById('m-d1') && !!document.getElementById('m-new1'), 6000);
+      await page.ev(`window.__postsDelay = 0; window.__in('r1', 'Em cảm ơn anh', { user: { id: 'u51', chatId: 'cu51', username: 'minhquan', fullname: 'Minh Quân', pictureAt: 0 } }); true`);
+      await chatPoll(page);
+      assert.deepEqual([await chatMsgIds(page), await full('dm2')], [['m-d1', 'm-new1', 'm-r1'], 2]); // lần lỗi + một lần đọc lại
+      // 2. Bấm lại chính cuộc trò chuyện đang mở giữa một lần đọc lại, rồi trang đầu lỗi: kết quả của lần đọc cũ không được để lại mốc
+      //    (có mốc là trang tưởng đã đọc xong trang đầu) — gửi được tin thì trang đọc lại, lịch sử hiện đủ
+      await page.ev(`${chatItem('Crypto Life')}.click(); true`);
+      await page.until(() => !!document.getElementById('m-n2') && !S.polling && !convLoading.size);
+      const heads = await full('chMain');
+      await page.ev(`window.__postsDelay = 600; window.__postsFail = { chMain: 1 }; pollChat(true); ${chatItem('Crypto Life')}.click(); true`);
+      await page.until(() => /Không tải được tin nhắn/.test(document.getElementById('msg-list').textContent) && !S.polling);
+      assert.equal(await page.ev(`S.lastSync`), 0);
+      await page.ev(`window.__postsDelay = 0; window.__enter('Mọi người còn đó không?'); true`);
+      await page.until(() => !!document.getElementById('m-n2') && !!document.getElementById('m-new2') && !document.querySelector('.msg.pending'));
+      assert.equal(await full('chMain'), heads + 2); // lần lỗi + một lần đọc lại
+    },
+  },
+  {
+    name: 'Trang Chat không mất tin: đồng hồ máy chạy nhanh hơn máy chủ — hội thoại trống, gửi tin đầu rồi vẫn nhận được câu trả lời và tin tới ngay trước đó',
+    async run({ page, url, assert }) {
+      // Máy chủ chậm hơn đồng hồ máy 10 phút: mọi tin (của mình lẫn của người kia) mang giờ máy chủ
+      const SKEW = -10 * 60e3;
+      const theirs = (id, text) => page.ev(`(() => { const at = Date.now() + ${SKEW}; window.__in('${id}', '${text}', { user: { id: 'u51', chatId: 'cu51', username: 'minhquan', fullname: 'Minh Quân', pictureAt: 0 }, createAt: at, updateAt: at }); return true; })()`);
+      const openEmpty = async () => {
+        await page.open(url('chat', 'chat=1&c=dm2&empty=dm2'), { width: 1280, height: 820 });
+        await page.until(() => /Chưa có tin nhắn nào/.test(document.getElementById('msg-list').textContent));
+        await chatHold(page);
+        await page.ev(`window.__chatSkew = ${SKEW}; true`);
+      };
+      // 1. Mình gửi tin đầu tiên, người kia trả lời: câu trả lời hiện ở lần đọc lại kế
+      await openEmpty();
+      await page.ev(`window.__enter('Chào Quân'); true`);
+      await chatSent(page);
+      await theirs('r1', 'Dạ em chào anh');
+      await chatPoll(page);
+      assert.deepEqual(await chatMsgIds(page), ['m-new1', 'm-r1']);
+      assert.ok(await page.ev(`S.lastSync <= Date.now() + ${SKEW}`)); // mốc đã về giờ máy chủ
+      // 2. Tin của người kia tới ngay trước tin đầu của mình: cũng không mất
+      await openEmpty();
+      await theirs('q1', 'Anh ơi cho em hỏi');
+      await page.ev(`window.__enter('Chào Quân'); true`);
+      await chatSent(page);
+      await chatPoll(page);
+      assert.deepEqual(await chatMsgIds(page), ['m-q1', 'm-new1']);
+    },
+  },
+  {
     name: 'Bảng Giao diện: BeinFusion Silk (Lụa) — thanh cộng đồng, tuỳ chỉnh, giữ khi mở lại; BeinFusion theme không đổi',
     async run({ page, url, assert }) {
       await page.open(url('chat', 'chat=1&tree=1&c=chMain'), { width: 1440, height: 900 });
@@ -2281,7 +2833,9 @@ export const scenarios = [
       // Bình luận mới của người khác: hiện trong thread, số bình luận tăng (không tính lại khi đọc lần sau)
       await page.ev(`window.__chatIncoming = [{ id: 'in2', channelId: 'chMain', user: { id: 'u70', chatId: 'cu70', username: 'moi', fullname: 'Người mới', pictureAt: 0 }, createAt: Date.now(), updateAt: Date.now() + 1, editAt: 0, deleted: false, system: false, message: 'Mình dùng Ledger', rootId: 'n2', replyCount: 0, pinned: false, files: [], participants: [], following: false }]; true`);
       await page.until(() => !!document.getElementById('t-in2') && document.querySelector('#m-n2 .tbar-n').textContent === '3 bình luận', 9000);
-      await new Promise((r) => setTimeout(r, 4500));
+      // Người kia sửa bình luận: máy chủ trả lại nó ở lần đọc sau — nội dung đổi, số bình luận không tính lại
+      await page.ev(`window.__chatIncoming = window.__chatIncoming.map((p) => ({ ...p, message: 'Mình dùng Ledger Nano', editAt: Date.now(), updateAt: Date.now() })); true`);
+      await page.until(() => /Ledger Nano/.test(document.getElementById('t-in2')?.textContent || ''), 9000);
       assert.equal(await page.ev(`document.querySelector('#m-n2 .tbar-n').textContent`), '3 bình luận');
       assert.deepEqual(await page.ev(`[!!document.getElementById('m-in2'), !!document.getElementById('m-n3'), !!document.getElementById('m-new1')]`), [false, false, false]); // bình luận không lẫn vào cuộc trò chuyện
       // Đóng bằng Esc trong ô bình luận
