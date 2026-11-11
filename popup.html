@@ -42,6 +42,22 @@
     </div>
   </section>
 
+  <!-- Hỏi lại trước khi tắt Chạy thử lúc đang bật tự xử lý (popup.js askDryOff); Esc = giữ Chạy thử -->
+  <dialog id="dry-ask" class="ask" role="alertdialog" aria-labelledby="dry-ask-title" aria-describedby="dry-ask-text">
+    <form method="dialog">
+      <div class="ask-title" id="dry-ask-title">Tắt Chạy thử?</div>
+      <div id="dry-ask-text">
+        Đang bật tự xử lý:
+        <ul id="dry-ask-list"></ul>
+        Từ lần quét tới, addon sẽ gửi thật lên Beincom. <b class="ask-warn" id="dry-ask-warn">Ẩn và từ chối không hoàn tác được.</b>
+      </div>
+      <div class="ask-actions">
+        <button value="keep" id="dry-ask-keep" class="keep" autofocus>Giữ Chạy thử</button>
+        <button value="off" id="dry-ask-off" class="danger">Tắt Chạy thử</button>
+      </div>
+    </form>
+  </dialog>
+
   <footer>
     <div class="ver"><span id="version"></span> · Tác giả: <b>Kai | Crypto Life</b></div>
   </footer>

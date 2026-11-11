@@ -457,7 +457,11 @@ function makeEnv({ data = fixture(), settings = {}, rules = {}, postRules = {}, 
     if (path.match(/^content\/contents\/pinned-content\/\w+$/) && method === 'PUT') return reply(200, ok(true));
     if ((m = path.match(/^content\/contents\/(\w+)$/)) && method === 'GET') {
       if (m[1].startsWith('gone')) return reply(404, { code: 'content.not_found', meta: { message: 'Content not found' } });
-      const found = [...Object.values(data.timeline).flat(), ...Object.values(data.scheduled || {}).flat()].find((x) => x.id === m[1]);
+      // data.detailFail: { [id]: mã HTTP } — đọc chi tiết bài này lỗi (500, 401…)
+      const fail = data.detailFail?.[m[1]];
+      if (fail) return reply(fail, { code: fail === 401 ? 'unauthorized' : 'internal_server_error', meta: { message: fail === 401 ? 'Unauthorized' : 'Internal Server Error' } });
+      // data.made: bài vừa đăng / hẹn giờ qua API trong test này
+      const found = [...Object.values(data.timeline).flat(), ...Object.values(data.scheduled || {}).flat(), ...Object.values(data.made || {})].find((x) => x.id === m[1]);
       return found ? reply(200, ok({ status: 'PUBLISHED', mentions: {}, tags: [], series: [], setting: { canComment: true, canReact: true, isImportant: false, importantExpiredAt: null }, ...found })) : reply(404, { code: 'api.not_found' });
     }
     if (path.match(/^content\/contents\/\w+\/setting$/) && method === 'PUT') return reply(200, ok(true));
@@ -505,9 +509,13 @@ function makeEnv({ data = fixture(), settings = {}, rules = {}, postRules = {}, 
     if (path.match(/^content\/manage\/groups\/\w+\/articles$/) && method === 'POST') return reply(201, ok({ id: `gart${++data.postSeq}`, status: 'DRAFT', type: 'ARTICLE' }));
     if ((m = path.match(/^content\/articles\/(\w+)\/(publish|schedule)$/)) && method === 'PUT') {
       if (data.failArticle) return reply(400, { code: 'api.validation_error', meta: { message: 'coverMedia is invalid' } });
+      (data.made ||= {})[m[1]] = { id: m[1], type: 'ARTICLE', status: m[2] === 'publish' ? 'PUBLISHED' : 'WAITING_SCHEDULE', actor: { id: 'me1', username: 'kai', fullname: 'Kai Crypto' } };
       return reply(200, ok({ id: m[1], type: 'ARTICLE', status: m[2] === 'publish' ? 'PUBLISHED' : 'WAITING_SCHEDULE' }));
     }
-    if (path.match(/^content\/articles\/\w+$/) && method === 'DELETE') return reply(200, ok(true));
+    if ((m = path.match(/^content\/articles\/(\w+)$/)) && method === 'DELETE') {
+      delete data.made?.[m[1]];
+      return reply(200, ok(true));
+    }
     if ((path === 'content/series' || path.match(/^content\/manage\/groups\/\w+\/series$/)) && method === 'POST') return reply(201, ok({ id: `ser${++data.postSeq}`, type: 'SERIES', status: 'PUBLISHED' }));
     // Đăng bài
     if (path === 'content/posts' && method === 'POST') return reply(201, ok({ id: `new${++data.postSeq}`, status: 'DRAFT' }));
@@ -517,10 +525,15 @@ function makeEnv({ data = fixture(), settings = {}, rules = {}, postRules = {}, 
     }
     if ((m = path.match(/^content\/posts\/(\w+)\/(publish|schedule)$/)) && method === 'PUT') {
       if (data.failPublish) return reply(400, { code: 'api.validation_error', meta: { message: 'Content is invalid' } });
+      (data.made ||= {})[m[1]] = { id: m[1], type: 'POST', status: m[2] === 'publish' ? 'PUBLISHED' : 'WAITING_SCHEDULE', actor: { id: 'me1', username: 'kai', fullname: 'Kai Crypto' } };
       return reply(200, ok({ id: m[1], status: m[2] === 'publish' ? 'PUBLISHED' : 'WAITING_SCHEDULE' }));
     }
     const goneReply = () => reply(400, { code: 'content.not_found', meta: { message: 'Content not found' } });
-    if ((m = path.match(/^content\/posts\/(\w+)$/)) && method === 'DELETE') return m[1].startsWith('gone') ? goneReply() : reply(200, ok(true));
+    if ((m = path.match(/^content\/posts\/(\w+)$/)) && method === 'DELETE') {
+      if (m[1].startsWith('gone')) return goneReply();
+      delete data.made?.[m[1]];
+      return reply(200, ok(true));
+    }
     if ((m = path.match(/^content\/contents\/(gone\w*)\/(hide|reschedule)$/))) return goneReply();
     if ((m = path.match(/^content\/manage\/groups\/(\w+)\/contents\/scheduled$/))) {
       const all = (data.scheduled[m[1]] || []).filter((x) => (x.type || 'POST') === (q.type || 'POST'));
@@ -1104,6 +1117,188 @@ test('bài định kỳ: mỗi bài một lần hẹn giờ (nhật ký ghi th�
   // Đổi giờ vẫn chỉ một bài
   const bad = await env.send({ type: 'scheduleAct', action: 'reschedule', contentIds: ['new1', 'new2'] });
   assert.match(bad.message, /Thiếu bài/);
+});
+
+// ---------- Huỷ / đổi giờ bài hẹn giờ: đọc trạng thái thật trước khi ghi ----------
+// Danh sách hẹn giờ trên Dashboard có thể đã cũ, mà DELETE content/posts/{id} cũng là lệnh xoá bài đã đăng.
+
+const contentCalls = (env, from = 0) => env.calls.slice(from).filter((c) => /^(GET|PUT|DELETE) content\/(contents|posts|articles)\//.test(c));
+const PUBLISHED_CANCEL = 'Bài đã đăng — không huỷ được ở đây; muốn gỡ thì dùng Xoá bài';
+
+test('huỷ bài hẹn giờ nhưng bài đã đăng (danh sách cũ): không gửi DELETE, báo rõ bài đã đăng, nhật ký ghi lý do', async () => {
+  const env = makeEnv({ settings: { dryRun: false } });
+  await scan(env);
+  // t1 đang ở timeline: đã đăng
+  const r = await env.send({ type: 'scheduleAct', action: 'cancel', contentId: 't1', snippet: 'Tin tức thị trường hôm nay', groupName: 'Crypto Life' });
+  assert.deepEqual(writes(env), []);
+  assert.deepEqual([r.status, r.ok, r.failed, r.published, r.errors], ['ok', 0, 1, 1, [PUBLISHED_CANCEL]]);
+  assert.match(r.message, /^1 bài đã đăng rồi nên không bị xoá/);
+  const e = env.storage.log[0];
+  assert.deepEqual([e.kind, e.action, e.contentId, e.status, e.message, e.published], ['compose', 'cancel', 't1', 'error', PUBLISHED_CANCEL, true]);
+  assert.equal(env.storage.actionJournal, undefined);
+  // Article đã đăng cũng vậy
+  env.data.made = { ar9: { id: 'ar9', type: 'ARTICLE', status: 'PUBLISHED' } };
+  const a = await env.send({ type: 'scheduleAct', action: 'cancel', contentId: 'ar9', contentType: 'ARTICLE' });
+  assert.deepEqual([a.ok, a.published, writes(env)], [0, 1, []]);
+});
+
+test('huỷ bài hẹn giờ lỗi (SCHEDULE_FAILED) và bài còn chờ: đọc trạng thái rồi mới DELETE; bài không còn trên Beincom thì coi như đã huỷ', async () => {
+  const data = fixture();
+  data.scheduled.gCL.push(post('sf1', 'Bài hẹn giờ bị lỗi', { status: 'SCHEDULE_FAILED', scheduledAt: '2026-10-08T02:00:00Z' }));
+  const env = makeEnv({ data, settings: { dryRun: false } });
+  await scan(env);
+  const from = env.calls.length;
+  const r = await env.send({ type: 'scheduleAct', action: 'cancel', contentId: 'sf1' });
+  assert.deepEqual([r.status, r.ok, r.failed, r.published, r.message], ['ok', 1, 0, 0, '']);
+  assert.deepEqual(contentCalls(env, from), ['GET content/contents/sf1', 'DELETE content/posts/sf1']);
+  assert.deepEqual([env.storage.log[0].contentId, env.storage.log[0].status], ['sf1', 'ok']);
+  // Bài không còn (đã bị xoá trên web): không cần DELETE nữa, vẫn tính là xong
+  const gone = await env.send({ type: 'scheduleAct', action: 'cancel', contentId: 'goneSched' });
+  assert.deepEqual([gone.ok, gone.gone, gone.failed, gone.published], [1, 1, 0, 0]);
+  assert.deepEqual(writes(env), ['DELETE content/posts/sf1']);
+  assert.match(env.storage.log[0].message, /không còn trên Beincom/);
+});
+
+test('huỷ cả chuỗi có 1 bài đã đăng + 2 bài còn chờ: xét từng bài, đúng 2 DELETE, kết quả nêu 1 bài đã đăng không bị xoá', async () => {
+  const env = makeEnv({ settings: { dryRun: false } });
+  await scan(env);
+  // Nhật ký dở dang (Dashboard hiện tiến độ, ghi bù khi nền bị tắt): mỗi bài một dòng, kể cả bài bị bỏ qua
+  const journals = [];
+  const set = env.ctx.chrome.storage.local.set;
+  env.ctx.chrome.storage.local.set = async (o) => {
+    if (o.actionJournal) journals.push(structuredClone(o.actionJournal.entries).map((e) => [e.contentId, e.status])); // structuredClone: về realm của test
+    return set(o);
+  };
+  const from = env.calls.length;
+  const r = await env.send({ type: 'scheduleAct', action: 'cancel', contentIds: ['t1', 's1', 's2'], snippet: '🔁 Bản tin tuần', groupName: 'Crypto Life' });
+  // Trạng thái đọc ngay trước lệnh xoá của chính bài đó
+  assert.deepEqual(contentCalls(env, from), ['GET content/contents/t1', 'GET content/contents/s1', 'DELETE content/posts/s1', 'GET content/contents/s2', 'DELETE content/posts/s2']);
+  assert.deepEqual([r.status, r.ok, r.failed, r.published, r.errors], ['ok', 2, 1, 1, [PUBLISHED_CANCEL]]);
+  assert.match(r.message, /^1 bài đã đăng rồi nên không bị xoá/);
+  assert.deepEqual(env.storage.log.slice(0, 3).map((e) => [e.contentId, e.action, e.status, e.message]), [
+    ['s2', 'cancel', 'ok', ''],
+    ['s1', 'cancel', 'ok', ''],
+    ['t1', 'cancel', 'error', PUBLISHED_CANCEL],
+  ]);
+  assert.deepEqual(journals.at(-1), [['t1', 'error'], ['s1', 'ok'], ['s2', 'ok']]);
+  assert.equal(env.storage.actionJournal, undefined);
+});
+
+test('đổi giờ bài đã đăng: không gửi PUT, báo rõ; bài còn chờ thì đổi như cũ', async () => {
+  const env = makeEnv({ settings: { dryRun: false } });
+  await scan(env);
+  const at = new Date(Date.now() + 86400e3).toISOString();
+  const r = await env.send({ type: 'scheduleAct', action: 'reschedule', contentId: 't1', scheduledAt: at, snippet: 'Tin tức thị trường hôm nay' });
+  assert.deepEqual(writes(env), []);
+  assert.deepEqual([r.status, r.ok, r.failed, r.published, r.errors], ['ok', 0, 1, 1, ['Bài đã đăng — không đổi giờ được nữa']]);
+  assert.match(r.message, /đã đăng rồi nên không đổi giờ/);
+  assert.deepEqual([env.storage.log[0].action, env.storage.log[0].status, env.storage.log[0].scheduledAt], ['reschedule', 'error', at]);
+  const from = env.calls.length;
+  const ok1 = await env.send({ type: 'scheduleAct', action: 'reschedule', contentId: 's1', scheduledAt: at });
+  assert.deepEqual([ok1.ok, ok1.published], [1, 0]);
+  assert.deepEqual(contentCalls(env, from), ['GET content/contents/s1', 'PUT content/contents/s1/reschedule']);
+});
+
+test('huỷ / đổi giờ khi đọc trạng thái lỗi, trạng thái lạ hoặc hết phiên: không gửi lệnh ghi, báo lỗi rõ', async () => {
+  const data = fixture();
+  data.scheduled.gCL.push(post('sp1', 'Bài đang xử lý video', { status: 'PROCESSING', scheduledAt: '2026-10-08T02:00:00Z' }), post('sp2', 'Bài trạng thái mới', { status: 'SOMETHING_NEW' }), post('sp3', 'Bài không rõ trạng thái', { status: '' }));
+  data.detailFail = { s1: 500 };
+  const env = makeEnv({ data, settings: { dryRun: false } });
+  await scan(env);
+  // Đọc trạng thái lỗi (500)
+  const e500 = await env.send({ type: 'scheduleAct', action: 'cancel', contentId: 's1' });
+  assert.deepEqual([e500.status, e500.ok, e500.failed, e500.published], ['ok', 0, 1, 0]);
+  assert.match(e500.errors[0], /Đọc trạng thái bài lỗi \(chưa huỷ\): Internal Server Error/);
+  assert.equal(env.storage.log[0].status, 'error');
+  const at = new Date(Date.now() + 86400e3).toISOString();
+  assert.match((await env.send({ type: 'scheduleAct', action: 'reschedule', contentId: 's1', scheduledAt: at })).errors[0], /Đọc trạng thái bài lỗi \(chưa đổi giờ\)/);
+  // Trạng thái không phải hẹn giờ cũng không phải đã đăng
+  const odd = await env.send({ type: 'scheduleAct', action: 'cancel', contentIds: ['sp1', 'sp2', 'sp3'] });
+  assert.deepEqual([odd.ok, odd.failed, odd.published], [0, 3, 0]);
+  assert.deepEqual(odd.errors, [
+    'Bài không còn hẹn giờ (trạng thái: Đang xử lý) — chưa huỷ',
+    'Bài không còn hẹn giờ (trạng thái: SOMETHING_NEW) — chưa huỷ',
+    'Bài không còn hẹn giờ (trạng thái: không rõ) — chưa huỷ',
+  ]);
+  assert.deepEqual(writes(env), []);
+  // Hết phiên đăng nhập lúc đọc trạng thái: báo cần đăng nhập, dừng cả loạt
+  data.detailFail = { s1: 401 };
+  const r401 = await env.send({ type: 'scheduleAct', action: 'cancel', contentIds: ['s1', 's2'] });
+  assert.deepEqual([r401.status, r401.ok, r401.failed], ['need_login', 0, 1]);
+  assert.match(r401.message, /đăng nhập lại/);
+  assert.deepEqual(writes(env), []);
+  assert.ok(!env.calls.includes('GET content/contents/s2'));
+  assert.deepEqual([stateOf(env).lastResult.status, env.badge.text], ['need_login', '!']);
+});
+
+test('huỷ cả chuỗi mà hết phiên ở bài thứ hai: bài đầu đã huỷ xong, dừng tại đó — bài sau không bị đọc hay ghi', async () => {
+  const data = fixture();
+  data.scheduled.gCL.push(post('s3', 'Bài hẹn giờ cuối', { status: 'WAITING_SCHEDULE', scheduledAt: '2026-10-11T02:00:00Z' }));
+  data.detailFail = { s2: 401 };
+  const env = makeEnv({ data, settings: { dryRun: false } });
+  await scan(env);
+  const from = env.calls.length;
+  const r = await env.send({ type: 'scheduleAct', action: 'cancel', contentIds: ['s1', 's2', 's3'], snippet: '🔁 Bản tin tuần' });
+  assert.deepEqual(contentCalls(env, from), ['GET content/contents/s1', 'DELETE content/posts/s1', 'GET content/contents/s2']);
+  assert.deepEqual([r.status, r.ok, r.failed, r.published], ['need_login', 1, 1, 0]);
+  assert.deepEqual(writes(env), ['DELETE content/posts/s1']);
+  assert.deepEqual(env.storage.log.slice(0, 2).map((e) => [e.contentId, e.status]), [['s2', 'error'], ['s1', 'ok']]);
+  assert.deepEqual([stateOf(env).lastResult.status, env.badge.text], ['need_login', '!']);
+});
+
+test('Chạy thử: huỷ / đổi giờ bài hẹn giờ không gửi lệnh ghi (cũng không đọc trạng thái, như sửa bài hẹn giờ)', async () => {
+  const env = makeEnv(); // dryRun mặc định bật
+  await scan(env);
+  const from = env.calls.length;
+  const r = await env.send({ type: 'scheduleAct', action: 'cancel', contentIds: ['t1', 's1'] });
+  assert.deepEqual([r.status, r.dryRun, r.dry, r.ok, r.failed, r.published, r.message], ['ok', true, 2, 0, 0, 0, '']);
+  const r2 = await env.send({ type: 'scheduleAct', action: 'reschedule', contentId: 's1', scheduledAt: new Date(Date.now() + 86400e3).toISOString() });
+  assert.deepEqual([r2.dryRun, r2.dry], [true, 1]);
+  assert.deepEqual(contentCalls(env, from), []);
+  assert.deepEqual(writes(env), []);
+  assert.deepEqual(env.storage.log.slice(0, 3).map((e) => [e.action, e.status]), [['reschedule', 'dry'], ['cancel', 'dry'], ['cancel', 'dry']]);
+});
+
+test('scheduleState: phân biệt còn hẹn giờ / đã đăng / trạng thái khác / bài không còn / cần đăng nhập / đọc lỗi', async () => {
+  const env = makeEnv();
+  const asked = [];
+  const state = (status, body) => env.ctx.scheduleState({ call: async (...a) => (asked.push(a.join(' ')), { status, body }) }, 'x1');
+  const kind = async (status, body) => (await state(status, body)).kind;
+  assert.equal(await kind(200, ok({ id: 'x1', status: 'WAITING_SCHEDULE' })), 'scheduled');
+  assert.equal(await kind(200, ok({ id: 'x1', status: 'SCHEDULE_FAILED' })), 'scheduled');
+  assert.equal(await kind(200, ok({ id: 'x1', status: 'PUBLISHED' })), 'published');
+  assert.equal(await kind(200, ok({ id: 'x1', status: 'PROCESSING' })), 'other');
+  assert.equal(await kind(200, ok({ id: 'x1' })), 'other');
+  assert.equal(await kind(200, ok(null)), 'other');
+  assert.equal(await kind(404, { code: 'content.not_found', meta: { message: 'Content not found' } }), 'gone');
+  assert.equal(await kind(401, { code: 'unauthorized' }), 'need_login');
+  assert.equal(await kind(500, { code: 'internal_server_error' }), 'error');
+  assert.equal(await kind(0, null), 'error');
+  assert.equal(await kind(200, { code: 'api.something_else', data: { status: 'WAITING_SCHEDULE' } }), 'error');
+  assert.deepEqual([...new Set(asked)], ['GET content/contents/x1']);
+  const st = await state(200, ok({ id: 'x1', status: 'PUBLISHED', actor: { id: 'me1' } }));
+  assert.deepEqual([st.status, st.data.actor.id, st.r.status], ['PUBLISHED', 'me1', 200]);
+});
+
+test('sửa bài hẹn giờ khi bài đã đăng / không còn / đọc lỗi / hết phiên: không gửi PUT, câu báo như cũ', async () => {
+  const data = fixture();
+  const mine = { actor: { id: 'me1', username: 'kai', fullname: 'Kai Crypto', avatar: '' } };
+  data.timeline.gCL.push(post('m1', 'Bài của tôi đã đăng', mine));
+  data.scheduled.gCL.push(post('m2', 'Bài hẹn của tôi', { ...mine, status: 'WAITING_SCHEDULE', scheduledAt: new Date(Date.now() + 5 * 3600e3).toISOString() }));
+  const env = makeEnv({ data, settings: { dryRun: false } });
+  await scan(env);
+  const at = new Date(Date.now() + 8 * 3600e3).toISOString();
+  const edit = (id) => env.send({ type: 'editScheduled', id, groupIds: ['gCL'], content: 'Nội dung mới', scheduledAt: at });
+  const pub = await edit('m1');
+  assert.deepEqual([pub.status, pub.failed, pub.message], ['error', 1, 'Bài đã đăng hoặc không còn hẹn giờ — sửa như bài đã đăng']);
+  assert.equal((await edit('goneMine')).message, 'Bài không còn trên Beincom (đã bị xoá)');
+  data.detailFail = { m2: 500 };
+  assert.equal((await edit('m2')).message, 'Đọc bài lỗi: Internal Server Error');
+  data.detailFail = { m2: 401 };
+  assert.equal((await edit('m2')).status, 'need_login');
+  assert.deepEqual(writes(env), []);
+  data.detailFail = {};
+  assert.deepEqual([(await edit('m2')).ok, writes(env)], [1, ['PUT content/posts/m2/schedule']]);
 });
 
 // ---------- Tải lại từng phần ----------

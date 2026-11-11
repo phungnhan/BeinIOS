@@ -83,6 +83,20 @@ li a { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: va
 li .cnt { color: var(--accent); font-weight: 600; white-space: nowrap; }
 li.empty { color: var(--muted); border: 0; }
 
+/* Hộp hỏi lại (tắt Chạy thử khi đang bật tự xử lý): nổi trên popup nên popup không đổi kích thước */
+.ask { width: calc(100% - 32px); max-width: 300px; padding: 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg); color: var(--fg); font-size: 12px; }
+.ask::backdrop { background: rgba(10, 8, 30, .45); }
+.ask-title { font-size: 14px; font-weight: 700; margin-bottom: 4px; }
+.ask ul { list-style: disc; margin: 2px 0 6px; padding-left: 18px; }
+.ask li { display: list-item; padding: 0; border: 0; font-weight: 600; }
+.ask-warn { display: block; margin-top: 4px; color: var(--err); }
+.ask-warn[hidden] { display: none; }
+.ask-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
+.ask-actions button { padding: 6px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--card); color: var(--fg); font: inherit; font-weight: 600; cursor: pointer; }
+.ask-actions button.keep { background: var(--accent); border-color: var(--accent); color: #fff; }
+.ask-actions button.danger { color: var(--err); }
+.ask-actions button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
 footer { margin-top: 8px; text-align: center; font-size: 12px; }
 .ver { color: var(--muted); font-size: 11px; }
 .label-row { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }

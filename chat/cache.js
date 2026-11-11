@@ -31,17 +31,16 @@ function keepRecent(map, key, val, max) {
   while (map.size > max) map.delete(map.keys().next().value);
 }
 
-// Trang tin mới nhất -> bản nhớ (như khi mở cuộc trò chuyện: tin gốc; bình luận chỉ đánh dấu đã thấy)
+// Trang tin mới nhất -> bản nhớ (như khi mở cuộc trò chuyện: tin gốc; bình luận chỉ đánh dấu đã thấy). Mốc đọc lại tính như
+// lúc mở (BG.chatSyncMark): trang chưa có tin nào vẫn có mốc, mở từ bản nhớ vẫn đọc tiếp được phần mới
 function convFromPage(r) {
   const posts = new Map();
   const seenReplies = new Set();
-  let lastSync = 0;
   for (const p of r.posts || []) {
     if (p.rootId) seenReplies.add(p.id);
     else posts.set(p.id, p);
-    lastSync = Math.max(lastSync, p.updateAt || 0, p.createAt || 0, p.editAt || 0);
   }
-  return { posts, hasMore: !!r.hasMore, lastSync, seenReplies, loadedAt: r.at, at: r.at };
+  return { posts, hasMore: !!r.hasMore, lastSync: BG.chatSyncMark(0, r.posts, r.at), seenReplies, loadedAt: r.at, at: r.at };
 }
 
 // Trang tin mới nhất của một kênh. Kết quả kèm `at` (lúc bắt đầu đọc); kênh không đang mở thì nhớ lại
@@ -58,7 +57,8 @@ function fetchConv(id) {
   return p;
 }
 
-// Rời cuộc trò chuyện: nhớ tin đang có (kể cả tin cũ đã tải thêm) để mở lại hiện ngay
+// Rời cuộc trò chuyện: nhớ tin đang có (kể cả tin cũ đã tải thêm) để mở lại hiện ngay, kèm mốc đọc lại để đọc tiếp từ đúng chỗ
+// đã đọc. Mốc còn 0 là trang đầu chưa đọc xong: chưa có gì để nhớ
 function saveConv() {
   const c = S.sel;
   if (!c || !S.lastSync) return;

@@ -209,6 +209,7 @@ function confirmDialog({ title, text, names = [], okText, danger = false, extra 
 // chunk: tên các danh sách trong lệnh có thể chia (vd ['contentIds']). Loạt lớn được chia thành nhiều lệnh nhỏ, mỗi lệnh
 // khoảng 2 phút kể cả thời gian nghỉ giữa hai thao tác — trình duyệt tắt service worker nếu một lệnh chạy quá 5 phút.
 // last(msg, isLast): sửa lệnh của từng đợt (vd chỉ cấm ở đợt cuối). Khi đang làm: thanh tiến độ với nút Dừng.
+// failText(r): câu báo riêng khi có mục lỗi (vd nền không xoá bài hẹn giờ đã đăng); trả '' thì dùng câu chung "Xong X, lỗi Y".
 const CHUNK_SECONDS = 120;
 let run = null; // { total, offset, stop }
 
@@ -238,7 +239,7 @@ function renderRun(doneInChunk = 0) {
   $('btn-bulk-stop').disabled = run.stop;
 }
 
-async function send(msg, doneText, { chunk = null, last = (m) => m } = {}) {
+async function send(msg, doneText, { chunk = null, last = (m) => m, failText = null } = {}) {
   busy = true;
   renderAll();
   const keys = chunk || [];
@@ -282,7 +283,7 @@ async function send(msg, doneText, { chunk = null, last = (m) => m } = {}) {
     else if (r?.status === 'error' && !r.failed) toast(r.message || 'Có lỗi', 'err');
     else if (r?.dryRun) toast(`Chạy thử: đã ghi ${r.dry} thao tác vào nhật ký, chưa gửi lên Beincom.`, 'warn');
     else if (r?.cancelled) toast(`Đã dừng: xong ${r.ok ?? 0}${r.failed ? `, lỗi ${r.failed}` : ''}, còn ${r.left} mục chưa làm. Nhật ký ghi đủ những mục đã làm.`, 'warn');
-    else if (r?.failed) toast(`Xong ${r.ok}, lỗi ${r.failed}: ${r.errors.join('; ')}`, 'err');
+    else if (r?.failed) toast(failText?.(r) || `Xong ${r.ok}, lỗi ${r.failed}: ${r.errors.join('; ')}`, 'err');
     else toast(doneText(r?.ok ?? 0) + (r?.gone ? ` (${r.gone} bài đã bị xoá trên Beincom từ trước, đã bỏ khỏi danh sách)` : ''));
     return r;
   } catch (e) {

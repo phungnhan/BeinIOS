@@ -2,6 +2,12 @@
 
 Mỗi bản một mục, bản mới nhất ở trên. Dashboard tự hiện các mục mới sau khi cập nhật (bấm "Có gì mới" ở cuối trang để xem lại).
 
+## v0.70.1 — 11/11/2026
+- **Huỷ / Đổi giờ bài hẹn giờ an toàn hơn**: ngay trước khi gửi lệnh, addon đọc lại trạng thái từng bài. Chỉ huỷ hoặc đổi giờ bài còn chờ đăng hay hẹn giờ lỗi; bài **đã đăng** thì giữ nguyên và báo rõ (muốn gỡ thì dùng Xoá bài). Trước đây, nếu Dashboard mở lâu mà danh sách đã cũ, bấm Huỷ có thể xoá luôn bài vừa được Beincom đăng. Huỷ cả chuỗi xét từng bài và báo số bài đã đăng không bị xoá. Bài đã quá giờ hẹn mà danh sách còn ghi "đang chờ" thì Dashboard tự tải lại danh sách trước khi hỏi.
+- **Trang Chat không còn bỏ sót tin**: tin người khác gửi ngay trước lúc bạn bấm Gửi giờ vẫn hiện (trước đây có thể bị bỏ qua tới khi tải lại trang). Áp dụng cả cho tin kèm tệp, bình luận trong thread và cuộc trò chuyện chưa có tin nào.
+- **Popup hỏi lại trước khi tắt Chạy thử**: bỏ tick Chạy thử trong popup khi đang bật Tự duyệt / Tự từ chối / Tự ẩn spam / Tự duyệt bài tin cậy thì popup nêu các công tắc đang bật và hỏi lại; chọn "Giữ Chạy thử" (hoặc đóng popup) thì không có gì thay đổi.
+- Sau khi cập nhật: vào trang quản lý tiện ích (chrome://extensions hoặc edge://extensions) bấm **Tải lại** BeinFusion — phần chạy nền đổi.
+
 ## v0.70.0 — 09/11/2026
 - **Ảnh từ Guar Studio**: chọn ảnh tạo bằng AI, ảnh phân cảnh của từng dự án (đúng tên dự án) và ảnh Thiết kế ảnh trong Guar Studio — ứng dụng sản xuất nội dung của bạn chạy trên chính máy này — để đính kèm khi đăng bài, chèn vào Article, hoặc gửi kèm bình luận. Hộp chọn ảnh dạng lưới, chia theo nhóm, chọn nhiều ảnh (tối đa theo chỗ còn trống).
   - Nối một lần: Cài đặt › Tích hợp › **Guar Studio** → Chép **Mã của BeinFusion**; trong Guar Studio vào Cài đặt › Kết nối › BeinFusion, bật "Cho phép BeinFusion đọc ảnh", dán mã, Lưu kết nối; quay lại bấm **Kiểm tra kết nối** (cho phép khi trình duyệt hỏi quyền truy cập 127.0.0.1). Sau đó nút **Guar Studio** hiện ở ô đăng bài, thanh công cụ Article và ô bình luận.

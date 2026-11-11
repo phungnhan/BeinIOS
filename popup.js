@@ -140,6 +140,7 @@ async function refresh() {
 
 function render(s, info) {
   for (const key of POPUP_SETTINGS) $(key).checked = !!s[key];
+  if ($('dry-ask').open) $('dryRun').checked = false; // đang hỏi tắt Chạy thử: ô giữ trạng thái vừa bấm tới khi trả lời
   $('master').classList.toggle('off', !s.active);
   $('master-text').textContent = s.active ? 'Addon đang hoạt động' : 'Đã tắt tất cả chức năng';
   document.querySelector('.settings').classList.toggle('paused', !s.active);
@@ -163,10 +164,45 @@ function render(s, info) {
   renderTodo(info.todo || [], flaggedPosts, reports, flaggedComments);
 }
 
+async function saveSetting(key, value) {
+  const { settings } = await chrome.storage.local.get('settings');
+  await chrome.storage.local.set({ settings: { ...BG.DEFAULT_SETTINGS, ...settings, [key]: value } });
+}
+
+// Tắt Chạy thử khi đang bật tự xử lý: lần quét tới sẽ duyệt / từ chối / ẩn thật (ẩn, từ chối không hoàn tác) nên hỏi lại, chưa ghi.
+// Hộp hỏi nằm trong trang (không dùng confirm()); chỉ nút "Tắt Chạy thử" mới ghi — Esc, "Giữ Chạy thử" hay đóng popup đều giữ nguyên.
+// noUndo: có công tắc ẩn / từ chối đang bật — chỉ lúc đó mới hiện dòng đỏ "không hoàn tác được"
+function askDryOff(autos, noUndo) {
+  const ask = $('dry-ask');
+  $('dry-ask-warn').hidden = !noUndo;
+  $('dry-ask-list').replaceChildren(
+    ...autos.map((label) => {
+      const li = document.createElement('li');
+      li.textContent = label;
+      return li;
+    }),
+  );
+  ask.returnValue = ''; // giá trị của lần hỏi trước còn lưu: Esc không được tính là đồng ý
+  $('dryRun').checked = false;
+  if (!ask.open) ask.showModal();
+}
+$('dry-ask').addEventListener('close', () => {
+  if ($('dry-ask').returnValue === 'off') saveSetting('dryRun', false);
+  else {
+    $('dryRun').checked = true;
+    refresh(); // rồi theo đúng kho: nơi khác vừa tắt Chạy thử trong lúc đang hỏi thì ô cũng phải cho thấy vậy
+  }
+});
+
 for (const key of POPUP_SETTINGS) {
   $(key).addEventListener('change', async () => {
-    const { settings } = await chrome.storage.local.get('settings');
-    await chrome.storage.local.set({ settings: { ...BG.DEFAULT_SETTINGS, ...settings, [key]: $(key).checked } });
+    const on = $(key).checked;
+    if (key === 'dryRun' && !on) {
+      const { settings } = await chrome.storage.local.get('settings');
+      const autos = BG.autoSwitchesOn(settings);
+      if (autos.length) return askDryOff(autos, !!(settings.autoDecline || settings.autoHideSpam));
+    }
+    await saveSetting(key, on);
   });
 }
 

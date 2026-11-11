@@ -293,6 +293,20 @@ async function doEditPost({ id, groupIds = [], content, media = null, mentions =
 // như web làm khi sửa bài hẹn giờ.
 const SCHEDULED_EDITABLE = ['WAITING_SCHEDULE', 'SCHEDULE_FAILED'];
 
+// Trạng thái hẹn giờ thật của một bài, đọc ngay trước khi sửa / đổi giờ / huỷ: danh sách trên Dashboard có thể đã cũ
+// (Dashboard mở lâu, bài đã tới giờ và được đăng). kind:
+//   scheduled  — còn hẹn giờ (chờ tới giờ đăng hoặc hẹn giờ lỗi): chỉ lúc này mới được ghi
+//   published  — đã đăng;  other — trạng thái khác (đang xử lý, đang kiểm duyệt, không rõ…)
+//   gone       — bài không còn trên Beincom;  need_login — hết phiên;  error — đọc lỗi
+// Kèm status, data (chi tiết bài) và r (phản hồi gốc, để báo lỗi).
+async function scheduleState(client, id) {
+  const r = await client.call('GET', `content/contents/${id}`);
+  const data = (BG.isOk(r) && r.body.data) || null;
+  const status = data?.status || '';
+  const kind = r.status === 401 ? 'need_login' : BG.isContentGone(r) ? 'gone' : !BG.isOk(r) ? 'error' : SCHEDULED_EDITABLE.includes(status) ? 'scheduled' : status === 'PUBLISHED' ? 'published' : 'other';
+  return { kind, status, data, r };
+}
+
 async function doEditScheduled({ id, groupIds = [], content, setting, scheduledAt = null, media = null, mentions = null, linkPreview = null, tags = [], series = [], source = 'manual' }) {
   if (!id) return { status: 'error', message: 'Thiếu bài' };
   if (!scheduledAt) return { status: 'error', message: 'Chưa chọn giờ đăng' };
@@ -306,12 +320,12 @@ async function doEditScheduled({ id, groupIds = [], content, setting, scheduledA
   if (settings.dryRun) r = { status: 'ok', dry: true };
   else {
     r = await withClient(async (client) => {
-      const cur = await client.call('GET', `content/contents/${id}`);
-      if (cur.status === 401) return { ...NEED_LOGIN };
-      if (BG.isContentGone(cur)) return { status: 'error', message: 'Bài không còn trên Beincom (đã bị xoá)' };
-      if (!BG.isOk(cur)) return { status: 'error', message: 'Đọc bài lỗi: ' + BG.errMsg(cur) };
-      if (cur.body.data?.actor?.id !== state.me?.id) return { status: 'error', message: 'Chỉ sửa được bài của chính bạn' };
-      if (!SCHEDULED_EDITABLE.includes(cur.body.data?.status)) return { status: 'error', message: 'Bài đã đăng hoặc không còn hẹn giờ — sửa như bài đã đăng' };
+      const cur = await scheduleState(client, id);
+      if (cur.kind === 'need_login') return { ...NEED_LOGIN };
+      if (cur.kind === 'gone') return { status: 'error', message: 'Bài không còn trên Beincom (đã bị xoá)' };
+      if (cur.kind === 'error') return { status: 'error', message: 'Đọc bài lỗi: ' + BG.errMsg(cur.r) };
+      if (cur.data?.actor?.id !== state.me?.id) return { status: 'error', message: 'Chỉ sửa được bài của chính bạn' };
+      if (cur.kind !== 'scheduled') return { status: 'error', message: 'Bài đã đăng hoặc không còn hẹn giờ — sửa như bài đã đăng' };
       if (body.tags.length || body.series.length) {
         const v = await client.call('POST', 'content/contents/validate-series-tags', { groups: body.audience.groupIds, series: body.series, tags: body.tags });
         if (v.status === 401) return { ...NEED_LOGIN };
@@ -423,6 +437,13 @@ async function doScheduled() {
   });
 }
 
+// Đổi giờ / huỷ bài hẹn giờ. Lệnh huỷ (DELETE content/posts|articles/{id}) cũng chính là lệnh xoá bài đã đăng, nên mỗi bài
+// đều đọc trạng thái ngay trước khi ghi và chỉ ghi khi bài còn hẹn giờ; bài đã đăng thì để yên, nhật ký ghi rõ lý do.
+const SCHEDULE_ACT = {
+  cancel: { undone: 'chưa huỷ', published: 'Bài đã đăng — không huỷ được ở đây; muốn gỡ thì dùng Xoá bài' },
+  reschedule: { undone: 'chưa đổi giờ', published: 'Bài đã đăng — không đổi giờ được nữa' },
+};
+
 async function doScheduleAct({ action, contentId, contentIds = null, contentType = 'POST', scheduledAt, snippet = '', groupName = '', source = 'manual' }) {
   if (action !== 'reschedule' && action !== 'cancel') return { status: 'error', message: 'Thao tác không hợp lệ' };
   // Huỷ cả chuỗi bài định kỳ: nhiều bài một lần
@@ -435,9 +456,18 @@ async function doScheduleAct({ action, contentId, contentIds = null, contentType
   const { settings, state, log } = await load();
   const iso = action === 'reschedule' ? new Date(scheduledAt).toISOString() : null;
   const article = contentType === 'ARTICLE';
+  const words = SCHEDULE_ACT[action];
   const items = ids.map((id) => ({
     log: { kind: 'compose', source, action, contentId: id, contentType: article ? 'ARTICLE' : 'POST', snippet, groupName, communityName: '', ...(iso ? { scheduledAt: iso } : {}) },
-    call: (c) => (action === 'reschedule' ? c.call('PUT', `content/contents/${id}/reschedule`, { scheduledAt: iso }) : c.call('DELETE', `content/${article ? 'articles' : 'posts'}/${id}`)),
+    call: async (c) => {
+      const cur = await scheduleState(c, id);
+      // Hết phiên / bài không còn: đưa phản hồi gốc cho performActions xử lý như mọi lệnh (dừng loạt / coi như đã xong)
+      if (cur.kind === 'need_login' || cur.kind === 'gone') return cur.r;
+      if (cur.kind === 'published') return { skip: words.published, flags: { published: true } };
+      if (cur.kind === 'other') return { skip: `Bài không còn hẹn giờ (trạng thái: ${BG.CONTENT_STATUS[cur.status] || cur.status || 'không rõ'}) — ${words.undone}` };
+      if (cur.kind !== 'scheduled') return { skip: `Đọc trạng thái bài lỗi (${words.undone}): ${BG.errMsg(cur.r)}` };
+      return action === 'reschedule' ? c.call('PUT', `content/contents/${id}/reschedule`, { scheduledAt: iso }) : c.call('DELETE', `content/${article ? 'articles' : 'posts'}/${id}`);
+    },
     gone: true,
   }));
   const r = await performActions(items, settings);
@@ -445,5 +475,8 @@ async function doScheduleAct({ action, contentId, contentIds = null, contentType
   const next = r.status === 'need_login' ? { ...state, lastResult: { status: 'need_login', message: NEED_LOGIN.message, mode: r.mode || '' } } : state;
   await saveState(next, { log });
   if (r.status === 'need_login') await updateBadge();
-  return summary(r, settings);
+  // published: số bài đã đăng nên không ghi (đã tính trong failed) — đủ để Dashboard báo riêng
+  const out = summary(r, settings);
+  const published = r.entries.filter((e) => e.published).length;
+  return { ...out, published, message: out.message || BG.publishedSkipNote(action, published) };
 }
