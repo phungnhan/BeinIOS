@@ -4,7 +4,8 @@
 // Nạp sau aireply.js (dùng aiConfig, aiCall, arCopy, aiReadClipboard, askAiPermission) và welcome.js / shoutout.js / postview.js.
 
 // opts: { kind (BG.AI_TASKS — ghi Lịch sử tác vụ AI), title, desc, noteLabel, notePlaceholder, controls (ô chọn thêm, vd loại bài),
-//         prompt(note) -> đề bài, fix(text) -> text, useLabel, onUse(text) } · abort: AbortController của lần AI đang viết
+//         prompt(note) -> đề bài, fix(text) -> text, maxLen (giới hạn ký tự — hiện số từ dưới Kết quả, đỏ khi quá; rê chuột xem số ký tự), useLabel,
+//         onUse(text) } · abort: AbortController của lần AI đang viết
 const AD = { opts: null, mode: 'web', cfg: null, busy: false, abort: null };
 
 async function openAiDraft(opts) {
@@ -49,6 +50,17 @@ function renderAd() {
   $('ad-gen').textContent = AD.busy ? 'Huỷ' : has ? 'Viết lại' : 'Nhờ AI viết';
   $('ad-result').placeholder = web ? 'Câu trả lời của AI hiện ở đây (bấm 📋 Dán, hoặc dán tay)…' : 'Bấm Nhờ AI viết — kết quả hiện ở đây.';
   $('ad-use').disabled = AD.busy || !has;
+  // Bài đăng: độ dài của kết quả theo số từ (dễ hình dung); quá giới hạn 3.000 ký tự của Beincom thì đỏ. Rê chuột xem số ký tự
+  const max = AD.opts?.maxLen;
+  const text = $('ad-result').value.trim();
+  const n = text.length;
+  $('ad-count').hidden = !max || !n;
+  if (max) {
+    const words = BG.wordCount(text).toLocaleString('vi-VN');
+    $('ad-count').textContent = `khoảng ${words} từ${n > max ? ` · quá dài (Beincom tối đa ~${BG.POST_MAX_WORDS} từ)` : ''}`;
+    $('ad-count').title = `${n.toLocaleString('vi-VN')}/${max.toLocaleString('vi-VN')} ký tự`;
+    $('ad-count').classList.toggle('over', n > max);
+  }
 }
 
 const adStatus = (text, cls = '') => {

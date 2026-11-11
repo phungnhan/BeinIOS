@@ -564,6 +564,78 @@ export const scenarios = [
       await page.until(() => [...document.querySelectorAll('#approval-body .tag')].some((t) => t.textContent.includes('Tin cậy')));
       const list = await page.ev(`chrome.storage.local.get('settings').then((o) => o.settings.trustedMembers)`);
       assert.equal(list.length, 3);
+      // Nhãn ⭐ Tin cậy khi công tắc đang tắt: gọi công tắc đúng tên ở Cài đặt
+      await page.ev(`chrome.storage.local.get('settings').then(({ settings }) => chrome.storage.local.set({ settings: { ...settings, autoApprovePosts: false } })).then(() => true)`);
+      await page.until((t) => [...document.querySelectorAll('#approval-body .tag')].some((x) => x.title.endsWith(t)), 4000, ` — bật "${AUTO_LABELS.autoApprovePosts}" ở Cài đặt để tự duyệt`);
+    },
+  },
+  {
+    name: 'Tên bốn công tắc tự xử lý: Cài đặt (Cổ điển và Hiện đại) đúng BG.AUTO_SWITCHES, ⓘ hai công tắc thành viên nói "Gợi ý duyệt" / "Gợi ý từ chối"; hộp hỏi khi bật / tắt Chạy thử gọi đúng tên',
+    async run({ page, url, assert }) {
+      await page.open(url('dashboard', 'tab=settings&sec=auto'));
+      const autoShown = () => page.until(() => !document.getElementById('autoApprove').closest('label').classList.contains('set-off') && document.getElementById('autoApprove').closest('label').getClientRects().length > 0);
+      await autoShown();
+      // Bộ tên chuẩn của trang (common.js) — cũng là bộ popup kể khi hỏi trước lúc tắt Chạy thử
+      assert.deepEqual(await page.ev(`BG.AUTO_SWITCHES`), AUTO_LABELS);
+      const rows = () =>
+        page.call(
+          (keys) =>
+            keys.map((k) => {
+              const r = document.getElementById(k).closest('label');
+              const b = r.querySelector('b');
+              const i = r.querySelector('.tip-i');
+              return { label: b.textContent, seen: b.getClientRects().length > 0 && !!i && i.getClientRects().length > 0, tip: i?.dataset.tip || '' };
+            }),
+          Object.keys(AUTO_LABELS),
+        );
+      for (const ui of ['classic', 'modern']) {
+        if (ui === 'modern') {
+          await page.ev(`showSettingsSec('look'); document.querySelector('input[name="dashUi"][value="modern"]').click(); true`);
+          await page.until(() => document.documentElement.dataset.ui === 'modern');
+          await page.ev(`showSettingsSec('auto'); true`);
+          await autoShown();
+        }
+        const v = await rows();
+        assert.deepEqual(v.map((x) => x.label), Object.values(AUTO_LABELS), ui);
+        assert.ok(v.every((x) => x.seen), ui); // tên và nút ⓘ đều hiện
+        assert.match(v[0].tip, /^Chỉ duyệt các yêu cầu .*"Gợi ý duyệt"/, ui);
+        assert.match(v[1].tip, /^Chỉ từ chối các yêu cầu .*"Gợi ý từ chối"/, ui);
+        // Chạm ⓘ: bong bóng hiện ý nghĩa, công tắc không đổi
+        for (const [k, word] of [['autoApprove', '"Gợi ý duyệt"'], ['autoDecline', '"Gợi ý từ chối"']]) {
+          await page.call((id) => (document.getElementById(id).closest('label').querySelector('.tip-i').click(), true), k);
+          await page.until((w) => document.getElementById('tipbox').textContent.includes(w) && document.getElementById('tipbox').getClientRects().length > 0, 4000, word);
+          assert.equal(await page.call((id) => document.getElementById(id).checked, k), false, `${ui} ${k}`);
+        }
+        await page.ev(`document.body.click(); true`);
+      }
+      // Hộp hỏi (Chạy thử đang tắt): bật từng công tắc thì hỏi, gọi đúng tên; không đồng ý thì công tắc về tắt, kho không đổi
+      await page.ev(`window.__asks = []; window.__askOk = false; window.confirm = (m) => (window.__asks.push(m), window.__askOk); true`);
+      const ask = (id) => page.call((i) => ((window.__asks = []), document.getElementById(i).click(), { asks: window.__asks, checked: document.getElementById(i).checked }), id);
+      for (const [k, label] of Object.entries(AUTO_LABELS)) {
+        const r = await ask(k);
+        assert.equal(r.asks.length, 1, k);
+        assert.ok(r.asks[0].startsWith(`Bật "${label}"? Sau mỗi lần quét,`), r.asks[0]);
+        assert.match(r.asks[0], /gửi thật lên Beincom|thật trên Beincom/, k);
+        assert.equal(r.checked, false, k);
+      }
+      assert.match((await ask('autoApprove')).asks[0], /được chấm "Gợi ý duyệt"/);
+      assert.match((await ask('autoDecline')).asks[0], /được chấm "Gợi ý từ chối"/);
+      assert.deepEqual(await page.ev(`chrome.storage.local.get('settings').then(({ settings }) => [settings.autoApprove, settings.autoDecline, settings.autoHideSpam, !!settings.autoApprovePosts, settings.dryRun])`), [false, false, false, false, false]);
+      // Đồng ý bật hai công tắc, bật Chạy thử (không hỏi); bỏ Chạy thử thì hỏi, kể đúng tên các công tắc đang bật
+      await page.ev(`window.__askOk = true; true`);
+      await ask('autoApprove');
+      await ask('autoHideSpam');
+      await page.until(() => data.settings.autoApprove && data.settings.autoHideSpam);
+      assert.deepEqual((await ask('dryRun')).asks, []);
+      await page.until(() => data.settings.dryRun);
+      await page.ev(`window.__askOk = false; true`);
+      const off = await ask('dryRun');
+      assert.deepEqual(off.asks, [`Tắt Chạy thử khi đang bật tự xử lý (${AUTO_LABELS.autoApprove}, ${AUTO_LABELS.autoHideSpam}): lần quét tới addon sẽ tự duyệt / từ chối / ẩn thật. Tiếp tục?`]);
+      assert.equal(off.checked, true);
+      assert.equal(await page.ev(`chrome.storage.local.get('settings').then(({ settings }) => settings.dryRun)`), true);
+      // Trả lại Cổ điển (trang sau mở theo bản nhớ ở localStorage)
+      await page.ev(`showSettingsSec('look'); document.querySelector('input[name="dashUi"][value="classic"]').click(); true`);
+      await page.until(() => !document.documentElement.dataset.ui && localStorage.getItem('beinfusion-ui') === 'classic');
     },
   },
   {
@@ -879,6 +951,11 @@ export const scenarios = [
       await page.ev(`document.getElementById('onb-next').click(); true`);
       const f = await page.call(() => [...document.querySelectorAll('#onb-features input')].map((x) => x.checked));
       assert.deepEqual(f, [true, true, true, false, false, false, false]); // theo cài đặt đang có: báo cáo, tự kiểm tra, nhắc chào bật; tự động khác tắt
+      // Hai công tắc tự xử lý: nhãn đúng tên ở Cài đặt (BG.AUTO_SWITCHES), phần giải thích ở dòng mô tả bên dưới
+      const feats = await page.call(() => [...document.querySelectorAll('#onb-features .onb-feature')].map((x) => [x.querySelector('b').textContent, x.querySelector('.muted').textContent]));
+      assert.deepEqual(feats.slice(5).map((x) => x[0]), [AUTO_LABELS.autoHideSpam, AUTO_LABELS.autoApprove]);
+      assert.match(feats[5][1], /link tới tên miền cấm.*Quy tắc bài viết/);
+      assert.match(feats[6][1], /đạt quy tắc \("Gợi ý duyệt"\)/);
       assert.equal(await page.ev(`document.getElementById('onb-dry').checked`), true);
       await page.ev(`document.querySelector('#onb-features input[data-i="3"]').click(); document.querySelector('#onb-features input[data-i="4"]').click(); document.getElementById('onb-group').value = 'gCL'; document.getElementById('onb-next').click(); true`);
       await page.until(() => !document.getElementById('onboard').open);
@@ -3657,7 +3734,7 @@ export const scenarios = [
       await page.ev(`document.getElementById('ad-note').value = 'AMA ví lạnh tối thứ Sáu'; document.getElementById('ad-prompt-box').open = true; true`);
       await page.until(() => /dạng "Sự kiện \/ AMA"/.test(document.getElementById('ad-prompt').textContent));
       const shown = await page.ev(`document.getElementById('ad-prompt').textContent`);
-      assert.match(shown, /Độ dài khoảng 250–400 từ/);
+      assert.match(shown, /\n- Độ dài: 2\.000–2\.700 ký tự, tính cả dấu cách \(khoảng 430–570 từ\)\. Không ngắn hơn 2\.000 ký tự; tuyệt đối không quá 3\.000 ký tự/);
       await page.ev(`document.getElementById('ad-gen').click(); true`);
       await page.until(() => window.__aiN === 1 && !!document.getElementById('ad-result').value.trim());
       assert.equal(await page.ev(`window.__aiReq.messages[0].content`), shown);
@@ -3693,6 +3770,115 @@ export const scenarios = [
       await page.until(() => document.getElementById('ad-prompt').textContent.includes('Bản nháp đang có:'));
       assert.match(await page.ev(`document.getElementById('ad-prompt').textContent`), /\n# Ví lạnh cho người mới: 4 bước giữ tài sản an toàn\n\nTóm tắt: Từ chọn ví/);
       await page.ev(`document.getElementById('ai-draft').close(); true`);
+    },
+  },
+  {
+    name: 'AI viết bài đăng: độ dài theo số từ (mặc định Vừa, nhớ lựa chọn cũ), hộp AI đếm số từ; bài quá 3.000 ký tự vẫn vào ô soạn, bộ đếm đỏ, cảnh báo rõ — cả giao diện Hiện đại; bài bình thường không cảnh báo',
+    async run({ page, url, assert }) {
+      await page.open(url('dashboard', 'tab=ai'));
+      await page.until(() => document.querySelectorAll('#ai-hub-tasks .ai-task').length === 6);
+      await page.ev(`(async () => {
+        localStorage.removeItem('beinfusion-ai-write');
+        await chrome.storage.local.set({ aiConfig: { key: 'sk-ant-' + 'e'.repeat(30), model: 'claude-opus-5-5', mode: 'api' } });
+        window.__realFetch = window.__realFetch || window.fetch;
+        window.__aiN = 0;
+        window.__para = (n) => Array.from({ length: n }, (_, i) => 'Đoạn ' + (i + 1) + ': tối thứ Sáu [giờ bắt đầu] mình có buổi AMA về ví lạnh, anh em chuẩn bị câu hỏi nhé.').join('\\n\\n');
+        window.fetch = async (u, o) => {
+          if (!String(u).startsWith('https://api.anthropic.com/')) return window.__realFetch(u, o);
+          window.__aiN++;
+          window.__aiReq = JSON.parse(o.body);
+          return new Response(JSON.stringify({ model: 'claude-opus-5-5', stop_reason: 'end_turn', content: [{ type: 'text', text: window.__aiOut }], usage: { input_tokens: 900, output_tokens: 900 } }), { status: 200, headers: { 'content-type': 'application/json' } });
+        };
+        return true;
+      })()`);
+      const open = async (selector) => {
+        await page.ev(`document.querySelectorAll('.toast').forEach((t) => t.remove()); document.querySelector(${JSON.stringify(selector)}).click(); true`);
+        await page.until(() => document.getElementById('ai-draft').open && !!document.getElementById('ad-len') && !document.getElementById('ad-gen').disabled);
+      };
+      // Viết bằng AI (giả) rồi Đưa vào ô soạn: trả số ký tự hộp AI đếm, ô soạn, bộ đếm, toast
+      const write = async (n, paras) => {
+        await page.ev(`window.__aiOut = window.__para(${paras}); document.getElementById('ad-gen').click(); true`);
+        await page.until((k) => window.__aiN === k && !!document.getElementById('ad-result').value.trim() && !document.getElementById('ad-use').disabled, 4000, n);
+        const dlg = await page.ev(`({ out: window.__aiOut.length, words: BG.wordCount(document.getElementById('ad-result').value), tip: document.getElementById('ad-count').title, count: document.getElementById('ad-count').textContent, over: document.getElementById('ad-count').classList.contains('over'), shown: !document.getElementById('ad-count').hidden && document.getElementById('ad-count').getClientRects().length > 0 })`);
+        await page.ev(`document.getElementById('ad-use').click(); true`);
+        await page.until(() => currentTab === 'compose' && !!document.querySelector('.toast'));
+        const res = await page.ev(`({ text: document.getElementById('compose-text').value, counter: document.getElementById('compose-count').textContent, red: document.getElementById('compose-count').classList.contains('over'), counterShown: document.getElementById('compose-count').getClientRects().length > 0, toast: document.querySelector('.toast').textContent, tone: document.querySelector('.toast').className })`);
+        return { ...dlg, ...res };
+      };
+      // Ô Độ dài: nhãn theo số từ (người dùng không cần biết ký tự); "Theo loại bài" (mặc định) ra mức Vừa cho mọi loại, kể cả Sự kiện
+      await open('[data-task=post] button.primary');
+      assert.deepEqual(await page.ev(`[...document.querySelectorAll('#ad-len option')].map((o) => o.textContent)`), ['Theo loại bài · Vừa', 'Ngắn · khoảng 150–230 từ', 'Vừa · khoảng 280–400 từ', 'Dài · khoảng 430–570 từ']);
+      assert.equal(await page.ev(`document.getElementById('ad-len').value`), '');
+      assert.equal(await page.ev(`document.getElementById('ad-count').hidden`), true); // chưa có kết quả: chưa đếm
+      await page.ev(`(() => { const k = document.getElementById('ad-kind'); k.value = 'event'; k.dispatchEvent(new Event('change')); document.getElementById('ad-note').value = 'AMA ví lạnh tối thứ Sáu'; document.getElementById('ad-prompt-box').open = true; return true; })()`);
+      await page.until(() => /dạng "Sự kiện \/ AMA"/.test(document.getElementById('ad-prompt').textContent));
+      assert.equal(await page.ev(`document.querySelector('#ad-len option').textContent`), 'Theo loại bài · Vừa');
+      assert.match(await page.ev(`document.getElementById('ad-prompt').textContent`), /\n- Độ dài: 1\.300–1\.900 ký tự, tính cả dấu cách \(khoảng 280–400 từ\)\. Không ngắn hơn 1\.300 ký tự; tuyệt đối không quá 3\.000 ký tự — giới hạn mỗi bài của Beincom/);
+      // Bài bình thường (~1.600 ký tự): hộp AI đếm, không đỏ; vào ô soạn, toast như thường (nhắc chỗ trống), không cảnh báo độ dài
+      const ok = await write(1, 17);
+      assert.ok(ok.out > 1300 && ok.out < 1900, String(ok.out));
+      assert.equal(ok.count, `khoảng ${ok.words.toLocaleString('vi-VN')} từ`);
+      assert.equal(ok.tip, `${ok.out.toLocaleString('vi-VN')}/3.000 ký tự`); // rê chuột: số ký tự
+      assert.ok(ok.words > 250 && ok.words < 450, String(ok.words));
+      assert.deepEqual([ok.over, ok.shown], [false, true]);
+      assert.equal(ok.text.length, ok.out);
+      assert.deepEqual([ok.counter, ok.red], [`${ok.out}/3000`, false]);
+      assert.match(ok.toast, /^Đã đưa bài vào ô soạn — xem lại, chọn group rồi bấm Đăng\. Còn 1 chỗ cần điền: \[giờ bắt đầu\]\.$/);
+      assert.doesNotMatch(ok.toast, /3\.000|Beincom chỉ cho/);
+      assert.ok(!/\berr\b/.test(ok.tone), ok.tone);
+      // Bài quá 3.000 ký tự: hộp AI đếm đỏ; vẫn vào ô soạn nguyên vẹn (không tự cắt), bộ đếm đỏ, toast cảnh báo rõ
+      await open('#btn-compose-ai');
+      const big = await write(2, 34);
+      assert.ok(big.out > 3000, String(big.out));
+      const n = big.out.toLocaleString('vi-VN');
+      assert.equal(big.count, `khoảng ${big.words.toLocaleString('vi-VN')} từ · quá dài (Beincom tối đa ~600 từ)`);
+      assert.equal(big.tip, `${n}/3.000 ký tự`);
+      assert.deepEqual([big.over, big.shown], [true, true]);
+      assert.equal(big.text, await page.ev(`window.__aiOut`));
+      assert.deepEqual([big.counter, big.red, big.counterShown], [`${big.out}/3000`, true, true]);
+      assert.equal(big.toast, `Đã đưa vào ô soạn, nhưng bài dài khoảng ${big.words.toLocaleString('vi-VN')} từ (${n} ký tự) — quá giới hạn mỗi bài của Beincom (3.000 ký tự, khoảng 600 từ): rút gọn trước khi đăng, hoặc chọn độ dài ngắn hơn rồi nhờ AI viết lại. Còn 1 chỗ cần điền: [giờ bắt đầu].`);
+      assert.match(big.tone, /\berr\b/);
+      // Sửa tay trong ô Kết quả: bộ đếm theo ngay
+      await open('#btn-compose-ai');
+      await page.ev(`(() => { const r = document.getElementById('ad-result'); r.value = 'Bài ngắn gọn.'; r.dispatchEvent(new Event('input')); return true; })()`);
+      assert.deepEqual(await page.ev(`[document.getElementById('ad-count').textContent, document.getElementById('ad-count').classList.contains('over')]`), ['khoảng 3 từ', false]);
+      await page.ev(`document.getElementById('ai-draft').close(); true`);
+      // Đã lưu lựa chọn cũ (Ngắn) ở trình duyệt: vẫn giữ, Ngắn giờ theo ký tự
+      await page.ev(`localStorage.setItem('beinfusion-ai-write', JSON.stringify({ post: { kind: 'announce', length: 'short' } })); true`);
+      await open('#btn-compose-ai');
+      assert.deepEqual(await page.ev(`[document.getElementById('ad-kind').value, document.getElementById('ad-len').value]`), ['announce', 'short']);
+      await page.ev(`document.getElementById('ad-prompt-box').open = true; true`);
+      await page.until(() => document.getElementById('ad-prompt').textContent.includes('dạng "Thông báo"'));
+      assert.match(await page.ev(`document.getElementById('ad-prompt').textContent`), /\n- Độ dài: 700–1\.100 ký tự, tính cả dấu cách \(khoảng 150–230 từ\)\. Không ngắn hơn 700 ký tự;/);
+      await page.ev(`document.getElementById('ai-draft').close(); true`);
+      // Article: độ dài theo từ như cũ, không đếm ký tự trong hộp AI
+      await page.ev(`showTab('ai'); true`);
+      await page.until(() => !!document.querySelector('[data-task=article] button.primary'));
+      await open('[data-task=article] button.primary');
+      assert.deepEqual(await page.ev(`[...document.querySelectorAll('#ad-len option')].map((o) => o.textContent)`), ['Theo loại bài', 'Ngắn · 500–700 từ', 'Vừa · 800–1.200 từ', 'Dài · 1.300–1.800 từ']);
+      // Article "Theo loại bài" như trước: Sự kiện vẫn Ngắn (500–700 từ), không theo bài đăng
+      await page.ev(`(() => { const k = document.getElementById('ad-kind'); k.value = 'event'; k.dispatchEvent(new Event('change')); document.getElementById('ad-prompt-box').open = true; return true; })()`);
+      await page.until(() => /^Viết một Article[^\n]*dạng "Sự kiện \/ AMA"/.test(document.getElementById('ad-prompt').textContent));
+      assert.match(await page.ev(`document.getElementById('ad-prompt').textContent`), /\nYêu cầu:\n- Độ dài khoảng 500–700 từ\.\n/);
+      assert.equal(await page.ev(`document.querySelector('#ad-len option').textContent`), 'Theo loại bài');
+      await page.ev(`window.__aiOut = 'TIÊU ĐỀ: Ví lạnh\\nTÓM TẮT: Ba bước.\\nNỘI DUNG:\\n' + window.__para(40); document.getElementById('ad-gen').click(); true`);
+      await page.until(() => window.__aiN === 3 && /^TIÊU ĐỀ:/.test(document.getElementById('ad-result').value));
+      assert.equal(await page.ev(`document.getElementById('ad-count').hidden`), true);
+      await page.ev(`document.getElementById('ai-draft').close(); true`);
+      // Giao diện Hiện đại: bài quá dài vẫn vào ô soạn, bộ đếm đỏ hiện trên thẻ Đăng bài, toast cảnh báo
+      await page.ev(`showTab('settings'); showSettingsSec('look'); true`);
+      await page.until(() => !!document.querySelector('input[name="dashUi"][value="modern"]'));
+      await page.ev(`document.querySelector('input[name="dashUi"][value="modern"]').click(); true`);
+      await page.until(() => document.documentElement.dataset.ui === 'modern');
+      await page.ev(`showTab('compose'); true`);
+      await open('#btn-compose-ai');
+      const mod = await write(4, 36);
+      assert.ok(mod.out > 3000 && mod.red && mod.counterShown && mod.over, JSON.stringify({ ...mod, text: '' }));
+      assert.match(mod.toast, /^Đã đưa vào ô soạn, nhưng bài dài khoảng [\d.]+ từ \([\d.]+ ký tự\) — quá giới hạn mỗi bài của Beincom \(3\.000 ký tự, khoảng 600 từ\):/);
+      assert.ok(await page.ev(`document.querySelector('.toast').getClientRects().length > 0`));
+      await page.ev(`showTab('settings'); showSettingsSec('look'); document.querySelector('input[name="dashUi"][value="classic"]').click(); true`);
+      await page.until(() => !document.documentElement.dataset.ui && localStorage.getItem('beinfusion-ui') === 'classic');
+      await page.ev(`localStorage.removeItem('beinfusion-ai-write'); true`);
     },
   },
   {

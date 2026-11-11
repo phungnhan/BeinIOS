@@ -2,15 +2,16 @@
 // Tự hiện khi cài mới (chưa có `onboarded`, `seenVersion`, nhật ký); mở lại ở chân trang. Xong thì ghi `onboarded`.
 
 const onb = { step: 1, check: null, checking: false };
-// Tính năng chọn ở bước 3: khoá cài đặt, nhãn, mô tả; group = cần chọn group (bài nhắc / bài thảo luận)
+// Tính năng chọn ở bước 3: khoá cài đặt, nhãn, mô tả; group = cần chọn group (bài nhắc / bài thảo luận).
+// Công tắc tự xử lý: nhãn là tên chuẩn BG.AUTO_SWITCHES (giống Cài đặt, popup), phần giải thích để ở note.
 const ONB_FEATURES = [
   { keys: ['weeklyReport', 'monthlyReport'], label: 'Tóm tắt tuần và báo cáo tháng', note: 'Thông báo sáng thứ Hai và đầu tháng; chỉ đọc.' },
   { keys: ['selfCheckDaily'], label: 'Tự kiểm tra mỗi ngày', note: 'Báo khi một tính năng đang chạy bị lỗi (thường do Beincom thay đổi); chỉ đọc.' },
   { keys: ['welcomeReminder'], label: 'Nhắc chào thành viên mới', note: 'Sáng thứ Hai nhắc soạn bài chào người mới vào.' },
   { keys: ['nudgeWeekly'], group: 'nudgeGroupId', label: 'Soạn sẵn bài nhắc người mới chưa hoạt động', note: 'Sáng thứ Hai soạn sẵn; bạn tự xem rồi đăng.' },
   { keys: ['promptWeekly'], group: 'promptGroupId', label: 'Soạn sẵn bài thảo luận hằng tuần', note: 'Câu hỏi mồi kèm giờ gợi ý; bạn tự xem rồi hẹn giờ.' },
-  { keys: ['autoHideSpam'], label: 'Tự ẩn bài / bình luận có link tới tên miền cấm', note: 'Cần thêm tên miền cấm ở Quy tắc bài viết.' },
-  { keys: ['autoApprove'], label: 'Tự duyệt yêu cầu tham gia đạt quy tắc', note: 'Chỉ yêu cầu được gợi ý "Duyệt".' },
+  { keys: ['autoHideSpam'], label: BG.AUTO_SWITCHES.autoHideSpam, note: 'Bài / bình luận mới có link tới tên miền cấm bị ẩn. Cần thêm tên miền ở Quy tắc bài viết.' },
+  { keys: ['autoApprove'], label: BG.AUTO_SWITCHES.autoApprove, note: 'Chỉ các yêu cầu đạt quy tắc ("Gợi ý duyệt").' },
 ];
 
 async function checkOnboarding() {
