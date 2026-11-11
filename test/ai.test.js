@@ -211,6 +211,7 @@ test('Hồ sơ của bạn cho AI: làm sạch (cắt độ dài, mặc định 
   const full = BG.aiPersonaBlock(p);
   assert.ok(full.startsWith('Hồ sơ của admin — người sẽ đăng nội dung này. Viết như chính họ tự viết:\n- Tên, cách xưng hô: Kai — xưng mình\n- Về admin: Admin 6 năm\n- Về cộng đồng: Người mới học crypto\n- Cách admin viết: Câu ngắn\n- Không bao giờ viết: Không hứa lợi nhuận\n'), full);
   assert.ok(full.includes(`không chép câu chữ hay thông tin trong đó:\n${q}\nĐoạn A\n\nĐoạn B\n${q}\nViết như người thật`));
+  assert.ok(full.includes('chỉ để học giọng văn (nhịp câu, từ hay dùng, cách xưng hô, cách dùng emoji), không theo độ dài của các đoạn này; không chép'), full); // đoạn mẫu ngắn không kéo bài ngắn theo
   assert.match(full, /không bịa thêm trải nghiệm, con số hay sự việc/);
   assert.equal(BG.aiPersonaBlock(p, { part: 'context' }), 'Bối cảnh (theo admin):\n- Tên, cách xưng hô: Kai — xưng mình\n- Về cộng đồng: Người mới học crypto');
   assert.match(BG.aiPersonaBlock(p, { en: true }), /^The admin's profile — .*\n- Name and how they address people: Kai/);
@@ -346,15 +347,67 @@ test('Mẫu đề bài viết bài: loại bài có dàn ý đánh số, độ d
   const ev = BG.aiWritePrompt({ kind: 'event', idea: 'AMA tối thứ Sáu', groupName: 'Crypto Life' });
   assert.match(ev, /^Viết một bài đăng dạng "Sự kiện \/ AMA" cho cộng đồng "Crypto Life" trên Beincom/);
   assert.match(ev, /\n\nDàn ý nên theo:\n1\. Dòng đầu: tên sự kiện và người tham gia được gì\.\n2\. Thời gian \(giờ Việt Nam\)/);
-  assert.match(ev, /\nYêu cầu:\n- Độ dài khoảng 60–120 từ\.\n- 1–2 dòng đầu quyết định người ta có bấm "Xem thêm"/); // Sự kiện mặc định Ngắn
+  assert.match(ev, /\nYêu cầu:\n- Độ dài: 1\.300–1\.900 ký tự, [^\n]*\n- Viết đủ dài bằng nội dung có ích[^\n]*\n- 1–2 dòng đầu quyết định người ta có bấm "Xem thêm"/); // Sự kiện mặc định Vừa
   assert.match(ev, /để chỗ trống trong ngoặc vuông cho admin điền, vd \[giờ bắt đầu\], \[link đăng ký\]/);
   assert.match(ev, /- Kết bằng đúng một lời kêu gọi rõ ràng/);
-  assert.match(ev, /- Trước khi trả lời, tự đọc lại một lượt/);
+  assert.match(ev, /- Trước khi trả lời, tự đọc lại một lượt: [^\n]*đã đủ độ dài yêu cầu chưa[^\n]*chưa quá 3\.000 ký tự/);
   assert.match(ev, /tối đa 3 emoji đặt đúng chỗ; không hashtag/);
   assert.match(ev, /\n\nChỉ trả về nội dung bài, không viết gì thêm\.$/);
-  assert.match(BG.aiWritePrompt({ kind: 'event', length: 'long', idea: 'x' }), /Độ dài khoảng 250–400 từ/);
-  assert.match(BG.aiWritePrompt({ kind: 'nope', idea: 'x' }), /^Viết một bài đăng cho cộng đồng[^\n]*\nÝ chính[^\n]*\n\nYêu cầu:\n- Độ dài khoảng 120–250 từ\./); // loại lạ: Tự do
+  assert.match(BG.aiWritePrompt({ kind: 'event', length: 'long', idea: 'x' }), /- Độ dài: 2\.000–2\.700 ký tự, /);
+  assert.match(BG.aiWritePrompt({ kind: 'nope', idea: 'x' }), /^Viết một bài đăng cho cộng đồng[^\n]*\nÝ chính[^\n]*\n\nYêu cầu:\n- Độ dài: 1\.300–1\.900 ký tự, /); // loại lạ: Tự do
   assert.equal(BG.aiPostPrompt({ kind: 'guide', idea: 'x' }), BG.aiWritePrompt({ format: 'post', kind: 'guide', idea: 'x' }));
+});
+
+test('Độ dài bài đăng AI viết: theo ký tự kèm số từ, dài hơn hẳn trước, cận trên mọi mức dưới 3.000 ký tự của Beincom; mọi loại mặc định Vừa', () => {
+  const L = BG.AI_WRITE_LENGTHS;
+  assert.deepEqual(Object.keys(L), ['short', 'medium', 'long']);
+  assert.deepEqual([L.short.chars, L.medium.chars, L.long.chars], [[700, 1100], [1300, 1900], [2000, 2700]]);
+  assert.deepEqual([L.short.post, L.medium.post, L.long.post], ['khoảng 150–230 từ', 'khoảng 280–400 từ', 'khoảng 430–570 từ']); // người dùng thấy số từ
+  // Giới hạn nói theo từ cho người dùng: không hứa quá 3.000 ký tự, và cao hơn cận trên mức Dài
+  assert.ok(BG.POST_MAX_WORDS * 5 <= BG.POST_MAX && BG.POST_MAX_WORDS > L.long.words[1]);
+  assert.equal(BG.wordCount('Ví lạnh   an toàn,\n- 3 bước 🔐 — xong!'), 7); // số đếm là từ; bỏ gạch đầu dòng, emoji, gạch ngang đứng riêng
+  assert.deepEqual([BG.wordCount(''), BG.wordCount(null), BG.wordCount('  ')], [0, 0, 0]);
+  let prev = 0;
+  for (const [k, v] of Object.entries(L)) {
+    const [lo, hi] = v.chars;
+    assert.ok(prev < lo && lo < hi, k); // tăng dần, không chồng lên nhau
+    prev = hi;
+    assert.ok(hi < BG.POST_MAX && hi <= 2700, k); // chừa chỗ cho AI viết lố
+    // Số từ ước lượng khớp số ký tự (văn tiếng Việt có dấu ~4,5–5 ký tự / từ); viết tới cận trên số từ, kể cả chữ thưa, vẫn dưới 3.000
+    v.words.forEach((w, i) => assert.ok(w * 4.5 <= v.chars[i] && v.chars[i] <= w * 5, `${k} ${w} từ / ${v.chars[i]} ký tự`));
+    assert.ok(v.words[1] * 5 < BG.POST_MAX, k);
+  }
+  // Dài hơn rõ rệt: cận dưới mỗi mức mới vượt cận trên của mức cũ (60–120 / 120–250 / 250–400 từ, ~4,7 ký tự / từ)
+  assert.ok(L.short.chars[0] > 120 * 4.7 && L.medium.chars[0] > 250 * 4.7 && L.long.chars[0] > 400 * 4.7);
+  // Mọi loại bài đăng, "Theo loại bài": mức Vừa mới
+  for (const kind of Object.keys(BG.AI_WRITE_KINDS)) {
+    assert.equal(BG.AI_WRITE_KINDS[kind].len, undefined, kind);
+    assert.equal(BG.aiWriteDefaultLength('post', kind), 'medium', kind);
+    const p = BG.aiPostPrompt({ kind, idea: 'x' });
+    assert.ok(p.includes('\n- Độ dài: 1.300–1.900 ký tự, tính cả dấu cách (khoảng 280–400 từ). '), kind);
+    assert.equal(p, BG.aiPostPrompt({ kind, idea: 'x', length: 'medium' }), kind);
+  }
+  assert.equal(BG.aiWriteDefaultLength('post', 'nope'), 'medium'); // loại lạ: như Tự do
+  // Câu độ dài: cận dưới, cận trên, giới hạn 3.000 của Beincom; cách viết đủ dài không độn, không bịa
+  const s = BG.aiPostPrompt({ kind: 'announce', length: 'short', idea: 'x' });
+  assert.ok(s.includes('\n- Độ dài: 700–1.100 ký tự, tính cả dấu cách (khoảng 150–230 từ). Không ngắn hơn 700 ký tự; tuyệt đối không quá 3.000 ký tự — giới hạn mỗi bài của Beincom, dài hơn là không đăng được.\n'), s);
+  assert.match(s, /\n- Viết đủ dài bằng nội dung có ích, không độn chữ: bối cảnh[^\n]*ví dụ minh hoạ[^\n]*các bước[^\n]*lưu ý[^\n]*câu hỏi gợi mở\. Được dùng kiến thức chung đúng với chủ đề\.\n/);
+  assert.match(s, /\n- Không bịa sự kiện, con số, giá, ngày giờ, tên người, link, lời hứa, quy định, quyền lợi hay cách thao tác trên Beincom: các thông tin đó chỉ lấy từ ý chính/);
+  // Ví dụ minh hoạ để làm bài đủ dài: nói rõ là ví dụ, không kể như chuyện đã xảy ra
+  assert.match(s, /\n- Cụ thể, có ví dụ hoặc tình huống hay gặp — ví dụ minh hoạ thì nói rõ là ví dụ, không kể như chuyện đã xảy ra; câu nào cũng phải có ích\./);
+  assert.doesNotMatch(s, /tình huống thật/);
+  // Viết lại bản nháp (không có ý chính): đủ độ dài bằng giải thích / ví dụ / lưu ý, không thêm sự việc ngoài bản nháp
+  assert.match(BG.aiPostPrompt({ current: 'Nháp ngắn' }), /\nViết lại bản nháp dưới đây cho rõ ràng, mạch lạc, hấp dẫn hơn; giữ nguyên ý\. Được thêm giải thích, ví dụ, lưu ý cho đủ độ dài, nhưng không thêm sự việc hay thông tin mới ngoài bản nháp\.\n/);
+  assert.match(BG.aiPostPrompt({ length: 'long', idea: 'x' }), /\n- Độ dài: 2\.000–2\.700 ký tự, tính cả dấu cách \(khoảng 430–570 từ\)\. Không ngắn hơn 2\.000 ký tự; tuyệt đối không quá 3\.000 ký tự/);
+  // Dàn ý, câu dự phòng không còn kéo bài về ngắn
+  const all = Object.values(BG.AI_WRITE_KINDS).flatMap((k) => k.plan).join('\n');
+  assert.doesNotMatch(all, /Lý do trong 1–2 câu|Bối cảnh 2–3 câu|Diễn biến ngắn gọn|một dòng ngắn/);
+  // Tổng kết: thêm bước có ích cho đủ độ dài mà không cần số liệu mới
+  assert.equal(BG.AI_WRITE_KINDS.recap.plan[2], 'Với mỗi điểm nổi bật: vì sao đáng chú ý, ai nên xem lại hoặc điều rút ra (không thêm con số, tên hay sự việc ngoài ý chính).');
+  assert.match(BG.aiPostPrompt({ kind: 'recap', idea: 'x' }), /\n2\. Điểm nổi bật[^\n]*\n3\. Với mỗi điểm nổi bật: vì sao đáng chú ý[^\n]*\n4\. Cảm ơn/);
+  const empty = BG.aiPostPrompt({});
+  assert.doesNotMatch(empty, /Bài ngắn/);
+  assert.match(empty, /\nChủ đề: lời chào cả cộng đồng kèm điều thành viên nên biết lúc này \(theo hồ sơ của admin\), mời mọi người chia sẻ\.\n/);
 });
 
 test('Mẫu đề bài Article: tiêu đề / tóm tắt / nội dung theo khuôn, Markdown có mục, độ dài bài dài, viết lại bản nháp', () => {
@@ -362,7 +415,27 @@ test('Mẫu đề bài Article: tiêu đề / tóm tắt / nội dung theo khuô
   const a = BG.aiWritePrompt({ format: 'article', kind: 'guide', idea: 'Tạo ví lạnh', persona, current: '# Nháp cũ\n\nVài dòng' });
   assert.match(a, /^Viết một Article \(bài dài có tiêu đề, tóm tắt và các mục\) dạng "Hướng dẫn từng bước"/);
   assert.match(a, /\n\nHồ sơ của admin — [\s\S]*\n\nDàn ý nên theo:\n1\. /);
-  assert.match(a, /- Độ dài khoảng 800–1\.200 từ\./);
+  assert.match(a, /\nYêu cầu:\n- Độ dài khoảng 800–1\.200 từ\.\n- Tiêu đề và 2–3 câu mở bài/);
+  // Article giữ nguyên độ dài theo từ; không có câu ký tự / giới hạn 3.000 của bài đăng
+  assert.deepEqual(Object.values(BG.AI_WRITE_LENGTHS).map((v) => v.article), ['500–700 từ', '800–1.200 từ', '1.300–1.800 từ']);
+  assert.match(BG.aiWritePrompt({ format: 'article', length: 'short', idea: 'x' }), /\n- Độ dài khoảng 500–700 từ\.\n/);
+  assert.match(BG.aiWritePrompt({ format: 'article', length: 'long', idea: 'x' }), /\n- Độ dài khoảng 1\.300–1\.800 từ\.\n/);
+  // "Theo loại bài" của Article như trước khi bài đăng dài ra: Ngắn cho Thông báo / Mở thảo luận / Sự kiện / Cảnh báo, còn lại Vừa
+  const shortArt = ['announce', 'discussion', 'event', 'warning'];
+  for (const [kind, k] of Object.entries(BG.AI_WRITE_KINDS)) {
+    const want = shortArt.includes(kind) ? 'short' : 'medium';
+    assert.equal(k.artLen || 'medium', want, kind);
+    assert.equal(BG.aiWriteDefaultLength('article', kind), want, kind);
+    const p = BG.aiWritePrompt({ format: 'article', kind, idea: 'x' });
+    assert.equal(p, BG.aiWritePrompt({ format: 'article', kind, idea: 'x', length: want }), kind);
+    assert.ok(p.includes(`\n- Độ dài khoảng ${want === 'short' ? '500–700' : '800–1.200'} từ.\n`), kind);
+  }
+  assert.equal(BG.aiWriteDefaultLength('article', 'nope'), 'medium');
+  assert.ok(!/3\.000|Không ngắn hơn|Viết đủ dài bằng/.test(a), a);
+  // Viết lại Article: câu như cũ, không có phần "cho đủ độ dài" của bài đăng
+  assert.match(a, /\nÝ chính của bài \(theo admin\): Tạo ví lạnh\n/);
+  assert.match(BG.aiWritePrompt({ format: 'article', current: 'Nháp' }), /\nViết lại bản nháp dưới đây cho rõ ràng, mạch lạc, hấp dẫn hơn; giữ nguyên ý\.\n/);
+  assert.match(a, /\n- Trước khi trả lời, tự đọc lại một lượt: dòng đầu có cuốn hút không; đã đủ độ dài yêu cầu chưa \(thiếu thì thêm ý có ích, không độn chữ\); còn câu lặp ý/);
   assert.match(a, /- Markdown: "## " cho tiêu đề mục \(3–6 mục, mỗi mục một ý\)[^\n]*Không dùng "# " trong nội dung\./);
   assert.match(a, /rất ít hoặc không emoji; không hashtag/);
   const q = '"'.repeat(3);

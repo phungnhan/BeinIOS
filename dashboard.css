@@ -822,7 +822,10 @@ dialog.ai-draft { max-width: 720px; height: auto; max-height: min(92vh, 900px); 
 .art-ai { display: flex; align-items: center; gap: 6px; }
 #ad-status { margin: 10px 0 6px; }
 #ad-status:empty { display: none; }
-.ad-result-label { display: block; margin: 12px 0 4px; }
+.ad-result-label { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; margin: 12px 0 4px; }
+/* Số ký tự bài đăng AI viết / giới hạn của Beincom */
+#ad-count { margin-left: auto; }
+#ad-count.over { color: var(--err); font-weight: 600; }
 #ad-result { width: 100%; min-height: 180px; resize: vertical; font: inherit; }
 #ar-paste { width: 100%; min-height: 80px; resize: vertical; font: 12.5px/1.4 ui-monospace, Menlo, Consolas, monospace; }
 .onboard { max-width: 560px; }

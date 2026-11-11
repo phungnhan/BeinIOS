@@ -1351,8 +1351,8 @@
           </select>
         </label>
         <div class="group-title auto-title">🤖 Tự xử lý sau mỗi lần quét</div>
-        <label class="switch-row"><input type="checkbox" id="autoApprove" /><span><b>Tự duyệt "Gợi ý duyệt"</b></span></label>
-        <label class="switch-row"><input type="checkbox" id="autoDecline" /><span><b>Tự từ chối "Gợi ý từ chối"</b></span></label>
+        <label class="switch-row"><input type="checkbox" id="autoApprove" /><span><b>Tự duyệt yêu cầu tham gia</b> <button type="button" class="tip-i" data-tip="Chỉ duyệt các yêu cầu mà Quy tắc thành viên chấm &quot;Gợi ý duyệt&quot; (đạt mọi quy tắc)." aria-label="Gợi ý: Chỉ duyệt các yêu cầu mà Quy tắc thành viên chấm &quot;Gợi ý duyệt&quot; (đạt mọi quy tắc).">i</button></span></label>
+        <label class="switch-row"><input type="checkbox" id="autoDecline" /><span><b>Tự từ chối yêu cầu tham gia</b> <button type="button" class="tip-i" data-tip="Chỉ từ chối các yêu cầu mà Quy tắc thành viên chấm &quot;Gợi ý từ chối&quot; (tài khoản bị vô hiệu hoá, dính từ khoá cấm, mạo danh admin…). Từ chối không hoàn tác được." aria-label="Gợi ý: Chỉ từ chối các yêu cầu mà Quy tắc thành viên chấm &quot;Gợi ý từ chối&quot; (tài khoản bị vô hiệu hoá, dính từ khoá cấm, mạo danh admin…). Từ chối không hoàn tác được.">i</button></span></label>
         <label class="switch-row"><input type="checkbox" id="autoHideSpam" /><span><b>Tự ẩn spam có link cấm</b> <button type="button" class="tip-i" data-tip="Bài và bình luận mới có link tới Tên miền cấm (quy tắc bài viết) bị ẩn ngay sau lần quét, lý do Spam. Chỉ xét tên miền cấm, không xét từ khoá; không ẩn bài của chính bạn; tối đa 20 mục mỗi lần quét." aria-label="Gợi ý: Bài và bình luận mới có link tới Tên miền cấm (quy tắc bài viết) bị ẩn ngay sau lần quét, lý do Spam. Chỉ xét tên miền cấm, không xét từ khoá; không ẩn bài của chính bạn; tối đa 20 mục mỗi lần quét.">i</button></span></label>
         <label class="switch-row"><input type="checkbox" id="autoApprovePosts" /><span><b>Tự duyệt bài của thành viên tin cậy</b> <button type="button" class="tip-i" data-tip="Bài chờ duyệt đạt mọi quy tắc bài viết của người trong danh sách dưới đây, hoặc người đã được duyệt đủ số bài qua addon (Dashboard, Telegram, tự duyệt) và chưa bị từ chối bài nào. Người có hồ sơ vi phạm không bao giờ được tự duyệt. Tối đa 20 bài mỗi lần quét." aria-label="Gợi ý: Bài chờ duyệt đạt mọi quy tắc bài viết của người trong danh sách dưới đây, hoặc người đã được duyệt đủ số bài qua addon (Dashboard, Telegram, tự duyệt) và chưa bị từ chối bài nào. Người có hồ sơ vi phạm không bao giờ được tự duyệt. Tối đa 20 bài mỗi lần quét.">i</button></span></label>
         <label class="text-row" data-requires="autoApprovePosts">
@@ -1742,7 +1742,7 @@
       <div class="ar-setup" id="ad-setup" hidden>Chưa có khoá API Claude — dùng AI trên web, hoặc dán khoá ở Cài đặt.</div>
       <details class="ap-preview ad-prompt-box" id="ad-prompt-box"><summary>Xem đề bài gửi AI</summary><pre id="ad-prompt"></pre></details>
       <p class="small muted" id="ad-status" role="status" aria-live="polite"></p>
-      <label class="ad-result-label" for="ad-result"><b>Kết quả</b> <span class="muted small">(sửa được)</span></label>
+      <label class="ad-result-label" for="ad-result"><b>Kết quả</b> <span class="muted small">(sửa được)</span><span class="muted small" id="ad-count" hidden></span></label>
       <textarea id="ad-result" rows="10"></textarea>
     </div>
     <div class="pv-form">

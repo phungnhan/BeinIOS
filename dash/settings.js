@@ -304,30 +304,31 @@ const saveSettings = (patch) => saveTo('settings', BG.DEFAULT_SETTINGS, patch, '
 for (const k of SETTING_BOOLS) {
   $(k).addEventListener('change', async () => {
     const on = $(k).checked;
-    // Tắt chạy thử khi đang bật tự xử lý: hỏi lại vì thao tác sẽ gửi thật
+    // Tắt chạy thử khi đang bật tự xử lý: hỏi lại vì thao tác sẽ gửi thật. Hộp hỏi gọi công tắc đúng tên ở BG.AUTO_SWITCHES
     if (on && (k === 'autoApprove' || k === 'autoDecline') && !data.settings.dryRun) {
       const what = k === 'autoApprove' ? 'duyệt' : 'từ chối';
-      if (!confirm(`Bật tự ${what}? Sau mỗi lần quét, addon sẽ tự ${what} các yêu cầu tham gia theo quy tắc và gửi thật lên Beincom.`)) {
+      if (!confirm(`Bật "${BG.AUTO_SWITCHES[k]}"? Sau mỗi lần quét, addon sẽ tự ${what} các yêu cầu tham gia được chấm "${k === 'autoApprove' ? 'Gợi ý duyệt' : 'Gợi ý từ chối'}" và gửi thật lên Beincom.`)) {
         $(k).checked = false;
         return;
       }
     }
     if (on && k === 'autoApprovePosts' && !data.settings.dryRun) {
       const n = (data.settings.trustedMembers || []).length;
-      if (!confirm(`Bật tự duyệt bài? Sau mỗi lần quét, bài chờ duyệt đạt mọi quy tắc của ${n ? n + ' thành viên tin cậy' : 'thành viên tin cậy'}${data.settings.trustAfterApproved ? ` và người đã được duyệt ít nhất ${data.settings.trustAfterApproved} bài` : ''} sẽ được duyệt thật trên Beincom.`)) {
+      if (!confirm(`Bật "${BG.AUTO_SWITCHES[k]}"? Sau mỗi lần quét, bài chờ duyệt đạt mọi quy tắc của ${n ? n + ' thành viên tin cậy' : 'thành viên tin cậy'}${data.settings.trustAfterApproved ? ` và người đã được duyệt ít nhất ${data.settings.trustAfterApproved} bài` : ''} sẽ được duyệt thật trên Beincom.`)) {
         $(k).checked = false;
         return;
       }
     }
     if (on && k === 'autoHideSpam' && !data.settings.dryRun) {
       const domains = data.postRules.blockedDomains || [];
-      if (!confirm(`Bật tự ẩn spam? Sau mỗi lần quét, bài và bình luận mới có link tới tên miền cấm (${domains.length ? domains.join(', ') : 'chưa có tên miền nào'}${Object.keys(data.groupRules || {}).length ? ' và tên miền cấm trong quy tắc riêng của group' : ''}) sẽ bị ẩn thật trên Beincom.`)) {
+      if (!confirm(`Bật "${BG.AUTO_SWITCHES[k]}"? Sau mỗi lần quét, bài và bình luận mới có link tới tên miền cấm (${domains.length ? domains.join(', ') : 'chưa có tên miền nào'}${Object.keys(data.groupRules || {}).length ? ' và tên miền cấm trong quy tắc riêng của group' : ''}) sẽ bị ẩn thật trên Beincom.`)) {
         $(k).checked = false;
         return;
       }
     }
-    if (!on && k === 'dryRun' && (data.settings.autoApprove || data.settings.autoDecline || data.settings.autoHideSpam || data.settings.autoApprovePosts)) {
-      if (!confirm('Tắt Chạy thử khi đang bật tự xử lý: lần quét tới addon sẽ tự duyệt / từ chối / ẩn thật. Tiếp tục?')) {
+    const autos = k === 'dryRun' && !on ? BG.autoSwitchesOn(data.settings) : [];
+    if (autos.length) {
+      if (!confirm(`Tắt Chạy thử khi đang bật tự xử lý (${autos.join(', ')}): lần quét tới addon sẽ tự duyệt / từ chối / ẩn thật. Tiếp tục?`)) {
         $(k).checked = true;
         return;
       }

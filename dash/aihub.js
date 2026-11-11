@@ -37,7 +37,13 @@ function writeControls(format) {
   kind.value = BG.AI_WRITE_KINDS[pref.kind] ? pref.kind : 'free';
   const len = el('select', { id: 'ad-len', 'aria-label': 'Độ dài' }, el('option', { value: '', text: 'Theo loại bài' }), ...Object.entries(BG.AI_WRITE_LENGTHS).map(([k, v]) => el('option', { value: k, text: `${v.label} · ${format === 'article' ? v.article : v.post}` })));
   len.value = BG.AI_WRITE_LENGTHS[pref.length] ? pref.length : '';
+  // Bài đăng: "Theo loại bài" ghi rõ ra mức nào (hiện mọi loại đều Vừa)
+  const byKind = () => {
+    if (format !== 'article') len.options[0].textContent = `Theo loại bài · ${BG.AI_WRITE_LENGTHS[BG.aiWriteDefaultLength(format, kind.value)].label}`;
+  };
+  byKind();
   const sync = () => {
+    byKind();
     $('ad-note').placeholder = BG.AI_WRITE_KINDS[kind.value].hint;
     try {
       localStorage.setItem(AI_WRITE_PREF, JSON.stringify({ ...writePrefs(), [format]: { kind: kind.value, length: len.value } }));
@@ -68,6 +74,7 @@ function aiPostDraft() {
     notePlaceholder: w.hint,
     controls: w.controls,
     prompt: () => BG.aiPostPrompt({ kind: w.kind.value, length: w.len.value, idea: $('ad-note').value.trim(), current, note: AD.cfg?.note || '', persona: data.aiPersona }),
+    maxLen: BG.POST_MAX,
     useLabel: 'Đưa vào ô soạn',
     onUse: (text) => {
       showTab('compose');
@@ -75,6 +82,13 @@ function aiPostDraft() {
       $('compose').scrollIntoView({ block: 'start' });
       $('compose-text').value = text;
       $('compose-text').dispatchEvent(new Event('input', { bubbles: true }));
+      // Quá giới hạn của Beincom: vẫn đưa vào (không tự cắt), báo rõ để rút gọn trước khi đăng
+      const body = $('compose-text').value.trim();
+      if (body.length > BG.POST_MAX)
+        return toast(
+          `Đã đưa vào ô soạn, nhưng bài dài khoảng ${BG.wordCount(body).toLocaleString('vi-VN')} từ (${body.length.toLocaleString('vi-VN')} ký tự) — quá giới hạn mỗi bài của Beincom (${BG.POST_MAX.toLocaleString('vi-VN')} ký tự, khoảng ${BG.POST_MAX_WORDS} từ): rút gọn trước khi đăng, hoặc chọn độ dài ngắn hơn rồi nhờ AI viết lại.` + blanksNote(text),
+          'err',
+        );
       toast('Đã đưa bài vào ô soạn — xem lại, chọn group rồi bấm Đăng.' + blanksNote(text), BG.aiBlanks(text).length ? 'warn' : '');
     },
   });

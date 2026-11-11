@@ -58,6 +58,8 @@
 
   // Bốn công tắc tự xử lý sau mỗi lần quét. Còn Chạy thử thì chúng chỉ ghi nhật ký; tắt Chạy thử lúc một trong số này đang bật
   // là lần quét tới gửi thật lên Beincom (ẩn / từ chối không hoàn tác) — popup hỏi lại và kể tên các công tắc đang bật.
+  // Đây là tên chuẩn: mọi nơi gọi tên công tắc (popup, hộp hỏi ở Cài đặt, Bắt đầu nhanh, Hướng dẫn, báo cáo sử dụng) lấy từ đây;
+  // nhãn trong dashboard.html là chữ cố định, test bảo đảm trùng.
   const AUTO_SWITCHES = {
     autoApprove: 'Tự duyệt yêu cầu tham gia',
     autoDecline: 'Tự từ chối yêu cầu tham gia',
@@ -432,6 +434,7 @@
     API,
     SITE,
     DEFAULT_SETTINGS,
+    AUTO_SWITCHES,
     autoSwitchesOn,
     DEFAULT_RULES,
     DEFAULT_POST_RULES,

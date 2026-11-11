@@ -1717,7 +1717,7 @@ test('báo cáo sử dụng: đếm tính năng theo ngày (chỉ lệnh có tê
     [
       'BeinFusion v0.28.0 · Chrome/141.0.1.2 · báo cáo sử dụng 30 ngày (tới 2026-10-12) · Lan — admin',
       '• Dùng từ 2026-10-12 · 1 ngày có dùng trong 30 ngày · quản trị 1 community, 2 group',
-      '• Đang bật: Chạy thử, Tự ẩn spam, Telegram (có nút)',
+      '• Đang bật: Chạy thử, Tự ẩn spam có link cấm, Telegram (có nút)',
       '• Tính năng dùng: Đăng / hẹn giờ bài 2 · Quét tay 1 · Báo cáo tháng 1',
       '• Nhật ký 30 ngày: 3 thao tác (1 tự động, 1 từ Telegram, 1 bấm tay) · 1 lỗi',
       '• Lỗi kỹ thuật 30 ngày: 2 — GET content/timeline/:id → 504 (×2); TypeError: x (×1)',
@@ -2169,4 +2169,50 @@ test('công tắc tự xử lý đang bật: kể tên từng công tắc trong 
     assert.deepEqual(BG.autoSwitchesOn({ ...BG.DEFAULT_SETTINGS, [k]: true }), [label], k);
   }
   assert.deepEqual(BG.autoSwitchesOn({ autoApprovePosts: true, autoHideSpam: true, autoApprove: true, autoDecline: true }), Object.values(labels));
+  assert.deepEqual(BG.AUTO_SWITCHES, labels); // bộ tên chuẩn, các nơi khác lấy từ đây
+});
+
+test('tên bốn công tắc tự xử lý: báo cáo sử dụng (Lỗi kỹ thuật) dùng đúng BG.AUTO_SWITCHES, đúng thứ tự, sau Chạy thử', () => {
+  const SW = BG.AUTO_SWITCHES;
+  for (const [k, label] of Object.entries(SW)) {
+    assert.deepEqual(BG.usageData({ settings: { [k]: true } }).flags, [label], k);
+    assert.match(BG.usageReport({ settings: { [k]: true }, now: Date.parse('2026-10-12T02:00:00Z') }), new RegExp(`^• Đang bật: ${label}$`, 'm'), k);
+  }
+  assert.deepEqual(BG.usageData({ settings: { autoApprovePosts: true, scanComments: true, autoHideSpam: true, dryRun: true, autoDecline: true, autoApprove: true } }).flags, ['Chạy thử', ...Object.values(SW), 'Quét bình luận']);
+  // Bật hết mọi công tắc: dòng "Đang bật" vẫn dưới giới hạn 400 ký tự một ô của máy nhận báo cáo (tools/usage-collector.gs)
+  const all = Object.fromEntries(Object.keys(BG.DEFAULT_SETTINGS).map((k) => [k, true]));
+  assert.ok(BG.usageData({ settings: all, telegram: { enabled: true, actions: true } }).flags.join(', ').length < 400);
+});
+
+test('tên bốn công tắc tự xử lý: nhãn ở Cài đặt (dashboard.html), Hướng dẫn, bộ mẫu chống lừa đảo đúng tên chuẩn; tên cũ không còn ở giao diện / tài liệu', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const root = path.join(__dirname, '..');
+  const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
+  const SW = BG.AUTO_SWITCHES;
+  // Cài đặt: nhãn là chữ cố định trong dashboard.html (hiện ngay, không chờ JS; BeinIOS nhúng trang này) — phải trùng tên chuẩn
+  const dash = read('dashboard.html');
+  const row = (k) => dash.match(new RegExp(`<input type="checkbox" id="${k}" /><span><b>([^<]*)</b>(?: <button type="button" class="tip-i" data-tip="([^"]*)")?`));
+  for (const [k, label] of Object.entries(SW)) {
+    assert.equal(row(k)?.[1], label, k);
+    assert.ok(row(k)[2], `${k}: có ⓘ`);
+  }
+  // Ý nghĩa của tên cũ ("Gợi ý duyệt" / "Gợi ý từ chối") nằm trong ⓘ của hai công tắc thành viên
+  assert.match(row('autoApprove')[2], /&quot;Gợi ý duyệt&quot;/);
+  assert.doesNotMatch(row('autoApprove')[2], /không bao giờ/); // chặn người có hồ sơ vi phạm tuỳ quy tắc "Có hồ sơ vi phạm" — không hứa tuyệt đối
+  assert.match(row('autoDecline')[2], /&quot;Gợi ý từ chối&quot;/);
+  // Hướng dẫn → Tự xử lý: mỗi công tắc một dòng, mở đầu bằng tên chuẩn
+  const items = BG.HELP_TOPICS.auto.sections.flatMap((s) => s.items.flat());
+  for (const label of Object.values(SW)) assert.equal(items.filter((x) => x.startsWith(label + ':')).length, 1, label);
+  assert.ok(items.some((x) => x.includes('"Gợi ý duyệt"')) && items.some((x) => x.includes('"Gợi ý từ chối"')));
+  assert.ok(BG.RULE_PRESETS.scam.parts.find((p) => p.key === 'blockedDomains').note.includes(`"${SW.autoHideSpam}"`));
+  // Tên cũ / tên rút gọn (viết hoa = gọi tên công tắc): không còn ở chữ giao diện và tài liệu. Bỏ qua dòng chú thích trong mã.
+  const OLD = [/Tự duyệt(?! yêu cầu tham gia| bài của thành viên tin cậy)/, /Tự từ chối(?! yêu cầu tham gia)/, /Tự ẩn(?! spam có link cấm)/];
+  const files = ['dashboard.html', 'popup.html', 'chat.html', 'HUONG-DAN-CAI.html', 'README.md', 'popup.js'];
+  for (const dir of ['lib', 'dash', 'bg', 'chat']) for (const f of fs.readdirSync(path.join(root, dir))) if (f.endsWith('.js') && !f.startsWith('silk')) files.push(`${dir}/${f}`);
+  for (const f of files) {
+    const text = f.endsWith('.js') ? read(f).replace(/^\s*\/\/.*$/gm, '') : read(f);
+    for (const re of OLD) assert.doesNotMatch(text, re, f);
+  }
+  for (const t of Object.values(BG.HELP_TOPICS)) for (const s of t.sections.flatMap((x) => x.items.flat())) for (const re of OLD) assert.doesNotMatch(s, re, s);
 });

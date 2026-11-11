@@ -2,6 +2,10 @@
 
 Mỗi bản một mục, bản mới nhất ở trên. Dashboard tự hiện các mục mới sau khi cập nhật (bấm "Có gì mới" ở cuối trang để xem lại).
 
+## v0.70.2 — 11/11/2026
+- **Trợ lý AI viết bài đăng dài hơn**: Ngắn khoảng 150–230 từ, Vừa khoảng 280–400 từ, Dài khoảng 430–570 từ (trước: 60–120 / 120–250 / 250–400 từ). Mức Dài đã sát giới hạn mỗi bài của Beincom (3.000 ký tự, khoảng 600 từ) — cần dài hơn thì viết Article. "Theo loại bài" nay là mức Vừa cho mọi loại bài đăng (trước đây Thông báo, Mở thảo luận, Sự kiện, Cảnh báo lừa đảo mặc định rất ngắn). AI được thêm bối cảnh, giải thích, ví dụ, các bước, lưu ý để đủ độ dài, nhưng vẫn không bịa số liệu, ngày giờ, tên hay link. Hộp AI hiện số từ của bài vừa viết; bài quá giới hạn thì báo đỏ khi đưa vào ô soạn (không tự cắt). Độ dài Article không đổi.
+- **Thống nhất tên 4 công tắc tự xử lý** ở Cài đặt, popup, Bắt đầu nhanh, các hộp hỏi, Hướng dẫn và báo cáo: Tự duyệt yêu cầu tham gia · Tự từ chối yêu cầu tham gia · Tự ẩn spam có link cấm · Tự duyệt bài của thành viên tin cậy. Ý "chỉ duyệt / từ chối yêu cầu được gợi ý" chuyển vào ⓘ của từng công tắc.
+
 ## v0.70.1 — 11/11/2026
 - **Huỷ / Đổi giờ bài hẹn giờ an toàn hơn**: ngay trước khi gửi lệnh, addon đọc lại trạng thái từng bài. Chỉ huỷ hoặc đổi giờ bài còn chờ đăng hay hẹn giờ lỗi; bài **đã đăng** thì giữ nguyên và báo rõ (muốn gỡ thì dùng Xoá bài). Trước đây, nếu Dashboard mở lâu mà danh sách đã cũ, bấm Huỷ có thể xoá luôn bài vừa được Beincom đăng. Huỷ cả chuỗi xét từng bài và báo số bài đã đăng không bị xoá. Bài đã quá giờ hẹn mà danh sách còn ghi "đang chờ" thì Dashboard tự tải lại danh sách trước khi hỏi.
 - **Trang Chat không còn bỏ sót tin**: tin người khác gửi ngay trước lúc bạn bấm Gửi giờ vẫn hiện (trước đây có thể bị bỏ qua tới khi tải lại trang). Áp dụng cả cho tin kèm tệp, bình luận trong thread và cuộc trò chuyện chưa có tin nào.
