@@ -4,7 +4,7 @@
 // Nạp sau dash/icons.js (icSvg). Mở thẳng một mục: dashboard.html#tab=settings&sec=tg, hoặc showSettingsSec('tg').
 const SET_SECTIONS = [
   ['Quản trị', [['scan', 'Hoạt động & quét', 'activity'], ['auto', 'Tự xử lý', 'bot'], ['watch', 'Theo dõi & nhắc việc', 'bell'], ['rules', 'Quy tắc thành viên', 'users'], ['postRules', 'Quy tắc bài viết', 'news']]],
-  ['Tích hợp', [['chat', 'Chat Beincom', 'message'], ['tg', 'Telegram', 'send'], ['ai', 'Trợ lý AI', 'sparkles']]],
+  ['Tích hợp', [['chat', 'Chat Beincom', 'message'], ['tg', 'Telegram', 'send'], ['ai', 'Trợ lý AI', 'sparkles'], ['guar', 'Guar Studio', 'image']]],
   ['Dữ liệu', [['backup', 'Sao lưu & đồng bộ', 'save'], ['beinios', 'BeinIOS (iPhone)', 'phone']]],
   ['Hiển thị', [['look', 'Giao diện', 'eye']]],
   ['Trợ giúp', [['help', 'Hướng dẫn', 'help']]],
@@ -34,7 +34,7 @@ function tagSettings() {
         tag(x, sec);
       }
     } else
-      tag(ch, c.contains('watch-group') ? 'watch' : c.contains('chat-group') ? 'chat' : c.contains('tg-group') ? 'tg' : c.contains('ai-group') ? 'ai' : c.contains('sync-group') || c.contains('backup-group') ? 'backup' : ch.id === 'beinios-group' ? 'beinios' : ch.id === 'look-set' ? 'look' : ch.id === 'help-set' ? 'help' : '');
+      tag(ch, c.contains('watch-group') ? 'watch' : c.contains('chat-group') ? 'chat' : c.contains('tg-group') ? 'tg' : c.contains('ai-group') ? 'ai' : c.contains('guar-group') ? 'guar' : c.contains('sync-group') || c.contains('backup-group') ? 'backup' : ch.id === 'beinios-group' ? 'beinios' : ch.id === 'look-set' ? 'look' : ch.id === 'help-set' ? 'help' : '');
   }
   // Nhóm một mình trong mục: tên nhóm trùng tên mục (tiêu đề thẻ đã ghi) nên ẩn
   const groups = [...card.children].filter((x) => x.classList.contains('group') && x.id !== 'settings-group');
@@ -79,6 +79,7 @@ function setNavStatus() {
   put('chat', on('chatEnabled') ? 'Bật' : 'Tắt');
   put('tg', on('tg-enabled') ? 'Bật' : 'Tắt');
   put('ai', BG.validAiKey($('ai-key').value) ? 'Khoá API' : 'Chép – dán');
+  put('guar', typeof GS === 'object' && GS.cfg.ok ? 'Đã nối' : 'Chưa nối'); // dash/guar.js
   put('backup', on('syncSettings') ? 'Đồng bộ' : '');
   put('look', document.querySelector('input[name="dashUi"]:checked')?.value === 'modern' ? 'Hiện đại' : 'Cổ điển');
 }

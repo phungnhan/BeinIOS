@@ -2087,6 +2087,15 @@ test('viết bình luận vào bài và trả lời bình luận: đúng API và
   assert.deepEqual(mine.map((c) => [c.postId, c.parentId]).sort(), [['t1', 'c1'], ['t3', '']]);
   // Không có nội dung / lỗi từ Beincom
   assert.match((await env.send({ type: 'commentWrite', postId: 't1', content: '   ' })).message, /chưa có nội dung/);
+  // Kèm ảnh (như web: media.images); có ảnh thì không bắt buộc chữ; tối đa 1 ảnh; mục lạ bị bỏ
+  const img = { url: 'https://media.beincom.com/up1', id: 'up1', width: 800, height: 600 };
+  await env.send({ type: 'commentWrite', postId: 't3', content: '', media: { images: [img, { id: 3 }] } });
+  assert.deepEqual(env.bodies.at(-1), ['POST content/comments', { postId: 't3', content: '', media: { images: [img] }, mentions: {} }]);
+  assert.equal(env.storage.log[0].snippet, '[1 ảnh] ');
+  assert.match((await env.send({ type: 'commentWrite', postId: 't3', content: 'x', media: { images: [img, { ...img, id: 'up2' }] } })).message, /tối đa 1 ảnh/);
+  // Ảnh bình luận tải lên với loại comment:content (như web)
+  await env.send({ type: 'uploadInit', kind: 'image', mimeType: 'image/png', resource: 'comment:content' });
+  assert.deepEqual(env.bodies.at(-1), ['POST upload/images/', { properties: { mime_type: 'image/png' }, resource: 'comment:content' }]);
   env.data.commentFail = true;
   const bad = await env.send({ type: 'commentWrite', postId: 't1', content: 'x' });
   assert.deepEqual([bad.failed, bad.errors], [1, ['Comment is invalid']]);

@@ -630,6 +630,7 @@
             <input type="file" id="media-input-video" accept="video/*" hidden />
             <button type="button" class="ghost sm" id="media-btn-file">📎 Tệp</button>
             <input type="file" id="media-input-file" multiple hidden />
+            <button type="button" class="ghost sm guar-only" id="media-btn-guar" hidden title="Chọn ảnh trong Guar Studio">🖼 Guar Studio</button>
             <span class="muted small" id="media-note"></span>
           </div>
           <div id="compose-media" class="media-tray" hidden></div>
@@ -750,6 +751,7 @@
                 <span class="sep" aria-hidden="true"></span>
                 <button type="button" data-md="link" title="Chèn link (Ctrl+K)" aria-label="Chèn link">🔗 Link</button>
                 <button type="button" data-md="image" title="Chèn ảnh vào chỗ con trỏ (tải lên khi bấm Đăng)" aria-label="Chèn ảnh">🖼 Ảnh</button>
+                <button type="button" class="guar-only" id="art-btn-guar" hidden title="Chèn ảnh từ Guar Studio vào chỗ con trỏ">Guar Studio</button>
                 <button type="button" data-md="video" title="Chèn video YouTube / Vimeo" aria-label="Chèn video">🎬 Video</button>
                 <button type="button" data-md="table" title="Chèn bảng" aria-label="Chèn bảng">▦ Bảng</button>
                 <button type="button" data-md="mention" title="Nhắc tên một người (hoặc gõ @)" aria-label="Nhắc tên">@ Nhắc tên</button>
@@ -1466,6 +1468,13 @@
         <label class="switch-row"><input type="checkbox" id="aiCtxThread" /><span><b>Bình luận được trả lời</b> <span class="muted small">và các trả lời trước trong thread</span></span></label>
         <label class="switch-row"><input type="checkbox" id="aiCtxAuthor" /><span><b>Người bình luận</b> <span class="muted small">tác giả bài, thành viên mới, từng vi phạm</span></span></label>
       </div>
+      <div class="group guar-group">
+        <div class="group-title">🖼 Ảnh từ Guar Studio <button type="button" class="tip-i" data-tip="Chọn ảnh tạo bằng AI, ảnh phân cảnh của từng dự án, ảnh Thiết kế ảnh trong Guar Studio để đính kèm khi đăng bài, chèn vào Article, gửi kèm bình luận. Guar Studio phải đang chạy trên máy này; chỉ đọc ảnh công khai, không sửa gì trong Guar Studio." aria-label="Gợi ý: Chọn ảnh tạo bằng AI, ảnh phân cảnh của từng dự án, ảnh Thiết kế ảnh trong Guar Studio để đính kèm khi đăng bài, chèn vào Article, gửi kèm bình luận. Guar Studio phải đang chạy trên máy này; chỉ đọc ảnh công khai, không sửa gì trong Guar Studio.">i</button></div>
+        <div class="muted small ai-lead">Lấy ảnh AI, ảnh phân cảnh của dự án, Thiết kế ảnh trong Guar Studio (đang chạy trên máy này) để đăng bài, chèn vào Article, gửi kèm bình luận. <button type="button" class="link-btn help-link" data-help="compose">Hướng dẫn</button></div>
+        <label class="text-row"><span><b>Địa chỉ Guar Studio</b> <button type="button" class="tip-i" data-tip="Địa chỉ mở Guar Studio trên máy này (mặc định http://127.0.0.1:9191). Chỉ nhận 127.0.0.1 hoặc localhost." aria-label="Gợi ý: Địa chỉ mở Guar Studio trên máy này (mặc định http://127.0.0.1:9191). Chỉ nhận 127.0.0.1 hoặc localhost.">i</button></span><input type="text" id="guar-url" spellcheck="false" autocomplete="off" placeholder="http://127.0.0.1:9191" /></label>
+        <div class="select-row guar-id-row"><span><b>Mã của BeinFusion</b> <button type="button" class="tip-i" data-tip="Dán mã này vào Guar Studio › Cài đặt › Kết nối › BeinFusion, bật Cho phép BeinFusion đọc ảnh, bấm Lưu kết nối — rồi quay lại bấm Kiểm tra kết nối." aria-label="Gợi ý: Dán mã này vào Guar Studio › Cài đặt › Kết nối › BeinFusion, bật Cho phép BeinFusion đọc ảnh, bấm Lưu kết nối — rồi quay lại bấm Kiểm tra kết nối.">i</button></span><span class="tg-line"><code class="guar-id" id="guar-id"></code><button type="button" class="ghost sm" id="btn-guar-copy">Chép</button></span></div>
+        <div class="sync-row"><span class="small muted" id="guar-status"></span><span class="tg-actions"><button type="button" class="primary sm" id="btn-guar-test">Kiểm tra kết nối</button></span></div>
+      </div>
       <div class="group sync-group">
         <div class="group-title">☁ Đồng bộ giữa các máy</div>
         <label class="switch-row"><input type="checkbox" id="syncSettings" /><span><b>Đồng bộ qua tài khoản Chrome / Edge</b> <button type="button" class="tip-i" data-tip="Cài đặt, quy tắc (chung và riêng từng group), mẫu bài chào / vinh danh đi theo tài khoản trình duyệt sang máy khác có cài BeinFusion. Không đồng bộ: công tắc bật addon, mẫu bài đăng, hồ sơ vi phạm (dùng Sao lưu)." aria-label="Gợi ý: Cài đặt, quy tắc (chung và riêng từng group), mẫu bài chào / vinh danh đi theo tài khoản trình duyệt sang máy khác có cài BeinFusion. Không đồng bộ: công tắc bật addon, mẫu bài đăng, hồ sơ vi phạm (dùng Sao lưu).">i</button></span></label>
@@ -1609,8 +1618,9 @@
     </div>
     <form id="pv-form" class="pv-form">
       <div class="pv-to" id="pv-to" hidden><span id="pv-to-text"></span> <button type="button" class="link-btn" id="pv-to-x">Huỷ trả lời</button></div>
+      <div class="pv-attach" id="pv-attach" hidden></div>
       <textarea id="pv-text" rows="3" placeholder="Viết bình luận… (gõ @username để nhắc tên người đăng hoặc người đã bình luận)"></textarea>
-      <div class="pv-actions"><span class="muted small">Đăng lên Beincom ngay, dưới tên tài khoản của bạn · Ctrl + Enter để gửi</span><button type="submit" class="primary" id="pv-send">Gửi bình luận</button></div>
+      <div class="pv-actions"><span class="pv-tools"><button type="button" class="ghost sm" id="pv-img-btn" title="Gửi kèm một ảnh — hoặc dán ảnh (Ctrl + V) vào ô bình luận">🖼 Ảnh</button><input type="file" id="pv-img-input" accept="image/jpeg,image/png,image/webp,image/gif" hidden /><button type="button" class="ghost sm guar-only" id="pv-guar-btn" hidden title="Chọn ảnh trong Guar Studio">Guar Studio</button><span class="muted small">Đăng lên Beincom ngay, dưới tên tài khoản của bạn · Ctrl + Enter để gửi</span></span><button type="submit" class="primary" id="pv-send">Gửi bình luận</button></div>
     </form>
   </dialog>
   <!-- Trả lời bình luận bằng AI (dash/aireply.js): AI viết sẵn, chính chủ xem / sửa / bỏ chọn rồi Trả lời tất cả -->
@@ -1654,6 +1664,24 @@
   </dialog>
   <!-- Nhờ AI viết một đoạn chữ (dash/aidraft.js): mẫu bài chào / vinh danh, tóm tắt bình luận -->
   <!-- Hồ sơ của bạn cho AI (dash/aipersona.js) -->
+  <!-- Ảnh từ Guar Studio (dash/guar.js) -->
+  <dialog id="guar-pick" class="postview guar-pick" aria-labelledby="gp-title">
+    <div class="pv-head">
+      <h3 id="gp-title">Ảnh từ Guar Studio</h3>
+      <button type="button" class="tip-i" data-tip="Ảnh công khai trong Guar Studio: ảnh tạo bằng AI, ảnh phân cảnh từng dự án, Thiết kế ảnh. Chọn rồi bấm Thêm ảnh — ảnh tải lên Beincom khi bạn bấm Đăng / Gửi." aria-label="Gợi ý: Ảnh công khai trong Guar Studio: ảnh tạo bằng AI, ảnh phân cảnh từng dự án, Thiết kế ảnh. Chọn rồi bấm Thêm ảnh — ảnh tải lên Beincom khi bạn bấm Đăng / Gửi.">i</button>
+      <button type="button" class="ghost sm" id="gp-reload" data-tip="Đọc lại ảnh trong Guar Studio" aria-label="Tải lại">↻</button>
+      <button type="button" class="ghost sm" id="gp-close" aria-label="Đóng">✕</button>
+    </div>
+    <div class="pv-body">
+      <div class="gp-bar"><select id="gp-group" aria-label="Nhóm ảnh"></select></div>
+      <p class="small muted" id="gp-status" role="status" aria-live="polite" hidden></p>
+      <div class="gp-grid" id="gp-grid"></div>
+    </div>
+    <div class="pv-form">
+      <div class="pv-actions"><span class="muted small" id="gp-count"></span><span class="ar-btns"><button type="button" class="ghost" id="gp-cancel">Đóng</button><button type="button" class="primary" id="gp-use" disabled>Thêm ảnh</button></span></div>
+    </div>
+  </dialog>
+
   <dialog id="ai-persona" class="postview ai-persona" aria-labelledby="ap-title">
     <div class="pv-head">
       <h3 id="ap-title">Hồ sơ của bạn cho AI</h3>
@@ -1891,6 +1919,7 @@
   <script src="dash/attach.js"></script>
   <script src="dash/calendar.js"></script>
   <script src="dash/article.js"></script>
+  <script src="dash/guar.js"></script>
   <script src="dash/welcome.js"></script>
   <script src="dash/shoutout.js"></script>
   <script src="dash/prompts.js"></script>
