@@ -148,6 +148,7 @@ node test/pwa/pwa.e2e.mjs
 
 ## Lịch sử BeinIOS
 
+- **1.9.1 (11/11/2026).** Gộp addon BeinFusion 0.70.1 — **Huỷ / Đổi giờ bài hẹn giờ** đọc lại trạng thái từng bài ngay trước khi gửi lệnh: bài đã đăng thì giữ nguyên và báo rõ (trước đây danh sách cũ có thể làm xoá nhầm bài vừa được đăng); **Chat không còn bỏ sót tin** người khác gửi ngay trước lúc bạn bấm Gửi (cả tin kèm tệp, bình luận trong thread, cuộc trò chuyện chưa có tin).
 - **1.9.0 (09/11/2026).** Gộp addon BeinFusion 0.70.0 — **bình luận kèm ảnh** trong cửa sổ Bài viết & bình luận (nút Ảnh hoặc dán ảnh; một ảnh mỗi bình luận, tải lên khi bấm Gửi). Phần "Ảnh từ Guar Studio" của addon chỉ dùng trên máy tính đang chạy Guar Studio nên không hiện trong BeinIOS.
 - **1.8.11 (09/11/2026).** Gộp addon BeinFusion 0.69.3 — sửa tận gốc lỗi không đăng được bài có ảnh / video: trước đây ứng dụng theo dõi tiến độ khi gửi file lên kho lưu trữ của Beincom, làm trình duyệt hỏi trước kho và bị từ chối nên file không được gửi đi. Giờ gửi như web Beincom; thanh tiến độ chạy dạng "đang tải".
 - **1.8.10 (09/11/2026).** Gộp addon BeinFusion 0.69.2 — sửa lỗi đăng ảnh "Beincom xử lý ảnh quá lâu" với ảnh lớn: ứng dụng chờ Beincom xử lý nhiều lượt (tới 3 phút với ảnh, 10 phút với video), nút Đăng ghi đang chờ bao lâu. Dán ảnh vào ô soạn bài / Article (giữ ô soạn rồi chọn Dán) thành ảnh đính kèm.
