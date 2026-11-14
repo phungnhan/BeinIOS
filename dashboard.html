@@ -1474,6 +1474,15 @@
         <div class="select-row guar-id-row"><span><b>Mã của BeinFusion</b> <button type="button" class="tip-i" data-tip="Dán mã này vào Guar Studio › Cài đặt › Kết nối › BeinFusion, bật Cho phép BeinFusion đọc ảnh, bấm Lưu kết nối — rồi quay lại bấm Kiểm tra kết nối." aria-label="Gợi ý: Dán mã này vào Guar Studio › Cài đặt › Kết nối › BeinFusion, bật Cho phép BeinFusion đọc ảnh, bấm Lưu kết nối — rồi quay lại bấm Kiểm tra kết nối.">i</button></span><span class="tg-line"><code class="guar-id" id="guar-id"></code><button type="button" class="ghost sm" id="btn-guar-copy">Chép</button></span></div>
         <div class="sync-row"><span class="small muted" id="guar-status"></span><span class="tg-actions"><button type="button" class="primary sm" id="btn-guar-test">Kiểm tra kết nối</button></span></div>
       </div>
+      <div class="group guar-publish-group">
+        <div class="group-title">Guar Studio · Đăng tự động</div>
+        <p class="muted small">Nhận bài giới thiệu video YouTube hoặc liên kết audio đã hẹn ở Guar Studio. Cần Chrome đang chạy, Guar Studio đang mở và phiên đăng nhập Beincom. Không đăng lại khi kết quả chưa rõ.</p>
+        <label class="text-row"><span>Địa chỉ Guar Studio</span><input id="guar-publish-url" type="url" spellcheck="false" autocomplete="off" placeholder="http://127.0.0.1:9364" /></label>
+        <label class="text-row"><span>Mã ghép nối từ Guar Studio</span><input id="guar-publish-token" type="password" spellcheck="false" autocomplete="off" placeholder="Dán mã mới; để trống để giữ mã đã lưu" /></label>
+        <label class="switch-row"><input id="guar-publish-enabled" type="checkbox" /><span>Cho phép nhận và đăng các bài đã xếp lịch ở Guar Studio</span></label>
+        <p class="muted small">Trong Guar Studio, cho phép đúng mã addon <code id="guar-publish-origin"></code>. Kết nối đăng bài tách riêng quyền đọc ảnh; mã ghép nối chỉ lưu trên máy này.</p>
+        <div class="sync-row"><span id="guar-publish-status" class="small muted" aria-live="polite"></span><span class="tg-actions"><button type="button" class="primary sm" id="guar-publish-save">Lưu kết nối</button><button type="button" class="ghost sm" id="guar-publish-poll">Kiểm tra hàng đợi</button><button type="button" class="ghost sm" id="guar-publish-disconnect">Ngắt kết nối</button></span></div>
+      </div>
       <div class="group sync-group">
         <div class="group-title">☁ Đồng bộ giữa các máy</div>
         <label class="switch-row"><input type="checkbox" id="syncSettings" /><span><b>Đồng bộ qua tài khoản Chrome / Edge</b> <button type="button" class="tip-i" data-tip="Cài đặt, quy tắc (chung và riêng từng group), mẫu bài chào / vinh danh đi theo tài khoản trình duyệt sang máy khác có cài BeinFusion. Không đồng bộ: công tắc bật addon, mẫu bài đăng, hồ sơ vi phạm (dùng Sao lưu)." aria-label="Gợi ý: Cài đặt, quy tắc (chung và riêng từng group), mẫu bài chào / vinh danh đi theo tài khoản trình duyệt sang máy khác có cài BeinFusion. Không đồng bộ: công tắc bật addon, mẫu bài đăng, hồ sơ vi phạm (dùng Sao lưu).">i</button></span></label>
@@ -1919,6 +1928,7 @@
   <script src="dash/calendar.js"></script>
   <script src="dash/article.js"></script>
   <script src="dash/guar.js"></script>
+  <script src="dash/guar-publish.js"></script>
   <script src="dash/welcome.js"></script>
   <script src="dash/shoutout.js"></script>
   <script src="dash/prompts.js"></script>
