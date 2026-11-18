@@ -7,6 +7,7 @@
   const enabled = document.getElementById('guar-publish-enabled');
   let busy = false;
   document.getElementById('guar-publish-origin').textContent = location.origin;
+  document.getElementById('guar-publish-copy').addEventListener('click', () => arCopy(location.origin).then((ok) => toast(ok ? 'Đã chép Mã của BeinFusion — dán vào Guar Studio › Cài đặt › Beincom qua BeinFusion.' : 'Không chép được — bôi đen mã rồi chép tay.', ok ? 'ok' : 'err')));
   const say = (message, bad = false) => {
     status.textContent = message;
     status.className = 'small ' + (bad ? 'err-text' : 'muted');
@@ -14,9 +15,9 @@
   async function read() {
     const r = await chrome.runtime.sendMessage({ type: 'guarPublishStatus' });
     if (r?.status !== 'ok') return say(r?.message || 'Chưa đọc được kết nối.', true);
-    if (document.activeElement !== url) url.value = r.config.url;
+    if (document.activeElement !== url) url.value = r.config.url || (typeof GS === 'object' && GS.cfg.url) || 'http://127.0.0.1:9191';
     enabled.checked = r.config.enabled;
-    token.placeholder = r.config.has_token ? 'Đã lưu mã · để trống để giữ nguyên' : 'Dán mã ghép nối từ Guar Studio';
+    token.placeholder = r.config.has_token ? 'Đã lưu mã · để trống để giữ nguyên, dán mã mới để thay' : 'Dán mã ghép nối từ Guar Studio';
     say(r.config.enabled ? r.worker?.message || 'Đang bật. Kiểm tra hàng đợi để đồng bộ nhóm.' : 'Đăng tự động đang tắt.', r.config.enabled && r.worker?.status === 'error');
   }
   async function act(action) {

@@ -74,6 +74,29 @@ async function guarPublishWriteJournal(key, record) {
   all[key] = { ...record, updated_at: new Date().toISOString() };
   await chrome.storage.local.set({ [GUAR_PUBLISH_JOURNAL]: all });
 }
+// Nhật ký BeinFusion: một dòng cho mỗi bài Guar Studio gửi sang, lúc Beincom nhận lần đầu (đã đăng hoặc đang chờ duyệt)
+async function guarPublishLog(task, contentId, phase) {
+  const { state, log } = await load();
+  const groups = state.snapshot?.groups || [];
+  const targets = task.group_ids.map((id) => groups.find((g) => g.id === id)).filter(Boolean);
+  pushLog(log, [{
+    time: Date.now(),
+    kind: 'compose',
+    source: 'guar',
+    action: 'publish',
+    status: 'ok',
+    groupId: task.group_ids[0] || '',
+    groupName: targets.map((g) => g.name).join(', ') || task.group_ids.join(', '),
+    communityName: [...new Set(targets.map((g) => g.communityName).filter(Boolean))].join(', '),
+    contentId,
+    contentType: 'POST',
+    snippet: String(task.content || '').replace(/\s+/g, ' ').slice(0, 120),
+    message: phase === 'published' ? 'Đã đăng (bài từ Guar Studio)' : 'Beincom đã nhận, đang xử lý / chờ duyệt (bài từ Guar Studio)',
+  }]);
+  await saveState(state, { log });
+}
+const GUAR_DONE = ['submitted', 'published'];
+
 async function guarPublishEvent(cfg, task, phase, remoteId, message = '') {
   return guarPublishRequest(cfg, '/tasks/' + task.id + '/event', { phase, ...(remoteId ? { remote_id: remoteId } : {}), message: String(message).slice(0, 400) });
 }
@@ -137,11 +160,13 @@ async function guarPublishRunTask(cfg, task, client, accountId, groups) {
     if ((status !== 'DRAFT' && !contentMatches) || (status === 'DRAFT' && String(data.content || '').trim() && !contentMatches)) return attention('Nội dung bài khác bản đã xếp; chưa nhận biên nhận hoặc ghi đè bài này.');
     if (['images', 'videos', 'files'].some((kind) => (data.media?.[kind] || []).length)) return attention('Bài có tệp đính kèm ngoài bản đã xếp; cần đối chiếu.');
     if (status === 'PUBLISHED') {
+      if (!GUAR_DONE.includes(record.phase)) await guarPublishLog(task, knownId, 'published');
       await save('published');
       await guarPublishEvent(cfg, task, 'published', knownId, 'Đã đăng trên Beincom.');
       return { status: 'ok', message: 'Đã đăng trên Beincom.', contentId: knownId };
     }
     if (['PROCESSING', 'WAITING_SCAN', 'WAITING_APPROVAL', 'WAITING_SCHEDULE'].includes(status)) {
+      if (!GUAR_DONE.includes(record.phase)) await guarPublishLog(task, knownId, 'submitted');
       await save('submitted');
       await guarPublishEvent(cfg, task, 'submitted', knownId, 'Beincom đã nhận; đang xử lý hoặc chờ duyệt.');
       return { status: 'ok', message: 'Beincom đã nhận; đang chờ trạng thái cuối.', contentId: knownId };
@@ -174,6 +199,7 @@ async function guarPublishRunTask(cfg, task, client, accountId, groups) {
   const result = await client.call('PUT', `content/posts/${record.remote_id}/publish`, body);
   if (!BG.isOk(result)) return attention('Chưa xác nhận được kết quả đăng. Giữ bản nháp và mã bài để đối chiếu; không đăng lại.');
   const phase = result.body?.data?.status === 'PUBLISHED' ? 'published' : 'submitted';
+  await guarPublishLog(task, record.remote_id, phase);
   await save(phase);
   await guarPublishEvent(cfg, task, phase, record.remote_id, phase === 'published' ? 'Đã đăng trên Beincom.' : 'Beincom đã nhận; đang xử lý hoặc chờ duyệt.');
   return { status: 'ok', message: phase === 'published' ? 'Đã đăng trên Beincom.' : 'Beincom đã nhận; đang chờ trạng thái cuối.', contentId: record.remote_id };
@@ -224,6 +250,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         await guarPublishSchedule();
         return guarPublishStatus();
       } : () => guarPublishSave(msg.config || {});
-  Promise.resolve().then(action).then(sendResponse, () => sendResponse({ status: 'error', message: 'Không lưu được kết nối; kiểm tra địa chỉ, mã ghép nối và quyền truy cập.' }));
+  Promise.resolve().then(action).then(sendResponse, (e) => sendResponse({ status: 'error', message: e?.message || 'Không lưu được kết nối; kiểm tra địa chỉ, mã ghép nối và quyền truy cập.' }));
   return true;
 });

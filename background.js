@@ -56,7 +56,7 @@ chrome.runtime.onInstalled.addListener(async () => {
   await scheduleAlarm();
   await scheduleTelegramPoll();
   await scheduleChatAlarm();
-  await guarPublishSchedule();
+  await guarPublishSchedule().catch(() => {}); // Nhận bài đăng từ Guar Studio (bg/guar-publish.js): lỗi không chặn quét
   await updateBadge();
   exclusive(() => doScan({ source: 'install' }));
 });
@@ -65,7 +65,7 @@ chrome.runtime.onStartup.addListener(async () => {
   await scheduleAlarm();
   await scheduleTelegramPoll();
   await scheduleChatAlarm();
-  await guarPublishSchedule();
+  await guarPublishSchedule().catch(() => {}); // Nhận bài đăng từ Guar Studio (bg/guar-publish.js): lỗi không chặn quét
   await updateBadge();
   exclusive(() => doScan({ source: 'startup' }));
 });

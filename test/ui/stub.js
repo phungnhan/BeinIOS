@@ -333,6 +333,18 @@
           return m.kind === 'file' ? { status: 'ok', id: 'f' + window.__uploads } : { status: 'ok', id: 'up' + window.__uploads, url: 'https://bucket.s3.example.com/', fields: { key: 'k' + window.__uploads, Policy: 'p' } };
         }
         if (m.type === 'uploadWait') { await new Promise((res) => setTimeout(res, 100)); return { status: 'ok', item: { url: img, id: m.id } }; }
+        // Nhận bài đăng từ Guar Studio (giả lập bg/guar-publish.js): store.guarPublish { url, token, enabled }
+        if (/^guarPublish(Status|Save|Poll|Disconnect)$/.test(m.type)) {
+          const view = () => ({ status: 'ok', config: { url: store.guarPublish?.url || '', enabled: !!store.guarPublish?.enabled, has_token: !!store.guarPublish?.token }, worker: store.guarPublishStatus || null });
+          if (m.type === 'guarPublishSave') {
+            const token = m.config.token || store.guarPublish?.token || '';
+            if (m.config.enabled && !/^[A-Za-z0-9_-]{32,512}$/.test(token)) return { status: 'error', message: 'Cần mã ghép nối do Guar Studio cấp.' };
+            store.guarPublish = { url: m.config.url, token, enabled: !!m.config.enabled };
+          }
+          if (m.type === 'guarPublishPoll') return { status: 'ok', message: 'Đã kết nối. Chưa có bài tới lịch và đủ điều kiện.' };
+          if (m.type === 'guarPublishDisconnect') delete store.guarPublish;
+          return view();
+        }
         if (m.type === 'diag') {
           store.diagLog = BG.pushDiag(store.diagLog || [], m.entry);
           return { status: 'ok' };
