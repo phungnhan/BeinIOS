@@ -4867,6 +4867,10 @@ test('Nhận bài đăng từ Guar Studio: chỉ nhận lệnh từ Cài đặt,
   assert.match((await env.send({ type: 'guarPublishSave', config: { url: 'http://127.0.0.1:9191/', enabled: true, token: '' } }, SENDER)).message, /Cần mã ghép nối/);
   const saved = await env.send({ type: 'guarPublishSave', config: { url: 'http://127.0.0.1:9191/', enabled: true, token: TOKEN } }, SENDER);
   assert.deepEqual(saved.config, { url: 'http://127.0.0.1:9191', enabled: true, has_token: true });
+  // Chỉ dùng phần ảnh (chưa bật nhận bài): vẫn lưu mã ghép nối; để trống mã thì giữ mã cũ
+  const onlyImg = await env.send({ type: 'guarPublishSave', config: { url: 'http://127.0.0.1:9191', enabled: false, token: '' } }, SENDER);
+  assert.deepEqual(onlyImg.config, { url: 'http://127.0.0.1:9191', enabled: false, has_token: true });
+  await env.send({ type: 'guarPublishSave', config: { url: 'http://127.0.0.1:9191', enabled: true, token: TOKEN } }, SENDER);
   assert.equal(env.storage.guarPublish.token, TOKEN);
   // Chạy thử: gửi tài khoản + nhóm quản trị cho Guar, không nhận bài, không gọi API ghi của Beincom
   env.data.guar = { token: TOKEN, tasks: [{ id: 't1' }] };
