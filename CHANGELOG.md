@@ -2,6 +2,9 @@
 
 Mỗi bản một mục, bản mới nhất ở trên. Dashboard tự hiện các mục mới sau khi cập nhật (bấm "Có gì mới" ở cuối trang để xem lại).
 
+## v0.71.1 — 19/11/2026
+- Nhận bài đăng từ Guar Studio: ô Địa chỉ Guar Studio cùng kiểu với các ô nhập khác.
+
 ## v0.71.0 — 19/11/2026
 - **Nhận bài đăng từ Guar Studio** (Cài đặt › Tích hợp › Guar Studio, ngay dưới phần Ảnh từ Guar Studio): Guar Studio gửi sang các bài giới thiệu video YouTube hoặc liên kết audio bạn đã hẹn, BeinFusion đăng bằng tài khoản Beincom đang đăng nhập vào các nhóm bạn chọn ở Guar Studio, tới giờ hẹn (addon hỏi hàng đợi mỗi phút khi Chrome chạy).
   - Nối: chép **Mã của BeinFusion** → trong Guar Studio vào Cài đặt › Beincom qua BeinFusion, dán mã, tạo **mã ghép nối** → dán mã ghép nối vào BeinFusion, bật "Nhận và đăng các bài đã xếp lịch ở Guar Studio", bấm **Lưu kết nối** (cho phép khi trình duyệt hỏi quyền truy cập 127.0.0.1). **Kiểm tra hàng đợi** để đồng bộ ngay; **Ngắt kết nối** để dừng.
