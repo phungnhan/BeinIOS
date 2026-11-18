@@ -2,6 +2,11 @@
 
 Mỗi bản một mục, bản mới nhất ở trên. Dashboard tự hiện các mục mới sau khi cập nhật (bấm "Có gì mới" ở cuối trang để xem lại).
 
+## v0.72.0 — 19/11/2026
+- **Một kết nối Guar Studio cho cả hai việc**: Cài đặt › Tích hợp › Guar Studio giờ chỉ còn một khối "Kết nối Guar Studio" — một Mã của BeinFusion, một địa chỉ, một mã ghép nối. Nối một lần là dùng được cả **nhận bài Guar Studio đã hẹn** (bật bằng công tắc) lẫn **lấy ảnh Guar Studio** khi đăng bài / Article / bình luận. Trước đây phần ảnh có cách nối riêng (trùng ô, trùng mã) và báo lỗi 405 với Guar Studio hiện tại.
+- Dòng **Ảnh từ Guar Studio** cho biết đã dùng được chưa. Guar Studio chưa có cổng ảnh mới thì ghi "chưa có cổng ảnh dùng chung mã ghép nối — cập nhật Guar Studio" và nút Guar Studio ở các ô soạn tạm ẩn; cập nhật xong bấm **Kiểm tra** là dùng được.
+- **Ngắt kết nối** tắt cả nhận bài lẫn lấy ảnh.
+
 ## v0.71.1 — 19/11/2026
 - Nhận bài đăng từ Guar Studio: ô Địa chỉ Guar Studio cùng kiểu với các ô nhập khác.
 

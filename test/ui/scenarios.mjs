@@ -3991,127 +3991,101 @@ export const scenarios = [
     },
   },
   {
-    name: 'Guar Studio: Cài đặt › Tích hợp (mã addon, Kiểm tra kết nối, báo chưa cho phép), nút hiện sau khi nối; chọn ảnh theo dự án cho bài đăng, Article, bình luận (kèm ảnh khi gửi)',
+    name: 'Kết nối Guar Studio: một khối cho nhận bài lẫn lấy ảnh (một Mã của BeinFusion, một mã ghép nối); Guar chưa có cổng ảnh thì báo, có thì nút Guar Studio hiện; chọn ảnh cho bài đăng, Article, bình luận (POST kèm mã); Ngắt kết nối',
     async run({ page, url, assert }) {
       await page.open(url('dashboard', 'tab=settings&sec=guar'));
-      await page.until(() => !!document.getElementById('btn-guar-test') && document.getElementById('btn-guar-test').getClientRects().length > 0);
-      const s0 = await page.ev(`({ url: document.getElementById('guar-url').value, id: document.getElementById('guar-id').textContent, hidden: [...document.querySelectorAll('.guar-only')].map((b) => b.hidden), nav: document.querySelector('[data-sec="guar"] em')?.textContent })`);
-      assert.equal(s0.url, 'http://127.0.0.1:9191');
-      assert.equal(s0.id, await page.ev(`location.origin`));
-      assert.deepEqual(s0.hidden, [true, true, true]); // chưa nối: không hiện nút chọn ảnh
-      // Guar Studio giả: lần đầu chưa cho phép (403), sau đó cho phép
+      await page.until(() => !!document.getElementById('guar-publish-token') && document.getElementById('guar-publish-token').getClientRects().length > 0);
+      const v = await page.ev(`({
+        groups: [...document.querySelectorAll('#settings > .group')].filter((g) => g.getClientRects().length).length,
+        ids: document.querySelectorAll('.guar-id').length,
+        old: !!document.getElementById('guar-url') || !!document.getElementById('btn-guar-test'),
+        origin: document.getElementById('guar-publish-origin').textContent,
+        url: document.getElementById('guar-publish-url').value,
+        img: document.getElementById('guar-img-status').textContent,
+        hidden: [...document.querySelectorAll('.guar-only')].map((b) => b.hidden),
+        nav: document.querySelector('[data-sec="guar"] em')?.textContent,
+      })`);
+      assert.deepEqual([v.groups, v.ids, v.old], [1, 1, false]); // một khối, một Mã của BeinFusion
+      assert.equal(v.origin, await page.ev(`location.origin`));
+      assert.equal(v.url, 'http://127.0.0.1:9191');
+      assert.match(v.img, /^Chưa nối/);
+      assert.deepEqual(v.hidden, [true, true, true]);
+      assert.equal(v.nav, 'Chưa nối');
+      // Guar Studio giả: kiểm mã ghép nối ở mọi lệnh POST; window.__guarImg = false giống bản chưa có cổng ảnh (405)
       await page.ev(`(() => {
         window.__realFetch = window.__realFetch || window.fetch;
-        window.__guarAllow = false;
-        window.__guarHits = [];
+        window.__guarImg = false;
+        window.__guarReqs = [];
         const PNG = Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='), (c) => c.charCodeAt(0));
         const J = (o, st = 200) => new Response(JSON.stringify(o), { status: st, headers: { 'content-type': 'application/json' } });
-        const img = (id, name) => ({ id, name, url: '/assets/' + id, width: 1536, height: 1024, size: 2400000, modified: '2026-11-09T20:00:00+07:00', mime: 'image/png' });
-        window.fetch = async (u, o) => {
+        const img = (id, name) => ({ id, name, url: '/assets/' + id, width: 1536, height: 1024, size: 2400000, modified: '2026-11-19T20:00:00+07:00', mime: 'image/png' });
+        window.fetch = async (u, o = {}) => {
           const s = String(u);
           if (!s.startsWith('http://127.0.0.1:9191/')) return window.__realFetch(u, o);
-          window.__guarHits.push(s.slice(21));
-          if (!window.__guarAllow) return J({ error: 'origin_not_allowed' }, 403);
-          if (s.endsWith('/api/integrations/beinfusion/ping')) return J({ app: 'Guar Studio', version: '0.8.0', ok: true });
-          if (s.includes('/api/integrations/beinfusion/images')) return J({ app: 'Guar Studio', version: '0.8.0', groups: [
-            { id: 'project:wf_1', kind: 'project', name: 'DCA Crypto Investment Misconceptions', updated: '2026-11-09T20:00:00+07:00', images: [img('illustrations/wf_1/scene_1.png', 'scene_1.png'), img('illustrations/wf_1/scene_2.png', 'Cảnh 2')] },
+          const path = s.slice(21);
+          window.__guarReqs.push({ path, method: o.method, auth: o.headers?.Authorization, body: o.body ? JSON.parse(o.body) : null });
+          if (o.headers?.Authorization !== 'Bearer Gp_' + 'k'.repeat(40)) return J({ detail: 'Mã ghép không hợp lệ' }, 403);
+          if (!window.__guarImg) return J({ detail: 'Method Not Allowed' }, 405);
+          if (o.method === 'POST' && path === '/api/integrations/beinfusion/images') return J({ app: 'Guar Studio', version: '0.9.0', groups: [
+            { id: 'project:wf_1', kind: 'project', name: 'DCA Crypto Investment Misconceptions', updated: '2026-11-19T20:00:00+07:00', images: [img('illustrations/wf_1/scene_1.png', 'scene_1.png'), img('illustrations/wf_1/scene_2.png', 'Cảnh 2')] },
             { id: 'generated', kind: 'generated', name: 'Ảnh tạo bằng AI', updated: null, images: [img('generated/ai_1.png', 'ai_1.png')] },
           ] });
-          if (s.includes('/assets/')) return new Response(new Blob([PNG], { type: 'image/png' }), { status: 200, headers: { 'content-type': 'image/png' } });
+          if (o.method === 'POST' && path === '/api/integrations/beinfusion/image') return new Response(new Blob([PNG], { type: 'image/png' }), { status: 200, headers: { 'content-type': 'image/png' } });
           return J({ detail: 'Not Found' }, 404);
         };
         return true;
       })()`);
-      await page.ev(`document.getElementById('btn-guar-test').click(); true`);
-      await page.until(() => /chưa cho phép BeinFusion/.test(document.getElementById('guar-status').textContent));
-      assert.match(await page.ev(`document.getElementById('guar-status').textContent`), new RegExp('dán mã ' + (await page.ev(`location.origin`)).replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')));
-      assert.ok(await page.ev(`window.__permRequests >= 1`)); // xin quyền truy cập địa chỉ Guar Studio lúc bấm
-      await page.ev(`window.__guarAllow = true; document.getElementById('btn-guar-test').click(); true`);
-      await page.until(() => /Đã kết nối Guar Studio 0\.8\.0 ✓/.test(document.getElementById('guar-status').textContent));
-      await page.until(() => [...document.querySelectorAll('.guar-only')].every((b) => !b.hidden));
-      assert.deepEqual(await page.ev(`chrome.storage.local.get('guarStudio').then((o) => o.guarStudio)`), { url: 'http://127.0.0.1:9191', ok: true, version: '0.8.0' });
+      // Dán mã ghép nối, bật nhận bài, Lưu kết nối: xin quyền truy cập 127.0.0.1; Guar bản cũ -> báo chưa có cổng ảnh, nút vẫn ẩn
+      await page.ev(`document.getElementById('guar-publish-token').value = 'Gp_' + 'k'.repeat(40); document.getElementById('guar-publish-enabled').click(); document.getElementById('guar-publish-save').click(); true`);
+      await page.until(() => /chưa có cổng ảnh/.test(document.getElementById('guar-img-status').textContent));
+      assert.deepEqual(await page.ev(`chrome.storage.local.get('guarPublish').then((o) => o.guarPublish)`), { url: 'http://127.0.0.1:9191', token: 'Gp_' + 'k'.repeat(40), enabled: true });
+      assert.ok(await page.ev(`window.__permRequests >= 1`));
+      assert.equal(await page.ev(`document.getElementById('guar-publish-token').value`), ''); // mã không còn hiện trong ô
+      assert.deepEqual(await page.ev(`[...document.querySelectorAll('.guar-only')].map((b) => b.hidden)`), [true, true, true]);
       await page.until(() => document.querySelector('[data-sec="guar"] em')?.textContent === 'Đã nối');
-      // Bài đăng: chọn 2 ảnh của dự án -> ảnh đính kèm (tên giữ / thêm đuôi)
+      // Guar Studio đã cập nhật cổng ảnh: Kiểm tra -> dùng được, nút Guar Studio hiện
+      await page.ev(`window.__guarImg = true; document.getElementById('guar-publish-poll').click(); true`);
+      await page.until(() => /^Dùng được/.test(document.getElementById('guar-img-status').textContent) && [...document.querySelectorAll('.guar-only')].every((b) => !b.hidden));
+      const probe = await page.ev(`window.__guarReqs.filter((r) => r.path.endsWith('/images')).at(-1)`);
+      assert.deepEqual([probe.method, probe.auth, probe.body], ['POST', 'Bearer Gp_' + 'k'.repeat(40), { limit: 1 }]);
+      // Bài đăng: chọn 2 ảnh của dự án -> ảnh đính kèm; tải ảnh bằng POST /image { id } kèm mã
       await page.ev(`showTab('compose'); setComposeKind('post'); document.getElementById('media-btn-guar').click(); true`);
       await page.until(() => document.getElementById('guar-pick').open && document.querySelectorAll('#gp-grid .gp-item').length === 2);
       const g = await page.ev(`({ groups: [...document.querySelectorAll('#gp-group option')].map((o) => o.textContent), src: document.querySelector('#gp-grid img').getAttribute('src'), count: document.getElementById('gp-count').textContent })`);
       assert.deepEqual(g.groups, ['DCA Crypto Investment Misconceptions (2)', 'Ảnh tạo bằng AI (1)']);
       assert.equal(g.src, 'http://127.0.0.1:9191/assets/illustrations/wf_1/scene_1.png');
       assert.equal(g.count, 'Chọn tối đa 10 ảnh');
-      await page.ev(`document.querySelectorAll('#gp-grid .gp-item')[0].click(); document.querySelectorAll('#gp-grid .gp-item')[1].click(); true`);
-      assert.equal(await page.ev(`document.getElementById('gp-count').textContent`), 'Đã chọn 2/10 ảnh');
-      await page.ev(`document.getElementById('gp-use').click(); true`);
+      await page.ev(`document.querySelectorAll('#gp-grid .gp-item')[0].click(); document.querySelectorAll('#gp-grid .gp-item')[1].click(); document.getElementById('gp-use').click(); true`);
       await page.until(() => !document.getElementById('guar-pick').open && compose.media.length === 2);
       assert.deepEqual(await page.ev(`compose.media.map((m) => [m.kind, m.name, m.file.type, m.file.size > 0])`), [['image', 'scene_1.png', 'image/png', true], ['image', 'Cảnh 2.png', 'image/png', true]]);
+      const gets = await page.ev(`window.__guarReqs.filter((r) => r.path.endsWith('/image')).map((r) => [r.method, r.auth === 'Bearer Gp_' + 'k'.repeat(40), r.body.id])`);
+      assert.deepEqual(gets, [['POST', true, 'illustrations/wf_1/scene_1.png'], ['POST', true, 'illustrations/wf_1/scene_2.png']]);
       // Article: chèn vào chỗ con trỏ
       await page.ev(`setComposeKind('article'); document.getElementById('art-content').value = ''; document.getElementById('art-btn-guar').click(); true`);
       await page.until(() => document.getElementById('guar-pick').open && document.querySelectorAll('#gp-grid .gp-item').length === 2);
       await page.ev(`(() => { const s = document.getElementById('gp-group'); s.value = 'generated'; s.dispatchEvent(new Event('change')); document.querySelector('#gp-grid .gp-item').click(); document.getElementById('gp-use').click(); return true; })()`);
       await page.until(() => /^!\[ai_1\.png\]\(local:\d+\)\n$/.test(document.getElementById('art-content').value));
-      // Bình luận: một ảnh; gửi kèm khi bấm Gửi (Chạy thử: không tải lên, nhật ký ghi [1 ảnh])
+      // Bình luận: một ảnh; gửi kèm khi bấm Gửi
       await page.ev(`openPost(data.state.recentPosts.find((p) => p.id === 't1')); true`);
       await page.until(() => document.getElementById('postview').open && !document.getElementById('pv-guar-btn').hidden);
       await page.ev(`document.getElementById('pv-guar-btn').click(); true`);
-      // Hộp nhớ nhóm ảnh lần trước (Ảnh tạo bằng AI) — đổi về dự án
       await page.until(() => document.getElementById('guar-pick').open && document.getElementById('gp-group').value === 'generated');
       await page.ev(`(() => { const s = document.getElementById('gp-group'); s.value = 'project:wf_1'; s.dispatchEvent(new Event('change')); return true; })()`);
       await page.until(() => document.querySelectorAll('#gp-grid .gp-item').length === 2);
       assert.equal(await page.ev(`document.getElementById('gp-count').textContent`), 'Chọn tối đa 1 ảnh');
       await page.ev(`document.querySelectorAll('#gp-grid .gp-item')[0].click(); true`);
-      assert.equal(await page.ev(`document.querySelectorAll('#gp-grid .gp-item')[1].disabled`), true); // đủ 1 ảnh
+      assert.equal(await page.ev(`document.querySelectorAll('#gp-grid .gp-item')[1].disabled`), true);
       await page.ev(`document.getElementById('gp-use').click(); true`);
       await page.until(() => !document.getElementById('pv-attach').hidden && !!document.querySelector('#pv-attach img'));
       await page.ev(`(() => { window.__sentMsgs = []; const real = chrome.runtime.sendMessage.bind(chrome.runtime); chrome.runtime.sendMessage = async (m, ...r) => { window.__sentMsgs.push(m); return real(m, ...r); }; document.getElementById('pv-text').value = 'Ảnh minh hoạ cho bạn'; document.getElementById('pv-send').click(); return true; })()`);
       await page.until(() => window.__sentMsgs.some((m) => m.type === 'commentWrite'));
       const cm = await page.ev(`window.__sentMsgs.find((m) => m.type === 'commentWrite')`);
-      assert.equal(cm.content, 'Ảnh minh hoạ cho bạn');
-      assert.equal(cm.media.images.length, 1);
-      // Dán ảnh vào ô bình luận cũng được
-      await page.until(() => document.getElementById('pv-attach').hidden);
-      const pasted = await page.call((b64) => {
-        const bin = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
-        const dt = new DataTransfer();
-        dt.items.add(new File([bin], 'image.png', { type: 'image/png' }));
-        const ev = new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true });
-        document.getElementById('pv-text').dispatchEvent(ev);
-        return { prevented: ev.defaultPrevented, shown: !document.getElementById('pv-attach').hidden, name: PV.image?.file.name };
-      }, B64_PNG);
-      assert.equal(pasted.prevented, true);
-      assert.equal(pasted.shown, true);
-      assert.match(pasted.name, /^anh-dan-\d{6}\.png$/);
-    },
-  },
-  {
-    name: 'Nhận bài đăng từ Guar Studio: hiện trong Cài đặt › Tích hợp › Guar Studio (cùng phần ảnh), chép Mã của BeinFusion, dán mã ghép nối + bật, Kiểm tra hàng đợi, Ngắt kết nối',
-    async run({ page, url, assert }) {
-      await page.open(url('dashboard', 'tab=settings&sec=guar'));
-      await page.until(() => !!document.getElementById('guar-publish-token') && document.getElementById('guar-publish-token').getClientRects().length > 0);
-      const v = await page.ev(`({
-        titles: [...document.querySelectorAll('#settings .guar-group .group-title, #settings .guar-publish-group .group-title')].filter((t) => t.getClientRects().length).map((t) => [...t.childNodes].filter((n) => !n.classList?.contains('tip-i')).map((n) => n.textContent).join('').trim()),
-        origin: document.getElementById('guar-publish-origin').textContent,
-        url: document.getElementById('guar-publish-url').value,
-        on: document.getElementById('guar-publish-enabled').checked,
-        head: document.querySelector('#settings > .card-head h2').textContent,
-      })`);
-      assert.equal(v.head, 'Guar Studio');
-      assert.equal(v.titles.length, 2);
-      assert.match(v.titles[0], /Ảnh từ Guar Studio$/);
-      assert.equal(v.titles[1], 'Nhận bài đăng từ Guar Studio');
-      assert.equal(v.origin, await page.ev(`location.origin`));
-      assert.equal(v.url, 'http://127.0.0.1:9191');
-      assert.equal(v.on, false);
-      // Bật mà chưa có mã: báo cần mã
-      await page.ev(`document.getElementById('guar-publish-enabled').click(); document.getElementById('guar-publish-save').click(); true`);
-      await page.until(() => /Cần mã ghép nối/.test(document.getElementById('guar-publish-status').textContent));
-      // Dán mã ghép nối, Lưu kết nối: mã không còn hiện trong ô, ô ghi đã lưu mã; mục bên trái ghi Đã nối
-      await page.ev(`document.getElementById('guar-publish-token').value = 'Gp_' + 'k'.repeat(40); document.getElementById('guar-publish-save').click(); true`);
-      await page.until(() => document.getElementById('guar-publish-token').value === '' && /Đã lưu mã/.test(document.getElementById('guar-publish-token').placeholder));
-      assert.deepEqual(await page.ev(`chrome.storage.local.get('guarPublish').then((o) => o.guarPublish)`), { url: 'http://127.0.0.1:9191', token: 'Gp_' + 'k'.repeat(40), enabled: true });
-      await page.until(() => document.querySelector('[data-sec="guar"] em')?.textContent === 'Đã nối');
-      await page.ev(`document.getElementById('guar-publish-poll').click(); true`);
-      await page.until(() => /Chưa có bài tới lịch/.test(document.getElementById('guar-publish-status').textContent));
-      await page.ev(`document.getElementById('guar-publish-disconnect').click(); true`);
-      await page.until(() => !document.getElementById('guar-publish-enabled').checked && /Dán mã ghép nối/.test(document.getElementById('guar-publish-token').placeholder));
+      assert.deepEqual([cm.content, cm.media.images.length], ['Ảnh minh hoạ cho bạn', 1]);
+      await page.ev(`document.getElementById('postview').close(); true`);
+      // Ngắt kết nối: tắt cả nhận bài lẫn lấy ảnh
+      await page.ev(`showTab('settings'); showSettingsSec('guar'); document.getElementById('guar-publish-disconnect').click(); true`);
+      await page.until(() => !document.getElementById('guar-publish-enabled').checked && /^Chưa nối/.test(document.getElementById('guar-img-status').textContent) && [...document.querySelectorAll('.guar-only')].every((b) => b.hidden));
+      assert.equal(await page.ev(`chrome.storage.local.get('guarStudio').then((o) => o.guarStudio ?? null)`), null);
     },
   },
   {

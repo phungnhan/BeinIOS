@@ -79,7 +79,7 @@ function setNavStatus() {
   put('chat', on('chatEnabled') ? 'Bật' : 'Tắt');
   put('tg', on('tg-enabled') ? 'Bật' : 'Tắt');
   put('ai', BG.validAiKey($('ai-key').value) ? 'Khoá API' : 'Chép – dán');
-  put('guar', (typeof GS === 'object' && GS.cfg.ok) || on('guar-publish-enabled') ? 'Đã nối' : 'Chưa nối'); // dash/guar.js, dash/guar-publish.js
+  put('guar', typeof GS === 'object' && GS.cfg.token ? 'Đã nối' : 'Chưa nối'); // dash/guar.js: kết nối Guar Studio (mã ghép nối)
   put('backup', on('syncSettings') ? 'Đồng bộ' : '');
   put('look', document.querySelector('input[name="dashUi"]:checked')?.value === 'modern' ? 'Hiện đại' : 'Cổ điển');
 }

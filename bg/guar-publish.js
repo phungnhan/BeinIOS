@@ -48,7 +48,8 @@ async function guarPublishSave(cfg) {
   const token = cfg.token || (url === previous.url ? previous.token : '');
   if (!url) throw new Error('Chỉ nhận địa chỉ Guar Studio trên máy này, không có đường dẫn phía sau.');
   if (cfg.enabled && !/^[A-Za-z0-9_-]{32,512}$/.test(token || '')) throw new Error('Cần mã ghép nối do Guar Studio cấp.');
-  if (cfg.enabled && !(await chrome.permissions.contains({ origins: [new URL(url).protocol + '//' + new URL(url).hostname + '/*'] }))) throw new Error('Chưa cấp quyền truy cập địa chỉ Guar Studio.');
+  // Có mã ghép nối là dùng mạng tới Guar (nhận bài và / hoặc lấy ảnh — dash/guar.js): cần quyền truy cập địa chỉ đó
+  if ((cfg.enabled || token) && !(await chrome.permissions.contains({ origins: [new URL(url).protocol + '//' + new URL(url).hostname + '/*'] }))) throw new Error('Chưa cấp quyền truy cập địa chỉ Guar Studio.');
   await chrome.storage.local.set({ [GUAR_PUBLISH_CONFIG]: { url, token, enabled: cfg.enabled === true } });
   await guarPublishSchedule();
   return guarPublishStatus();
