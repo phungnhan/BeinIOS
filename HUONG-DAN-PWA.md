@@ -148,6 +148,7 @@ node test/pwa/pwa.e2e.mjs
 
 ## Lịch sử BeinIOS
 
+- **1.9.5 (19/11/2026).** Gộp addon BeinFusion 0.72.0 (một kết nối Guar Studio cho nhận bài lẫn lấy ảnh — phần chỉ dành cho máy tính, không hiện trong BeinIOS).
 - **1.9.4 (19/11/2026).** Gộp addon BeinFusion 0.71.1 (sửa kiểu ô nhập ở phần chỉ dành cho máy tính; BeinIOS không đổi gì thấy được).
 - **1.9.3 (19/11/2026).** Gộp addon BeinFusion 0.71.0 (Nhận bài đăng từ Guar Studio trên máy tính). Phần này cần Guar Studio chạy trên cùng máy tính nên không hiện trong BeinIOS; các phần khác không đổi.
 - **1.9.2 (11/11/2026).** Gộp addon BeinFusion 0.70.2 — **Trợ lý AI viết bài đăng dài hơn**: Ngắn khoảng 150–230 từ, Vừa khoảng 280–400 từ (mặc định cho mọi loại), Dài khoảng 430–570 từ — sát giới hạn mỗi bài của Beincom (3.000 ký tự, khoảng 600 từ); hộp AI hiện số từ và báo đỏ khi bài quá giới hạn. Tên 4 công tắc tự xử lý được thống nhất ở mọi nơi.
