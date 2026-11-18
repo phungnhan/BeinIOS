@@ -2,6 +2,12 @@
 
 Mỗi bản một mục, bản mới nhất ở trên. Dashboard tự hiện các mục mới sau khi cập nhật (bấm "Có gì mới" ở cuối trang để xem lại).
 
+## v0.71.0 — 19/11/2026
+- **Nhận bài đăng từ Guar Studio** (Cài đặt › Tích hợp › Guar Studio, ngay dưới phần Ảnh từ Guar Studio): Guar Studio gửi sang các bài giới thiệu video YouTube hoặc liên kết audio bạn đã hẹn, BeinFusion đăng bằng tài khoản Beincom đang đăng nhập vào các nhóm bạn chọn ở Guar Studio, tới giờ hẹn (addon hỏi hàng đợi mỗi phút khi Chrome chạy).
+  - Nối: chép **Mã của BeinFusion** → trong Guar Studio vào Cài đặt › Beincom qua BeinFusion, dán mã, tạo **mã ghép nối** → dán mã ghép nối vào BeinFusion, bật "Nhận và đăng các bài đã xếp lịch ở Guar Studio", bấm **Lưu kết nối** (cho phép khi trình duyệt hỏi quyền truy cập 127.0.0.1). **Kiểm tra hàng đợi** để đồng bộ ngay; **Ngắt kết nối** để dừng.
+  - An toàn: Guar chỉ nhận tên tài khoản và danh sách nhóm, không nhận cookie / mật khẩu Beincom; mã ghép nối chỉ lưu trên máy này. Mỗi bước (tạo nháp, đăng) đều được ghi lại trước khi làm; kết quả chưa rõ thì **không bao giờ tự đăng lại** mà chờ bạn đối chiếu; đổi tài khoản Beincom hay mất quyền nhóm thì dừng. Đang **Chạy thử** thì chỉ đồng bộ tài khoản / nhóm, chưa đăng bài.
+  - Bài Guar Studio đăng giúp có trong **Nhật ký** với nguồn "Guar Studio".
+
 ## v0.70.2 — 11/11/2026
 - **Trợ lý AI viết bài đăng dài hơn**: Ngắn khoảng 150–230 từ, Vừa khoảng 280–400 từ, Dài khoảng 430–570 từ (trước: 60–120 / 120–250 / 250–400 từ). Mức Dài đã sát giới hạn mỗi bài của Beincom (3.000 ký tự, khoảng 600 từ) — cần dài hơn thì viết Article. "Theo loại bài" nay là mức Vừa cho mọi loại bài đăng (trước đây Thông báo, Mở thảo luận, Sự kiện, Cảnh báo lừa đảo mặc định rất ngắn). AI được thêm bối cảnh, giải thích, ví dụ, các bước, lưu ý để đủ độ dài, nhưng vẫn không bịa số liệu, ngày giờ, tên hay link. Hộp AI hiện số từ của bài vừa viết; bài quá giới hạn thì báo đỏ khi đưa vào ô soạn (không tự cắt). Độ dài Article không đổi.
 - **Thống nhất tên 4 công tắc tự xử lý** ở Cài đặt, popup, Bắt đầu nhanh, các hộp hỏi, Hướng dẫn và báo cáo: Tự duyệt yêu cầu tham gia · Tự từ chối yêu cầu tham gia · Tự ẩn spam có link cấm · Tự duyệt bài của thành viên tin cậy. Ý "chỉ duyệt / từ chối yêu cầu được gợi ý" chuyển vào ⓘ của từng công tắc.

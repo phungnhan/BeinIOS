@@ -31,7 +31,7 @@ globalThis.addEventListener?.('unhandledrejection', (e) => recordDiag({ where: '
 // common.js tạo BG, lib/*.js (theo BG.PARTS) gắn thêm phần còn lại, rồi tới các tệp của service worker
 importScripts('common.js');
 importScripts(...BG.PARTS.map((p) => `lib/${p}.js`));
-importScripts('bg/core.js', 'bg/scan.js', 'bg/actions.js', 'bg/compose.js', 'bg/article.js', 'bg/manage.js', 'bg/sync.js', 'bg/telegram.js', 'bg/insights.js', 'bg/selfcheck.js', 'bg/guard.js', 'bg/chat.js');
+importScripts('bg/core.js', 'bg/scan.js', 'bg/actions.js', 'bg/compose.js', 'bg/article.js', 'bg/manage.js', 'bg/sync.js', 'bg/telegram.js', 'bg/insights.js', 'bg/selfcheck.js', 'bg/guard.js', 'bg/chat.js', 'bg/guar-publish.js');
 
 // Thao tác hàng loạt lần trước bị tắt giữa chừng: ghi bù vào Nhật ký (bg/core.js)
 recoverJournal().catch(() => {});
@@ -56,6 +56,7 @@ chrome.runtime.onInstalled.addListener(async () => {
   await scheduleAlarm();
   await scheduleTelegramPoll();
   await scheduleChatAlarm();
+  await guarPublishSchedule().catch(() => {}); // Nhận bài đăng từ Guar Studio (bg/guar-publish.js): lỗi không chặn quét
   await updateBadge();
   exclusive(() => doScan({ source: 'install' }));
 });
@@ -64,11 +65,13 @@ chrome.runtime.onStartup.addListener(async () => {
   await scheduleAlarm();
   await scheduleTelegramPoll();
   await scheduleChatAlarm();
+  await guarPublishSchedule().catch(() => {}); // Nhận bài đăng từ Guar Studio (bg/guar-publish.js): lỗi không chặn quét
   await updateBadge();
   exclusive(() => doScan({ source: 'startup' }));
 });
 
 chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name === GUAR_PUBLISH_ALARM) guarPublishTick().catch(() => {});
   if (alarm.name === ALARM) exclusive(() => doScan({ source: 'alarm' }));
   if (alarm.name === TG_POLL_ALARM) pollTelegram().catch(() => {}); // nút bấm trong tin Telegram (bg/telegram.js)
   if (alarm.name === CHAT_ALARM) chatQuickCheck().catch(() => {}); // tin nhắn riêng / nhắc tên / thread mỗi phút (bg/chat.js)

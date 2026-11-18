@@ -147,6 +147,21 @@ function makeEnv({ data = fixture(), settings = {}, rules = {}, postRules = {}, 
   const tg = [];
   const fetch = async (url, opts = {}) => {
     const method = opts.method || 'GET';
+    // Guar Studio giả (cổng nhận bài cho BeinFusion): data.guar = { token, tasks: [gói đăng], events: [] }; ghi lệnh "POST guar:/…"
+    if (url.startsWith('http://127.0.0.1:9191/')) {
+      const p = url.slice('http://127.0.0.1:9191'.length);
+      const body = opts.body ? JSON.parse(opts.body) : null;
+      calls.push(`${method} guar:${p}`);
+      bodies.push([`${method} guar:${p}`, body]);
+      const g = (data.guar ||= {});
+      const out = (st, o) => ({ ok: st >= 200 && st < 300, status: st, json: async () => o });
+      if (g.down) throw new TypeError('Failed to fetch');
+      if (opts.headers?.Authorization !== 'Bearer ' + g.token) return out(401, { error: 'unauthorized' });
+      if (p.endsWith('/heartbeat')) return ((g.heartbeats ||= []).push(body), out(200, { ok: true }));
+      if (p.endsWith('/claim')) return out(200, { task: (g.tasks || []).shift() || null });
+      if (/\/tasks\/[\w-]+\/event$/.test(p)) return ((g.events ||= []).push(body.phase), out(200, { ok: true }));
+      return out(404, {});
+    }
     // Chat Beincom (Mattermost giả lập): data.chat; ghi lệnh dạng "GET chat:v4/…"
     if (url.startsWith('https://chat.beincom.com/api/')) {
       const p = url.slice('https://chat.beincom.com/api/'.length);
@@ -569,7 +584,16 @@ function makeEnv({ data = fixture(), settings = {}, rules = {}, postRules = {}, 
   const syncStore = {};
   const syncWrites = [];
   const listeners = {};
-  const ev = (name) => ({ addListener: (fn) => (listeners[name] = fn), removeListener: () => {} });
+  // Như Chrome: onMessage có thể có nhiều bộ nghe (bg/guar-publish.js thêm một bộ riêng); bộ nào trả true thì trả lời sau
+  const many = {};
+  const ev = (name) => ({
+    addListener: (fn) => {
+      if (name !== 'message') return (listeners[name] = fn);
+      (many.message ||= []).push(fn);
+      listeners.message = (msg, sender, sendResponse) => many.message.map((f) => f(msg, sender, sendResponse)).some((r) => r === true);
+    },
+    removeListener: () => {},
+  });
   const notifications = [];
   const tabsCreated = [];
   const badge = {};
@@ -614,7 +638,7 @@ function makeEnv({ data = fixture(), settings = {}, rules = {}, postRules = {}, 
       onUpdated: ev('updated'),
     },
     scripting: { executeScript: async () => [{ result: { status: 401 } }] },
-    runtime: { onMessage: ev('message'), onStartup: ev('startup'), onInstalled: ev('installed'), getURL: (p) => 'chrome-extension://x/' + p, getPlatformInfo: async () => ((data.pings = (data.pings || 0) + 1), { os: 'win' }), getManifest: () => ({ version: '0.0.0-test', permissions: data.unlimited ? ['storage', 'unlimitedStorage'] : ['storage'] }) },
+    runtime: { id: 'x', onMessage: ev('message'), onStartup: ev('startup'), onInstalled: ev('installed'), getURL: (p) => 'chrome-extension://x/' + p, getPlatformInfo: async () => ((data.pings = (data.pings || 0) + 1), { os: 'win' }), getManifest: () => ({ version: '0.0.0-test', permissions: data.unlimited ? ['storage', 'unlimitedStorage'] : ['storage'] }) },
     permissions: { contains: async ({ origins }) => (origins.some((o) => o.includes('script.google')) ? data.usagePerm !== false : origins.some((o) => o.includes('chat.beincom')) ? data.chatPerm !== false : true) },
   };
   const ctx = vm.createContext({
@@ -630,6 +654,7 @@ function makeEnv({ data = fixture(), settings = {}, rules = {}, postRules = {}, 
     console,
     structuredClone,
     TextEncoder,
+    crypto: globalThis.crypto,
     URL,
     AbortController,
     AbortSignal,
@@ -642,7 +667,7 @@ function makeEnv({ data = fixture(), settings = {}, rules = {}, postRules = {}, 
   vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'background.js'), 'utf8'), ctx);
 
   // structuredClone: đưa kết quả về realm của test để deepEqual so được
-  const send = (msg) => new Promise((resolve) => listeners.message(msg, {}, (r) => resolve(structuredClone(r))));
+  const send = (msg, sender = {}) => new Promise((resolve) => listeners.message(msg, sender, (r) => resolve(structuredClone(r))));
   // ctx: phạm vi của service worker — test gọi thẳng hàm bên trong (vd. runProbes)
   return { send, storage, calls, bodies, headers, notifications, tabsCreated, badge, data, listeners, syncStore, syncWrites, tg, ctx };
 }
@@ -4832,3 +4857,88 @@ test('Hồ sơ một người: lệnh memberInfo tìm người trong danh sách 
   assert.ok(BG.SAFE_RESEND.has('memberInfo'));
 });
 
+test('Nhận bài đăng từ Guar Studio: chỉ nhận lệnh từ Cài đặt, lưu kết nối (địa chỉ máy này, mã ghép nối), Chạy thử chỉ đồng bộ tài khoản / nhóm', async () => {
+  const SENDER = { id: 'x', url: 'chrome-extension://x/dashboard.html' };
+  const TOKEN = 'a'.repeat(40);
+  const env = makeEnv({ settings: { dryRun: true } });
+  await scan(env);
+  assert.match((await env.send({ type: 'guarPublishStatus' })).message, /Chỉ nhận thao tác từ Cài đặt BeinFusion/);
+  assert.match((await env.send({ type: 'guarPublishSave', config: { url: 'http://evil.example/', enabled: true, token: TOKEN } }, SENDER)).message, /Chỉ nhận địa chỉ Guar Studio trên máy này/);
+  assert.match((await env.send({ type: 'guarPublishSave', config: { url: 'http://127.0.0.1:9191/', enabled: true, token: '' } }, SENDER)).message, /Cần mã ghép nối/);
+  const saved = await env.send({ type: 'guarPublishSave', config: { url: 'http://127.0.0.1:9191/', enabled: true, token: TOKEN } }, SENDER);
+  assert.deepEqual(saved.config, { url: 'http://127.0.0.1:9191', enabled: true, has_token: true });
+  assert.equal(env.storage.guarPublish.token, TOKEN);
+  // Chạy thử: gửi tài khoản + nhóm quản trị cho Guar, không nhận bài, không gọi API ghi của Beincom
+  env.data.guar = { token: TOKEN, tasks: [{ id: 't1' }] };
+  const r = await env.send({ type: 'guarPublishPoll' }, SENDER);
+  assert.match(r.message, /Đang Chạy thử|đang Chạy thử/);
+  assert.deepEqual(env.data.guar.heartbeats[0].account, { id: 'me1', name: 'Kai Crypto' });
+  assert.deepEqual(env.data.guar.heartbeats[0].groups.map((g) => g.id).sort(), ['gCL', 'gCLsub', 'gFood']);
+  assert.ok(!env.calls.some((c) => c.endsWith('guar:/api/integrations/beinfusion/claim')));
+  assert.ok(!env.calls.some((c) => c.startsWith('POST content/posts')));
+  // Ngắt kết nối: xoá cấu hình (cả mã)
+  await env.send({ type: 'guarPublishDisconnect' }, SENDER);
+  assert.equal(env.storage.guarPublish, undefined);
+});
+
+test('Nhận bài đăng từ Guar Studio: đăng theo mốc chặn (báo Guar trước mỗi bước), ghi Nhật ký; kết quả chưa rõ / đổi tài khoản / nhóm lạ thì không tạo bài; đối chiếu bài đã đăng không đăng lại', async () => {
+  const SENDER = { id: 'x', url: 'chrome-extension://x/dashboard.html' };
+  const TOKEN = 'b'.repeat(40);
+  const HASH = 'c'.repeat(64);
+  const task = (extra = {}) => ({ id: 'task-1', pair_id: 'pair-1', payload_hash: HASH, account_id: 'me1', source_kind: 'youtube', source_url: 'https://www.youtube.com/watch?v=abc123', content: 'Video mới về ví lạnh https://www.youtube.com/watch?v=abc123', group_ids: ['gCL'], phase: 'dispatched', ...extra });
+  const fresh = async () => {
+    const env = makeEnv({ settings: { dryRun: false } });
+    await scan(env);
+    await env.send({ type: 'guarPublishSave', config: { url: 'http://127.0.0.1:9191', enabled: true, token: TOKEN } }, SENDER);
+    env.calls.length = 0;
+    return env;
+  };
+  // Đăng bình thường
+  const env = await fresh();
+  env.data.guar = { token: TOKEN, tasks: [task()] };
+  const r = await env.send({ type: 'guarPublishPoll' }, SENDER);
+  assert.equal(r.message, 'Đã đăng trên Beincom.');
+  assert.deepEqual(env.data.guar.events, ['creating', 'draft', 'publishing', 'published']);
+  const writes = env.calls.filter((c) => /^(POST|PUT|DELETE) content\//.test(c));
+  assert.deepEqual(writes, ['POST content/posts', 'PUT content/posts/new1/publish']);
+  const pub = env.bodies.find(([c]) => c === 'PUT content/posts/new1/publish')[1];
+  assert.deepEqual([pub.content, pub.audience.groupIds], [task().content, ['gCL']]);
+  const e = env.storage.log[0];
+  assert.deepEqual([e.kind, e.source, e.action, e.status, e.contentId, e.groupName], ['compose', 'guar', 'publish', 'ok', 'new1', 'Crypto Life']);
+  assert.equal(BG.sourceLabel(e.source), 'Guar Studio');
+  // Hỏi lại khi không còn bài: không đăng gì thêm
+  env.calls.length = 0;
+  assert.match((await env.send({ type: 'guarPublishPoll' }, SENDER)).message, /Chưa có bài tới lịch/);
+  assert.ok(!env.calls.some((c) => c.startsWith('POST content/posts')));
+
+  // Lượt tạo nháp trước chưa rõ kết quả (Guar ghi creating, không có mã bài): không tự tạo bài khác
+  const a = await fresh();
+  a.data.guar = { token: TOKEN, tasks: [task({ phase: 'creating' })] };
+  assert.match((await a.send({ type: 'guarPublishPoll' }, SENDER)).message, /chưa rõ kết quả/);
+  assert.deepEqual(a.data.guar.events, ['attention']);
+  assert.ok(!a.calls.some((c) => c.startsWith('POST content/posts')));
+  // Gói của tài khoản khác / nhóm không còn quyền: không gửi bài
+  const b = await fresh();
+  b.data.guar = { token: TOKEN, tasks: [task({ account_id: 'nguoi-khac' })] };
+  assert.match((await b.send({ type: 'guarPublishPoll' }, SENDER)).message, /Tài khoản Beincom đã đổi/);
+  b.data.guar.tasks = [task({ group_ids: ['gOther'] })];
+  assert.match((await b.send({ type: 'guarPublishPoll' }, SENDER)).message, /nhóm không còn quyền/);
+  assert.ok(!b.calls.some((c) => c.startsWith('POST content/posts')));
+  // Đã có mã bài, bài đã đăng (mất phản hồi lần trước): chỉ đọc lại, báo đã đăng, không PUT lại
+  const c = await fresh();
+  c.data.made = { p77: { id: 'p77', type: 'POST', status: 'PUBLISHED', actor: { id: 'me1' }, content: task().content, audience: { groups: [{ id: 'gCL' }] }, media: {} } };
+  c.data.guar = { token: TOKEN, tasks: [task({ phase: 'publishing', remote_id: 'p77' })] };
+  assert.equal((await c.send({ type: 'guarPublishPoll' }, SENDER)).message, 'Đã đăng trên Beincom.');
+  assert.deepEqual(c.data.guar.events, ['published']);
+  assert.ok(!c.calls.some((x) => /^(POST|PUT) content\/posts/.test(x)));
+  assert.equal(c.storage.log[0].contentId, 'p77');
+  // Bài đã có nhưng nội dung khác bản đã xếp: không nhận, cần đối chiếu
+  const d = await fresh();
+  d.data.made = { p78: { id: 'p78', type: 'POST', status: 'PUBLISHED', actor: { id: 'me1' }, content: 'Nội dung khác', audience: { groups: [{ id: 'gCL' }] }, media: {} } };
+  d.data.guar = { token: TOKEN, tasks: [task({ phase: 'publishing', remote_id: 'p78' })] };
+  assert.match((await d.send({ type: 'guarPublishPoll' }, SENDER)).message, /Nội dung bài khác bản đã xếp/);
+  // Guar Studio đang tắt: giữ nguyên hàng đợi
+  const f = await fresh();
+  f.data.guar = { token: TOKEN, down: true };
+  assert.match((await f.send({ type: 'guarPublishPoll' }, SENDER)).message, /Không kết nối được Guar Studio; giữ nguyên hàng đợi/);
+});

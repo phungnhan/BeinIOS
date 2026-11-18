@@ -34,7 +34,7 @@ function tagSettings() {
         tag(x, sec);
       }
     } else
-      tag(ch, c.contains('watch-group') ? 'watch' : c.contains('chat-group') ? 'chat' : c.contains('tg-group') ? 'tg' : c.contains('ai-group') ? 'ai' : c.contains('guar-group') ? 'guar' : c.contains('sync-group') || c.contains('backup-group') ? 'backup' : ch.id === 'beinios-group' ? 'beinios' : ch.id === 'look-set' ? 'look' : ch.id === 'help-set' ? 'help' : '');
+      tag(ch, c.contains('watch-group') ? 'watch' : c.contains('chat-group') ? 'chat' : c.contains('tg-group') ? 'tg' : c.contains('ai-group') ? 'ai' : c.contains('guar-group') || c.contains('guar-publish-group') ? 'guar' : c.contains('sync-group') || c.contains('backup-group') ? 'backup' : ch.id === 'beinios-group' ? 'beinios' : ch.id === 'look-set' ? 'look' : ch.id === 'help-set' ? 'help' : '');
   }
   // Nhóm một mình trong mục: tên nhóm trùng tên mục (tiêu đề thẻ đã ghi) nên ẩn
   const groups = [...card.children].filter((x) => x.classList.contains('group') && x.id !== 'settings-group');
@@ -79,7 +79,7 @@ function setNavStatus() {
   put('chat', on('chatEnabled') ? 'Bật' : 'Tắt');
   put('tg', on('tg-enabled') ? 'Bật' : 'Tắt');
   put('ai', BG.validAiKey($('ai-key').value) ? 'Khoá API' : 'Chép – dán');
-  put('guar', typeof GS === 'object' && GS.cfg.ok ? 'Đã nối' : 'Chưa nối'); // dash/guar.js
+  put('guar', (typeof GS === 'object' && GS.cfg.ok) || on('guar-publish-enabled') ? 'Đã nối' : 'Chưa nối'); // dash/guar.js, dash/guar-publish.js
   put('backup', on('syncSettings') ? 'Đồng bộ' : '');
   put('look', document.querySelector('input[name="dashUi"]:checked')?.value === 'modern' ? 'Hiện đại' : 'Cổ điển');
 }

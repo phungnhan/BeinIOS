@@ -4082,6 +4082,39 @@ export const scenarios = [
     },
   },
   {
+    name: 'Nhận bài đăng từ Guar Studio: hiện trong Cài đặt › Tích hợp › Guar Studio (cùng phần ảnh), chép Mã của BeinFusion, dán mã ghép nối + bật, Kiểm tra hàng đợi, Ngắt kết nối',
+    async run({ page, url, assert }) {
+      await page.open(url('dashboard', 'tab=settings&sec=guar'));
+      await page.until(() => !!document.getElementById('guar-publish-token') && document.getElementById('guar-publish-token').getClientRects().length > 0);
+      const v = await page.ev(`({
+        titles: [...document.querySelectorAll('#settings .guar-group .group-title, #settings .guar-publish-group .group-title')].filter((t) => t.getClientRects().length).map((t) => [...t.childNodes].filter((n) => !n.classList?.contains('tip-i')).map((n) => n.textContent).join('').trim()),
+        origin: document.getElementById('guar-publish-origin').textContent,
+        url: document.getElementById('guar-publish-url').value,
+        on: document.getElementById('guar-publish-enabled').checked,
+        head: document.querySelector('#settings > .card-head h2').textContent,
+      })`);
+      assert.equal(v.head, 'Guar Studio');
+      assert.equal(v.titles.length, 2);
+      assert.match(v.titles[0], /Ảnh từ Guar Studio$/);
+      assert.equal(v.titles[1], 'Nhận bài đăng từ Guar Studio');
+      assert.equal(v.origin, await page.ev(`location.origin`));
+      assert.equal(v.url, 'http://127.0.0.1:9191');
+      assert.equal(v.on, false);
+      // Bật mà chưa có mã: báo cần mã
+      await page.ev(`document.getElementById('guar-publish-enabled').click(); document.getElementById('guar-publish-save').click(); true`);
+      await page.until(() => /Cần mã ghép nối/.test(document.getElementById('guar-publish-status').textContent));
+      // Dán mã ghép nối, Lưu kết nối: mã không còn hiện trong ô, ô ghi đã lưu mã; mục bên trái ghi Đã nối
+      await page.ev(`document.getElementById('guar-publish-token').value = 'Gp_' + 'k'.repeat(40); document.getElementById('guar-publish-save').click(); true`);
+      await page.until(() => document.getElementById('guar-publish-token').value === '' && /Đã lưu mã/.test(document.getElementById('guar-publish-token').placeholder));
+      assert.deepEqual(await page.ev(`chrome.storage.local.get('guarPublish').then((o) => o.guarPublish)`), { url: 'http://127.0.0.1:9191', token: 'Gp_' + 'k'.repeat(40), enabled: true });
+      await page.until(() => document.querySelector('[data-sec="guar"] em')?.textContent === 'Đã nối');
+      await page.ev(`document.getElementById('guar-publish-poll').click(); true`);
+      await page.until(() => /Chưa có bài tới lịch/.test(document.getElementById('guar-publish-status').textContent));
+      await page.ev(`document.getElementById('guar-publish-disconnect').click(); true`);
+      await page.until(() => !document.getElementById('guar-publish-enabled').checked && /Dán mã ghép nối/.test(document.getElementById('guar-publish-token').placeholder));
+    },
+  },
+  {
     name: 'Giao diện Dashboard: Cổ điển mặc định, chọn Hiện đại ở Cài đặt › Giao diện (thanh mục bên trái, nhớ khi mở lại), đổi lại được',
     async run({ page, url, assert }) {
       await page.open(url('dashboard', 'tab=settings&sec=look'));
